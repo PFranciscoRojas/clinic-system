@@ -1,0 +1,54 @@
+version: "2"
+
+linters:
+  enable:
+    - bodyclose
+    - contextcheck
+    - errcheck
+    - exhaustive
+    - gochecknoglobals
+    - gocritic
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - misspell
+    - noctx
+    - revive
+    - sqlclosecheck
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+    - wrapcheck
+
+linters-settings:
+  exhaustive:
+    default-signifies-exhaustive: true
+  gosec:
+    excludes:
+      - G115  # integer overflow (falso positivo frecuente en conversiones internas)
+  revive:
+    rules:
+      - name: exported
+        severity: error
+      - name: error-return
+        severity: warning
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - performance
+      - style
+
+issues:
+  exclude-rules:
+    # Tests may use globals and skip error wrapping
+    - path: _test\.go
+      linters:
+        - gochecknoglobals
+        - wrapcheck
+        - errcheck
+    # main.go is allowed a global logger setup
+    - path: cmd/
+      linters:
+        - gochecknoglobals

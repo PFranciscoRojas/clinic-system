@@ -1,0 +1,23 @@
+# Air — live reload for Go development
+# Usage: air (from services/core-api/)
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/core-api ./cmd/api"
+  bin = "./tmp/core-api"
+  delay = 1000
+  exclude_dir = ["tmp", "migrations"]
+  include_ext = ["go"]
+  exclude_regex = ["_test\\.go"]
+  kill_delay = "1s"
+
+[log]
+  time = false
+
+[color]
+  main = "magenta"
+  watcher = "cyan"
+  build = "yellow"
+  runner = "green"

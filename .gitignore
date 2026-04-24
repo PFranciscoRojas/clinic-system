@@ -1,0 +1,26 @@
+# Environment — NUNCA commitear
+.env
+.env.local
+.env.*.local
+
+# Data directories (bind mounts en dev)
+data/
+
+# Go
+services/core-api/tmp/
+services/core-api/vendor/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+services/ai-service/.venv/
+services/ai-service/*.egg-info/
+
+# Frontend
+services/frontend/node_modules/
+services/frontend/dist/
+
+# OS
+.DS_Store
+*.swp
