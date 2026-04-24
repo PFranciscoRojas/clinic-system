@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
+	"sghcp/core-api/internal/auth"
 	"sghcp/core-api/internal/shared/config"
 	"sghcp/core-api/internal/shared/crypto"
 	"sghcp/core-api/internal/shared/db"
@@ -69,10 +70,15 @@ func main() {
 		fmt.Fprint(w, "ok")
 	})
 
-	// BC routes are registered here as they are implemented (Fase 3+).
-	// Example: r.Mount("/api/v1/auth", auth.NewHandler(pool, redisClient, km, cfg).Routes())
+	r.Mount("/api/v1/auth", auth.NewHandler(pool, redisClient, cfg).Routes())
 
-	_ = km // suppress unused warning until BC handlers are wired
+	// Protected routes require a valid JWT. RBAC is enforced per-endpoint with middleware.RequirePermission.
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.RequireAuth([]byte(cfg.JWTSecret)))
+		// BC-3 patients, BC-4 appointments, BC-5 clinical routes mount here in subsequent phases.
+	})
+
+	_ = km // km is used by patient/clinical handlers in Fase 3 — suppress until wired
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,

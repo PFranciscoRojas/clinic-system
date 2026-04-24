@@ -13,10 +13,12 @@ type contextKey string
 const claimsKey contextKey = "claims"
 
 // Claims are the JWT payload fields embedded in every authenticated request.
+// Permissions are included at login time so middleware never needs a DB call.
 type Claims struct {
 	UserID         string   `json:"sub"`
 	OrganizationID string   `json:"org"`
 	Roles          []string `json:"roles"`
+	Permissions    []string `json:"perms"`
 	jwt.RegisteredClaims
 }
 
@@ -49,23 +51,32 @@ func RequireAuth(jwtSecret []byte) func(http.Handler) http.Handler {
 	}
 }
 
-// ClaimsFromContext retrieves JWT claims from the request context.
-// Panics if called outside of RequireAuth-protected routes.
-func ClaimsFromContext(ctx context.Context) *Claims {
-	c, _ := ctx.Value(claimsKey).(*Claims)
-	return c
-}
-
 // RequirePermission checks that the authenticated user has the given permission code.
-// Permission codes follow the format "resource:action" (e.g. "patients:read").
+// Must be used after RequireAuth. Permission codes follow "resource:action" (e.g. "patients:read").
 func RequirePermission(permission string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Actual permission lookup against DB will be implemented in Fase 3.
-			// Placeholder: pass through (DB-backed RBAC wired in auth handler).
-			next.ServeHTTP(w, r)
+			claims := ClaimsFromContext(r.Context())
+			if claims == nil {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			for _, p := range claims.Permissions {
+				if p == permission {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+			http.Error(w, "forbidden", http.StatusForbidden)
 		})
 	}
+}
+
+// ClaimsFromContext retrieves JWT claims from the request context.
+// Returns nil if called outside of a RequireAuth-protected route.
+func ClaimsFromContext(ctx context.Context) *Claims {
+	c, _ := ctx.Value(claimsKey).(*Claims)
+	return c
 }
 
 func extractBearerToken(r *http.Request) string {
