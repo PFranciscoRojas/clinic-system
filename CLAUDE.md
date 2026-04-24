@@ -109,6 +109,34 @@ Ver `docs/security/blind-variables.md`. Los puntos críticos:
 - Nunca usar datos reales de pacientes en entornos dev/staging — usar generador sintético con Faker.
 - Backups cifrados (GPG) en Backblaze B2 con política de retención de 15 años (Bootstrap). En Cloud: S3 Glacier con Object Lock (WORM).
 
+## Branching model — Libflow adaptado (REGLA ESTRICTA)
+
+Este proyecto usa una variante de Libflow ajustada para aplicaciones (no librerías).
+
+**Ramas estables — protegidas en GitHub, nunca push directo:**
+- `main` — producción. Solo acepta merges via PR aprobado.
+
+**Ramas de trabajo — se crean y eliminan por tarea:**
+- `feature/*` — nueva funcionalidad (ej. `feature/auth-login`)
+- `enhancement/*` — mejora a algo ya existente (ej. `enhancement/patient-search-index`)
+- `fix/*` — bug encontrado en desarrollo (ej. `fix/migration-generated-column`)
+- `hotfix/*` — bug urgente en producción, merge inmediato (ej. `hotfix/jwt-expiry`)
+
+**Flujo obligatorio:**
+1. Partir siempre de `main` actualizado: `git checkout main && git pull`
+2. Crear rama con prefijo correcto
+3. Commits atómicos con convención: `tipo(scope): descripción`
+   - tipos: `feat`, `fix`, `test`, `refactor`, `chore`
+   - scope = bounded context: `auth`, `patients`, `crypto`, `infra`, etc.
+   - ejemplo: `feat(auth): implement login endpoint with bcrypt + JWT`
+4. Abrir PR a `main` cuando la rama está lista
+5. Borrar la rama tras el merge
+
+**Reglas de calidad:**
+- Cada PR resuelve exactamente una cosa
+- `main` siempre compila y los tests pasan
+- Sin commits de "WIP" o "fix typo" sueltos — squash antes del PR si es necesario
+
 ## Documentación de referencia
 
 | Documento | Contenido |
