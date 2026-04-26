@@ -7,7 +7,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
-## [Unreleased] — PR #1 · feature/bc1-auth
+## [Unreleased]
+
+---
+
+## [0.2.0] — 2026-04-26 · PR #1 · feature/bc1-auth
 
 ### Added
 - BC-1 Auth: `POST /api/v1/auth/login`, `/refresh`, `/logout`, `GET /auth/me`
