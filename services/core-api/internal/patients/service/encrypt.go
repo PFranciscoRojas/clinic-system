@@ -10,6 +10,56 @@ import (
 	"sghcp/core-api/internal/shared/crypto"
 )
 
+// plainPII groups all encryptable PII string fields for batch processing.
+// Adding a new PII field means one edit here and one in sealAll — nowhere else.
+type plainPII struct {
+	FirstName        string
+	MiddleName       string
+	PaternalLastName string
+	MaternalLastName string
+	Phone            string
+	Email            string
+	Address          string
+}
+
+// sealedPII is the encrypted counterpart of plainPII.
+type sealedPII struct {
+	FirstNameEnc        []byte
+	MiddleNameEnc       []byte
+	PaternalLastNameEnc []byte
+	MaternalLastNameEnc []byte
+	PhoneEnc            []byte
+	EmailEnc            []byte
+	AddressEnc          []byte
+}
+
+// sealAll encrypts every field of p in a single table-driven pass.
+// Empty strings produce nil bytes (stored as SQL NULL).
+func sealAll(dek []byte, p plainPII) (sealedPII, error) {
+	type entry struct {
+		name  string
+		value string
+		dest  *[]byte
+	}
+	var s sealedPII
+	for _, e := range []entry{
+		{"first_name", p.FirstName, &s.FirstNameEnc},
+		{"middle_name", p.MiddleName, &s.MiddleNameEnc},
+		{"paternal_last_name", p.PaternalLastName, &s.PaternalLastNameEnc},
+		{"maternal_last_name", p.MaternalLastName, &s.MaternalLastNameEnc},
+		{"phone", p.Phone, &s.PhoneEnc},
+		{"email", p.Email, &s.EmailEnc},
+		{"address", p.Address, &s.AddressEnc},
+	} {
+		enc, err := sealField(dek, e.value)
+		if err != nil {
+			return sealedPII{}, fmt.Errorf("encrypt %s: %w", e.name, err)
+		}
+		*e.dest = enc
+	}
+	return s, nil
+}
+
 // newDEK generates a fresh DEK, stores its encrypted form in the DB,
 // and returns the plaintext DEK and its DB row ID.
 func (s *Service) newDEK(ctx context.Context) (dek []byte, dekID string, err error) {
@@ -72,12 +122,13 @@ func decryptRaw(dek []byte, r *patients.RawPatient) (*patients.Patient, error) {
 		CreatedAt:        r.CreatedAt,
 		UpdatedAt:        r.UpdatedAt,
 	}
-
-	fields := []struct {
+	type field struct {
 		dst  *string
 		src  []byte
 		name string
-	}{
+	}
+	var err error
+	for _, f := range []field{
 		{&p.FirstName, r.FirstNameEnc, "first_name"},
 		{&p.MiddleName, r.MiddleNameEnc, "middle_name"},
 		{&p.PaternalLastName, r.PaternalLastNameEnc, "paternal_last_name"},
@@ -86,9 +137,7 @@ func decryptRaw(dek []byte, r *patients.RawPatient) (*patients.Patient, error) {
 		{&p.Phone, r.PhoneEnc, "phone"},
 		{&p.Email, r.EmailEnc, "email"},
 		{&p.Address, r.AddressEnc, "address"},
-	}
-	var err error
-	for _, f := range fields {
+	} {
 		if *f.dst, err = openField(dek, f.src); err != nil {
 			return nil, fmt.Errorf("decrypt %s: %w", f.name, err)
 		}

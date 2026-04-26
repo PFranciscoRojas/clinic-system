@@ -13,19 +13,19 @@ type CreateInput struct {
 	OrganizationID   string
 	DocumentTypeCode string
 	FirstName        string
-	MiddleName       string // optional
+	MiddleName       string
 	PaternalLastName string
-	MaternalLastName string // optional
+	MaternalLastName string
 	DocumentNumber   string
-	Phone            string // optional
-	Email            string // optional
-	Address          string // optional
+	Phone            string
+	Email            string
+	Address          string
 	BirthDate        time.Time
-	Gender           string // optional free-text per Decreto 1227/2015
+	Gender           string // free-text per Decreto 1227/2015
 }
 
 func (s *Service) Create(ctx context.Context, in CreateInput) (string, error) {
-	if in.FirstName == "" || in.PaternalLastName == "" || in.DocumentNumber == "" || in.OrganizationID == "" {
+	if in.OrganizationID == "" || in.FirstName == "" || in.PaternalLastName == "" || in.DocumentNumber == "" {
 		return "", patients.ErrInvalidInput
 	}
 
@@ -34,37 +34,22 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (string, error) {
 		return "", err
 	}
 
-	firstNameEnc, err := sealField(dek, in.FirstName)
+	sealed, err := sealAll(dek, plainPII{
+		FirstName:        in.FirstName,
+		MiddleName:       in.MiddleName,
+		PaternalLastName: in.PaternalLastName,
+		MaternalLastName: in.MaternalLastName,
+		Phone:            in.Phone,
+		Email:            in.Email,
+		Address:          in.Address,
+	})
 	if err != nil {
-		return "", fmt.Errorf("encrypt first_name: %w", err)
+		return "", err
 	}
-	pLastNameEnc, err := sealField(dek, in.PaternalLastName)
-	if err != nil {
-		return "", fmt.Errorf("encrypt paternal_last_name: %w", err)
-	}
+
 	docEnc, err := sealField(dek, in.DocumentNumber)
 	if err != nil {
 		return "", fmt.Errorf("encrypt document_number: %w", err)
-	}
-	midEnc, err := sealField(dek, in.MiddleName)
-	if err != nil {
-		return "", fmt.Errorf("encrypt middle_name: %w", err)
-	}
-	matEnc, err := sealField(dek, in.MaternalLastName)
-	if err != nil {
-		return "", fmt.Errorf("encrypt maternal_last_name: %w", err)
-	}
-	phoneEnc, err := sealField(dek, in.Phone)
-	if err != nil {
-		return "", fmt.Errorf("encrypt phone: %w", err)
-	}
-	emailEnc, err := sealField(dek, in.Email)
-	if err != nil {
-		return "", fmt.Errorf("encrypt email: %w", err)
-	}
-	addrEnc, err := sealField(dek, in.Address)
-	if err != nil {
-		return "", fmt.Errorf("encrypt address: %w", err)
 	}
 
 	fullName := in.FirstName + " " + in.PaternalLastName
@@ -72,23 +57,22 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (string, error) {
 		fullName += " " + in.MaternalLastName
 	}
 
-	id, err := s.repo.Create(ctx, patients.CreateParams{
+	return s.repo.Create(ctx, patients.CreateParams{
 		OrganizationID:       in.OrganizationID,
 		DocumentTypeCode:     in.DocumentTypeCode,
 		DEKID:                dekID,
-		FirstNameEnc:         firstNameEnc,
-		MiddleNameEnc:        midEnc,
-		PaternalLastNameEnc:  pLastNameEnc,
-		MaternalLastNameEnc:  matEnc,
+		FirstNameEnc:         sealed.FirstNameEnc,
+		MiddleNameEnc:        sealed.MiddleNameEnc,
+		PaternalLastNameEnc:  sealed.PaternalLastNameEnc,
+		MaternalLastNameEnc:  sealed.MaternalLastNameEnc,
 		PaternalLastNameHash: hashField(in.PaternalLastName),
 		FullNameSearchHash:   hashField(fullName),
 		DocumentNumberEnc:    docEnc,
 		DocSearchHash:        hashField(in.DocumentNumber),
-		PhoneEnc:             phoneEnc,
-		EmailEnc:             emailEnc,
-		AddressEnc:           addrEnc,
+		PhoneEnc:             sealed.PhoneEnc,
+		EmailEnc:             sealed.EmailEnc,
+		AddressEnc:           sealed.AddressEnc,
 		BirthDate:            in.BirthDate,
 		Gender:               in.Gender,
 	})
-	return id, err
 }
