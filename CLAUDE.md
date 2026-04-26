@@ -109,6 +109,36 @@ Ver `docs/security/blind-variables.md`. Los puntos críticos:
 - Nunca usar datos reales de pacientes en entornos dev/staging — usar generador sintético con Faker.
 - Backups cifrados (GPG) en Backblaze B2 con política de retención de 15 años (Bootstrap). En Cloud: S3 Glacier con Object Lock (WORM).
 
+## Versioning — SemVer (REGLA ESTRICTA)
+
+Este proyecto sigue [Semantic Versioning 2.0.0](https://semver.org/): `MAJOR.MINOR.PATCH`
+
+**Regla de cada dígito:**
+- `PATCH` — bug fix que no cambia la API pública (`0.1.1`, `0.1.2`)
+- `MINOR` — nueva funcionalidad retrocompatible, equivale a completar una fase (`0.2.0`)
+- `MAJOR` — cambio que rompe compatibilidad con clientes existentes (`1.0.0`)
+
+**Hoja de ruta de versiones:**
+
+| Versión | Hito |
+|---|---|
+| `0.1.0` | Fases 1 + 2 — diseño y scaffolding ← actual en `main` |
+| `0.2.0` | Fase 3 — BC-1 Auth + BC-3 Pacientes |
+| `0.3.0` | Fase 4 — Motor IA (Whisper + Claude API) |
+| `0.4.0` | Fase 5 — Frontend React + Observabilidad |
+| `1.0.0` | Primera clínica en producción (go-live) |
+
+**Proceso de release:**
+1. Merge del PR a `main`
+2. Actualizar `[Unreleased]` en `CHANGELOG.md` con la nueva versión y fecha
+3. Crear tag en git: `git tag v0.2.0 && git push origin v0.2.0`
+
+**Reglas del CHANGELOG (`CHANGELOG.md`):**
+- Toda entrada va bajo `[Unreleased]` mientras el PR no esté mergeado
+- Al hacer release, `[Unreleased]` se convierte en `[X.Y.Z] — YYYY-MM-DD · descripción`
+- Secciones válidas: `Added`, `Changed`, `Fixed`, `Removed`, `Security`
+- Una línea por cambio — concreto y orientado al usuario, no al implementador
+
 ## Branching model — Libflow adaptado (REGLA ESTRICTA)
 
 Este proyecto usa una variante de Libflow ajustada para aplicaciones (no librerías).
