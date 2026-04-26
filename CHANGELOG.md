@@ -9,6 +9,16 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+- BC-3 Patients: `POST /api/v1/patients`, `GET /patients`, `GET /patients/{id}`, `PUT /patients/{id}`, `DELETE /patients/{id}` (soft deactivate)
+- Envelope encryption per patient — unique DEK per record, encrypted with `MASTER_KEY` via `shared/crypto.KeyManager`
+- AES-256-GCM encryption of all PII fields (`first_name`, `paternal_last_name`, `document_number`, `phone`, `email`, `address`, etc.)
+- SHA-256 hashed indexes for searchable fields (`paternal_last_name_hash`, `doc_search_hash`) — no plaintext in DB
+- `patients/repository` layer — `create.go`, `find.go`, `update.go`, `helpers.go`
+- `patients/service` layer — `create.go`, `get.go`, `search.go`, `update.go`, `encrypt.go`
+- `patients/handler` layer with `RequirePermission` middleware per endpoint
+- `shared/httputil` package — `WriteJSON`, `WriteError`, `DecodeJSON`, `ExtractIP`
+
 ---
 
 ## [0.2.0] — 2026-04-26 · PR #1 · feature/bc1-auth
