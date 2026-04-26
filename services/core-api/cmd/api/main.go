@@ -13,7 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
-	"sghcp/core-api/internal/auth"
+	authhandler "sghcp/core-api/internal/auth/handler"
 	"sghcp/core-api/internal/shared/config"
 	"sghcp/core-api/internal/shared/crypto"
 	"sghcp/core-api/internal/shared/db"
@@ -70,7 +70,7 @@ func main() {
 		fmt.Fprint(w, "ok")
 	})
 
-	r.Mount("/api/v1/auth", auth.NewHandler(pool, redisClient, cfg).Routes())
+	r.Mount("/api/v1/auth", authhandler.New(pool, redisClient, cfg).Routes([]byte(cfg.JWTSecret)))
 
 	// Protected routes require a valid JWT. RBAC is enforced per-endpoint with middleware.RequirePermission.
 	r.Group(func(r chi.Router) {
