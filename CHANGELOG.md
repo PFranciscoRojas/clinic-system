@@ -30,13 +30,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ### Added
 - RFC-001: business requirements and system overview
 - ADR-001 through ADR-006: Go, PostgreSQL + AES encryption, VPS Bootstrap,
-  Whisper local + Claude API, React PWA, outbox pattern
+  local Whisper + Claude API, React PWA, outbox pattern
 - C4 architecture diagrams (context, container, component, bounded contexts)
 - Full PostgreSQL schema: 27 tables, 5 bounded contexts, RLS, RBAC seed data
 - Security blind variables document (10 legal/operational risks pre go-live)
 - `docker-compose.yml`: postgres 16, redis 7, caddy, core-api, ai-service
 - `Makefile`: dev lifecycle commands (up / down / migrate / test / lint / sqlc)
-- `scripts/backup.sh`: pg_dump + GPG + Backblaze B2
+- `scripts/backup.sh`: pg_dump + GPG encryption + Backblaze B2 upload
 - Go scaffold: chi router, AES-256-GCM KeyManager, pgx pool, Redis, outbox publisher
 - Python AI service scaffold: Whisper transcription, Claude API SOAP extraction, NER anonymizer
 - Migration `000001`: full schema applied and verified

@@ -133,11 +133,12 @@ Este proyecto sigue [Semantic Versioning 2.0.0](https://semver.org/): `MAJOR.MIN
 2. Actualizar `[Unreleased]` en `CHANGELOG.md` con la nueva versión y fecha
 3. Crear tag en git: `git tag v0.2.0 && git push origin v0.2.0`
 
-**Reglas del CHANGELOG (`CHANGELOG.md`):**
-- Toda entrada va bajo `[Unreleased]` mientras el PR no esté mergeado
-- Al hacer release, `[Unreleased]` se convierte en `[X.Y.Z] — YYYY-MM-DD · descripción`
-- Secciones válidas: `Added`, `Changed`, `Fixed`, `Removed`, `Security`
-- Una línea por cambio — concreto y orientado al usuario, no al implementador
+**CHANGELOG rules (`CHANGELOG.md`):**
+- Always written in **English** — same rule as source code
+- Every entry goes under `[Unreleased]` until the PR is merged
+- On release, `[Unreleased]` becomes `[X.Y.Z] — YYYY-MM-DD · description`
+- Valid sections: `Added`, `Changed`, `Fixed`, `Removed`, `Security`
+- One line per change — user-facing and concrete, not implementation detail
 
 ## Branching model — Libflow adaptado (REGLA ESTRICTA)
 
