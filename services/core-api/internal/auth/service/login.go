@@ -8,13 +8,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"sghcp/core-api/internal/auth"
+	"sghcp/core-api/internal/shared/hash"
 	"sghcp/core-api/internal/shared/token"
 )
 
-// Login verifies credentials and returns a token pair.
-// Enforces account lockout after maxFailedAttempts consecutive failures.
 func (s *Service) Login(ctx context.Context, orgSlug, email, password, ip, userAgent string) (*token.Pair, error) {
-	emailHash := auth.HashEmail(email)
+	emailHash := hash.Normalize(email)
 
 	user, err := s.repo.FindByEmail(ctx, orgSlug, email)
 	if err != nil {

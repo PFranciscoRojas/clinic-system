@@ -1,11 +1,9 @@
 package repository
 
-import "sghcp/core-api/internal/auth"
+import "sghcp/core-api/internal/shared/hash"
 
-// hashEmail delegates to the domain function so the hash is computed identically
-// whether called from the service layer or directly from a repository query.
 func hashEmail(email string) string {
-	return auth.HashEmail(email)
+	return hash.Normalize(email)
 }
 
 func nullableUUID(s *string) any {

@@ -10,6 +10,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	authhandler "sghcp/core-api/internal/auth/handler"
+	patientshandler "sghcp/core-api/internal/patients/handler"
 	"sghcp/core-api/internal/shared/middleware"
 )
 
@@ -38,7 +39,7 @@ func (a *app) buildRouter() http.Handler {
 	// RequirePermission (per-endpoint) checks a specific permission code from those claims.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RequireAuth([]byte(a.cfg.JWTSecret)))
-		// Fase 3: patients, Fase 4: appointments + clinical records mount here.
+		r.Mount("/api/v1/patients", patientshandler.New(a.pool, a.km).Routes())
 	})
 
 	return r
