@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"sghcp/core-api/internal/patients"
+	"sghcp/core-api/internal/shared/hash"
 )
 
 func (s *Service) Update(ctx context.Context, in UpdateInput) error {
@@ -45,8 +46,8 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) error {
 		MiddleNameEnc:        sealed.MiddleNameEnc,
 		PaternalLastNameEnc:  sealed.PaternalLastNameEnc,
 		MaternalLastNameEnc:  sealed.MaternalLastNameEnc,
-		PaternalLastNameHash: hashField(in.PaternalLastName),
-		FullNameSearchHash:   hashField(fullName),
+		PaternalLastNameHash: hash.Normalize(in.PaternalLastName),
+		FullNameSearchHash:   hash.Normalize(fullName),
 		PhoneEnc:             sealed.PhoneEnc,
 		EmailEnc:             sealed.EmailEnc,
 		AddressEnc:           sealed.AddressEnc,

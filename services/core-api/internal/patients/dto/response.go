@@ -1,9 +1,10 @@
-package handler
+package dto
 
 import "sghcp/core-api/internal/patients"
 
-// patientResponse is the JSON representation of a decrypted patient record.
-type patientResponse struct {
+// PatientResponse is the JSON representation of a decrypted patient record.
+// Exported so it can be referenced by tests and any future handler within this BC.
+type PatientResponse struct {
 	ID               string `json:"id"`
 	DocumentTypeCode string `json:"document_type_code"`
 	FirstName        string `json:"first_name"`
@@ -19,8 +20,9 @@ type patientResponse struct {
 	IsActive         bool   `json:"is_active"`
 }
 
-func toResponse(p *patients.Patient) patientResponse {
-	return patientResponse{
+// ToResponse maps a decrypted Patient domain entity to its HTTP response shape.
+func ToResponse(p *patients.Patient) PatientResponse {
+	return PatientResponse{
 		ID:               p.ID,
 		DocumentTypeCode: p.DocumentTypeCode,
 		FirstName:        p.FirstName,

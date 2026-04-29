@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	patientsdto "sghcp/core-api/internal/patients/dto"
 	patientssvc "sghcp/core-api/internal/patients/service"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
@@ -19,7 +20,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	httputil.WriteJSON(w, http.StatusOK, toResponse(p))
+	httputil.WriteJSON(w, http.StatusOK, patientsdto.ToResponse(p))
 }
 
 // GET /api/v1/patients?last_name=Garcia&limit=20&offset=0
@@ -43,9 +44,9 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := make([]patientResponse, 0, len(results))
+	resp := make([]patientsdto.PatientResponse, 0, len(results))
 	for _, p := range results {
-		resp = append(resp, toResponse(p))
+		resp = append(resp, patientsdto.ToResponse(p))
 	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"patients": resp})
 }

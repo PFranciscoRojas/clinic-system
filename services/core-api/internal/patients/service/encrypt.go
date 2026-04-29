@@ -2,9 +2,7 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
-	"strings"
 
 	"sghcp/core-api/internal/patients"
 	"sghcp/core-api/internal/shared/crypto"
@@ -101,13 +99,6 @@ func openField(dek, ciphertext []byte) (string, error) {
 		return "", err
 	}
 	return string(b), nil
-}
-
-// hashField lower-cases, trims, and SHA-256 hashes a string for indexed lookups.
-func hashField(s string) string {
-	normalized := strings.ToLower(strings.TrimSpace(s))
-	h := sha256.Sum256([]byte(normalized))
-	return fmt.Sprintf("%x", h)
 }
 
 // decryptRaw decrypts all PII fields of a RawPatient into a plain Patient.

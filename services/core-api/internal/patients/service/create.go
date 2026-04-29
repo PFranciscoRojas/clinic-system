@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"sghcp/core-api/internal/patients"
+	"sghcp/core-api/internal/shared/hash"
 )
 
 func (s *Service) Create(ctx context.Context, in CreateInput) (string, error) {
@@ -48,10 +49,10 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (string, error) {
 		MiddleNameEnc:        sealed.MiddleNameEnc,
 		PaternalLastNameEnc:  sealed.PaternalLastNameEnc,
 		MaternalLastNameEnc:  sealed.MaternalLastNameEnc,
-		PaternalLastNameHash: hashField(in.PaternalLastName),
-		FullNameSearchHash:   hashField(fullName),
+		PaternalLastNameHash: hash.Normalize(in.PaternalLastName),
+		FullNameSearchHash:   hash.Normalize(fullName),
 		DocumentNumberEnc:    docEnc,
-		DocSearchHash:        hashField(in.DocumentNumber),
+		DocSearchHash:        hash.Normalize(in.DocumentNumber),
 		PhoneEnc:             sealed.PhoneEnc,
 		EmailEnc:             sealed.EmailEnc,
 		AddressEnc:           sealed.AddressEnc,

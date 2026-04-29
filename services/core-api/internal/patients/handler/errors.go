@@ -8,16 +8,19 @@ import (
 	"sghcp/core-api/internal/shared/httputil"
 )
 
-// writeErr maps patients domain sentinels to the appropriate HTTP status.
-func writeErr(w http.ResponseWriter, err error) {
+var patientErrors = httputil.ErrorMapper(func(err error) (int, string) {
 	switch {
 	case errors.Is(err, patients.ErrNotFound):
-		httputil.WriteError(w, http.StatusNotFound, "patient not found")
+		return http.StatusNotFound, "patient not found"
 	case errors.Is(err, patients.ErrForbidden):
-		httputil.WriteError(w, http.StatusForbidden, "access denied")
+		return http.StatusForbidden, "access denied"
 	case errors.Is(err, patients.ErrInvalidInput):
-		httputil.WriteError(w, http.StatusUnprocessableEntity, "invalid input")
+		return http.StatusUnprocessableEntity, "invalid input"
 	default:
-		httputil.WriteError(w, http.StatusInternalServerError, "internal error")
+		return 0, ""
 	}
+})
+
+func writeErr(w http.ResponseWriter, err error) {
+	httputil.WriteErrorFrom(w, err, patientErrors)
 }

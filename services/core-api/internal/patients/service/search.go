@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"sghcp/core-api/internal/patients"
+	"sghcp/core-api/internal/shared/hash"
 )
 
 func (s *Service) Search(ctx context.Context, in SearchInput) ([]*patients.Patient, error) {
@@ -17,10 +18,10 @@ func (s *Service) Search(ctx context.Context, in SearchInput) ([]*patients.Patie
 
 	filter := patients.SearchFilter{Limit: in.Limit, Offset: in.Offset}
 	if in.PaternalLastName != "" {
-		filter.PaternalLastNameHash = hashField(in.PaternalLastName)
+		filter.PaternalLastNameHash = hash.Normalize(in.PaternalLastName)
 	}
 	if in.DocumentNumber != "" {
-		filter.DocSearchHash = hashField(in.DocumentNumber)
+		filter.DocSearchHash = hash.Normalize(in.DocumentNumber)
 	}
 
 	rows, err := s.repo.Search(ctx, in.OrganizationID, filter)

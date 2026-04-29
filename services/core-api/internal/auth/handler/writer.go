@@ -1,31 +1,16 @@
 package handler
 
 import (
-	"errors"
 	"log/slog"
 	"net/http"
 
-	"sghcp/core-api/internal/auth"
+	authdto "sghcp/core-api/internal/auth/dto"
 	"sghcp/core-api/internal/shared/httputil"
 )
 
-type loginRequest struct {
-	OrgSlug  string `json:"org_slug"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
-
-type refreshRequest struct {
-	RefreshToken string `json:"refresh_token"`
-}
-
-type logoutRequest struct {
-	RefreshToken string `json:"refresh_token"`
-}
-
 // POST /api/v1/auth/login
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
-	var req loginRequest
+	var req authdto.LoginRequest
 	if err := httputil.DecodeJSON(r, &req); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
@@ -37,21 +22,16 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 
 	pair, err := h.svc.Login(r.Context(), req.OrgSlug, req.Email, req.Password, httputil.ExtractIP(r), r.UserAgent())
 	if err != nil {
-		if errors.Is(err, auth.ErrInvalidCredentials) || errors.Is(err, auth.ErrAccountLocked) {
-			httputil.WriteError(w, http.StatusUnauthorized, "invalid credentials")
-			return
-		}
-		slog.Error("auth.login unexpected error", "err", err)
-		httputil.WriteError(w, http.StatusUnauthorized, "invalid credentials")
+		slog.Error("auth.login", "err", err)
+		writeErr(w, err)
 		return
 	}
-
 	httputil.WriteJSON(w, http.StatusOK, pair)
 }
 
 // POST /api/v1/auth/refresh
 func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
-	var req refreshRequest
+	var req authdto.RefreshRequest
 	if err := httputil.DecodeJSON(r, &req); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
@@ -63,16 +43,15 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 
 	pair, err := h.svc.Refresh(r.Context(), req.RefreshToken)
 	if err != nil {
-		httputil.WriteError(w, http.StatusUnauthorized, "invalid or expired refresh token")
+		writeErr(w, err)
 		return
 	}
-
 	httputil.WriteJSON(w, http.StatusOK, pair)
 }
 
 // POST /api/v1/auth/logout
 func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
-	var req logoutRequest
+	var req authdto.LogoutRequest
 	if err := httputil.DecodeJSON(r, &req); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
