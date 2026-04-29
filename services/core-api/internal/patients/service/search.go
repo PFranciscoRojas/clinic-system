@@ -7,15 +7,6 @@ import (
 	"sghcp/core-api/internal/patients"
 )
 
-// SearchInput holds plain-text search terms; exactly one of the hash fields must be set.
-type SearchInput struct {
-	OrganizationID   string
-	PaternalLastName string // search by last name
-	DocumentNumber   string // search by document number
-	Limit            int
-	Offset           int
-}
-
 func (s *Service) Search(ctx context.Context, in SearchInput) ([]*patients.Patient, error) {
 	if in.PaternalLastName == "" && in.DocumentNumber == "" {
 		return nil, fmt.Errorf("%w: provide paternal_last_name or document_number", patients.ErrInvalidInput)
@@ -24,10 +15,7 @@ func (s *Service) Search(ctx context.Context, in SearchInput) ([]*patients.Patie
 		in.Limit = 20
 	}
 
-	filter := patients.SearchFilter{
-		Limit:  in.Limit,
-		Offset: in.Offset,
-	}
+	filter := patients.SearchFilter{Limit: in.Limit, Offset: in.Offset}
 	if in.PaternalLastName != "" {
 		filter.PaternalLastNameHash = hashField(in.PaternalLastName)
 	}

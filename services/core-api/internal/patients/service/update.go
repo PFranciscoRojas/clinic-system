@@ -2,25 +2,9 @@ package service
 
 import (
 	"context"
-	"time"
 
 	"sghcp/core-api/internal/patients"
 )
-
-// UpdateInput carries plain-text fields for a full patient update.
-type UpdateInput struct {
-	OrganizationID   string
-	PatientID        string
-	FirstName        string
-	MiddleName       string
-	PaternalLastName string
-	MaternalLastName string
-	Phone            string
-	Email            string
-	Address          string
-	BirthDate        time.Time
-	Gender           string
-}
 
 func (s *Service) Update(ctx context.Context, in UpdateInput) error {
 	if in.FirstName == "" || in.PaternalLastName == "" {
