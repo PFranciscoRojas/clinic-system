@@ -9,32 +9,31 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+---
+
+## [0.2.1] — 2026-04-29 · PR #2 · feature/bc3-patients
+
+Completes Phase 3 (BC-3 Patients). `0.2.0` covered BC-1 Auth; `0.2.1` adds BC-3 Patients and consolidates shared infrastructure.
+
 ### Added
 - BC-3 Patients: `POST /api/v1/patients`, `GET /patients`, `GET /patients/{id}`, `PUT /patients/{id}`, `DELETE /patients/{id}` (soft deactivate)
 - Envelope encryption per patient — unique DEK per record, encrypted with `MASTER_KEY` via `shared/crypto.KeyManager`
 - AES-256-GCM encryption of all PII fields (`first_name`, `paternal_last_name`, `document_number`, `phone`, `email`, `address`, etc.)
 - SHA-256 hashed indexes for searchable fields (`paternal_last_name_hash`, `doc_search_hash`) — no plaintext in DB
-- `patients/repository` layer — `create.go`, `find.go`, `update.go`, `helpers.go`
-- `patients/service` layer — `create.go`, `get.go`, `search.go`, `update.go`, `encrypt.go`
-- `patients/handler` layer with `RequirePermission` middleware per endpoint
-- `shared/httputil` package — `WriteJSON`, `WriteError`, `DecodeJSON`, `ExtractIP`
-- `shared/hash` package — single `Normalize()` function (lowercase + trim + SHA-256) used by all BCs
-- `shared/httputil.ErrorMapper` + `WriteErrorFrom()` — standard domain→HTTP error mapping pattern
-- `patients/dto` package — exported `PatientResponse` and `ToResponse()` reusable within the BC
+- `shared/hash` package — single `Normalize()` (lowercase + trim + SHA-256) used by all BCs
+- `shared/httputil.ErrorMapper` + `WriteErrorFrom()` — standard domain→HTTP error mapping pattern for every handler
+- `patients/dto` package — exported `PatientResponse` and `ToResponse()`, reusable within the BC
 - `auth/dto` package — `LoginRequest`, `RefreshRequest`, `LogoutRequest` extracted from handler
 
 ### Changed
-- `auth/handler/writer.go` uses `auth/dto` request types and shared `writeErr()` instead of inline error checks
-- `auth/handler/errors.go` added — consistent error mapper matching the patients pattern
-- `auth/service/login.go` and `auth/repository/helpers.go` use `shared/hash.Normalize()` instead of the removed `auth.HashEmail()`
-- `patients/service` uses `shared/hash.Normalize()` — `hashField()` local function removed
-- `patients/handler/errors.go` uses `httputil.WriteErrorFrom()` via the shared `ErrorMapper` type
-- `auth/domain.go` and `patients/domain.go` split: structs → `models.go`, interface → `repository.go`, sentinel errors → `errors.go`
-- Handler packages restructured: `handler.go` (struct + New), `ports.go` (svcPort interface), `routes.go` (Routes), `errors.go` (domain→HTTP map)
-- `svcPort` interfaces moved to `ports.go` with compile-time satisfaction checks in both auth and patients handlers
+- Domain files split by concern in both BCs: structs → `models.go`, interface → `repository.go`, sentinel errors → `errors.go`
+- Handler packages structured consistently: `handler.go` (struct + New), `ports.go` (svcPort + compile-time check), `routes.go`, `errors.go` (domain→HTTP map)
+- `auth/service/login.go` and `auth/repository/helpers.go` use `shared/hash.Normalize()` — `auth.HashEmail()` removed
+- `patients/service` use cases use `shared/hash.Normalize()` — `hashField()` local function removed
+- Service input types centralised in `patients/service/inputs.go`
 
 ### Removed
-- `auth/hash.go` — replaced by `shared/hash.Normalize()`
+- `auth/hash.go` — replaced by `shared/hash`
 - `auth/handler/helpers.go` — replaced by `shared/httputil`
 - `patients/handler/response.go` — promoted to `patients/dto/response.go`
 
