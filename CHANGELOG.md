@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+---
+
+## [0.3.0] — 2026-05-04 · PR #3 · feature/bc4-ai-motor
+
+Completes Fase 4 (Motor IA). Adds BC-4 Appointments and the full Whisper → NER → Claude → encrypt pipeline.
+
 ### Added
 - BC-4 Appointments: `POST /api/v1/appointments`, `GET /appointments`, `GET /appointments/{id}`, `DELETE /appointments/{id}` (cancel with reason)
 - `POST /api/v1/appointments/{id}/audio` — multipart upload, saves to `/data/audio/{org}/{appt}/{file}`, creates `ai_draft` (PENDING), enqueues job to Redis Stream `ai_jobs`
