@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     redis_port: int = 6379
     redis_password: str
 
+    # Envelope encryption — same MASTER_KEY used by core-api to decrypt DEKs
+    master_key: str
+
     # Anthropic
     anthropic_api_key: str
 

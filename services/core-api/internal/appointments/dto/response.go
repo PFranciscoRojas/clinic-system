@@ -1,0 +1,37 @@
+package dto
+
+import (
+	"sghcp/core-api/internal/appointments"
+)
+
+type AppointmentResponse struct {
+	ID             string `json:"id"`
+	OrganizationID string `json:"organization_id"`
+	PatientID      string `json:"patient_id"`
+	StaffID        string `json:"staff_id"`
+	ScheduledAt    string `json:"scheduled_at"`
+	DurationMin    int    `json:"duration_min"`
+	Modality       string `json:"modality"`
+	Status         string `json:"status"`
+	RescheduledTo  string `json:"rescheduled_to,omitempty"`
+	CancelReason   string `json:"cancel_reason,omitempty"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
+}
+
+func ToResponse(a *appointments.Appointment) AppointmentResponse {
+	return AppointmentResponse{
+		ID:             a.ID,
+		OrganizationID: a.OrganizationID,
+		PatientID:      a.PatientID,
+		StaffID:        a.StaffID,
+		ScheduledAt:    a.ScheduledAt.Format("2006-01-02T15:04:05Z07:00"),
+		DurationMin:    a.DurationMin,
+		Modality:       a.Modality,
+		Status:         a.Status,
+		RescheduledTo:  a.RescheduledTo,
+		CancelReason:   a.CancelReason,
+		CreatedAt:      a.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:      a.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
+}

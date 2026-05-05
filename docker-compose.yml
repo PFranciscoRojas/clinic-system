@@ -33,6 +33,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       AI_SERVICE_URL: http://ai-service:8000
+      AUDIO_DIR: /data/audio
     volumes:
       - audio_data:/data/audio
     networks:
