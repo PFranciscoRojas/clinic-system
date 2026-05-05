@@ -23,6 +23,7 @@ type Config struct {
 	JWTRefreshTTLDays  int
 
 	AIServiceURL string
+	AudioDir     string
 }
 
 func Load() Config {
@@ -43,6 +44,7 @@ func Load() Config {
 		JWTRefreshTTLDays: getEnvInt("JWT_REFRESH_TTL_DAYS", 7),
 
 		AIServiceURL: getEnv("AI_SERVICE_URL", "http://ai-service:8000"),
+		AudioDir:     getEnv("AUDIO_DIR", "/data/audio"),
 	}
 }
 

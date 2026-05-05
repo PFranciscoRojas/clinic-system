@@ -10,6 +10,8 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	authhandler "sghcp/core-api/internal/auth/handler"
+	apptshandler "sghcp/core-api/internal/appointments/handler"
+	aidraftshandler "sghcp/core-api/internal/aidrafts/handler"
 	patientshandler "sghcp/core-api/internal/patients/handler"
 	"sghcp/core-api/internal/shared/middleware"
 )
@@ -39,7 +41,13 @@ func (a *app) buildRouter() http.Handler {
 	// RequirePermission (per-endpoint) checks a specific permission code from those claims.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RequireAuth([]byte(a.cfg.JWTSecret)))
+
 		r.Mount("/api/v1/patients", patientshandler.New(a.pool, a.km).Routes())
+		r.Mount("/api/v1/appointments", apptshandler.New(a.pool).Routes())
+
+		aiDrafts := aidraftshandler.New(a.pool, a.km, a.rdb, a.cfg.AudioDir)
+		r.Mount("/api/v1/ai-drafts", aiDrafts.Routes())
+		r.Method(http.MethodPost, "/api/v1/appointments/{appointment_id}/audio", aiDrafts.AppointmentAudioRoute())
 	})
 
 	return r

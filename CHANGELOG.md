@@ -9,6 +9,20 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+- BC-4 Appointments: `POST /api/v1/appointments`, `GET /appointments`, `GET /appointments/{id}`, `DELETE /appointments/{id}` (cancel with reason)
+- `POST /api/v1/appointments/{id}/audio` — multipart upload, saves to `/data/audio/{org}/{appt}/{file}`, creates `ai_draft` (PENDING), enqueues job to Redis Stream `ai_jobs`
+- `GET /api/v1/ai-drafts/{id}` — fetch draft status and metadata
+- `internal/aidrafts` — domain, repository, service, handler following established pattern
+- `shared/config.AudioDir` — configurable audio storage path via `AUDIO_DIR` env var
+- `services/ai-service/src/ai_service/crypto.py` — AES-256-GCM seal/open mirroring Go's shared/crypto; wire-compatible
+- AI worker (`worker.py`) rewritten: consumes `ai_jobs` stream → Whisper transcription → spaCy NER anonymization → Claude SOAP extraction → encrypts outputs with draft's DEK before storing
+- Migration `000002`: `ALTER TABLE ai_drafts ADD COLUMN audio_path_enc BYTEA`
+
+### Changed
+- `config.py` (ai-service): added `master_key` field for DEK decryption
+- `docker-compose.yml`: `AUDIO_DIR=/data/audio` injected into core-api environment
+
 ---
 
 ## [0.2.1] — 2026-04-29 · PR #2 · feature/bc3-patients

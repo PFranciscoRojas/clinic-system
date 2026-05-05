@@ -1,30 +1,33 @@
 import asyncio
-import json
+import binascii
 import logging
+import os
 from typing import Any
 
 import asyncpg
 import redis.asyncio as aioredis
 
+from ai_service.crypto import open_, seal
 from ai_service.transcription.whisper import transcribe_audio
 from ai_service.anonymization.ner import anonymize
 from ai_service.drafts.claude import generate_soap_draft
 
 logger = logging.getLogger(__name__)
 
-STREAM_NAME = "domain-events"
+STREAM_NAME = "ai_jobs"
 CONSUMER_GROUP = "ai-service"
 CONSUMER_NAME = "ai-worker-1"
-BLOCK_MS = 5_000  # wait up to 5s for new messages before polling again
-BATCH_SIZE = 5    # process up to 5 audio jobs concurrently
+BLOCK_MS = 5_000
+BATCH_SIZE = 5
 
 
-class OutboxWorker:
-    """Consumes AI job requests from Redis Streams and processes audio files."""
+class AIWorker:
+    """Consumes ai_jobs from Redis Streams and processes audio through the AI pipeline."""
 
-    def __init__(self, redis_url: str, database_url: str) -> None:
+    def __init__(self, redis_url: str, database_url: str, master_key_hex: str) -> None:
         self._redis_url = redis_url
         self._database_url = database_url
+        self._master_key = binascii.unhexlify(master_key_hex)
         self._redis: aioredis.Redis | None = None
         self._db: asyncpg.Pool | None = None
         self._task: asyncio.Task[None] | None = None
@@ -33,7 +36,6 @@ class OutboxWorker:
         self._redis = aioredis.from_url(self._redis_url, decode_responses=True)
         self._db = await asyncpg.create_pool(self._database_url, min_size=1, max_size=5)
 
-        # Create consumer group if it doesn't exist (idempotent)
         try:
             await self._redis.xgroup_create(STREAM_NAME, CONSUMER_GROUP, id="0", mkstream=True)
         except aioredis.ResponseError as e:
@@ -77,55 +79,83 @@ class OutboxWorker:
                 await asyncio.sleep(5)
 
     async def _handle(self, message_id: str, fields: dict[str, Any]) -> None:
-        event_type = fields.get("event_type", "")
-
-        # Only process AI job requests — other domain events are for analytics consumers
-        if event_type != "AIDraftRequested":
-            await self._ack(message_id)
-            return
-
-        payload: dict[str, Any] = json.loads(fields.get("payload", "{}"))
-        draft_id = payload.get("draft_id")
-        audio_path = payload.get("audio_path")
+        draft_id = fields.get("draft_id")
+        audio_path = fields.get("audio_path")
 
         if not draft_id or not audio_path:
-            logger.warning("AIDraftRequested missing required fields", extra={"message_id": message_id})
+            logger.warning("ai_job missing fields", extra={"message_id": message_id, "fields": list(fields.keys())})
             await self._ack(message_id)
             return
 
         logger.info("processing ai draft", extra={"draft_id": draft_id})
         try:
+            await self._set_status(draft_id, "PROCESSING")
             await self._process_draft(draft_id, audio_path)
             await self._ack(message_id)
         except Exception as exc:
             logger.error("draft processing failed", extra={"draft_id": draft_id, "err": str(exc)})
+            await self._set_error(draft_id, str(exc))
             # Do NOT ack — message stays in PEL for retry or manual inspection
 
     async def _process_draft(self, draft_id: str, audio_path: str) -> None:
-        # 1. Transcribe audio locally with Whisper (audio never leaves the server)
+        # 1. Transcribe locally — audio never leaves the server
         transcription = await asyncio.to_thread(transcribe_audio, audio_path)
 
-        # 2. Anonymize: remove names, document numbers, phone numbers with spaCy NER
+        # 2. Anonymize — strip names, document numbers, phones before Claude sees anything
         anonymized = anonymize(transcription)
 
-        # 3. Send anonymized text to Claude API for SOAP extraction
+        # 3. Generate SOAP draft via Claude API with anonymized text only
         soap_draft = await generate_soap_draft(anonymized)
 
-        # 4. Write results back to DB (core-api will read them via polling)
+        # 4. Encrypt both outputs with the draft's DEK before storing
         assert self._db is not None
+        row = await self._db.fetchrow(
+            """
+            SELECT d.dek_id, k.encrypted_dek, k.key_source
+            FROM ai_drafts d
+            JOIN encryption_keys k ON k.id = d.dek_id
+            WHERE d.id = $1
+            """,
+            draft_id,
+        )
+        if row is None:
+            raise RuntimeError(f"ai_draft {draft_id} not found")
+
+        dek = self._decrypt_dek(row["key_source"], bytes(row["encrypted_dek"]))
+        transcription_enc = seal(dek, transcription.encode())
+        draft_content_enc = seal(dek, soap_draft.encode())
+
         await self._db.execute(
             """
             UPDATE ai_drafts
-            SET
-                transcription_enc = $2,
+            SET transcription_enc = $2,
                 draft_content_enc = $3,
                 status = 'DRAFT_READY',
                 processed_at = NOW()
             WHERE id = $1
             """,
             draft_id,
-            transcription.encode(),    # core-api will AEA-encrypt before storing; placeholder
-            soap_draft.encode(),
+            transcription_enc,
+            draft_content_enc,
+        )
+
+    def _decrypt_dek(self, key_source: str, encrypted_dek: bytes) -> bytes:
+        if key_source.startswith("env:"):
+            return open_(self._master_key, encrypted_dek)
+        raise ValueError(f"unsupported key_source: {key_source}")
+
+    async def _set_status(self, draft_id: str, status: str) -> None:
+        assert self._db is not None
+        await self._db.execute(
+            "UPDATE ai_drafts SET status = $2 WHERE id = $1",
+            draft_id, status,
+        )
+
+    async def _set_error(self, draft_id: str, message: str) -> None:
+        assert self._db is not None
+        await self._db.execute(
+            "UPDATE ai_drafts SET status = 'ERROR', error_message = $2 WHERE id = $1",
+            draft_id, message,
         )
 
     async def _ack(self, message_id: str) -> None:
