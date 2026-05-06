@@ -36,6 +36,35 @@ func (r *Repository) FindEncKey(ctx context.Context, dekID string) (*patients.En
 	return &k, nil
 }
 
+// List returns all active patients for the organization, ordered by creation date desc.
+func (r *Repository) List(ctx context.Context, orgID string, limit, offset int) ([]*patients.RawPatient, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, organization_id, document_type_code, dek_id,
+		       first_name_enc, middle_name_enc,
+		       paternal_last_name_enc, maternal_last_name_enc,
+		       document_number_enc, phone_enc, email_enc, address_enc,
+		       birth_date, gender, is_active, created_at, updated_at
+		FROM patients
+		WHERE organization_id = $1 AND is_active = TRUE
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`, orgID, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("list patients: %w", err)
+	}
+	defer rows.Close()
+
+	var result []*patients.RawPatient
+	for rows.Next() {
+		p, err := scanPatient(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, p)
+	}
+	return result, rows.Err()
+}
+
 // Search returns patients matching the given hash filter within the organization.
 // Supports search by paternal last name hash OR document hash (not both simultaneously).
 func (r *Repository) Search(ctx context.Context, orgID string, f patients.SearchFilter) ([]*patients.RawPatient, error) {

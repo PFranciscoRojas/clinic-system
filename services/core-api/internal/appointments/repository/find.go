@@ -12,9 +12,9 @@ import (
 
 func (r *Repository) FindByID(ctx context.Context, orgID, appointmentID string) (*appointments.Appointment, error) {
 	row := r.db.QueryRow(ctx, `
-		SELECT id, organization_id, patient_id, staff_id,
-		       scheduled_at, duration_min, modality, status,
-		       notes_enc, rescheduled_to, cancelled_by, cancel_reason,
+		SELECT id::text, organization_id::text, patient_id::text, staff_id::text,
+		       scheduled_at, duration_min, modality::text, status::text,
+		       notes_enc, rescheduled_to::text, cancelled_by::text, cancel_reason,
 		       created_at, updated_at
 		FROM appointments
 		WHERE id = $1 AND organization_id = $2
@@ -29,9 +29,9 @@ func (r *Repository) List(ctx context.Context, orgID string, f appointments.List
 	}
 
 	q := `
-		SELECT id, organization_id, patient_id, staff_id,
-		       scheduled_at, duration_min, modality, status,
-		       notes_enc, rescheduled_to, cancelled_by, cancel_reason,
+		SELECT id::text, organization_id::text, patient_id::text, staff_id::text,
+		       scheduled_at, duration_min, modality::text, status::text,
+		       notes_enc, rescheduled_to::text, cancelled_by::text, cancel_reason,
 		       created_at, updated_at
 		FROM appointments
 		WHERE organization_id = $1`
@@ -82,11 +82,11 @@ func scanAppointment(row interface {
 	Scan(...any) error
 }) (*appointments.Appointment, error) {
 	var a appointments.Appointment
-	var rescheduledTo, cancelledBy *string
+	var rescheduledTo, cancelledBy, cancelReason *string
 	err := row.Scan(
 		&a.ID, &a.OrganizationID, &a.PatientID, &a.StaffID,
 		&a.ScheduledAt, &a.DurationMin, &a.Modality, &a.Status,
-		&a.NotesEnc, &rescheduledTo, &cancelledBy, &a.CancelReason,
+		&a.NotesEnc, &rescheduledTo, &cancelledBy, &cancelReason,
 		&a.CreatedAt, &a.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -100,6 +100,9 @@ func scanAppointment(row interface {
 	}
 	if cancelledBy != nil {
 		a.CancelledBy = *cancelledBy
+	}
+	if cancelReason != nil {
+		a.CancelReason = *cancelReason
 	}
 	return &a, nil
 }

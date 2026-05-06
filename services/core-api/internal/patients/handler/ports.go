@@ -12,6 +12,7 @@ import (
 type svcPort interface {
 	Create(ctx context.Context, in patientssvc.CreateInput) (string, error)
 	Get(ctx context.Context, orgID, patientID string) (*patients.Patient, error)
+	List(ctx context.Context, in patientssvc.ListInput) ([]*patients.Patient, error)
 	Search(ctx context.Context, in patientssvc.SearchInput) ([]*patients.Patient, error)
 	Update(ctx context.Context, in patientssvc.UpdateInput) error
 	Deactivate(ctx context.Context, orgID, patientID string) error

@@ -9,6 +9,19 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+- React frontend (Vite + React 18 + TypeScript) — PWA with offline support via vite-plugin-pwa (NetworkFirst strategy)
+- `AppShell` — sidebar with nav links, topbar with search/notifications/profile dropdown, PIN lock screen
+- `LoginPage` — gradient login form with org slug + email + password; 3-step onboarding flow
+- `DashboardPage` — daily agenda, 4 stat cards, mini calendar with date picker, clinical inbox
+- `PatientsPage` — debounced search with live results list
+- `PatientProfilePage` — tabbed profile: historia clínica, citas, borradores IA, documentos
+- `NewAppointmentPage` — patient search, date/time/duration picker, modality selector, notes
+- `AIDraftPage` — SOAP section viewer/editor, status polling (3s for PENDING/PROCESSING), approve flow
+- API client with automatic JWT refresh (401 → tryRefresh → retry) — `api.get/post/put/delete/upload`
+- CSS design system — full token palette (teal, slate scale), card utilities, all animations
+- `display_name` field added to `Me` interface
+
 ---
 
 ## [0.3.0] — 2026-05-04 · PR #3 · feature/bc4-ai-motor

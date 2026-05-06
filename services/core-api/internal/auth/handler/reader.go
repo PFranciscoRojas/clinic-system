@@ -15,8 +15,9 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{
-		"user_id": claims.UserID,
-		"org_id":  claims.OrganizationID,
-		"roles":   claims.Roles,
+		"user_id":     claims.UserID,
+		"org_id":      claims.OrganizationID,
+		"roles":       claims.Roles,
+		"permissions": claims.Permissions,
 	})
 }

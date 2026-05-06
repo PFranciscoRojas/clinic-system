@@ -3,6 +3,8 @@ services:
     image: caddy:2-alpine
     container_name: sghcp_caddy
     restart: unless-stopped
+    env_file:
+      - .env
     ports:
       - "80:80"
       - "443:443"
@@ -23,8 +25,8 @@ services:
       dockerfile: Dockerfile
     container_name: sghcp_core_api
     restart: unless-stopped
-    expose:
-      - "8080"
+    ports:
+      - "8080:8080"
     env_file:
       - .env
     environment:
@@ -84,7 +86,7 @@ services:
     networks:
       - sghcp_net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${DB_USER} -d $${DB_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
