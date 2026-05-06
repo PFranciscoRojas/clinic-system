@@ -1,386 +1,1168 @@
-import { useState, useRef, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
-  ArrowLeft, CalendarDays, User, Video, Stethoscope,
-  Phone, AlertCircle, CheckCircle2, Search, X, ChevronDown,
+  ChevronLeft, ChevronRight, Clock, MapPin, Video, Repeat,
+  CalendarCheck, CalendarPlus, CheckCircle2, Bell, BellOff,
+  Search, X, UserPlus, RefreshCw, ClipboardList,
+  TriangleAlert, Award, Users, Minus, ArrowLeft, User,
+  AlertCircle,
 } from 'lucide-react';
-import { appointmentsApi, type AppointmentModality } from '@/api/appointments';
-import { patientsApi, type Patient } from '@/api/patients';
-import { Field } from '@/components/ui/Field';
-import { Spinner } from '@/components/ui/Spinner';
-import { useAuth } from '@/context/AuthContext';
 
-const DURATIONS = [30, 45, 60, 90, 120];
+import { appointmentsApi, Appointment } from '../../api/appointments';
+import { patientsApi, Patient } from '../../api/patients';
+import { Spinner } from '../../components/ui/Spinner';
+import { useAuth } from '../../context/AuthContext';
 
-const MODALITIES: { value: AppointmentModality; label: string; Icon: React.ElementType; desc: string }[] = [
-  { value: 'IN_PERSON', label: 'Presencial',   Icon: Stethoscope, desc: 'Consultorio' },
-  { value: 'VIRTUAL',   label: 'Videollamada', Icon: Video,       desc: 'En línea'    },
-  { value: 'HYBRID',    label: 'Híbrida',      Icon: Phone,       desc: 'Mixta'       },
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Modality = 'presencial' | 'virtual';
+type Recurrence = 'none' | 'weekly' | 'biweekly';
+
+interface SessionType {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  duration: number;
+  color: string;
+}
+
+const SESSION_TYPES: SessionType[] = [
+  { id: 'initial',      label: 'Sesión inicial',          icon: UserPlus,       duration: 60, color: '#0d9488' },
+  { id: 'followup',     label: 'Seguimiento',             icon: RefreshCw,      duration: 50, color: '#0d9488' },
+  { id: 'psychometric', label: 'Evaluación psicométrica', icon: ClipboardList,  duration: 60, color: '#6366f1' },
+  { id: 'crisis',       label: 'Atención en crisis',      icon: TriangleAlert,  duration: 90, color: '#ef4444' },
+  { id: 'discharge',    label: 'Sesión de alta',          icon: Award,          duration: 50, color: '#0d9488' },
+  { id: 'family',       label: 'Sesión familiar',         icon: Users,          duration: 60, color: '#8b5cf6' },
 ];
 
-export function NewAppointmentPage() {
-  const navigate       = useNavigate();
-  const { user }       = useAuth();
-  const [params]       = useSearchParams();
-  const prePatientId   = params.get('patient_id') ?? '';
+const SLOT_START = 8 * 60;
+const SLOT_END   = 20 * 60;
+const SLOT_STEP  = 30;
 
-  // Patient picker state
-  const [patientId,       setPatientId]       = useState(prePatientId);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerQ,    setPickerQ]    = useState('');
-  const pickerRef = useRef<HTMLDivElement>(null);
+function generateSlots(): string[] {
+  const slots: string[] = [];
+  for (let m = SLOT_START; m < SLOT_END; m += SLOT_STEP) {
+    const h = String(Math.floor(m / 60)).padStart(2, '0');
+    const min = String(m % 60).padStart(2, '0');
+    slots.push(`${h}:${min}`);
+  }
+  return slots;
+}
 
-  // Form state
-  const [date,     setDate]     = useState('');
-  const [time,     setTime]     = useState('');
-  const [duration, setDuration] = useState(60);
-  const [modality, setModality] = useState<AppointmentModality>('IN_PERSON');
-  const [location, setLocation] = useState('');
-  const [notes,    setNotes]    = useState('');
-  const [error,    setError]    = useState('');
+const ALL_SLOTS = generateSlots();
 
-  // Close picker on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
-        setPickerOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
+function toMinutes(t: string) {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
 
-  // Load all patients for the picker list
-  const { data: allPatients = [], isLoading: loadingAll } = useQuery({
-    queryKey: ['patients', 'list-picker'],
-    queryFn: () => patientsApi.list({ limit: 100 }),
-    staleTime: 60_000,
+function formatDateLabel(d: string) {
+  const dt = new Date(d + 'T00:00:00');
+  return dt.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function formatTime(t: string) {
+  if (!t) return '—';
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hh = h % 12 || 12;
+  return `${hh}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+function initials(p: Patient) {
+  return `${p.first_name[0] ?? ''}${p.paternal_last_name[0] ?? ''}`.toUpperCase();
+}
+
+function patientFullName(p: Patient) {
+  return [p.first_name, p.middle_name, p.paternal_last_name, p.maternal_last_name]
+    .filter(Boolean).join(' ');
+}
+
+// Always use local calendar date, not UTC (avoids off-by-one after 19:00 in UTC-5)
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// "-05:00" for Colombia, derived dynamically so the code works if the tz ever changes
+function tzOffset(): string {
+  const off = new Date().getTimezoneOffset(); // minutes BEHIND UTC (Colombia = 300)
+  const sign = off <= 0 ? '+' : '-';
+  const abs  = Math.abs(off);
+  return `${sign}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
+}
+
+// Build a timezone-aware ISO string that the backend interprets correctly
+function localISO(date: string, time: string): string {
+  return `${date}T${time}:00${tzOffset()}`;
+}
+
+// ─── MiniCalendar ─────────────────────────────────────────────────────────────
+
+interface MiniCalendarProps {
+  selected: string;
+  onSelect: (d: string) => void;
+  busyDates?: Set<string>;
+}
+
+function MiniCalendar({ selected, onSelect, busyDates = new Set() }: MiniCalendarProps) {
+  const today = todayISO();
+  const [view, setView] = useState<Date>(() => {
+    const base = selected ? new Date(selected + 'T00:00:00') : new Date();
+    return new Date(base.getFullYear(), base.getMonth(), 1);
   });
 
-  // Load the selected patient info
-  const { data: selectedPatient } = useQuery({
-    queryKey: ['patient', patientId],
-    queryFn: () => patientsApi.get(patientId),
-    enabled: !!patientId,
-  });
+  const year  = view.getFullYear();
+  const month = view.getMonth();
 
-  // Filter patients locally — list is already loaded
-  const filtered = pickerQ.trim().length === 0
-    ? allPatients
-    : allPatients.filter(p => {
-        const q = pickerQ.toLowerCase();
-        return (
-          p.paternal_last_name?.toLowerCase().includes(q) ||
-          p.maternal_last_name?.toLowerCase().includes(q) ||
-          p.first_name?.toLowerCase().includes(q) ||
-          p.middle_name?.toLowerCase().includes(q)
-        );
-      });
+  const monthLabel = view.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
 
-  const { mutate: create, isPending, isSuccess } = useMutation({
-    mutationFn: appointmentsApi.create,
-    onSuccess: () => setTimeout(() => navigate('/'), 1500),
-    onError: (err: Error) => setError(err.message || 'Error al crear la cita'),
-  });
+  const firstDow = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    if (!patientId)    { setError('Selecciona un paciente'); return; }
-    if (!date || !time){ setError('La fecha y hora son requeridas'); return; }
-    const scheduled_at = new Date(`${date}T${time}:00`).toISOString();
-    create({ patient_id: patientId, staff_id: user!.user_id, scheduled_at, duration_min: duration, modality, location_or_link: location, notes });
-  };
+  const cells: (number | null)[] = [
+    ...Array(firstDow).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
 
-  const selectPatient = (p: Patient) => {
-    setPatientId(p.id);
-    setPickerOpen(false);
-    setPickerQ('');
-  };
+  while (cells.length % 7 !== 0) cells.push(null);
 
-  const clearPatient = () => {
-    setPatientId('');
-    setPickerOpen(true);
-  };
-
-  if (isSuccess) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
-        <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
-          <CheckCircle2 size={36} color="#059669" />
-        </div>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--s800)', margin: '0 0 8px' }}>¡Cita agendada!</h2>
-        <p style={{ color: 'var(--s400)', fontSize: 14 }}>Redirigiendo a la agenda…</p>
-      </div>
-    );
+  function toISO(day: number) {
+    return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   }
 
-  const fullName = (p: Patient) =>
-    [p.paternal_last_name, p.maternal_last_name].filter(Boolean).join(' ')
-    + ', ' + [p.first_name, p.middle_name].filter(Boolean).join(' ');
+  const prevMonth = () => setView(new Date(year, month - 1, 1));
+  const nextMonth = () => setView(new Date(year, month + 1, 1));
 
-  const initials = (p: Patient) =>
-    [p.paternal_last_name?.[0], p.first_name?.[0]].filter(Boolean).join('').toUpperCase();
+  const DOW = ['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá'];
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto' }}>
-      <button
-        onClick={() => navigate(-1)}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s500)', fontSize: 14, marginBottom: 24, padding: 0 }}
-      >
-        <ArrowLeft size={16} /> Volver
-      </button>
+    <div style={{ userSelect: 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <button onClick={prevMonth} style={navBtnStyle}>
+          <ChevronLeft size={16} />
+        </button>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s800)', textTransform: 'capitalize' }}>
+          {monthLabel}
+        </span>
+        <button onClick={nextMonth} style={navBtnStyle}>
+          <ChevronRight size={16} />
+        </button>
+      </div>
 
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--s800)', margin: '0 0 4px' }}>Nueva cita</h1>
-      <p style={{ color: 'var(--s400)', fontSize: 14, margin: '0 0 28px' }}>Completa los datos para agendar la consulta</p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 4 }}>
+        {DOW.map(d => (
+          <div key={d} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: 'var(--s400)', paddingBottom: 4 }}>
+            {d}
+          </div>
+        ))}
+      </div>
 
-      <form onSubmit={handleSubmit}>
-        {/* ── Paciente ─────────────────────────────────────── */}
-        <div className="card" style={{ padding: 24, marginBottom: 16 }}>
-          <h3 style={{ fontSize: 11, fontWeight: 700, color: 'var(--s500)', margin: '0 0 14px', display: 'flex', alignItems: 'center', gap: 7, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            <User size={13} color="var(--teal)" /> Paciente
-          </h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+        {cells.map((day, i) => {
+          if (!day) return <div key={i} />;
+          const iso = toISO(day);
+          const isPast     = iso < today;
+          const isToday    = iso === today;
+          const isSelected = iso === selected;
+          const hasBusy    = busyDates.has(iso);
 
-          {patientId && selectedPatient ? (
-            /* Selected patient card */
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'var(--teal-10)', borderRadius: 12, border: '1.5px solid rgba(20,184,166,0.3)' }}>
-              <div style={{ width: 42, height: 42, borderRadius: 10, background: 'var(--teal)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
-                {initials(selectedPatient)}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--s800)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {fullName(selectedPatient)}
-                </p>
-                {selectedPatient.email && (
-                  <p style={{ margin: 0, fontSize: 12, color: 'var(--s500)' }}>{selectedPatient.email}</p>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={clearPatient}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)', display: 'flex', padding: 4 }}
-              >
-                <X size={15} />
-              </button>
-            </div>
-          ) : (
-            /* Patient picker */
-            <div ref={pickerRef} style={{ position: 'relative' }}>
-              <button
-                type="button"
-                onClick={() => setPickerOpen(v => !v)}
-                style={{
-                  width: '100%', padding: '11px 14px', borderRadius: 11,
-                  border: `1.5px solid ${pickerOpen ? 'var(--teal)' : 'var(--s200)'}`,
-                  background: pickerOpen ? '#fff' : 'var(--s50)',
-                  display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
-                  boxShadow: pickerOpen ? '0 0 0 3px rgba(20,184,166,.12)' : 'none',
-                  transition: 'all .15s',
-                }}
-              >
-                <User size={16} color={pickerOpen ? 'var(--teal)' : 'var(--s400)'} />
-                <span style={{ flex: 1, textAlign: 'left', fontSize: 14, color: 'var(--s400)' }}>
-                  Seleccionar paciente…
-                </span>
-                <ChevronDown size={15} color="var(--s400)" style={{ transform: pickerOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
-              </button>
-
-              {pickerOpen && (
-                <div style={{
-                  position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0,
-                  background: '#fff', borderRadius: 14, border: '1.5px solid var(--s200)',
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 50, overflow: 'hidden',
-                }}>
-                  {/* Search inside picker */}
-                  <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--s100)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--s50)', borderRadius: 9, padding: '7px 12px' }}>
-                      <Search size={14} color="var(--s400)" />
-                      <input
-                        autoFocus
-                        value={pickerQ}
-                        onChange={e => setPickerQ(e.target.value)}
-                        placeholder="Filtrar por nombre o apellido…"
-                        style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 13, color: 'var(--s700)', outline: 'none' }}
-                      />
-                      {pickerQ && <button type="button" onClick={() => setPickerQ('')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}><X size={12} color="var(--s400)" /></button>}
-                    </div>
-                  </div>
-
-                  {/* Patient list */}
-                  <div style={{ maxHeight: 280, overflowY: 'auto' }}>
-                    {loadingAll ? (
-                      <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}>
-                        <Spinner size={20} color="var(--teal)" />
-                      </div>
-                    ) : filtered.length === 0 ? (
-                      <div style={{ padding: '20px 16px', textAlign: 'center', color: 'var(--s400)', fontSize: 13 }}>
-                        {pickerQ ? `Sin resultados para "${pickerQ}"` : 'No hay pacientes registrados'}
-                      </div>
-                    ) : (
-                      filtered.map(p => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => selectPatient(p)}
-                          style={{
-                            width: '100%', padding: '10px 14px', textAlign: 'left', background: 'none',
-                            border: 'none', borderBottom: '1px solid var(--s100)', cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', gap: 10, transition: 'background .1s',
-                          }}
-                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--s50)')}
-                          onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                        >
-                          <div style={{ width: 34, height: 34, borderRadius: 8, background: stringToColor(p.paternal_last_name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
-                            {initials(p)}
-                          </div>
-                          <div style={{ minWidth: 0 }}>
-                            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--s800)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {fullName(p)}
-                            </p>
-                            {p.email && <p style={{ margin: 0, fontSize: 11, color: 'var(--s400)' }}>{p.email}</p>}
-                          </div>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                </div>
+          return (
+            <div
+              key={i}
+              onClick={() => !isPast && onSelect(iso)}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center',
+                padding: '4px 0', borderRadius: 6,
+                cursor: isPast ? 'not-allowed' : 'pointer',
+                background: isSelected ? 'var(--teal)' : 'transparent',
+                border: isToday && !isSelected ? '1.5px solid var(--teal)' : '1.5px solid transparent',
+                opacity: isPast ? 0.35 : 1,
+                transition: 'background 0.15s',
+              }}
+            >
+              <span style={{
+                fontSize: 12,
+                fontWeight: isSelected || isToday ? 700 : 400,
+                color: isSelected ? '#fff' : 'var(--s800)',
+              }}>
+                {day}
+              </span>
+              {hasBusy && (
+                <span style={{
+                  width: 4, height: 4, borderRadius: '50%',
+                  background: isSelected ? 'rgba(255,255,255,0.7)' : 'var(--teal)',
+                  marginTop: 2,
+                }} />
               )}
             </div>
-          )}
-        </div>
-
-        {/* ── Fecha y hora ─────────────────────────────────── */}
-        <div className="card" style={{ padding: 24, marginBottom: 16 }}>
-          <h3 style={{ fontSize: 11, fontWeight: 700, color: 'var(--s500)', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 7, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            <CalendarDays size={13} color="var(--teal)" /> Fecha y hora
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-            <Field label="Fecha" value={date} onChange={setDate} type="date" required />
-            <Field label="Hora de inicio" value={time} onChange={setTime} type="time" required />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--s700)', marginBottom: 10 }}>
-              Duración
-            </label>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {DURATIONS.map(d => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => setDuration(d)}
-                  style={{
-                    padding: '7px 16px', borderRadius: 8, fontSize: 13, cursor: 'pointer', transition: 'all .1s',
-                    border: `1.5px solid ${duration === d ? 'var(--teal)' : 'var(--s200)'}`,
-                    background: duration === d ? 'var(--teal-10)' : '#fff',
-                    color: duration === d ? 'var(--teal)' : 'var(--s600)',
-                    fontWeight: duration === d ? 600 : 400,
-                  }}
-                >
-                  {d < 60 ? `${d} min` : `${d / 60}h${d % 60 ? ` ${d % 60}min` : ''}`}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Modalidad ────────────────────────────────────── */}
-        <div className="card" style={{ padding: 24, marginBottom: 16 }}>
-          <h3 style={{ fontSize: 11, fontWeight: 700, color: 'var(--s500)', margin: '0 0 16px', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Modalidad
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 16 }}>
-            {MODALITIES.map(({ value, label, Icon, desc }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setModality(value)}
-                style={{
-                  padding: '16px 12px', borderRadius: 12, cursor: 'pointer', transition: 'all .15s',
-                  border: `1.5px solid ${modality === value ? 'var(--teal)' : 'var(--s200)'}`,
-                  background: modality === value ? 'var(--teal-10)' : '#fff',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-                }}
-              >
-                <div style={{ width: 40, height: 40, borderRadius: 10, background: modality === value ? 'rgba(20,184,166,0.15)' : 'var(--s100)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon size={20} color={modality === value ? 'var(--teal)' : 'var(--s400)'} />
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: modality === value ? 'var(--teal)' : 'var(--s700)' }}>{label}</p>
-                  <p style={{ margin: 0, fontSize: 11, color: 'var(--s400)' }}>{desc}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-          <Field
-            label={modality === 'VIRTUAL' ? 'Enlace de videollamada' : 'Consultorio / ubicación'}
-            value={location}
-            onChange={setLocation}
-            placeholder={modality === 'VIRTUAL' ? 'https://meet.google.com/abc-def' : 'Consultorio 3, piso 2'}
-          />
-        </div>
-
-        {/* ── Notas ────────────────────────────────────────── */}
-        <div className="card" style={{ padding: 24, marginBottom: 24 }}>
-          <h3 style={{ fontSize: 11, fontWeight: 700, color: 'var(--s500)', margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Notas internas (opcional)
-          </h3>
-          <textarea
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            placeholder="Motivo de consulta, recordatorios previos, indicaciones especiales…"
-            rows={3}
-            style={{
-              width: '100%', padding: '11px 14px', borderRadius: 11,
-              border: '1.5px solid var(--s200)', fontSize: 14, color: 'var(--s700)',
-              resize: 'vertical', background: 'var(--s50)', boxSizing: 'border-box',
-              lineHeight: 1.6, outline: 'none', transition: 'border-color .15s',
-            }}
-            onFocus={e => (e.target.style.borderColor = 'var(--teal)')}
-            onBlur={e => (e.target.style.borderColor = 'var(--s200)')}
-          />
-        </div>
-
-        {error && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--red)', padding: '12px 16px', background: '#fef2f2', borderRadius: 10, marginBottom: 16, border: '1px solid #fecaca' }}>
-            <AlertCircle size={15} /> {error}
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: 12 }}>
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            style={{ flex: 1, padding: 13, borderRadius: 11, background: 'var(--s100)', color: 'var(--s700)', border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 600, transition: 'background .1s' }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'var(--s200)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'var(--s100)')}
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={isPending}
-            style={{
-              flex: 2, padding: 13, borderRadius: 11,
-              background: isPending ? 'var(--s200)' : 'var(--teal)',
-              color: '#fff', border: 'none', cursor: isPending ? 'not-allowed' : 'pointer',
-              fontSize: 15, fontWeight: 600,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              boxShadow: isPending ? 'none' : '0 2px 8px rgba(20,184,166,0.3)',
-              transition: 'all .15s',
-            }}
-          >
-            {isPending ? <><Spinner size={18} /> Guardando…</> : 'Confirmar cita'}
-          </button>
-        </div>
-      </form>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function stringToColor(s: string = '') {
-  const palette = ['#0ea5e9','#8b5cf6','#ec4899','#f59e0b','#10b981','#6366f1','#14b8a6'];
-  let hash = 0;
-  for (let i = 0; i < s.length; i++) hash = s.charCodeAt(i) + ((hash << 5) - hash);
-  return palette[Math.abs(hash) % palette.length];
+// ─── TimeSlots ────────────────────────────────────────────────────────────────
+
+interface TimeSlotsProps {
+  selected: string;
+  onSelect: (t: string) => void;
+  duration: number;
+  blocked: Set<string>;
+  pastSlots: Set<string>;
+}
+
+function TimeSlots({ selected, onSelect, duration, blocked, pastSlots }: TimeSlotsProps) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+      {ALL_SLOTS.map(slot => {
+        const slotMin   = toMinutes(slot);
+        const isPast    = pastSlots.has(slot);
+        const isBlocked = blocked.has(slot);
+        const overlaps  = Array.from(blocked).some(b => {
+          const bm = toMinutes(b);
+          return slotMin >= bm && slotMin < bm + duration;
+        });
+        const unavail   = isPast || isBlocked || overlaps;
+        const isSel     = slot === selected;
+
+        return (
+          <button
+            key={slot}
+            disabled={unavail}
+            onClick={() => !unavail && onSelect(slot)}
+            title={isPast ? 'Horario pasado' : isBlocked || overlaps ? 'Horario ocupado' : ''}
+            style={{
+              padding: '7px 4px', borderRadius: 7, cursor: unavail ? 'not-allowed' : 'pointer',
+              border: isSel ? 'none' : '1.5px solid var(--s200)',
+              background: isSel ? 'var(--teal)' : isPast ? 'transparent' : isBlocked || overlaps ? 'var(--s100)' : '#fff',
+              color: isSel ? '#fff' : isPast ? 'var(--s300)' : isBlocked || overlaps ? 'var(--s400)' : 'var(--s700)',
+              fontSize: 12, fontFamily: "'DM Mono', monospace",
+              fontWeight: isSel ? 700 : 400,
+              // past = faded, occupied = strikethrough
+              textDecoration: (isBlocked || overlaps) && !isSel && !isPast ? 'line-through' : 'none',
+              opacity: isPast ? 0.4 : 1,
+              transition: 'all 0.15s',
+            }}
+          >
+            {slot}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── PatientSearch ────────────────────────────────────────────────────────────
+
+interface PatientSearchProps {
+  selected: Patient | null;
+  onSelect: (p: Patient | null) => void;
+  onNewPatient: () => void;
+}
+
+function PatientSearch({ selected, onSelect, onNewPatient }: PatientSearchProps) {
+  const [query, setQuery] = useState('');
+  const [open, setOpen]   = useState(false);
+  const ref               = useRef<HTMLDivElement>(null);
+
+  const { data: results = [], isFetching } = useQuery({
+    queryKey: ['patients-search', query],
+    queryFn: () => query.length >= 2
+      ? patientsApi.search({ last_name: query, limit: 8 })
+      : patientsApi.list({ limit: 8 }),
+    enabled: open,
+  });
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  if (selected) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '10px 14px', borderRadius: 10,
+        border: '2px solid var(--teal)', background: 'var(--teal-l)',
+      }}>
+        <div style={avatarStyle}>{initials(selected)}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--s800)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {patientFullName(selected)}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--s500)' }}>
+            {selected.document_type_code} {selected.document_number}
+          </div>
+        </div>
+        <button onClick={() => onSelect(null)} style={{ ...iconBtnStyle, color: 'var(--s500)' }}>
+          <X size={15} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '10px 14px', borderRadius: 10,
+        border: '1.5px solid var(--s200)', background: '#fff',
+        boxShadow: open ? '0 0 0 3px rgba(13,148,136,0.15)' : 'none',
+        transition: 'box-shadow 0.15s',
+      }}>
+        <Search size={15} color="var(--s400)" />
+        <input
+          value={query}
+          onChange={e => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          placeholder="Buscar paciente por apellido…"
+          style={{ border: 'none', outline: 'none', flex: 1, fontSize: 14, color: 'var(--s800)', background: 'transparent' }}
+        />
+        {isFetching && <Spinner size={14} color="var(--teal)" />}
+      </div>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+          background: '#fff', borderRadius: 10, border: '1px solid var(--s200)',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.1)', zIndex: 50, overflow: 'hidden',
+        }}>
+          {results.length === 0 && !isFetching && (
+            <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--s500)' }}>
+              Sin resultados
+            </div>
+          )}
+          {results.map(p => (
+            <div
+              key={p.id}
+              onMouseDown={() => { onSelect(p); setOpen(false); setQuery(''); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '10px 14px', cursor: 'pointer', transition: 'background 0.1s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--s50)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              <div style={avatarStyle}>{initials(p)}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--s800)' }}>
+                  {patientFullName(p)}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--s500)' }}>
+                  {p.document_type_code} {p.document_number}
+                </div>
+              </div>
+              {p.is_active
+                ? <span style={{ ...badgeStyle, background: '#dcfce7', color: '#15803d' }}>Activo</span>
+                : <span style={{ ...badgeStyle, background: '#fee2e2', color: '#b91c1c' }}>Inactivo</span>
+              }
+            </div>
+          ))}
+          <div
+            onMouseDown={onNewPatient}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '10px 14px', cursor: 'pointer',
+              borderTop: '1px solid var(--s100)',
+              fontSize: 13, color: 'var(--teal)', fontWeight: 600,
+              transition: 'background 0.1s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--teal-l)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            <UserPlus size={14} />
+            Registrar nuevo paciente
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── ConfirmModal ─────────────────────────────────────────────────────────────
+
+interface ModalData {
+  patient: Patient;
+  date: string;
+  time: string;
+  sessionType: SessionType;
+  duration: number;
+  modality: Modality;
+  recurrence: Recurrence;
+  reminder: boolean;
+  notes: string;
+}
+
+interface ConfirmModalProps {
+  data: ModalData;
+  onClose: () => void;
+  onConfirm: () => void;
+  isPending: boolean;
+  isSuccess: boolean;
+}
+
+function ConfirmModal({ data, onClose, onConfirm, isPending, isSuccess }: ConfirmModalProps) {
+  const { patient, date, time, sessionType, duration, modality, recurrence, reminder } = data;
+  const SIcon = sessionType.icon;
+
+  const recurrenceLabel: Record<Recurrence, string> = {
+    none: 'Sin recurrencia', weekly: 'Semanal', biweekly: 'Quincenal',
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)',
+      backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', zIndex: 1000, animation: 'fadeIn 0.2s',
+    }}>
+      <div style={{
+        background: '#fff', borderRadius: 18, width: 480, maxWidth: '95vw',
+        boxShadow: '0 24px 60px rgba(0,0,0,0.18)', animation: 'scaleIn 0.2s',
+        overflow: 'hidden',
+      }}>
+        {isSuccess ? (
+          <div style={{ padding: 48, textAlign: 'center' }}>
+            <div style={{
+              width: 64, height: 64, borderRadius: '50%',
+              background: 'linear-gradient(135deg, var(--teal), var(--teal-d))',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 20px',
+            }}>
+              <CheckCircle2 size={32} color="#fff" />
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--s800)', marginBottom: 8 }}>
+              ¡Cita agendada!
+            </div>
+            <div style={{ fontSize: 14, color: 'var(--s500)' }}>
+              La sesión ha sido registrada correctamente.
+            </div>
+          </div>
+        ) : (
+          <>
+            <div style={{
+              background: 'linear-gradient(135deg, var(--teal), var(--teal-d))',
+              padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 14,
+            }}>
+              <div style={{ ...avatarStyle, width: 44, height: 44, fontSize: 16, border: '2px solid rgba(255,255,255,0.4)' }}>
+                {initials(patient)}
+              </div>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>
+                  {patientFullName(patient)}
+                </div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>
+                  {patient.document_type_code} {patient.document_number}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ padding: '20px 24px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                {[
+                  { label: 'Fecha',       value: formatDateLabel(date) },
+                  { label: 'Hora',        value: formatTime(time) },
+                  { label: 'Tipo',        value: sessionType.label },
+                  { label: 'Duración',    value: `${duration} min` },
+                  { label: 'Modalidad',   value: modality === 'presencial' ? 'Presencial' : 'Virtual' },
+                  { label: 'Recurrencia', value: recurrenceLabel[recurrence] },
+                ].map(({ label, value }) => (
+                  <div key={label} style={{ background: 'var(--s50)', borderRadius: 10, padding: '10px 14px' }}>
+                    <div style={{ fontSize: 11, color: 'var(--s400)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                      {label}
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--s800)' }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--s500)', marginBottom: 20 }}>
+                <SIcon size={13} color={sessionType.color} />
+                <span>{sessionType.label}</span>
+                {reminder && (
+                  <>
+                    <span style={{ color: 'var(--s300)' }}>·</span>
+                    <Bell size={13} color="var(--teal)" />
+                    <span>Recordatorio activado</span>
+                  </>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={onClose} disabled={isPending} style={{ ...secondaryBtn, flex: 1 }}>
+                  Cancelar
+                </button>
+                <button
+                  onClick={onConfirm}
+                  disabled={isPending}
+                  style={{ ...primaryBtn, flex: 1, gap: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  {isPending ? <Spinner size={16} color="#fff" /> : <CalendarCheck size={16} />}
+                  Confirmar cita
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── SummaryPanel ─────────────────────────────────────────────────────────────
+
+interface SummaryPanelProps {
+  patient: Patient | null;
+  date: string;
+  time: string;
+  sessionType: SessionType | null;
+  duration: number;
+  modality: Modality;
+  recurrence: Recurrence;
+  reminder: boolean;
+  blockingErrors: string[];
+  onSubmit: () => void;
+}
+
+function SummaryPanel({ patient, date, time, sessionType, duration, modality, recurrence, reminder, blockingErrors, onSubmit }: SummaryPanelProps) {
+  const SIcon = sessionType?.icon ?? CalendarCheck;
+
+  const checks = [
+    { label: 'Paciente seleccionado', done: !!patient },
+    { label: 'Fecha elegida',         done: !!date },
+    { label: 'Hora elegida',          done: !!time },
+    { label: 'Tipo de sesión',        done: !!sessionType },
+  ];
+  const completed = checks.filter(c => c.done).length;
+  const progress  = (completed / checks.length) * 100;
+  const canSubmit = completed === checks.length && blockingErrors.length === 0;
+
+  const recurrenceLabel: Record<Recurrence, string> = {
+    none: 'Sin recurrencia', weekly: 'Semanal', biweekly: 'Quincenal',
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid var(--s200)', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+        <div style={{
+          background: 'linear-gradient(135deg, var(--teal), var(--teal-d))',
+          padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <CalendarPlus size={16} color="#fff" />
+          <span style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>Resumen de cita</span>
+        </div>
+
+        <div style={{ background: 'var(--teal-l)', padding: 16 }}>
+          {patient ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid rgba(13,148,136,0.15)' }}>
+              <div style={{ ...avatarStyle, width: 38, height: 38, fontSize: 13 }}>{initials(patient)}</div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--s800)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {patientFullName(patient)}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--s500)' }}>{patient.document_type_code} {patient.document_number}</div>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid rgba(13,148,136,0.15)', color: 'var(--s400)', fontSize: 13 }}>
+              <User size={15} />
+              Sin paciente seleccionado
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[
+              { Icon: CalendarCheck, label: date ? formatDateLabel(date) : 'Sin fecha',        ok: !!date },
+              { Icon: Clock,         label: time ? formatTime(time) : 'Sin hora',              ok: !!time },
+              { Icon: SIcon,         label: sessionType ? `${sessionType.label} · ${duration} min` : 'Sin tipo', ok: !!sessionType },
+              { Icon: modality === 'virtual' ? Video : MapPin, label: modality === 'virtual' ? 'Virtual' : 'Presencial', ok: true },
+              { Icon: Repeat,        label: recurrenceLabel[recurrence],                       ok: true },
+              { Icon: reminder ? Bell : BellOff, label: reminder ? 'Recordatorio activo' : 'Sin recordatorio', ok: true },
+            ].map(({ Icon, label, ok }, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 7,
+                  background: ok ? 'rgba(13,148,136,0.12)' : 'var(--s100)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }}>
+                  <Icon size={13} color={ok ? 'var(--teal-d)' : 'var(--s400)'} />
+                </div>
+                <span style={{ fontSize: 12, color: ok ? 'var(--s700)' : 'var(--s400)' }}>{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Progress */}
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--s600)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Completado
+          </span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--teal-d)' }}>{completed}/{checks.length}</span>
+        </div>
+        <div style={{ height: 6, borderRadius: 3, background: 'var(--s200)', overflow: 'hidden' }}>
+          <div style={{
+            height: '100%', borderRadius: 3,
+            background: 'linear-gradient(90deg, var(--teal), var(--teal-d))',
+            width: `${progress}%`, transition: 'width 0.4s cubic-bezier(0.4,0,0.2,1)',
+          }} />
+        </div>
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {checks.map(({ label, done }) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+              <CheckCircle2 size={12} color={done ? 'var(--teal)' : 'var(--s300)'} />
+              <span style={{ color: done ? 'var(--s700)' : 'var(--s400)' }}>{label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Blocking error list */}
+      {blockingErrors.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {blockingErrors.map(err => (
+            <div key={err} style={{ display: 'flex', alignItems: 'flex-start', gap: 7, background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, padding: '8px 12px', fontSize: 11, color: '#991b1b' }}>
+              <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+              {err}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <button
+        onClick={onSubmit}
+        disabled={!canSubmit}
+        style={{
+          ...primaryBtn, width: '100%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          opacity: canSubmit ? 1 : 0.45,
+          cursor: canSubmit ? 'pointer' : 'not-allowed',
+        }}
+      >
+        <CalendarCheck size={16} />
+        Agendar cita
+      </button>
+    </div>
+  );
+}
+
+// ─── Section wrapper ───────────────────────────────────────────────────────────
+
+function Section({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+        <div style={{
+          width: 30, height: 30, borderRadius: 8,
+          background: 'linear-gradient(135deg, var(--teal), var(--teal-d))',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Icon size={15} color="#fff" />
+        </div>
+        <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--s800)' }}>{title}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ─── Toggle ────────────────────────────────────────────────────────────────────
+
+function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div
+      onClick={() => onChange(!on)}
+      style={{
+        width: 42, height: 24, borderRadius: 12, cursor: 'pointer',
+        background: on ? 'var(--teal)' : 'var(--s200)',
+        position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+      }}
+    >
+      <div style={{
+        position: 'absolute', top: 3, left: on ? 21 : 3,
+        width: 18, height: 18, borderRadius: '50%', background: '#fff',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+        transition: 'left 0.2s',
+      }} />
+    </div>
+  );
+}
+
+// ─── Shared styles ─────────────────────────────────────────────────────────────
+
+const avatarStyle: React.CSSProperties = {
+  width: 34, height: 34, borderRadius: '50%',
+  background: 'linear-gradient(135deg, var(--teal), var(--teal-d))',
+  color: '#fff', fontWeight: 700, fontSize: 13,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  flexShrink: 0,
+};
+
+const navBtnStyle: React.CSSProperties = {
+  width: 28, height: 28, borderRadius: 7, border: '1px solid var(--s200)',
+  background: '#fff', cursor: 'pointer', display: 'flex',
+  alignItems: 'center', justifyContent: 'center', color: 'var(--s600)',
+  transition: 'background 0.15s',
+};
+
+const iconBtnStyle: React.CSSProperties = {
+  width: 28, height: 28, borderRadius: 7, border: 'none',
+  background: 'transparent', cursor: 'pointer',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+};
+
+const badgeStyle: React.CSSProperties = {
+  fontSize: 10, fontWeight: 700, padding: '2px 7px',
+  borderRadius: 20, flexShrink: 0,
+};
+
+const primaryBtn: React.CSSProperties = {
+  padding: '11px 20px', borderRadius: 10, border: 'none', cursor: 'pointer',
+  background: 'linear-gradient(135deg, var(--teal), var(--teal-d))',
+  color: '#fff', fontWeight: 700, fontSize: 14,
+  boxShadow: '0 4px 14px rgba(13,148,136,0.35)',
+  transition: 'opacity 0.2s, transform 0.1s',
+};
+
+const secondaryBtn: React.CSSProperties = {
+  padding: '11px 20px', borderRadius: 10,
+  border: '1.5px solid var(--s200)', cursor: 'pointer',
+  background: '#fff', color: 'var(--s700)', fontWeight: 600, fontSize: 14,
+  transition: 'background 0.15s',
+};
+
+// ─── Main Page ─────────────────────────────────────────────────────────────────
+
+export function NewAppointmentPage() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const [patient,     setPatient]     = useState<Patient | null>(null);
+  const [date,        setDate]        = useState<string>(todayISO());
+  const [time,        setTime]        = useState<string>('');
+  const [sessionType, setSessionType] = useState<SessionType | null>(SESSION_TYPES[1]);
+  const [duration,    setDuration]    = useState<number>(50);
+  const [modality,    setModality]    = useState<Modality>('presencial');
+  const [recurrence,  setRecurrence]  = useState<Recurrence>('none');
+  const [notes,       setNotes]       = useState<string>('');
+  const [reminder,    setReminder]    = useState<boolean>(true);
+  const [showModal,   setShowModal]   = useState<boolean>(false);
+  const [confirmed,   setConfirmed]   = useState<boolean>(false);
+
+  // ── Staff appointments for the selected day (slot blocking + workload) ────────
+  const { data: dayAppointments = [] } = useQuery<Appointment[]>({
+    queryKey: ['appointments-day', date, user?.user_id],
+    queryFn: () => appointmentsApi.list({
+      staff_id: user?.user_id,
+      date_from: localISO(date, '00:00'),
+      date_to:   localISO(date, '23:59'),
+      limit: 50,
+    }),
+    enabled: !!date && !!user?.user_id,
+  });
+
+  // ── Patient appointments for the selected day (double-booking check) ──────────
+  const { data: patientDayAppts = [] } = useQuery<Appointment[]>({
+    queryKey: ['patient-day-appts', patient?.id, date],
+    queryFn: () => appointmentsApi.list({
+      patient_id: patient!.id,
+      date_from:  localISO(date, '00:00'),
+      date_to:    localISO(date, '23:59'),
+      limit: 10,
+    }),
+    enabled: !!patient?.id && !!date,
+  });
+
+  // ── Derived validations ────────────────────────────────────────────────────────
+  const isCrisisSession = sessionType?.id === 'crisis';
+
+  // 1. Past slots: today → block slots ≤ now + 30 min buffer
+  const pastSlots = useMemo<Set<string>>(() => {
+    if (date !== todayISO()) return new Set<string>();
+    const now = new Date();
+    const cutoffMin = now.getHours() * 60 + now.getMinutes() + 30;
+    return new Set(ALL_SLOTS.filter(s => toMinutes(s) <= cutoffMin));
+  }, [date]);
+
+  // Clear selected time if it becomes past when switching to today
+  useEffect(() => {
+    if (time && pastSlots.has(time)) setTime('');
+  }, [pastSlots, time]);
+
+  // 2. Blocked slots from staff's existing appointments
+  const blockedSlots = useMemo<Set<string>>(() => {
+    const s = new Set<string>();
+    for (const appt of dayAppointments) {
+      if (appt.status === 'CANCELLED' || appt.status === 'NO_SHOW') continue;
+      const start = new Date(appt.scheduled_at);
+      const end   = new Date(start.getTime() + appt.duration_min * 60_000);
+      for (const slot of ALL_SLOTS) {
+        const [h, m] = slot.split(':').map(Number);
+        const slotStart = new Date(start);
+        slotStart.setHours(h, m, 0, 0);
+        const slotEnd = new Date(slotStart.getTime() + SLOT_STEP * 60_000);
+        if (slotStart < end && slotEnd > start) s.add(slot);
+      }
+    }
+    return s;
+  }, [dayAppointments]);
+
+  // 3. Busy dates (dot on calendar)
+  const busyDates = useMemo<Set<string>>(() => {
+    const s = new Set<string>();
+    if (dayAppointments.length > 0) s.add(date);
+    return s;
+  }, [dayAppointments, date]);
+
+  // 4. Same patient already has an appointment this day (double-booking)
+  const doubleBookingAppt = patientDayAppts.find(
+    a => a.status !== 'CANCELLED' && a.status !== 'NO_SHOW'
+  );
+  const hasDoubleBooking = !!doubleBookingAppt && !isCrisisSession;
+
+  // 5. Patient inactive
+  const patientInactive = !!patient && !patient.is_active;
+
+  // 6. Staff workload: ≥8 active appointments → warning; ≥12 → hard block
+  const activeApptCount = dayAppointments.filter(
+    a => a.status !== 'CANCELLED' && a.status !== 'NO_SHOW'
+  ).length;
+  const workloadWarning = activeApptCount >= 8;
+  const workloadBlock   = activeApptCount >= 12;
+
+  // Aggregate: can the form be submitted?
+  const blockingErrors: string[] = [];
+  if (patientInactive)  blockingErrors.push('El paciente está inactivo.');
+  if (hasDoubleBooking) blockingErrors.push('El paciente ya tiene una cita este día.');
+  if (workloadBlock)    blockingErrors.push('Límite de 12 citas diarias alcanzado.');
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      if (!patient || !time || !sessionType) throw new Error('Faltan datos');
+      return appointmentsApi.create({
+        patient_id:   patient.id,
+        staff_id:     user!.user_id,
+        scheduled_at: localISO(date, time),   // timezone-aware: no UTC shift
+        duration_min: duration,
+        modality:     modality === 'presencial' ? 'IN_PERSON' : 'VIRTUAL',
+        notes:        notes || undefined,
+      });
+    },
+    onSuccess: () => {
+      setConfirmed(true);
+      setTimeout(() => navigate('/appointments'), 2000);
+    },
+  });
+
+  function handleSelectSessionType(st: SessionType) {
+    setSessionType(st);
+    setDuration(st.duration);
+  }
+
+  function handleSubmit() {
+    if (!patient || !time || !sessionType) return;
+    if (blockingErrors.length > 0) return;
+    setShowModal(true);
+  }
+
+  const modalData: ModalData | null = patient && time && sessionType
+    ? { patient, date, time, sessionType, duration, modality, recurrence, reminder, notes }
+    : null;
+
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '300px 1fr 272px',
+      height: 'calc(100vh - var(--topbar-h))',
+      overflow: 'hidden',
+    }}>
+      {/* ── Column 1: Calendar + Patient ──────────────────────────────── */}
+      <div style={{
+        background: '#fff', borderRight: '1px solid var(--s200)',
+        padding: '24px 20px', overflowY: 'auto',
+        display: 'flex', flexDirection: 'column',
+      }}>
+        <button
+          onClick={() => navigate('/appointments')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            color: 'var(--s500)', fontSize: 13, marginBottom: 20,
+            background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px',
+          }}
+        >
+          <ArrowLeft size={15} />
+          Volver
+        </button>
+
+        <Section icon={CalendarCheck} title="Fecha de cita">
+          <MiniCalendar selected={date} onSelect={d => { setDate(d); setTime(''); }} busyDates={busyDates} />
+        </Section>
+
+        <Section icon={User} title="Paciente">
+          <PatientSearch
+            selected={patient}
+            onSelect={setPatient}
+            onNewPatient={() => navigate('/patients/new')}
+          />
+          {patientInactive && (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginTop: 8, background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, padding: '8px 12px', fontSize: 11, color: '#991b1b' }}>
+              <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+              Paciente inactivo — no se pueden agendar nuevas citas.
+            </div>
+          )}
+        </Section>
+      </div>
+
+      {/* ── Column 2: Main form ────────────────────────────────────────── */}
+      <div style={{ background: 'var(--s50)', padding: '24px 28px', overflowY: 'auto' }}>
+        <div style={{ marginBottom: 24 }}>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--s800)', margin: 0 }}>
+            Nueva cita
+          </h1>
+          <p style={{ fontSize: 13, color: 'var(--s500)', margin: '4px 0 0' }}>
+            {date ? formatDateLabel(date) : 'Selecciona una fecha'}
+          </p>
+        </div>
+
+        {/* Workload warning */}
+        {workloadWarning && !workloadBlock && (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 9, padding: '10px 14px', marginBottom: 20, fontSize: 12, color: '#92400e' }}>
+            <TriangleAlert size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>Tienes <b>{activeApptCount} citas</b> agendadas para este día. Considera tu capacidad de atención.</span>
+          </div>
+        )}
+        {workloadBlock && (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 9, padding: '10px 14px', marginBottom: 20, fontSize: 12, color: '#991b1b' }}>
+            <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>Límite de <b>12 citas diarias</b> alcanzado. No es posible agendar más para este día.</span>
+          </div>
+        )}
+
+        {/* Double-booking warning */}
+        {hasDoubleBooking && (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 9, padding: '10px 14px', marginBottom: 20, fontSize: 12, color: '#991b1b' }}>
+            <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>
+              <b>{patient ? `${patient.first_name} ${patient.paternal_last_name}` : 'Este paciente'}</b> ya tiene una cita agendada para este día.
+              Para agendar igual, selecciona el tipo <b>Atención en crisis</b>.
+            </span>
+          </div>
+        )}
+
+        {/* Time slots */}
+        <Section icon={Clock} title="Hora de inicio">
+          {date && pastSlots.size === ALL_SLOTS.length && (
+            <div style={{ fontSize: 12, color: 'var(--s400)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <AlertCircle size={12} />
+              Todos los horarios del día de hoy ya pasaron.
+            </div>
+          )}
+          {date ? (
+            <>
+              <TimeSlots
+                selected={time}
+                onSelect={setTime}
+                duration={duration}
+                blocked={blockedSlots}
+                pastSlots={pastSlots}
+              />
+              {time && (
+                <div style={{ marginTop: 10, fontSize: 12, color: 'var(--teal-d)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Clock size={12} />
+                  {formatTime(time)} — {formatTime((() => {
+                    const [h, m] = time.split(':').map(Number);
+                    const total = h * 60 + m + duration;
+                    return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+                  })())}
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ fontSize: 13, color: 'var(--s400)', padding: '8px 0' }}>
+              Selecciona una fecha para ver los horarios disponibles.
+            </div>
+          )}
+        </Section>
+
+        {/* Session types */}
+        <Section icon={CalendarPlus} title="Tipo de sesión">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+            {SESSION_TYPES.map(st => {
+              const SIcon = st.icon;
+              const isSel = sessionType?.id === st.id;
+              return (
+                <button
+                  key={st.id}
+                  onClick={() => handleSelectSessionType(st)}
+                  style={{
+                    padding: '12px 8px', borderRadius: 10, cursor: 'pointer',
+                    border: isSel ? `2px solid ${st.color}` : '2px solid var(--s200)',
+                    background: isSel ? `${st.color}12` : '#fff',
+                    textAlign: 'center', transition: 'all 0.15s',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                  }}
+                >
+                  <SIcon size={18} color={isSel ? st.color : 'var(--s400)'} />
+                  <span style={{ fontSize: 11, fontWeight: 600, color: isSel ? st.color : 'var(--s600)', lineHeight: 1.3 }}>
+                    {st.label}
+                  </span>
+                  <span style={{ fontSize: 10, color: 'var(--s400)' }}>{st.duration} min</span>
+                </button>
+              );
+            })}
+          </div>
+        </Section>
+
+        {/* Modality */}
+        <Section icon={MapPin} title="Modalidad">
+          <div style={{ display: 'flex', gap: 10 }}>
+            {([
+              ['presencial', MapPin,  '#0d9488', 'Presencial'],
+              ['virtual',    Video,   '#6366f1', 'Virtual'],
+            ] as const).map(([val, Icon, color, label]) => {
+              const isSel = modality === val;
+              return (
+                <button
+                  key={val}
+                  onClick={() => setModality(val)}
+                  style={{
+                    flex: 1, padding: '12px', borderRadius: 10, cursor: 'pointer',
+                    border: isSel ? `2px solid ${color}` : '2px solid var(--s200)',
+                    background: isSel ? `${color}12` : '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    gap: 8, transition: 'all 0.15s',
+                  }}
+                >
+                  <Icon size={16} color={isSel ? color : 'var(--s400)'} />
+                  <span style={{ fontSize: 13, fontWeight: 600, color: isSel ? color : 'var(--s600)' }}>
+                    {label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </Section>
+
+        {/* Recurrence */}
+        <Section icon={Repeat} title="Recurrencia">
+          <div style={{ display: 'flex', gap: 8, marginBottom: recurrence !== 'none' ? 12 : 0 }}>
+            {([
+              ['none',     'Sin repetición', Minus],
+              ['weekly',   'Semanal',        Repeat],
+              ['biweekly', 'Quincenal',      Repeat],
+            ] as const).map(([val, label, Icon]) => {
+              const isSel = recurrence === val;
+              return (
+                <button
+                  key={val}
+                  onClick={() => setRecurrence(val)}
+                  style={{
+                    flex: 1, padding: '10px 8px', borderRadius: 9, cursor: 'pointer',
+                    border: isSel ? '2px solid var(--teal)' : '2px solid var(--s200)',
+                    background: isSel ? 'var(--teal-l)' : '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    gap: 6, transition: 'all 0.15s', fontSize: 12, fontWeight: 600,
+                    color: isSel ? 'var(--teal-d)' : 'var(--s600)',
+                  }}
+                >
+                  <Icon size={13} />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          {recurrence !== 'none' && (
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: 8,
+              background: 'rgba(13,148,136,0.08)', borderRadius: 8, padding: '10px 12px',
+              fontSize: 12, color: 'var(--teal-d)',
+            }}>
+              <AlertCircle size={13} style={{ marginTop: 1, flexShrink: 0 }} />
+              Se creará una cita {recurrence === 'weekly' ? 'cada semana' : 'cada dos semanas'} en el mismo horario. Podrás cancelar en cualquier momento.
+            </div>
+          )}
+        </Section>
+
+        {/* Notes */}
+        <Section icon={ClipboardList} title="Notas previas">
+          <textarea
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            placeholder="Motivo de consulta, notas para preparar la sesión…"
+            rows={3}
+            style={{
+              width: '100%', borderRadius: 10, border: '1.5px solid var(--s200)',
+              padding: '10px 14px', fontSize: 13, color: 'var(--s800)',
+              resize: 'vertical', fontFamily: 'inherit', background: '#fff',
+              outline: 'none', boxSizing: 'border-box', lineHeight: 1.5,
+            }}
+          />
+        </Section>
+
+        {/* Reminder */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: '#fff', border: '1.5px solid var(--s200)', borderRadius: 10,
+          padding: '12px 16px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {reminder ? <Bell size={16} color="var(--teal)" /> : <BellOff size={16} color="var(--s400)" />}
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--s800)' }}>Recordatorio automático</div>
+              <div style={{ fontSize: 11, color: 'var(--s500)' }}>Notificación 24h antes de la cita</div>
+            </div>
+          </div>
+          <Toggle on={reminder} onChange={setReminder} />
+        </div>
+      </div>
+
+      {/* ── Column 3: Summary ─────────────────────────────────────────── */}
+      <div style={{
+        background: '#fff', borderLeft: '1px solid var(--s200)',
+        padding: '24px 18px', overflowY: 'auto',
+      }}>
+        <SummaryPanel
+          patient={patient}
+          date={date}
+          time={time}
+          sessionType={sessionType}
+          duration={duration}
+          modality={modality}
+          recurrence={recurrence}
+          reminder={reminder}
+          blockingErrors={blockingErrors}
+          onSubmit={handleSubmit}
+        />
+
+        {mutation.isError && (
+          <div style={{
+            marginTop: 12, padding: '10px 14px', borderRadius: 8,
+            background: '#fee2e2', color: '#b91c1c', fontSize: 12,
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            <AlertCircle size={13} />
+            Error al agendar la cita. Intenta de nuevo.
+          </div>
+        )}
+      </div>
+
+      {/* ── Confirmation modal ─────────────────────────────────────────── */}
+      {showModal && modalData && (
+        <ConfirmModal
+          data={modalData}
+          onClose={() => setShowModal(false)}
+          onConfirm={() => mutation.mutate()}
+          isPending={mutation.isPending}
+          isSuccess={confirmed}
+        />
+      )}
+    </div>
+  );
 }
