@@ -148,20 +148,13 @@ function HistoryTab({ patient }: { patient: Patient }) {
     <div className="card" style={{ padding: 28 }}>
       <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--s800)', margin: '0 0 20px' }}>Datos clínicos</h3>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-        <InfoField label="Tipo documento" value={patient.document_type_id} />
+        <InfoField label="Tipo documento" value={patient.document_type_code} />
+        <InfoField label="Número de documento" value={patient.document_number} />
         <InfoField label="Género" value={patient.gender ?? '—'} />
         <InfoField label="Fecha de nacimiento" value={patient.birth_date ? formatBirthDate(patient.birth_date) : '—'} />
+        <InfoField label="Teléfono" value={patient.phone ?? '—'} />
         <InfoField label="Dirección" value={patient.address ?? '—'} />
-        <InfoField label="Contacto de emergencia" value={patient.emergency_contact_name ?? '—'} />
-        <InfoField label="Tel. emergencia" value={patient.emergency_contact_phone ?? '—'} />
       </div>
-      {patient.notes && (
-        <>
-          <div style={{ height: 1, background: 'var(--s100)', margin: '24px 0' }} />
-          <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--s700)', margin: '0 0 10px' }}>Notas</h4>
-          <p style={{ fontSize: 14, color: 'var(--s600)', margin: 0, lineHeight: 1.7 }}>{patient.notes}</p>
-        </>
-      )}
     </div>
   );
 }

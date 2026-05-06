@@ -1,6 +1,6 @@
 import { api } from './client';
 
-export type AppointmentModality = 'IN_PERSON' | 'VIDEO_CALL' | 'PHONE_CALL';
+export type AppointmentModality = 'IN_PERSON' | 'VIRTUAL' | 'HYBRID';
 export type AppointmentStatus   = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
 
 export interface Appointment {
@@ -22,6 +22,7 @@ export interface Appointment {
 
 export interface CreateAppointmentBody {
   patient_id: string;
+  staff_id: string;
   scheduled_at: string;
   duration_min?: number;
   modality?: AppointmentModality;
@@ -42,7 +43,8 @@ export const appointmentsApi = {
     if (params?.date_to)    q.set('date_to', params.date_to);
     if (params?.limit)      q.set('limit', String(params.limit));
     if (params?.offset)     q.set('offset', String(params.offset));
-    return api.get<Appointment[]>(`/appointments?${q}`);
+    return api.get<{ appointments: Appointment[] }>(`/appointments?${q}`)
+      .then(r => r.appointments ?? []);
   },
 
   get: (id: string) => api.get<Appointment>(`/appointments/${id}`),

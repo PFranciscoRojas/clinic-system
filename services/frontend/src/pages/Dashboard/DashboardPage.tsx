@@ -45,13 +45,15 @@ export function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [calDate, setCalDate] = useState(new Date());
 
-  const { data: appointments, isLoading } = useQuery({
-    queryKey: ['appointments', selectedDate],
+  const { data: appointments = [], isLoading } = useQuery({
+    queryKey: ['appointments', selectedDate, user?.user_id],
     queryFn: () => appointmentsApi.list({
+      staff_id:  user?.user_id,
       date_from: selectedDate + 'T00:00:00Z',
       date_to:   selectedDate + 'T23:59:59Z',
       limit: 50,
     }),
+    enabled: !!user,
   });
 
   const calDays = buildCalDays(calDate);

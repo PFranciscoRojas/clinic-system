@@ -6,9 +6,11 @@ import { LoginPage } from '@/pages/Login/LoginPage';
 import { DashboardPage } from '@/pages/Dashboard/DashboardPage';
 import { PatientsPage } from '@/pages/Patients/PatientsPage';
 import { PatientProfilePage } from '@/pages/Patients/PatientProfilePage';
+import { NewPatientPage } from '@/pages/Patients/NewPatientPage';
 import { NewAppointmentPage } from '@/pages/Appointments/NewAppointmentPage';
 import { AIDraftPage } from '@/pages/AIDrafts/AIDraftPage';
 import { StubPage } from '@/pages/StubPage';
+import { SettingsPage } from '@/pages/Settings/SettingsPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -50,12 +52,13 @@ export function App() {
               <Routes>
                 <Route index element={<DashboardPage />} />
                 <Route path="patients" element={<PatientsPage />} />
+                <Route path="patients/new" element={<NewPatientPage />} />
                 <Route path="patients/:id" element={<PatientProfilePage />} />
                 <Route path="appointments/new" element={<NewAppointmentPage />} />
                 <Route path="ai-drafts/:id" element={<AIDraftPage />} />
                 <Route path="evaluations" element={<StubPage title="Evaluaciones" />} />
                 <Route path="billing" element={<StubPage title="Facturación" />} />
-                <Route path="settings" element={<StubPage title="Configuración" />} />
+                <Route path="settings" element={<SettingsPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </AppShell>

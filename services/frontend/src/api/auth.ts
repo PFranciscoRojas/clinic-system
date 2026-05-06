@@ -8,11 +8,12 @@ export interface TokenPair {
 
 export interface Me {
   user_id: string;
-  organization_id: string;
-  email: string;
+  org_id: string;
+  organization_id?: string;  // alias — backend returns org_id
+  email?: string;
   display_name?: string | null;
   roles: string[];
-  permissions: string[];
+  permissions?: string[];
 }
 
 export const authApi = {
