@@ -9,18 +9,37 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+---
+
+## [0.4.0] — 2026-05-06 · PR #5 · feature/bc5-frontend
+
+Completes Fase 5 (Frontend React + PWA). Full clinical scheduling UI with business rule validation.
+
 ### Added
 - React frontend (Vite + React 18 + TypeScript) — PWA with offline support via vite-plugin-pwa (NetworkFirst strategy)
-- `AppShell` — sidebar with nav links, topbar with search/notifications/profile dropdown, PIN lock screen
-- `LoginPage` — gradient login form with org slug + email + password; 3-step onboarding flow
-- `DashboardPage` — daily agenda, 4 stat cards, mini calendar with date picker, clinical inbox
+- `AppShell` — sidebar nav, topbar with search/notifications/profile dropdown, PIN lock screen
+- `LoginPage` — animated gradient, glass card, 4-step onboarding PIN flow
+- `DashboardPage` — 2-col layout: daily agenda with EN CURSO indicator, filter tabs (Todas/Próxima/Confirmadas/Pendientes/Completadas), appointment rows with avatar/modality badge/expand; Inbox Clínico panel with urgent badges; Acciones rápidas
+- `NewAppointmentPage` — 3-col layout: MiniCalendar + patient search with initials avatar; 24-slot time grid (08:00–19:30); 6 session types; modality, recurrence, reminder; live summary panel with progress bar and confirm modal
 - `PatientsPage` — debounced search with live results list
 - `PatientProfilePage` — tabbed profile: historia clínica, citas, borradores IA, documentos
-- `NewAppointmentPage` — patient search, date/time/duration picker, modality selector, notes
-- `AIDraftPage` — SOAP section viewer/editor, status polling (3s for PENDING/PROCESSING), approve flow
-- API client with automatic JWT refresh (401 → tryRefresh → retry) — `api.get/post/put/delete/upload`
+- `AIDraftPage` — SOAP section viewer/editor, status polling, approve flow
+- API client with automatic JWT refresh (401 → tryRefresh → retry)
 - CSS design system — full token palette (teal, slate scale), card utilities, all animations
+
+### Changed
 - `display_name` field added to `Me` interface
+
+### Fixed
+- Timezone bug: all date/time constructions now use `localISO()` with browser UTC offset — appointments after 19:00 in Colombia (UTC-5) no longer saved or queried on the wrong day
+- `todayISO()` uses local date parts instead of UTC slice to avoid off-by-one after 19:00
+
+### Added (Business Rules — frontend validation)
+- Past time slots blocked with 30-min buffer from current time
+- Same-patient double-booking blocked per day (crisis sessions exempt)
+- Inactive patient blocks new appointment creation
+- Staff workload warning at ≥8 appointments/day, hard block at ≥12
+- Blocking errors surfaced inline and in summary panel before submission
 
 ---
 
