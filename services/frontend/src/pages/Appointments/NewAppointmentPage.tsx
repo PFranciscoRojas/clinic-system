@@ -548,16 +548,16 @@ function SummaryPanel({ patient, date, time, sessionType, duration, modality, re
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid var(--s200)', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+      <div style={{ borderRadius: 14, overflow: 'hidden', border: '1.5px solid #99f6e4', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
         <div style={{
-          background: 'linear-gradient(135deg, var(--teal), var(--teal-d))',
-          padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 10,
+          background: 'var(--teal-d)',
+          padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          <CalendarPlus size={16} color="#fff" />
-          <span style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>Resumen de cita</span>
+          <CalendarCheck size={14} color="#fff" />
+          <span style={{ color: '#fff', fontWeight: 700, fontSize: 12.5 }}>Resumen de cita</span>
         </div>
 
-        <div style={{ background: 'var(--teal-l)', padding: 16 }}>
+        <div style={{ background: 'var(--teal-l)', padding: 14 }}>
           {patient ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid rgba(13,148,136,0.15)' }}>
               <div style={{ ...avatarStyle, width: 38, height: 38, fontSize: 13 }}>{initials(patient)}</div>

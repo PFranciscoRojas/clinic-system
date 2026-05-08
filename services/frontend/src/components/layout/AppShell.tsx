@@ -8,11 +8,11 @@ import {
 import { useAuth } from '@/context/AuthContext';
 
 const NAV = [
-  { to: '/',            label: 'Agenda',        Icon: CalendarDays,  perm: 'appointments:read' },
-  { to: '/patients',    label: 'Pacientes',      Icon: Users,         perm: 'patients:read'     },
-  { to: '/evaluations', label: 'Evaluaciones',   Icon: ClipboardList, perm: null                },
-  { to: '/billing',     label: 'Facturación',    Icon: Receipt,       perm: null                },
-  { to: '/settings',    label: 'Configuración',  Icon: Settings,      perm: null                },
+  { to: '/',            label: 'Agenda',        Icon: CalendarDays,  perm: 'appointments:read', badge: null },
+  { to: '/patients',    label: 'Pacientes',      Icon: Users,         perm: 'patients:read',     badge: null },
+  { to: '/evaluations', label: 'Evaluaciones',   Icon: ClipboardList, perm: null,                badge: 2   },
+  { to: '/billing',     label: 'Facturación',    Icon: Receipt,       perm: null,                badge: null },
+  { to: '/settings',    label: 'Configuración',  Icon: Settings,      perm: null,                badge: null },
 ];
 
 interface Props { children: ReactNode }
@@ -38,7 +38,16 @@ export function AppShell({ children }: Props) {
     return () => document.removeEventListener('mousedown', handle);
   }, []);
 
-  const initials = user?.email?.slice(0, 2).toUpperCase() ?? 'US';
+  const displayName = user?.display_name ?? user?.email?.split('@')[0] ?? 'Usuario';
+  const initials = (() => {
+    if (user?.display_name) {
+      const words = user.display_name.trim().split(/\s+/);
+      const first = words[0]?.[0] ?? '';
+      const last  = words.length > 1 ? (words[words.length - 1]?.[0] ?? '') : '';
+      return (first + last).toUpperCase();
+    }
+    return user?.email?.slice(0, 2).toUpperCase() ?? 'US';
+  })();
 
   const handleLogout = async () => {
     await logout();
@@ -76,7 +85,7 @@ export function AppShell({ children }: Props) {
             <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,.40)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 8, paddingLeft: 4 }}>
               Principal
             </div>
-            {NAV.map(({ to, label, Icon }) => {
+            {NAV.map(({ to, label, Icon, badge }) => {
               const active = to === '/' ? location.pathname === '/' : location.pathname.startsWith(to);
               return (
                 <Link key={to} to={to} style={{
@@ -91,7 +100,12 @@ export function AppShell({ children }: Props) {
                 onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                 >
                   <Icon size={16} color={active ? '#fff' : 'rgba(255,255,255,.65)'} />
-                  {label}
+                  <span style={{ flex: 1 }}>{label}</span>
+                  {badge !== null && (
+                    <span style={{ background: '#f59e0b', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 9999, padding: '1px 6px', minWidth: 18, textAlign: 'center' }}>
+                      {badge}
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -105,7 +119,7 @@ export function AppShell({ children }: Props) {
               </div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 12.5, fontWeight: 500, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {user?.email ?? '—'}
+                  {displayName}
                 </div>
                 <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.50)' }}>Psicólog@ clínic@</div>
               </div>
@@ -195,13 +209,14 @@ export function AppShell({ children }: Props) {
                 <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg, var(--teal), var(--teal-d))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff' }}>
                   {initials}
                 </div>
-                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--s700)' }}>{user?.email?.split('@')[0] ?? 'Usuario'}</span>
+                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--s700)' }}>{displayName}</span>
                 <ChevronDown size={13} color="var(--s400)" style={{ transform: profileOpen ? 'rotate(180deg)' : '', transition: 'transform .2s' }} />
               </button>
               {profileOpen && (
                 <div className="anim-fade-in" style={{ position: 'absolute', top: 'calc(100% + 10px)', right: 0, width: 220, background: '#fff', borderRadius: 12, border: '1px solid var(--s200)', boxShadow: 'var(--shadow-lg)', overflow: 'hidden', zIndex: 100 }}>
                   <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--s100)' }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--s800)' }}>{user?.email ?? '—'}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--s800)' }}>{displayName}</div>
+                    <div style={{ fontSize: 11.5, color: 'var(--s500)', marginTop: 2 }}>{user?.email ?? '—'}</div>
                   </div>
                   {[
                     { Icon: UserCircle, label: 'Mi perfil',      action: () => setProfileOpen(false) },
