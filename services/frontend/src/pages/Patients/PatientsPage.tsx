@@ -1,34 +1,23 @@
-import { useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Search, Plus, User, Phone, Mail, ChevronRight,
-  AlertCircle, X, Info, Users, UserCheck, UserX,
+  Search, Plus, Users, UserCheck, UserX,
+  ChevronRight, AlertCircle, X, Info,
+  Mail, Phone, CreditCard, Filter,
 } from 'lucide-react';
 import { patientsApi, type Patient } from '@/api/patients';
-import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
-
-type SearchMode   = 'list' | 'last_name' | 'document';
-type ActiveFilter = 'all' | 'active' | 'inactive';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function useDebounce(value: string, delay: number) {
   const [debounced, setDebounced] = useState(value);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
-  if (value !== debounced) {
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setDebounced(value), delay);
-  }
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
   return debounced;
-}
-
-function stringToColor(s: string = '') {
-  const palette = ['#0ea5e9', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#6366f1', '#ef4444', '#14b8a6'];
-  let hash = 0;
-  for (let i = 0; i < s.length; i++) hash = s.charCodeAt(i) + ((hash << 5) - hash);
-  return palette[Math.abs(hash) % palette.length];
 }
 
 function calcAge(birthIso: string): number {
@@ -39,73 +28,60 @@ function calcAge(birthIso: string): number {
   return age;
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-interface StatsCardProps {
-  icon: React.ReactNode;
-  iconColor: string;
-  label: string;
-  value: number | '—';
+const AVATAR_COLORS = [
+  '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b',
+  '#10b981', '#14b8a6', '#0ea5e9', '#ef4444',
+];
+function avatarColor(name: string = '') {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
 }
 
-function StatsCard({ icon, iconColor, label, value }: StatsCardProps) {
+// ── Stat card ─────────────────────────────────────────────────────────────────
+
+function StatCard({ icon: Icon, color, label, value }: {
+  icon: React.ElementType; color: string; label: string; value: number | string;
+}) {
   return (
     <div style={{
-      flex: 1,
-      background: '#fff',
-      border: '1px solid var(--s200)',
-      borderRadius: 12,
-      padding: '14px 18px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: 14,
-      minWidth: 0,
+      flex: 1, minWidth: 0,
+      background: '#fff', border: '1px solid var(--s200)', borderRadius: 12,
+      padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14,
     }}>
       <div style={{
-        width: 40,
-        height: 40,
-        borderRadius: 10,
-        background: iconColor + '18',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-        color: iconColor,
+        width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+        background: color + '18',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        {icon}
+        <Icon size={18} color={color} />
       </div>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--s800)', lineHeight: 1.1 }}>
-          {value}
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {label}
-        </div>
+      <div>
+        <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--s800)', lineHeight: 1.1, letterSpacing: '-1px' }}>{value}</div>
+        <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>{label}</div>
       </div>
     </div>
   );
 }
 
+// ── Patient row ───────────────────────────────────────────────────────────────
+
 function PatientRow({ patient, isLast, onClick }: { patient: Patient; isLast: boolean; onClick: () => void }) {
-  const initials = [patient.first_name?.[0], patient.paternal_last_name?.[0]]
-    .filter(Boolean)
-    .join('')
-    .toUpperCase();
-
-  const displayName = [patient.paternal_last_name, patient.first_name]
-    .filter(Boolean)
-    .join(', ');
-
+  const initials = [patient.first_name?.[0], patient.paternal_last_name?.[0]].filter(Boolean).join('').toUpperCase();
+  const fullName = [patient.first_name, patient.middle_name, patient.paternal_last_name, patient.maternal_last_name]
+    .filter(Boolean).join(' ');
+  const color = avatarColor(patient.paternal_last_name);
   const age = patient.birth_date ? calcAge(patient.birth_date) : null;
 
   return (
     <div
       onClick={onClick}
       style={{
-        display: 'flex',
+        display: 'grid',
+        gridTemplateColumns: '40px 1fr 200px 120px 90px 28px',
         alignItems: 'center',
-        gap: 14,
-        padding: '14px 20px',
+        gap: 16,
+        padding: '13px 20px',
         borderBottom: isLast ? 'none' : '1px solid var(--s100)',
         cursor: 'pointer',
         transition: 'background .1s',
@@ -115,52 +91,31 @@ function PatientRow({ patient, isLast, onClick }: { patient: Patient; isLast: bo
     >
       {/* Avatar */}
       <div style={{
-        width: 42,
-        height: 42,
-        borderRadius: '50%',
-        flexShrink: 0,
-        background: `linear-gradient(135deg, ${stringToColor(patient.paternal_last_name)}, ${stringToColor(patient.paternal_last_name)}bb)`,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: 14,
-        fontWeight: 700,
-        color: '#fff',
-        letterSpacing: 0.5,
-        boxShadow: `0 2px 8px ${stringToColor(patient.paternal_last_name)}44`,
+        width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
+        background: `linear-gradient(135deg, ${color}, ${color}bb)`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 13, fontWeight: 700, color: '#fff',
+        boxShadow: `0 2px 6px ${color}44`,
       }}>
-        {initials || <User size={17} color="#fff" />}
+        {initials}
       </div>
 
-      {/* Main info */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {/* Name row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <span style={{
-            fontSize: 14,
-            fontWeight: 700,
-            color: 'var(--s800)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}>
-            {displayName}
-          </span>
+      {/* Name + doc */}
+      <div style={{ minWidth: 0 }}>
+        <div style={{
+          fontSize: 14, fontWeight: 600, color: 'var(--s800)',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          marginBottom: 3,
+        }}>
+          {fullName || '—'}
         </div>
-
-        {/* Document + age row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {patient.document_type_code && (
             <span style={{
-              fontSize: 10,
-              fontWeight: 700,
-              letterSpacing: 0.3,
-              color: 'var(--teal)',
-              background: 'var(--teal-10, rgba(20,184,166,0.1))',
-              border: '1px solid var(--teal-20, rgba(20,184,166,0.2))',
-              borderRadius: 4,
-              padding: '1px 5px',
-              textTransform: 'uppercase',
+              fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
+              color: 'var(--teal)', background: 'rgba(20,184,166,0.10)',
+              border: '1px solid rgba(20,184,166,0.20)',
+              borderRadius: 4, padding: '1px 5px', textTransform: 'uppercase',
             }}>
               {patient.document_type_code}
             </span>
@@ -170,375 +125,399 @@ function PatientRow({ patient, isLast, onClick }: { patient: Patient; isLast: bo
               {patient.document_number}
             </span>
           )}
-          {age !== null && (
-            <span style={{ fontSize: 12, color: 'var(--s400)' }}>
-              · {age} años
-            </span>
-          )}
         </div>
       </div>
 
-      {/* Right side: contact + status */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+      {/* Contact */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
         {patient.email && (
-          <span style={{ fontSize: 12, color: 'var(--s400)', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Mail size={11} color="var(--s300)" />
+          <span style={{
+            fontSize: 12, color: 'var(--s500)',
+            display: 'flex', alignItems: 'center', gap: 5,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
+            <Mail size={11} color="var(--s300)" style={{ flexShrink: 0 }} />
             {patient.email}
           </span>
         )}
         {patient.phone && (
-          <span style={{ fontSize: 12, color: 'var(--s400)', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Phone size={11} color="var(--s300)" />
+          <span style={{
+            fontSize: 12, color: 'var(--s500)',
+            display: 'flex', alignItems: 'center', gap: 5,
+          }}>
+            <Phone size={11} color="var(--s300)" style={{ flexShrink: 0 }} />
             {patient.phone}
           </span>
         )}
+      </div>
+
+      {/* Age */}
+      <div style={{ fontSize: 13, color: 'var(--s600)', textAlign: 'center' }}>
+        {age !== null ? `${age} años` : '—'}
+      </div>
+
+      {/* Status badge */}
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
         {patient.is_active ? (
-          <Badge label="Activo" color="#10b981" bg="#d1fae5" size="sm" />
+          <span style={{
+            fontSize: 11, fontWeight: 600, color: '#10b981',
+            background: '#ecfdf5', border: '1px solid #6ee7b7',
+            borderRadius: 6, padding: '3px 9px',
+            display: 'flex', alignItems: 'center', gap: 4,
+          }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
+            Activo
+          </span>
         ) : (
-          <Badge label="Inactivo" color="var(--s500)" bg="var(--s100)" size="sm" />
+          <span style={{
+            fontSize: 11, fontWeight: 600, color: 'var(--s400)',
+            background: 'var(--s100)', border: '1px solid var(--s200)',
+            borderRadius: 6, padding: '3px 9px',
+          }}>
+            Inactivo
+          </span>
         )}
       </div>
 
-      <ChevronRight size={16} color="var(--s300)" style={{ flexShrink: 0 }} />
+      <ChevronRight size={15} color="var(--s300)" />
     </div>
   );
 }
 
-function EmptyState({ isSearch, isFiltered, filter, q, onNew }: {
-  isSearch: boolean;
-  isFiltered: boolean;
-  filter: ActiveFilter;
-  q: string;
-  onNew: () => void;
-}) {
-  const filterLabel = filter === 'active' ? 'activos' : 'inactivos';
+// ── Table header ──────────────────────────────────────────────────────────────
 
-  if (isFiltered && !isSearch) {
-    return (
-      <div style={{ textAlign: 'center', padding: '56px 24px' }}>
-        <div style={{
-          width: 64, height: 64, borderRadius: 16,
-          background: 'var(--s100)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          margin: '0 auto 16px',
+function TableHeader() {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '40px 1fr 200px 120px 90px 28px',
+      gap: 16,
+      padding: '10px 20px',
+      background: 'var(--s50)',
+      borderBottom: '1px solid var(--s200)',
+    }}>
+      {['', 'Paciente', 'Contacto', 'Edad', 'Estado', ''].map((h, i) => (
+        <div key={i} style={{
+          fontSize: 11, fontWeight: 700, color: 'var(--s400)',
+          textTransform: 'uppercase', letterSpacing: '.06em',
+          textAlign: i === 3 ? 'center' : i === 4 ? 'center' : 'left',
         }}>
-          {filter === 'active'
-            ? <UserCheck size={28} color="var(--s300)" />
-            : <UserX size={28} color="var(--s300)" />
-          }
+          {h}
         </div>
-        <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--s700)', margin: '0 0 6px' }}>
-          Sin pacientes {filterLabel}
-        </p>
-        <p style={{ fontSize: 13, color: 'var(--s400)', margin: 0, maxWidth: 300, marginLeft: 'auto', marginRight: 'auto' }}>
-          No hay pacientes {filterLabel} en este momento.
-        </p>
+      ))}
+    </div>
+  );
+}
+
+// ── Empty states ──────────────────────────────────────────────────────────────
+
+function EmptyState({ query, filter, onNew }: {
+  query: string; filter: 'all' | 'active' | 'inactive'; onNew: () => void;
+}) {
+  if (query) return (
+    <div style={{ textAlign: 'center', padding: '56px 24px' }}>
+      <div style={{ width: 56, height: 56, borderRadius: 14, background: 'var(--s100)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+        <Search size={24} color="var(--s300)" />
       </div>
-    );
-  }
+      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--s700)', marginBottom: 6 }}>
+        Sin resultados para "{query}"
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--s400)', maxWidth: 320, margin: '0 auto', lineHeight: 1.6 }}>
+        La búsqueda es exacta. Verifica la ortografía incluyendo tildes.
+      </div>
+    </div>
+  );
+
+  if (filter !== 'all') return (
+    <div style={{ textAlign: 'center', padding: '56px 24px' }}>
+      <div style={{ width: 56, height: 56, borderRadius: 14, background: 'var(--s100)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+        {filter === 'active' ? <UserCheck size={24} color="var(--s300)" /> : <UserX size={24} color="var(--s300)" />}
+      </div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--s700)' }}>
+        Sin pacientes {filter === 'active' ? 'activos' : 'inactivos'}
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ textAlign: 'center', padding: '56px 24px' }}>
-      <div style={{
-        width: 64, height: 64, borderRadius: 16,
-        background: 'var(--s100)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        margin: '0 auto 16px',
-      }}>
-        {isSearch ? <Search size={28} color="var(--s300)" /> : <User size={28} color="var(--s300)" />}
+      <div style={{ width: 64, height: 64, borderRadius: 16, background: 'var(--teal-l)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
+        <Users size={28} color="var(--teal)" />
       </div>
-      <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--s700)', margin: '0 0 6px' }}>
-        {isSearch ? `Sin resultados para "${q}"` : 'Aún no hay pacientes registrados'}
-      </p>
-      <p style={{ fontSize: 13, color: 'var(--s400)', margin: '0 0 20px', maxWidth: 320, marginLeft: 'auto', marginRight: 'auto' }}>
-        {isSearch
-          ? 'La búsqueda es exacta por el apellido paterno. Verifica la ortografía incluyendo tildes.'
-          : 'Registra el primer paciente de tu organización.'}
-      </p>
-      {!isSearch && (
-        <button
-          onClick={onNew}
-          style={{
-            padding: '9px 22px',
-            background: 'var(--teal)',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 9,
-            cursor: 'pointer',
-            fontSize: 14,
-            fontWeight: 600,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-          }}
-        >
-          <Plus size={14} /> Registrar primer paciente
-        </button>
-      )}
+      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--s700)', marginBottom: 8 }}>
+        Aún no hay pacientes registrados
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--s400)', maxWidth: 300, margin: '0 auto 24px', lineHeight: 1.6 }}>
+        Registra el primer paciente de tu organización.
+      </div>
+      <button
+        onClick={onNew}
+        style={{
+          padding: '10px 24px', background: 'var(--teal)', color: '#fff',
+          border: 'none', borderRadius: 10, cursor: 'pointer',
+          fontSize: 14, fontWeight: 600,
+          display: 'inline-flex', alignItems: 'center', gap: 7,
+          boxShadow: '0 2px 10px rgba(20,184,166,0.3)',
+        }}
+      >
+        <Plus size={15} />Registrar primer paciente
+      </button>
     </div>
   );
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+type Filter = 'all' | 'active' | 'inactive';
+type SearchMode = 'last_name' | 'document';
+
+const LIMIT = 30;
+
 export function PatientsPage() {
   const navigate = useNavigate();
-  const [q, setQ]                     = useState('');
-  const [mode, setMode]               = useState<SearchMode>('list');
-  const [page, setPage]               = useState(0);
-  const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all');
-  const dq                            = useDebounce(q, 400);
-  const LIMIT                         = 30;
-
+  const [q, setQ]             = useState('');
+  const [mode, setMode]       = useState<SearchMode>('last_name');
+  const [filter, setFilter]   = useState<Filter>('all');
+  const [page, setPage]       = useState(0);
+  const [showModeMenu, setShowModeMenu] = useState(false);
+  const modeRef = useRef<HTMLDivElement>(null);
+  const dq = useDebounce(q, 380);
   const isSearching = dq.trim().length >= 2;
+
+  // Close mode menu on outside click
+  useEffect(() => {
+    function h(e: MouseEvent) {
+      if (modeRef.current && !modeRef.current.contains(e.target as Node)) setShowModeMenu(false);
+    }
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
 
   const { data, isLoading, isError, isFetching } = useQuery({
     queryKey: ['patients', mode, dq, page],
-    queryFn: () => {
-      if (!isSearching) {
-        return patientsApi.list({ limit: LIMIT, offset: page * LIMIT });
-      }
-      return patientsApi.search({
-        last_name: mode === 'last_name' ? dq.trim() : undefined,
-        document:  mode === 'document'  ? dq.trim() : undefined,
-        limit: LIMIT,
-        offset: page * LIMIT,
-      });
-    },
+    queryFn: () =>
+      isSearching
+        ? patientsApi.search({
+            last_name: mode === 'last_name' ? dq.trim() : undefined,
+            document:  mode === 'document'  ? dq.trim() : undefined,
+            limit: LIMIT, offset: page * LIMIT,
+          })
+        : patientsApi.list({ limit: LIMIT, offset: page * LIMIT }),
     staleTime: 30_000,
-    placeholderData: (prev) => prev,
+    placeholderData: prev => prev,
   });
 
-  const patients = data ?? [];
+  const all      = data ?? [];
+  const shown    = filter === 'all' ? all : all.filter(p => filter === 'active' ? p.is_active : !p.is_active);
+  const total    = all.length;
+  const actives  = all.filter(p => p.is_active).length;
+  const inactive = all.filter(p => !p.is_active).length;
 
-  // Client-side active/inactive filter
-  const filteredPatients = activeFilter === 'all'
-    ? patients
-    : patients.filter(p => activeFilter === 'active' ? p.is_active : !p.is_active);
+  const handleQ = (v: string) => { setQ(v); setPage(0); };
 
-  const totalCount    = patients.length;
-  const activeCount   = patients.filter(p => p.is_active).length;
-  const inactiveCount = patients.filter(p => !p.is_active).length;
-
-  const handleSearch = (v: string) => {
-    setQ(v);
-    setPage(0);
-  };
-
-  const clearSearch = () => {
-    setQ('');
-    setPage(0);
-  };
-
-  const isFiltered = activeFilter !== 'all';
+  const modeLabel = mode === 'last_name' ? 'Apellido paterno' : 'Nº documento';
 
   return (
-    <div className="anim-fade-in">
-      {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+    <div style={{ padding: '24px 28px' }}>
+
+      {/* ── Page header ─────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 22 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--s800)', margin: '0 0 2px' }}>Pacientes</h1>
-          <p style={{ color: 'var(--s400)', fontSize: 13, margin: 0 }}>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--s800)', margin: 0, letterSpacing: '-0.4px' }}>
+            Pacientes
+          </h1>
+          <p style={{ fontSize: 13, color: 'var(--s400)', margin: '4px 0 0' }}>
             {isLoading
               ? 'Cargando…'
               : isSearching
-                ? `${filteredPatients.length} resultado${filteredPatients.length !== 1 ? 's' : ''} encontrado${filteredPatients.length !== 1 ? 's' : ''}`
-                : `${totalCount} paciente${totalCount !== 1 ? 's' : ''} registrado${totalCount !== 1 ? 's' : ''}`
-            }
+                ? `${shown.length} resultado${shown.length !== 1 ? 's' : ''} para "${dq}"`
+                : `${total} paciente${total !== 1 ? 's' : ''} registrado${total !== 1 ? 's' : ''}`}
           </p>
         </div>
         <button
           onClick={() => navigate('/patients/new')}
           style={{
             display: 'flex', alignItems: 'center', gap: 7,
-            padding: '9px 18px',
+            padding: '9px 18px', borderRadius: 10, border: 'none',
             background: 'var(--teal)', color: '#fff',
-            border: 'none', borderRadius: 10,
             fontSize: 14, fontWeight: 600, cursor: 'pointer',
-            boxShadow: '0 2px 8px rgba(20,184,166,0.3)',
+            boxShadow: '0 2px 10px rgba(20,184,166,0.30)',
             transition: 'all .15s',
           }}
-          onMouseEnter={e => (e.currentTarget.style.background = 'var(--teal-d, #0d9488)')}
-          onMouseLeave={e => (e.currentTarget.style.background = 'var(--teal)')}
+          onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.07)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onMouseLeave={e => { e.currentTarget.style.filter = ''; e.currentTarget.style.transform = ''; }}
         >
-          <Plus size={16} /> Nuevo paciente
+          <Plus size={16} />Nuevo paciente
         </button>
       </div>
 
-      {/* ── Stats bar ───────────────────────────────────────────────────── */}
+      {/* ── Stats ───────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
-        <StatsCard
-          icon={<Users size={20} />}
-          iconColor="var(--teal)"
-          label="Total registrados"
-          value={isLoading ? '—' : totalCount}
-        />
-        <StatsCard
-          icon={<UserCheck size={20} />}
-          iconColor="#10b981"
-          label="Activos"
-          value={isLoading ? '—' : activeCount}
-        />
-        <StatsCard
-          icon={<UserX size={20} />}
-          iconColor="#f59e0b"
-          label="Inactivos"
-          value={isLoading ? '—' : inactiveCount}
-        />
+        <StatCard icon={Users}     color="var(--teal)" label="Total registrados" value={isLoading ? '—' : total}    />
+        <StatCard icon={UserCheck} color="#10b981"     label="Activos"           value={isLoading ? '—' : actives}  />
+        <StatCard icon={UserX}     color="#f59e0b"     label="Inactivos"         value={isLoading ? '—' : inactive} />
       </div>
 
-      {/* ── Search bar ──────────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 14 }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          background: '#fff',
-          border: '1.5px solid var(--s200)',
-          borderRadius: 12,
-          padding: '10px 16px',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-          transition: 'border-color .15s',
-        }}>
+      {/* ── Search + filters ────────────────────────────────── */}
+      <div style={{
+        background: '#fff', border: '1px solid var(--s200)', borderRadius: 14,
+        boxShadow: '0 1px 4px rgba(0,0,0,.04)', marginBottom: 16, overflow: 'hidden',
+      }}>
+        {/* Search row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--s100)' }}>
           {isFetching && isSearching
             ? <Spinner size={16} color="var(--teal)" />
             : <Search size={16} color="var(--s400)" />
           }
           <input
             value={q}
-            onChange={e => handleSearch(e.target.value)}
-            placeholder={
-              mode === 'document'
-                ? 'Número de documento exacto…'
-                : 'Buscar por apellido paterno exacto…'
-            }
+            onChange={e => handleQ(e.target.value)}
+            placeholder={`Buscar por ${modeLabel.toLowerCase()}…`}
             style={{
               flex: 1, border: 'none', background: 'transparent',
               fontSize: 14, color: 'var(--s800)', outline: 'none',
             }}
           />
           {q && (
-            <button
-              onClick={clearSearch}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                color: 'var(--s400)', display: 'flex', alignItems: 'center', padding: 2,
-              }}
-            >
+            <button onClick={() => handleQ('')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--s300)', display: 'flex', padding: 2 }}>
               <X size={14} />
             </button>
           )}
+
+          {/* Mode selector */}
+          <div ref={modeRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowModeMenu(v => !v)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '6px 10px', borderRadius: 7,
+                border: `1.5px solid ${showModeMenu ? 'var(--teal)' : 'var(--s200)'}`,
+                background: showModeMenu ? 'var(--teal-l)' : 'var(--s50)',
+                color: showModeMenu ? 'var(--teal)' : 'var(--s500)',
+                fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap',
+                transition: 'all .12s',
+              }}
+            >
+              <Filter size={12} />{modeLabel}
+            </button>
+            {showModeMenu && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+                background: '#fff', border: '1px solid var(--s200)', borderRadius: 10,
+                boxShadow: '0 8px 24px rgba(0,0,0,.10)', overflow: 'hidden', zIndex: 50,
+                minWidth: 160,
+              }}>
+                {([
+                  { id: 'last_name' as SearchMode, label: 'Apellido paterno', icon: '👤' },
+                  { id: 'document'  as SearchMode, label: 'Nº de documento',  icon: <CreditCard size={13} /> },
+                ] as const).map(opt => (
+                  <button
+                    key={opt.id}
+                    onClick={() => { setMode(opt.id); setShowModeMenu(false); setQ(''); }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 9, width: '100%',
+                      padding: '10px 14px', border: 'none', background: 'transparent',
+                      textAlign: 'left', fontSize: 13, cursor: 'pointer',
+                      color: mode === opt.id ? 'var(--teal)' : 'var(--s700)',
+                      fontWeight: mode === opt.id ? 600 : 400,
+                      transition: 'background .1s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--s50)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <span style={{ fontSize: 14 }}>{typeof opt.icon === 'string' ? opt.icon : opt.icon}</span>
+                    {opt.label}
+                    {mode === opt.id && <span style={{ marginLeft: 'auto', color: 'var(--teal)', fontSize: 12 }}>✓</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Search mode selector */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
-          <div style={{ display: 'flex', gap: 6 }}>
+        {/* Filter tabs + privacy note */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px' }}>
+          <div style={{ display: 'flex', gap: 4 }}>
             {([
-              { id: 'list'      as SearchMode, label: 'Todos' },
-              { id: 'last_name' as SearchMode, label: 'Por apellido' },
-              { id: 'document'  as SearchMode, label: 'Por documento' },
-            ]).map(({ id, label }) => (
-              <button
-                key={id}
-                onClick={() => { setMode(id); clearSearch(); }}
-                style={{
-                  padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500,
-                  border: `1.5px solid ${mode === id ? 'var(--teal)' : 'var(--s200)'}`,
-                  background: mode === id ? 'var(--teal-10, rgba(20,184,166,0.1))' : 'transparent',
-                  color: mode === id ? 'var(--teal)' : 'var(--s500)',
-                  cursor: 'pointer', transition: 'all .1s',
-                }}
-              >
-                {label}
-              </button>
-            ))}
+              { id: 'all'      as Filter, label: 'Todos',     count: total    },
+              { id: 'active'   as Filter, label: 'Activos',   count: actives  },
+              { id: 'inactive' as Filter, label: 'Inactivos', count: inactive },
+            ] as const).map(({ id, label, count }) => {
+              const on = filter === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => setFilter(id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    padding: '5px 12px', borderRadius: 20, fontSize: 12.5, fontWeight: on ? 600 : 400,
+                    border: `1.5px solid ${on ? 'var(--teal)' : 'transparent'}`,
+                    background: on ? 'var(--teal)' : 'transparent',
+                    color: on ? '#fff' : 'var(--s500)',
+                    cursor: 'pointer', transition: 'all .12s',
+                  }}
+                >
+                  {label}
+                  {!isLoading && (
+                    <span style={{
+                      fontSize: 10.5, fontWeight: 700,
+                      background: on ? 'rgba(255,255,255,.25)' : 'var(--s100)',
+                      color: on ? '#fff' : 'var(--s400)',
+                      borderRadius: 10, padding: '1px 6px',
+                    }}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
           {isSearching && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--s400)' }}>
-              <Info size={11} />
-              Búsqueda exacta por razones de privacidad
+              <Info size={11} />Búsqueda exacta por privacidad
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Active/Inactive filter tabs ──────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        {([
-          { id: 'all'      as ActiveFilter, label: 'Todos',     count: totalCount },
-          { id: 'active'   as ActiveFilter, label: 'Activos',   count: activeCount },
-          { id: 'inactive' as ActiveFilter, label: 'Inactivos', count: inactiveCount },
-        ]).map(({ id, label, count }) => {
-          const isSelected = activeFilter === id;
-          return (
-            <button
-              key={id}
-              onClick={() => setActiveFilter(id)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 500,
-                border: `1.5px solid ${isSelected ? 'var(--teal)' : 'var(--s200)'}`,
-                background: isSelected ? 'var(--teal)' : '#fff',
-                color: isSelected ? '#fff' : 'var(--s600)',
-                cursor: 'pointer', transition: 'all .15s',
-                boxShadow: isSelected ? '0 2px 6px rgba(20,184,166,0.25)' : 'none',
-              }}
-            >
-              {label}
-              {!isLoading && (
-                <span style={{
-                  fontSize: 11, fontWeight: 700,
-                  background: isSelected ? 'rgba(255,255,255,0.25)' : 'var(--s100)',
-                  color: isSelected ? '#fff' : 'var(--s500)',
-                  borderRadius: 10, padding: '1px 6px',
-                  lineHeight: 1.6,
-                }}>
-                  {count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ── Error ───────────────────────────────────────────────────────── */}
+      {/* ── Error ───────────────────────────────────────────── */}
       {isError && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
-          color: 'var(--red)', padding: '12px 16px',
-          background: '#fef2f2', borderRadius: 12, marginBottom: 16,
+          color: '#ef4444', padding: '12px 16px', marginBottom: 16,
+          background: '#fef2f2', borderRadius: 10, border: '1px solid #fecaca',
+          fontSize: 13,
         }}>
-          <AlertCircle size={15} /> Error al cargar pacientes. Intenta de nuevo.
+          <AlertCircle size={15} />Error al cargar pacientes. Intenta de nuevo.
         </div>
       )}
 
-      {/* ── Content ─────────────────────────────────────────────────────── */}
+      {/* ── Content ─────────────────────────────────────────── */}
       {isLoading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
           <Spinner size={28} color="var(--teal)" />
         </div>
-      ) : filteredPatients.length === 0 ? (
-        <EmptyState
-          isSearch={isSearching}
-          isFiltered={isFiltered}
-          filter={activeFilter}
-          q={q}
-          onNew={() => navigate('/patients/new')}
-        />
+      ) : shown.length === 0 ? (
+        <div style={{ background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, overflow: 'hidden' }}>
+          <EmptyState query={isSearching ? dq : ''} filter={filter} onNew={() => navigate('/patients/new')} />
+        </div>
       ) : (
         <>
-          <div className="card" style={{ overflow: 'hidden', padding: 0 }}>
-            {filteredPatients.map((patient, idx) => (
+          <div style={{ background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, overflow: 'hidden' }}>
+            <TableHeader />
+            {shown.map((patient, idx) => (
               <PatientRow
                 key={patient.id}
                 patient={patient}
-                isLast={idx === filteredPatients.length - 1}
+                isLast={idx === shown.length - 1}
                 onClick={() => navigate(`/patients/${patient.id}`)}
               />
             ))}
           </div>
 
           {/* Pagination */}
-          {(patients.length === LIMIT || page > 0) && (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 16 }}>
+          {(all.length === LIMIT || page > 0) && (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 16 }}>
               <button
                 disabled={page === 0}
                 onClick={() => setPage(p => p - 1)}
@@ -548,27 +527,24 @@ export function PatientsPage() {
                   background: page === 0 ? 'var(--s50)' : '#fff',
                   color: page === 0 ? 'var(--s300)' : 'var(--s700)',
                   cursor: page === 0 ? 'not-allowed' : 'pointer',
-                  fontSize: 13, fontWeight: 500,
+                  fontSize: 13, fontWeight: 500, transition: 'all .12s',
                 }}
               >
                 ← Anterior
               </button>
-              <span style={{
-                display: 'flex', alignItems: 'center',
-                fontSize: 13, color: 'var(--s500)', padding: '0 8px',
-              }}>
+              <span style={{ fontSize: 13, color: 'var(--s400)', padding: '0 8px' }}>
                 Página {page + 1}
               </span>
               <button
-                disabled={patients.length < LIMIT}
+                disabled={all.length < LIMIT}
                 onClick={() => setPage(p => p + 1)}
                 style={{
                   padding: '7px 16px', borderRadius: 8,
                   border: '1.5px solid var(--s200)',
-                  background: patients.length < LIMIT ? 'var(--s50)' : '#fff',
-                  color: patients.length < LIMIT ? 'var(--s300)' : 'var(--s700)',
-                  cursor: patients.length < LIMIT ? 'not-allowed' : 'pointer',
-                  fontSize: 13, fontWeight: 500,
+                  background: all.length < LIMIT ? 'var(--s50)' : '#fff',
+                  color: all.length < LIMIT ? 'var(--s300)' : 'var(--s700)',
+                  cursor: all.length < LIMIT ? 'not-allowed' : 'pointer',
+                  fontSize: 13, fontWeight: 500, transition: 'all .12s',
                 }}
               >
                 Siguiente →
