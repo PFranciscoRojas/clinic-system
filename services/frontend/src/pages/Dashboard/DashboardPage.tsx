@@ -16,8 +16,7 @@ import { AgendaCalendar } from './AgendaCalendar';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-type FilterTab  = 'all' | 'upcoming' | 'confirmed' | 'pending' | 'completed';
-type ViewMode   = 'list' | 'week';
+type FilterTab = 'all' | 'upcoming' | 'confirmed' | 'pending' | 'completed';
 
 const FILTER_TABS: { key: FilterTab; label: string }[] = [
   { key: 'all',       label: 'Todas'       },
@@ -27,8 +26,6 @@ const FILTER_TABS: { key: FilterTab; label: string }[] = [
   { key: 'completed', label: 'Completadas' },
 ];
 
-const DAY_NAMES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-const MONTH_NAMES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
 function todayISO() {
   const d = new Date();
@@ -61,35 +58,6 @@ function shiftDate(iso: string, days: number) {
   const d = new Date(iso + 'T12:00:00');
   d.setDate(d.getDate() + days);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function localDateFromISO(isoUTC: string): string {
-  // Convert UTC ISO to local YYYY-MM-DD
-  const d = new Date(isoUTC);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-// Week helpers
-function getWeekDays(iso: string): string[] {
-  const d   = new Date(iso + 'T12:00:00');
-  const dow = d.getDay(); // 0=Sun
-  const mondayOff = dow === 0 ? -6 : 1 - dow;
-  const days: string[] = [];
-  for (let i = 0; i < 7; i++) {
-    const day = new Date(d);
-    day.setDate(d.getDate() + mondayOff + i);
-    days.push(`${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`);
-  }
-  return days;
-}
-
-function weekRangeLabel(days: string[]): string {
-  const s = new Date(days[0] + 'T12:00:00');
-  const e = new Date(days[6] + 'T12:00:00');
-  const sm = MONTH_NAMES[s.getMonth()];
-  const em = MONTH_NAMES[e.getMonth()];
-  if (sm === em) return `${s.getDate()}–${e.getDate()} ${sm} ${s.getFullYear()}`;
-  return `${s.getDate()} ${sm} – ${e.getDate()} ${em} ${e.getFullYear()}`;
 }
 
 function fmtTime(isoOrHHMM: string) {
@@ -311,155 +279,6 @@ function AppointmentRow({
   );
 }
 
-// ─── WeekApptChip ─────────────────────────────────────────────────────────────
-
-function WeekApptChip({ appt }: { appt: Appointment }) {
-  const navigate = useNavigate();
-  const { data: patient } = usePatient(appt.patient_id);
-  const inProg = isInProgress(appt);
-  const cancelled = appt.status === 'CANCELLED';
-  const completed = appt.status === 'COMPLETED';
-  const time = fmtTime(appt.scheduled_at);
-  const firstName = patient
-    ? (patient.first_name || patientFullName(patient)).split(' ')[0]
-    : '···';
-
-  const bg     = inProg    ? 'var(--teal)'    : completed ? 'var(--s100)' : cancelled ? '#fee2e2' : 'var(--teal-l)';
-  const border = inProg    ? 'var(--teal-d)'  : completed ? 'var(--s300)' : cancelled ? '#fca5a5' : 'var(--teal)';
-  const clr    = inProg    ? '#fff'           : completed ? 'var(--s500)' : cancelled ? '#991b1b' : 'var(--teal-d)';
-  const sub    = inProg    ? 'rgba(255,255,255,0.80)' : cancelled ? '#b91c1c' : 'var(--s500)';
-
-  return (
-    <button
-      onClick={e => { e.stopPropagation(); navigate(`/patients/${appt.patient_id}`); }}
-      style={{
-        width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer',
-        background: bg,
-        borderLeft: `3px solid ${border}`,
-        borderRadius: 5, padding: '3px 7px',
-        opacity: cancelled ? 0.7 : 1,
-        transition: 'opacity 0.12s',
-      }}
-    >
-      <div style={{ fontSize: 10.5, fontWeight: 700, color: clr, fontFamily: "'DM Mono', monospace" }}>{time}</div>
-      <div style={{ fontSize: 11, color: sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{firstName}</div>
-    </button>
-  );
-}
-
-// ─── WeekView ─────────────────────────────────────────────────────────────────
-
-function WeekView({
-  days, appointments, onDayClick, isLoading,
-}: {
-  days: string[];
-  appointments: Appointment[];
-  onDayClick: (iso: string) => void;
-  isLoading: boolean;
-}) {
-  const today = todayISO();
-
-  // Group by local date
-  const byDay = useMemo(() => {
-    const map: Record<string, Appointment[]> = {};
-    for (const d of days) map[d] = [];
-    for (const a of appointments) {
-      const localDate = localDateFromISO(a.scheduled_at);
-      if (map[localDate] !== undefined) map[localDate].push(a);
-    }
-    // Sort each day by time
-    for (const d of days) map[d].sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
-    return map;
-  }, [days, appointments]);
-
-  const maxAppts = Math.max(...days.map(d => byDay[d]?.length ?? 0), 3);
-
-  return (
-    <div>
-      {isLoading && (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}>
-          <Spinner size={24} color="var(--teal)" />
-        </div>
-      )}
-
-      {!isLoading && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 10 }}>
-          {days.map((day, idx) => {
-            const isToday   = day === today;
-            const d         = new Date(day + 'T12:00:00');
-            const dayNum    = d.getDate();
-            const monthAbbr = MONTH_NAMES[d.getMonth()];
-            const appts     = byDay[day] ?? [];
-            const hasAppts  = appts.length > 0;
-
-            return (
-              <div
-                key={day}
-                onClick={() => onDayClick(day)}
-                style={{
-                  background: isToday ? '#f0fdfa' : '#fff',
-                  borderRadius: 12,
-                  border: `1.5px solid ${isToday ? 'var(--teal)' : 'var(--s200)'}`,
-                  cursor: 'pointer',
-                  minHeight: Math.max(140, 60 + maxAppts * 44),
-                  transition: 'box-shadow 0.15s, border-color 0.15s',
-                  overflow: 'hidden',
-                }}
-                onMouseEnter={e => {
-                  if (!isToday) (e.currentTarget as HTMLElement).style.borderColor = 'var(--teal)';
-                  (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 16px rgba(20,184,166,0.12)';
-                }}
-                onMouseLeave={e => {
-                  if (!isToday) (e.currentTarget as HTMLElement).style.borderColor = 'var(--s200)';
-                  (e.currentTarget as HTMLElement).style.boxShadow = 'none';
-                }}
-              >
-                {/* Day header */}
-                <div style={{
-                  padding: '10px 10px 8px',
-                  borderBottom: `1px solid ${isToday ? '#99f6e4' : 'var(--s100)'}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: isToday ? 'var(--teal-d)' : 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    {DAY_NAMES[idx === 6 ? 0 : idx + 1]}
-                  </span>
-                  <span style={{
-                    fontSize: 14, fontWeight: 700,
-                    width: 26, height: 26, borderRadius: '50%',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: isToday ? 'var(--teal)' : 'transparent',
-                    color: isToday ? '#fff' : 'var(--s700)',
-                  }}>
-                    {dayNum}
-                  </span>
-                </div>
-
-                {/* Month label (when week spans 2 months) */}
-                {dayNum === 1 && (
-                  <div style={{ padding: '2px 10px 0', fontSize: 10, color: 'var(--teal)', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                    {monthAbbr}
-                  </div>
-                )}
-
-                {/* Appointment chips */}
-                <div style={{ padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {hasAppts ? (
-                    appts.map(a => <WeekApptChip key={a.id} appt={a} />)
-                  ) : (
-                    <div style={{ paddingTop: 14, textAlign: 'center' }}>
-                      <span style={{ fontSize: 11, color: 'var(--s300)' }}>—</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── InboxItem ────────────────────────────────────────────────────────────────
 
 interface InboxItemProps {
@@ -522,10 +341,9 @@ function InboxItem({ icon: Icon, iconColor, iconBg, title, subtitle, time, actio
 export function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [mainTab, setMainTab]               = useState<'agenda' | 'calendario'>('agenda');
-  const [selectedDate, setSelectedDate]     = useState(todayISO());
-  const [filter, setFilter]                 = useState<FilterTab>('all');
-  const [viewMode, setViewMode]             = useState<ViewMode>('list');
+  const [mainTab, setMainTab]           = useState<'agenda' | 'calendario'>('agenda');
+  const [selectedDate, setSelectedDate] = useState(todayISO());
+  const [filter, setFilter]             = useState<FilterTab>('all');
 
   const displayName = user?.display_name ?? user?.email ?? 'Usuario';
 
@@ -538,22 +356,7 @@ export function DashboardPage() {
       date_to:   localISO(selectedDate, '23:59'),
       limit: 50,
     }),
-    enabled: viewMode === 'list' && !!user,
-    refetchInterval: 60_000,
-  });
-
-  // ── Week query ────────────────────────────────────────────────────────────
-  const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
-
-  const { data: weekAppointments = [], isLoading: weekLoading } = useQuery({
-    queryKey: ['appointments-week', weekDays[0], user?.user_id],
-    queryFn: () => appointmentsApi.list({
-      staff_id:  user?.user_id,
-      date_from: localISO(weekDays[0], '00:00'),
-      date_to:   localISO(weekDays[6], '23:59'),
-      limit: 100,
-    }),
-    enabled: viewMode === 'week' && !!user,
+    enabled: !!user,
     refetchInterval: 60_000,
   });
 
@@ -581,15 +384,6 @@ export function DashboardPage() {
     }
     return -1;
   }, [filtered, nowMs, isToday]);
-
-  // Navigation step: 7 days in week mode, 1 in list mode
-  const navStep = viewMode === 'week' ? 7 : 1;
-
-  // When clicking a day in week view → switch to list for that day
-  function handleDayClick(iso: string) {
-    setSelectedDate(iso);
-    setViewMode('list');
-  }
 
   return (
     <div style={{ height: 'calc(100vh - var(--topbar-h))', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -635,69 +429,7 @@ export function DashboardPage() {
 
       {/* ── Agenda tab ──────────────────────────────────────────────────────── */}
       {mainTab === 'agenda' && (
-    <div style={{
-      display: viewMode === 'week' ? 'block' : 'grid',
-      gridTemplateColumns: '1fr 260px',
-      flex: 1,
-      overflow: 'hidden',
-    }}>
-      {/* ── Week mode: full-width layout ───────────────────────────────────── */}
-      {viewMode === 'week' && (
-        <div style={{ height: '100%', overflowY: 'auto', padding: '24px 28px' }}>
-
-          {/* Header */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            <div>
-              <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--s800)', margin: '0 0 4px' }}>
-                {greeting(displayName)}
-              </h1>
-              <p style={{ fontSize: 13, color: 'var(--s500)', margin: 0 }}>
-                {weekRangeLabel(weekDays)} · {weekAppointments.filter(a => a.status !== 'CANCELLED').length} citas esta semana
-              </p>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              {/* View switcher */}
-              <ViewSwitcher mode={viewMode} onChange={setViewMode} />
-
-              {/* Week nav */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <button onClick={() => setSelectedDate(d => shiftDate(d, -7))} style={navBtn}>
-                  <ChevronLeft size={16} />
-                </button>
-                <button
-                  onClick={() => setSelectedDate(todayISO())}
-                  style={{
-                    padding: '5px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                    border: '1px solid var(--s200)',
-                    background: weekDays.includes(todayISO()) ? 'var(--teal)' : '#fff',
-                    color: weekDays.includes(todayISO()) ? '#fff' : 'var(--s800)',
-                    cursor: 'pointer', transition: 'all 0.15s',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  Esta semana
-                </button>
-                <button onClick={() => setSelectedDate(d => shiftDate(d, 7))} style={navBtn}>
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Week grid */}
-          <WeekView
-            days={weekDays}
-            appointments={weekAppointments}
-            onDayClick={handleDayClick}
-            isLoading={weekLoading}
-          />
-        </div>
-      )}
-
-      {/* ── List mode: 2-col layout ────────────────────────────────────────── */}
-      {viewMode === 'list' && (
-        <>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', flex: 1, overflow: 'hidden' }}>
           {/* Left column */}
           <div style={{ overflowY: 'auto', padding: '28px 32px' }}>
 
@@ -713,9 +445,7 @@ export function DashboardPage() {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <ViewSwitcher mode={viewMode} onChange={setViewMode} />
-
-                <button onClick={() => setSelectedDate(d => shiftDate(d, -navStep))} style={navBtn}>
+                <button onClick={() => setSelectedDate(d => shiftDate(d, -1))} style={navBtn}>
                   <ChevronLeft size={16} />
                 </button>
                 <button
@@ -730,7 +460,7 @@ export function DashboardPage() {
                 >
                   {navDateLabel(selectedDate)}
                 </button>
-                <button onClick={() => setSelectedDate(d => shiftDate(d, navStep))} style={navBtn}>
+                <button onClick={() => setSelectedDate(d => shiftDate(d, 1))} style={navBtn}>
                   <ChevronRight size={16} />
                 </button>
               </div>
@@ -880,40 +610,8 @@ export function DashboardPage() {
               ))}
             </div>
           </div>
-        </>
+        </div>
       )}
-    </div>
-      )}
-    </div>
-  );
-}
-
-// ─── ViewSwitcher ─────────────────────────────────────────────────────────────
-
-function ViewSwitcher({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode) => void }) {
-  return (
-    <div style={{ display: 'flex', border: '1px solid var(--s200)', borderRadius: 8, overflow: 'hidden', background: 'var(--s50)' }}>
-      {([
-        { key: 'list' as ViewMode, icon: LayoutList,   title: 'Lista' },
-        { key: 'week' as ViewMode, icon: CalendarRange, title: 'Semana' },
-      ] as const).map(({ key, icon: Icon, title }) => (
-        <button
-          key={key}
-          title={title}
-          onClick={() => onChange(key)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 5,
-            padding: '5px 10px', border: 'none', cursor: 'pointer',
-            background: mode === key ? 'var(--teal)' : 'transparent',
-            color: mode === key ? '#fff' : 'var(--s500)',
-            fontSize: 12, fontWeight: 500,
-            transition: 'all 0.15s',
-          }}
-        >
-          <Icon size={14} />
-          {title}
-        </button>
-      ))}
     </div>
   );
 }
