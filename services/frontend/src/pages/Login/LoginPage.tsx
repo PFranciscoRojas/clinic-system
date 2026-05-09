@@ -237,7 +237,11 @@ export function LoginPage() {
     setErrors({}); setLoginErr(''); setLoading(true);
     try {
       await login(org.trim().toLowerCase(), email.trim(), password);
-      navigate('/');
+      if (!localStorage.getItem('sghcp_onboarding_done')) {
+        setScreen('onboard');
+      } else {
+        navigate('/');
+      }
     } catch {
       setLoginErr('Credenciales incorrectas. Verifica organización, correo y contraseña.');
     } finally {
@@ -255,6 +259,7 @@ export function LoginPage() {
     }
     setPinErr(''); setSaving(true);
     setTimeout(() => { setSaving(false); setDone(true); }, 1600);
+    localStorage.setItem('sghcp_onboarding_done', 'true');
     setTimeout(() => navigate('/'), 3000);
   };
 
