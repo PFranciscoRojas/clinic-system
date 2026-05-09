@@ -12,6 +12,7 @@ import { appointmentsApi, type Appointment } from '@/api/appointments';
 import { patientsApi, type Patient } from '@/api/patients';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
+import { AgendaCalendar } from './AgendaCalendar';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -521,6 +522,7 @@ function InboxItem({ icon: Icon, iconColor, iconBg, title, subtitle, time, actio
 export function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [mainTab, setMainTab]               = useState<'agenda' | 'calendario'>('agenda');
   const [selectedDate, setSelectedDate]     = useState(todayISO());
   const [filter, setFilter]                 = useState<FilterTab>('all');
   const [viewMode, setViewMode]             = useState<ViewMode>('list');
@@ -590,10 +592,53 @@ export function DashboardPage() {
   }
 
   return (
+    <div style={{ height: 'calc(100vh - var(--topbar-h))', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+      {/* ── Sub-tab bar ─────────────────────────────────────────────────────── */}
+      <div style={{
+        height: 44, flexShrink: 0,
+        borderBottom: '1px solid var(--s200)',
+        display: 'flex', alignItems: 'center',
+        padding: '0 24px', gap: 4,
+        background: '#fff',
+      }}>
+        {([
+          { key: 'agenda'     as const, icon: LayoutList,   label: 'Agenda del día' },
+          { key: 'calendario' as const, icon: CalendarRange, label: 'Calendario'     },
+        ]).map(({ key, icon: Icon, label }) => (
+          <button
+            key={key}
+            onClick={() => setMainTab(key)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '5px 14px', border: 'none', cursor: 'pointer',
+              borderRadius: 8, fontSize: 13, fontWeight: mainTab === key ? 700 : 500,
+              background: mainTab === key ? 'var(--teal-l)' : 'transparent',
+              color: mainTab === key ? 'var(--teal-d)' : 'var(--s500)',
+              transition: 'all .15s',
+            }}
+            onMouseEnter={e => { if (mainTab !== key) e.currentTarget.style.background = 'var(--s100)'; }}
+            onMouseLeave={e => { if (mainTab !== key) e.currentTarget.style.background = 'transparent'; }}
+          >
+            <Icon size={14} color={mainTab === key ? 'var(--teal)' : 'var(--s400)'} />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Calendario tab ──────────────────────────────────────────────────── */}
+      {mainTab === 'calendario' && (
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <AgendaCalendar initialDate={selectedDate} />
+        </div>
+      )}
+
+      {/* ── Agenda tab ──────────────────────────────────────────────────────── */}
+      {mainTab === 'agenda' && (
     <div style={{
       display: viewMode === 'week' ? 'block' : 'grid',
       gridTemplateColumns: '1fr 260px',
-      height: 'calc(100vh - var(--topbar-h))',
+      flex: 1,
       overflow: 'hidden',
     }}>
       {/* ── Week mode: full-width layout ───────────────────────────────────── */}
@@ -836,6 +881,8 @@ export function DashboardPage() {
             </div>
           </div>
         </>
+      )}
+    </div>
       )}
     </div>
   );
