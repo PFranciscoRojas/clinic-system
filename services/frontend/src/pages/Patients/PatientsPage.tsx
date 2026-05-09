@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Search, Plus, Users, UserCheck, UserX,
-  ChevronRight, AlertCircle, X, Info,
-  Mail, Phone, CreditCard, Filter,
+  AlertCircle, X, CreditCard, Filter,
+  LayoutGrid, List, Eye, CalendarPlus,
+  Mail, Phone, Heart, UserPlus, ClipboardList,
+  MapPin,
 } from 'lucide-react';
 import { patientsApi, type Patient } from '@/api/patients';
 import { Spinner } from '@/components/ui/Spinner';
@@ -32,176 +34,178 @@ const AVATAR_COLORS = [
   '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b',
   '#10b981', '#14b8a6', '#0ea5e9', '#ef4444',
 ];
-function avatarColor(name: string = '') {
+function avatarColor(name = ''): string {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
 }
 
-// ── Stat card ─────────────────────────────────────────────────────────────────
+function fullName(p: Patient): string {
+  return [p.first_name, p.middle_name, p.paternal_last_name, p.maternal_last_name]
+    .filter(Boolean).join(' ');
+}
 
-function StatCard({ icon: Icon, color, label, value }: {
+function abbr(p: Patient): string {
+  return [p.first_name?.[0], p.paternal_last_name?.[0]].filter(Boolean).join('').toUpperCase() || '?';
+}
+
+// ── KPI Card ──────────────────────────────────────────────────────────────────
+
+function KpiCard({ icon: Icon, color, label, value }: {
   icon: React.ElementType; color: string; label: string; value: number | string;
 }) {
   return (
     <div style={{
-      flex: 1, minWidth: 0,
-      background: '#fff', border: '1px solid var(--s200)', borderRadius: 12,
-      padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14,
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '10px 16px', background: 'var(--s50)',
+      borderRadius: 10, border: '1px solid var(--s200)', flexShrink: 0, minWidth: 155,
     }}>
-      <div style={{
-        width: 40, height: 40, borderRadius: 10, flexShrink: 0,
-        background: color + '18',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <Icon size={18} color={color} />
+      <div style={{ width: 34, height: 34, borderRadius: 9, background: color + '1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Icon size={16} color={color} />
       </div>
       <div>
-        <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--s800)', lineHeight: 1.1, letterSpacing: '-1px' }}>{value}</div>
-        <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>{label}</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color, lineHeight: 1, letterSpacing: '-0.5px' }}>{value}</div>
+        <div style={{ fontSize: 11, color: 'var(--s500)', marginTop: 2 }}>{label}</div>
       </div>
     </div>
   );
 }
 
-// ── Patient row ───────────────────────────────────────────────────────────────
+// ── StatusBadge ───────────────────────────────────────────────────────────────
 
-function PatientRow({ patient, isLast, onClick }: { patient: Patient; isLast: boolean; onClick: () => void }) {
-  const initials = [patient.first_name?.[0], patient.paternal_last_name?.[0]].filter(Boolean).join('').toUpperCase();
-  const fullName = [patient.first_name, patient.middle_name, patient.paternal_last_name, patient.maternal_last_name]
-    .filter(Boolean).join(' ');
+function StatusBadge({ active, size = 'sm' }: { active: boolean; size?: 'sm' | 'md' }) {
+  const pad  = size === 'md' ? '4px 10px' : '2px 8px';
+  const font = size === 'md' ? 12 : 11;
+  const dot  = size === 'md' ? 7 : 5;
+
+  return active ? (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: font, fontWeight: 700, color: '#10b981', background: '#ecfdf5', borderRadius: 7, padding: pad }}>
+      <span style={{ width: dot, height: dot, borderRadius: '50%', background: '#10b981', display: 'block' }} />Activo
+    </span>
+  ) : (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: font, fontWeight: 700, color: 'var(--s400)', background: 'var(--s100)', borderRadius: 7, padding: pad }}>
+      <span style={{ width: dot, height: dot, borderRadius: '50%', background: 'var(--s400)', display: 'block' }} />Inactivo
+    </span>
+  );
+}
+
+// ── PatientCard (grid) ────────────────────────────────────────────────────────
+
+function PatientCard({ patient, onClick }: { patient: Patient; onClick: () => void }) {
   const color = avatarColor(patient.paternal_last_name);
-  const age = patient.birth_date ? calcAge(patient.birth_date) : null;
+  const age   = patient.birth_date ? calcAge(patient.birth_date) : null;
+  const name  = fullName(patient);
+  const ini   = abbr(patient);
 
   return (
     <div
       onClick={onClick}
       style={{
-        display: 'grid',
-        gridTemplateColumns: '40px 1fr 200px 120px 90px 28px',
-        alignItems: 'center',
-        gap: 16,
-        padding: '13px 20px',
-        borderBottom: isLast ? 'none' : '1px solid var(--s100)',
-        cursor: 'pointer',
-        transition: 'background .1s',
+        background: '#fff', borderRadius: 14, border: '1.5px solid var(--s200)',
+        overflow: 'hidden', cursor: 'pointer', position: 'relative',
+        transition: 'all .15s',
       }}
-      onMouseEnter={e => (e.currentTarget.style.background = 'var(--s50)')}
-      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+      onMouseEnter={e => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.borderColor = color;
+        el.style.boxShadow   = `0 4px 20px ${color}22`;
+        el.style.transform   = 'translateY(-2px)';
+      }}
+      onMouseLeave={e => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.borderColor = 'var(--s200)';
+        el.style.boxShadow   = 'none';
+        el.style.transform   = '';
+      }}
     >
-      {/* Avatar */}
-      <div style={{
-        width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-        background: `linear-gradient(135deg, ${color}, ${color}bb)`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 13, fontWeight: 700, color: '#fff',
-        boxShadow: `0 2px 6px ${color}44`,
-      }}>
-        {initials}
-      </div>
+      {/* Top accent */}
+      <div style={{ height: 3, background: color, opacity: patient.is_active ? 1 : 0.35 }} />
 
-      {/* Name + doc */}
-      <div style={{ minWidth: 0 }}>
-        <div style={{
-          fontSize: 14, fontWeight: 600, color: 'var(--s800)',
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          marginBottom: 3,
-        }}>
-          {fullName || '—'}
+      <div style={{ padding: '16px 18px 14px' }}>
+        {/* Avatar + name */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 13, flexShrink: 0,
+            background: color + '22', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 14, fontWeight: 800, color,
+          }}>
+            {ini}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {name}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>
+              {age !== null ? `${age} años` : 'Edad N/D'}
+              {patient.document_number ? ` · ${patient.document_number}` : ''}
+            </div>
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+
+        {/* Badges */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+          <StatusBadge active={patient.is_active} />
           {patient.document_type_code && (
-            <span style={{
-              fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
-              color: 'var(--teal)', background: 'rgba(20,184,166,0.10)',
-              border: '1px solid rgba(20,184,166,0.20)',
-              borderRadius: 4, padding: '1px 5px', textTransform: 'uppercase',
-            }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--teal)', background: 'rgba(20,184,166,.10)', border: '1px solid rgba(20,184,166,.20)', borderRadius: 4, padding: '1px 6px', textTransform: 'uppercase' as const }}>
               {patient.document_type_code}
             </span>
           )}
-          {patient.document_number && (
-            <span style={{ fontSize: 12, color: 'var(--s500)', fontVariantNumeric: 'tabular-nums' }}>
-              {patient.document_number}
-            </span>
+        </div>
+
+        {/* Contact */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14, minHeight: 40 }}>
+          {patient.email ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--s500)' }}>
+              <Mail size={11} color="var(--s300)" />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{patient.email}</span>
+            </div>
+          ) : null}
+          {patient.phone ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--s500)' }}>
+              <Phone size={11} color="var(--s300)" />
+              {patient.phone}
+            </div>
+          ) : null}
+          {!patient.email && !patient.phone && (
+            <div style={{ fontSize: 12, color: 'var(--s300)', fontStyle: 'italic' }}>Sin datos de contacto</div>
           )}
         </div>
-      </div>
 
-      {/* Contact */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
-        {patient.email && (
-          <span style={{
-            fontSize: 12, color: 'var(--s500)',
-            display: 'flex', alignItems: 'center', gap: 5,
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
-            <Mail size={11} color="var(--s300)" style={{ flexShrink: 0 }} />
-            {patient.email}
-          </span>
-        )}
-        {patient.phone && (
-          <span style={{
-            fontSize: 12, color: 'var(--s500)',
-            display: 'flex', alignItems: 'center', gap: 5,
-          }}>
-            <Phone size={11} color="var(--s300)" style={{ flexShrink: 0 }} />
-            {patient.phone}
-          </span>
-        )}
-      </div>
+        {/* Stats placeholder */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '10px 12px', background: 'var(--s50)', borderRadius: 9, marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 10, color: 'var(--s400)', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '.04em' }}>Sesiones</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color, letterSpacing: '-0.5px' }}>—</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: 'var(--s400)', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '.04em' }}>Próxima cita</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--s500)', marginTop: 2 }}>—</div>
+          </div>
+        </div>
 
-      {/* Age */}
-      <div style={{ fontSize: 13, color: 'var(--s600)', textAlign: 'center' }}>
-        {age !== null ? `${age} años` : '—'}
+        {/* Action */}
+        <button
+          onClick={e => { e.stopPropagation(); onClick(); }}
+          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 8, border: '1.5px solid var(--s200)', borderRadius: 9, background: '#fff', fontSize: 13, color: 'var(--s600)', fontWeight: 500, transition: 'all .12s', cursor: 'pointer' }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = color; e.currentTarget.style.color = color; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--s200)'; e.currentTarget.style.color = 'var(--s600)'; }}
+        >
+          <Eye size={13} />Ver perfil
+        </button>
       </div>
-
-      {/* Status badge */}
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
-        {patient.is_active ? (
-          <span style={{
-            fontSize: 11, fontWeight: 600, color: '#10b981',
-            background: '#ecfdf5', border: '1px solid #6ee7b7',
-            borderRadius: 6, padding: '3px 9px',
-            display: 'flex', alignItems: 'center', gap: 4,
-          }}>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
-            Activo
-          </span>
-        ) : (
-          <span style={{
-            fontSize: 11, fontWeight: 600, color: 'var(--s400)',
-            background: 'var(--s100)', border: '1px solid var(--s200)',
-            borderRadius: 6, padding: '3px 9px',
-          }}>
-            Inactivo
-          </span>
-        )}
-      </div>
-
-      <ChevronRight size={15} color="var(--s300)" />
     </div>
   );
 }
 
-// ── Table header ──────────────────────────────────────────────────────────────
+// ── Table ─────────────────────────────────────────────────────────────────────
+
+const TABLE_COLS = '1fr 110px 64px 150px 190px 80px';
 
 function TableHeader() {
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '40px 1fr 200px 120px 90px 28px',
-      gap: 16,
-      padding: '10px 20px',
-      background: 'var(--s50)',
-      borderBottom: '1px solid var(--s200)',
-    }}>
-      {['', 'Paciente', 'Contacto', 'Edad', 'Estado', ''].map((h, i) => (
-        <div key={i} style={{
-          fontSize: 11, fontWeight: 700, color: 'var(--s400)',
-          textTransform: 'uppercase', letterSpacing: '.06em',
-          textAlign: i === 3 ? 'center' : i === 4 ? 'center' : 'left',
-        }}>
+    <div style={{ display: 'grid', gridTemplateColumns: TABLE_COLS, padding: '9px 20px', background: 'var(--s50)', borderBottom: '1px solid var(--s200)', gap: 12 }}>
+      {['Paciente', 'Estado', 'Edad', 'Documento', 'Correo', 'Acciones'].map(h => (
+        <div key={h} style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase' as const, letterSpacing: '.06em' }}>
           {h}
         </div>
       ))}
@@ -209,82 +213,246 @@ function TableHeader() {
   );
 }
 
-// ── Empty states ──────────────────────────────────────────────────────────────
+function PatientTableRow({ patient, isLast, onClick }: { patient: Patient; isLast: boolean; onClick: () => void }) {
+  const color = avatarColor(patient.paternal_last_name);
+  const age   = patient.birth_date ? calcAge(patient.birth_date) : null;
+  const name  = fullName(patient);
+  const ini   = abbr(patient);
 
-function EmptyState({ query, filter, onNew }: {
-  query: string; filter: 'all' | 'active' | 'inactive'; onNew: () => void;
-}) {
-  if (query) return (
-    <div style={{ textAlign: 'center', padding: '56px 24px' }}>
-      <div style={{ width: 56, height: 56, borderRadius: 14, background: 'var(--s100)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-        <Search size={24} color="var(--s300)" />
+  return (
+    <div
+      style={{ display: 'grid', gridTemplateColumns: TABLE_COLS, padding: '12px 20px', borderBottom: isLast ? 'none' : '1px solid var(--s100)', alignItems: 'center', gap: 12, cursor: 'pointer', transition: 'background .1s' }}
+      onClick={onClick}
+      onMouseEnter={e => (e.currentTarget.style.background = 'var(--s50)')}
+      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+    >
+      {/* Avatar + name */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+        <div style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, background: color + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color }}>
+          {ini}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--s800)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {name}
+          </div>
+          {patient.phone && (
+            <div style={{ fontSize: 11, color: 'var(--s400)', marginTop: 1 }}>{patient.phone}</div>
+          )}
+        </div>
       </div>
-      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--s700)', marginBottom: 6 }}>
-        Sin resultados para "{query}"
+
+      {/* Status */}
+      <StatusBadge active={patient.is_active} />
+
+      {/* Age */}
+      <div style={{ fontSize: 13, color: 'var(--s600)' }}>{age !== null ? `${age}a` : '—'}</div>
+
+      {/* Document */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+        {patient.document_type_code && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--teal)', background: 'rgba(20,184,166,.10)', border: '1px solid rgba(20,184,166,.20)', borderRadius: 4, padding: '1px 5px', textTransform: 'uppercase' as const, flexShrink: 0 }}>
+            {patient.document_type_code}
+          </span>
+        )}
+        <span style={{ fontSize: 12, color: 'var(--s500)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {patient.document_number || '—'}
+        </span>
       </div>
-      <div style={{ fontSize: 13, color: 'var(--s400)', maxWidth: 320, margin: '0 auto', lineHeight: 1.6 }}>
-        La búsqueda es exacta. Verifica la ortografía incluyendo tildes.
+
+      {/* Email */}
+      <div style={{ fontSize: 12, color: 'var(--s500)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {patient.email || '—'}
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: 5 }}>
+        <button
+          onClick={e => { e.stopPropagation(); onClick(); }}
+          title="Vista rápida"
+          style={{ border: '1.5px solid var(--s200)', background: '#fff', borderRadius: 7, padding: '5px 8px', display: 'flex', transition: 'all .12s', cursor: 'pointer' }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--teal)'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--s200)'; }}
+        >
+          <Eye size={13} color="var(--s400)" />
+        </button>
       </div>
     </div>
   );
+}
 
-  if (filter !== 'all') return (
-    <div style={{ textAlign: 'center', padding: '56px 24px' }}>
-      <div style={{ width: 56, height: 56, borderRadius: 14, background: 'var(--s100)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-        {filter === 'active' ? <UserCheck size={24} color="var(--s300)" /> : <UserX size={24} color="var(--s300)" />}
+// ── QuickViewPanel ────────────────────────────────────────────────────────────
+
+function QuickViewPanel({ patient, onClose }: { patient: Patient; onClose: () => void }) {
+  const navigate = useNavigate();
+  const color    = avatarColor(patient.paternal_last_name);
+  const age      = patient.birth_date ? calcAge(patient.birth_date) : null;
+  const name     = fullName(patient);
+  const ini      = abbr(patient);
+
+  type InfoRow = { icon: React.ElementType; label: string; value: string };
+  const rows: InfoRow[] = [
+    patient.email       && { icon: Mail,       label: 'Correo',      value: patient.email },
+    patient.phone       && { icon: Phone,      label: 'Teléfono',    value: patient.phone },
+    patient.birth_date  && { icon: Heart,      label: 'Fecha nac.',  value: new Date(patient.birth_date + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' }) },
+    patient.document_number && { icon: CreditCard, label: patient.document_type_code ?? 'Documento', value: patient.document_number },
+    patient.gender      && { icon: Users,      label: 'Género',      value: patient.gender },
+    patient.address     && { icon: MapPin,     label: 'Dirección',   value: patient.address },
+  ].filter(Boolean) as InfoRow[];
+
+  return (
+    <div
+      className="anim-fade-in"
+      style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(4px)', zIndex: 100, display: 'flex', alignItems: 'stretch', justifyContent: 'flex-end' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="anim-scale-in"
+        style={{ width: 380, background: '#fff', boxShadow: '-8px 0 40px rgba(0,0,0,0.14)', overflow: 'auto', display: 'flex', flexDirection: 'column' }}
+      >
+        {/* Header */}
+        <div style={{ padding: '20px 22px', borderBottom: '1px solid var(--s200)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+          <div style={{ width: 48, height: 48, borderRadius: 14, background: color + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color, flexShrink: 0 }}>
+            {ini}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 800, fontSize: 15.5, color: 'var(--s800)', letterSpacing: '-0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {name}
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--s500)', marginTop: 2 }}>
+              {age !== null ? `${age} años` : ''}
+              {patient.document_number ? ` · ${patient.document_number}` : ''}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ border: 'none', background: 'none', color: 'var(--s400)', display: 'flex', padding: 6, borderRadius: 8, transition: 'background .12s', cursor: 'pointer' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--s100)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+          >
+            <X size={17} />
+          </button>
+        </div>
+
+        <div style={{ flex: 1, overflow: 'auto', padding: '18px 22px' }}>
+          {/* Status badge */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 18 }}>
+            <StatusBadge active={patient.is_active} size="md" />
+          </div>
+
+          {/* Info rows */}
+          {rows.map(({ icon: Icon, label, value }) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 0', borderBottom: '1px solid var(--s50)' }}>
+              <Icon size={14} color="var(--s400)" style={{ flexShrink: 0, marginTop: 2 }} />
+              <div>
+                <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--s400)', textTransform: 'uppercase' as const, letterSpacing: '.05em' }}>{label}</div>
+                <div style={{ fontSize: 13.5, color: 'var(--s700)', marginTop: 2, fontWeight: 500 }}>{value}</div>
+              </div>
+            </div>
+          ))}
+
+          {/* Sessions placeholder */}
+          <div style={{ margin: '18px 0 0', padding: '14px 16px', background: 'var(--s50)', borderRadius: 12, border: '1px solid var(--s200)', display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 28, fontWeight: 900, color, letterSpacing: '-1px' }}>—</div>
+              <div style={{ fontSize: 11, color: 'var(--s400)' }}>sesiones</div>
+            </div>
+            <div style={{ width: 1, height: 40, background: 'var(--s200)' }} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--s700)' }}>Evolución clínica</div>
+              <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>Ver historial en el perfil completo</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer actions */}
+        <div style={{ padding: '16px 22px', borderTop: '1px solid var(--s200)', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
+          <button
+            onClick={() => navigate(`/patients/${patient.id}`)}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 12, borderRadius: 11, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg, ${color}, ${color}cc)`, color: '#fff', fontSize: 14, fontWeight: 800, boxShadow: `0 4px 14px ${color}44`, transition: 'filter .15s' }}
+            onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(1.08)')}
+            onMouseLeave={e => (e.currentTarget.style.filter = '')}
+          >
+            <Eye size={16} />Abrir perfil completo
+          </button>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <button
+              onClick={() => navigate('/appointments/new')}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: 10, borderRadius: 10, border: '1.5px solid var(--s200)', background: '#fff', color: 'var(--s600)', fontSize: 13, fontWeight: 500, transition: 'all .12s', cursor: 'pointer' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--teal)'; e.currentTarget.style.color = 'var(--teal)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--s200)'; e.currentTarget.style.color = 'var(--s600)'; }}
+            >
+              <CalendarPlus size={14} />Nueva cita
+            </button>
+            <button
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: 10, borderRadius: 10, border: '1.5px solid var(--s200)', background: '#fff', color: 'var(--s600)', fontSize: 13, fontWeight: 500, transition: 'all .12s', cursor: 'pointer' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.color = '#8b5cf6'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--s200)'; e.currentTarget.style.color = 'var(--s600)'; }}
+            >
+              <ClipboardList size={14} />Evaluación
+            </button>
+          </div>
+        </div>
       </div>
-      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--s700)' }}>
-        Sin pacientes {filter === 'active' ? 'activos' : 'inactivos'}
+    </div>
+  );
+}
+
+// ── EmptyState ────────────────────────────────────────────────────────────────
+
+function EmptyState({ query, filter, onNew }: { query: string; filter: StatusFilter; onNew: () => void }) {
+  if (query) return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 300, color: 'var(--s400)', gap: 12 }}>
+      <div style={{ width: 52, height: 52, borderRadius: 14, background: 'var(--s100)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Search size={22} color="var(--s300)" />
       </div>
+      <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--s500)' }}>Sin resultados para "{query}"</div>
+      <div style={{ fontSize: 13 }}>Verifica la ortografía o ajusta los filtros</div>
     </div>
   );
 
   return (
-    <div style={{ textAlign: 'center', padding: '56px 24px' }}>
-      <div style={{ width: 64, height: 64, borderRadius: 16, background: 'var(--teal-l)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 300, gap: 16 }}>
+      <div style={{ width: 64, height: 64, borderRadius: 16, background: 'var(--teal-l)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Users size={28} color="var(--teal)" />
       </div>
-      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--s700)', marginBottom: 8 }}>
-        Aún no hay pacientes registrados
+      <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--s700)' }}>
+        {filter !== 'all' ? 'Sin pacientes con este filtro' : 'Aún no hay pacientes registrados'}
       </div>
-      <div style={{ fontSize: 13, color: 'var(--s400)', maxWidth: 300, margin: '0 auto 24px', lineHeight: 1.6 }}>
-        Registra el primer paciente de tu organización.
-      </div>
-      <button
-        onClick={onNew}
-        style={{
-          padding: '10px 24px', background: 'var(--teal)', color: '#fff',
-          border: 'none', borderRadius: 10, cursor: 'pointer',
-          fontSize: 14, fontWeight: 600,
-          display: 'inline-flex', alignItems: 'center', gap: 7,
-          boxShadow: '0 2px 10px rgba(20,184,166,0.3)',
-        }}
-      >
-        <Plus size={15} />Registrar primer paciente
-      </button>
+      {filter === 'all' && (
+        <button
+          onClick={onNew}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 22px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 600, boxShadow: '0 2px 10px rgba(20,184,166,.3)' }}
+        >
+          <Plus size={15} />Registrar primer paciente
+        </button>
+      )}
     </div>
   );
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-type Filter = 'all' | 'active' | 'inactive';
-type SearchMode = 'last_name' | 'document';
+type ViewMode    = 'grid' | 'table';
+type StatusFilter = 'all' | 'active' | 'inactive';
+type SearchMode  = 'last_name' | 'document';
 
-const LIMIT = 30;
+const LIMIT = 50;
 
 export function PatientsPage() {
   const navigate = useNavigate();
-  const [q, setQ]             = useState('');
-  const [mode, setMode]       = useState<SearchMode>('last_name');
-  const [filter, setFilter]   = useState<Filter>('all');
-  const [page, setPage]       = useState(0);
-  const [showModeMenu, setShowModeMenu] = useState(false);
+
+  const [viewMode,      setViewMode]      = useState<ViewMode>('grid');
+  const [selected,      setSelected]      = useState<Patient | null>(null);
+  const [q,             setQ]             = useState('');
+  const [searchMode,    setSearchMode]    = useState<SearchMode>('last_name');
+  const [statusFilter,  setStatusFilter]  = useState<StatusFilter>('all');
+  const [showModeMenu,  setShowModeMenu]  = useState(false);
+  const [page,          setPage]          = useState(0);
+
   const modeRef = useRef<HTMLDivElement>(null);
-  const dq = useDebounce(q, 380);
+  const dq      = useDebounce(q, 380);
   const isSearching = dq.trim().length >= 2;
 
-  // Close mode menu on outside click
   useEffect(() => {
     function h(e: MouseEvent) {
       if (modeRef.current && !modeRef.current.contains(e.target as Node)) setShowModeMenu(false);
@@ -294,12 +462,12 @@ export function PatientsPage() {
   }, []);
 
   const { data, isLoading, isError, isFetching } = useQuery({
-    queryKey: ['patients', mode, dq, page],
-    queryFn: () =>
+    queryKey: ['patients', searchMode, dq, page],
+    queryFn:  () =>
       isSearching
         ? patientsApi.search({
-            last_name: mode === 'last_name' ? dq.trim() : undefined,
-            document:  mode === 'document'  ? dq.trim() : undefined,
+            last_name: searchMode === 'last_name' ? dq.trim() : undefined,
+            document:  searchMode === 'document'  ? dq.trim() : undefined,
             limit: LIMIT, offset: page * LIMIT,
           })
         : patientsApi.list({ limit: LIMIT, offset: page * LIMIT }),
@@ -307,80 +475,56 @@ export function PatientsPage() {
     placeholderData: prev => prev,
   });
 
-  const all      = data ?? [];
-  const shown    = filter === 'all' ? all : all.filter(p => filter === 'active' ? p.is_active : !p.is_active);
-  const total    = all.length;
-  const actives  = all.filter(p => p.is_active).length;
-  const inactive = all.filter(p => !p.is_active).length;
+  const all     = data ?? [];
+  const shown   = useMemo(() => {
+    if (statusFilter === 'active')   return all.filter(p => p.is_active);
+    if (statusFilter === 'inactive') return all.filter(p => !p.is_active);
+    return all;
+  }, [all, statusFilter]);
+
+  const total       = all.length;
+  const actives     = all.filter(p => p.is_active).length;
+  const inactive    = all.filter(p => !p.is_active).length;
+  const withContact = all.filter(p => p.email || p.phone).length;
 
   const handleQ = (v: string) => { setQ(v); setPage(0); };
-
-  const modeLabel = mode === 'last_name' ? 'Apellido paterno' : 'Nº documento';
+  const modeLabel = searchMode === 'last_name' ? 'Apellido paterno' : 'Nº documento';
 
   return (
-    <div style={{ padding: '24px 28px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - var(--topbar-h))', overflow: 'hidden' }}>
 
-      {/* ── Page header ─────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 22 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--s800)', margin: 0, letterSpacing: '-0.4px' }}>
-            Pacientes
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--s400)', margin: '4px 0 0' }}>
-            {isLoading
-              ? 'Cargando…'
-              : isSearching
-                ? `${shown.length} resultado${shown.length !== 1 ? 's' : ''} para "${dq}"`
-                : `${total} paciente${total !== 1 ? 's' : ''} registrado${total !== 1 ? 's' : ''}`}
-          </p>
-        </div>
-        <button
-          onClick={() => navigate('/patients/new')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 7,
-            padding: '9px 18px', borderRadius: 10, border: 'none',
-            background: 'var(--teal)', color: '#fff',
-            fontSize: 14, fontWeight: 600, cursor: 'pointer',
-            boxShadow: '0 2px 10px rgba(20,184,166,0.30)',
-            transition: 'all .15s',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.07)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-          onMouseLeave={e => { e.currentTarget.style.filter = ''; e.currentTarget.style.transform = ''; }}
+      {/* ── KPI strip ───────────────────────────────────────────────────────── */}
+      <div style={{ background: '#fff', borderBottom: '1px solid var(--s200)', padding: '10px 24px', display: 'flex', gap: 10, flexShrink: 0, overflowX: 'auto' }}>
+        <KpiCard icon={Users}       color="var(--s700)"  label="Total pacientes"   value={isLoading ? '—' : total}       />
+        <KpiCard icon={UserCheck}   color="#10b981"      label="Activos"           value={isLoading ? '—' : actives}     />
+        <KpiCard icon={UserX}       color="#f59e0b"      label="Inactivos"         value={isLoading ? '—' : inactive}    />
+        <KpiCard icon={Phone}       color="#6366f1"      label="Con contacto"      value={isLoading ? '—' : withContact} />
+        <KpiCard icon={Heart}       color="#ef4444"      label="PHQ-9 alto (≥15)"  value="—"                             />
+        <KpiCard icon={AlertCircle} color="#f97316"      label="Con pendientes"    value="—"                             />
+      </div>
+
+      {/* ── Filters toolbar ─────────────────────────────────────────────────── */}
+      <div style={{ background: '#fff', borderBottom: '1px solid var(--s200)', padding: '10px 24px', display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+
+        {/* Search box */}
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--s50)', border: '1.5px solid var(--s200)', borderRadius: 10, padding: '7px 13px', flex: 1, maxWidth: 380, transition: 'all .15s' }}
+          onFocusCapture={e => (e.currentTarget.style.borderColor = 'var(--teal)')}
+          onBlurCapture={e => (e.currentTarget.style.borderColor = 'var(--s200)')}
         >
-          <Plus size={16} />Nuevo paciente
-        </button>
-      </div>
-
-      {/* ── Stats ───────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
-        <StatCard icon={Users}     color="var(--teal)" label="Total registrados" value={isLoading ? '—' : total}    />
-        <StatCard icon={UserCheck} color="#10b981"     label="Activos"           value={isLoading ? '—' : actives}  />
-        <StatCard icon={UserX}     color="#f59e0b"     label="Inactivos"         value={isLoading ? '—' : inactive} />
-      </div>
-
-      {/* ── Search + filters ────────────────────────────────── */}
-      <div style={{
-        background: '#fff', border: '1px solid var(--s200)', borderRadius: 14,
-        boxShadow: '0 1px 4px rgba(0,0,0,.04)', marginBottom: 16, overflow: 'hidden',
-      }}>
-        {/* Search row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--s100)' }}>
           {isFetching && isSearching
-            ? <Spinner size={16} color="var(--teal)" />
-            : <Search size={16} color="var(--s400)" />
+            ? <Spinner size={14} color="var(--teal)" />
+            : <Search size={14} color="var(--s400)" />
           }
           <input
             value={q}
             onChange={e => handleQ(e.target.value)}
             placeholder={`Buscar por ${modeLabel.toLowerCase()}…`}
-            style={{
-              flex: 1, border: 'none', background: 'transparent',
-              fontSize: 14, color: 'var(--s800)', outline: 'none',
-            }}
+            style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 13.5, color: 'var(--s700)', outline: 'none' }}
           />
           {q && (
-            <button onClick={() => handleQ('')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--s300)', display: 'flex', padding: 2 }}>
-              <X size={14} />
+            <button onClick={() => handleQ('')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--s300)', display: 'flex', padding: 0 }}>
+              <X size={13} />
             </button>
           )}
 
@@ -388,46 +532,25 @@ export function PatientsPage() {
           <div ref={modeRef} style={{ position: 'relative' }}>
             <button
               onClick={() => setShowModeMenu(v => !v)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '6px 10px', borderRadius: 7,
-                border: `1.5px solid ${showModeMenu ? 'var(--teal)' : 'var(--s200)'}`,
-                background: showModeMenu ? 'var(--teal-l)' : 'var(--s50)',
-                color: showModeMenu ? 'var(--teal)' : 'var(--s500)',
-                fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap',
-                transition: 'all .12s',
-              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 7, border: `1.5px solid ${showModeMenu ? 'var(--teal)' : 'var(--s200)'}`, background: showModeMenu ? 'var(--teal-l)' : '#fff', color: showModeMenu ? 'var(--teal)' : 'var(--s500)', fontSize: 11.5, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all .12s' }}
             >
-              <Filter size={12} />{modeLabel}
+              <Filter size={11} />{modeLabel}
             </button>
             {showModeMenu && (
-              <div style={{
-                position: 'absolute', top: 'calc(100% + 6px)', right: 0,
-                background: '#fff', border: '1px solid var(--s200)', borderRadius: 10,
-                boxShadow: '0 8px 24px rgba(0,0,0,.10)', overflow: 'hidden', zIndex: 50,
-                minWidth: 160,
-              }}>
+              <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: '#fff', border: '1px solid var(--s200)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,.10)', overflow: 'hidden', zIndex: 50, minWidth: 175 }}>
                 {([
-                  { id: 'last_name' as SearchMode, label: 'Apellido paterno', icon: '👤' },
-                  { id: 'document'  as SearchMode, label: 'Nº de documento',  icon: <CreditCard size={13} /> },
+                  { id: 'last_name' as SearchMode, label: 'Apellido paterno' },
+                  { id: 'document'  as SearchMode, label: 'Nº de documento'  },
                 ] as const).map(opt => (
                   <button
                     key={opt.id}
-                    onClick={() => { setMode(opt.id); setShowModeMenu(false); setQ(''); }}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 9, width: '100%',
-                      padding: '10px 14px', border: 'none', background: 'transparent',
-                      textAlign: 'left', fontSize: 13, cursor: 'pointer',
-                      color: mode === opt.id ? 'var(--teal)' : 'var(--s700)',
-                      fontWeight: mode === opt.id ? 600 : 400,
-                      transition: 'background .1s',
-                    }}
+                    onClick={() => { setSearchMode(opt.id); setShowModeMenu(false); setQ(''); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '10px 14px', border: 'none', background: 'transparent', textAlign: 'left', fontSize: 13, cursor: 'pointer', color: searchMode === opt.id ? 'var(--teal)' : 'var(--s700)', fontWeight: searchMode === opt.id ? 600 : 400, transition: 'background .1s' }}
                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--s50)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   >
-                    <span style={{ fontSize: 14 }}>{typeof opt.icon === 'string' ? opt.icon : opt.icon}</span>
                     {opt.label}
-                    {mode === opt.id && <span style={{ marginLeft: 'auto', color: 'var(--teal)', fontSize: 12 }}>✓</span>}
+                    {searchMode === opt.id && <span style={{ marginLeft: 'auto', color: 'var(--teal)', fontSize: 12 }}>✓</span>}
                   </button>
                 ))}
               </div>
@@ -435,124 +558,121 @@ export function PatientsPage() {
           </div>
         </div>
 
-        {/* Filter tabs + privacy note */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px' }}>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {([
-              { id: 'all'      as Filter, label: 'Todos',     count: total    },
-              { id: 'active'   as Filter, label: 'Activos',   count: actives  },
-              { id: 'inactive' as Filter, label: 'Inactivos', count: inactive },
-            ] as const).map(({ id, label, count }) => {
-              const on = filter === id;
-              return (
-                <button
-                  key={id}
-                  onClick={() => setFilter(id)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 5,
-                    padding: '5px 12px', borderRadius: 20, fontSize: 12.5, fontWeight: on ? 600 : 400,
-                    border: `1.5px solid ${on ? 'var(--teal)' : 'transparent'}`,
-                    background: on ? 'var(--teal)' : 'transparent',
-                    color: on ? '#fff' : 'var(--s500)',
-                    cursor: 'pointer', transition: 'all .12s',
-                  }}
-                >
-                  {label}
-                  {!isLoading && (
-                    <span style={{
-                      fontSize: 10.5, fontWeight: 700,
-                      background: on ? 'rgba(255,255,255,.25)' : 'var(--s100)',
-                      color: on ? '#fff' : 'var(--s400)',
-                      borderRadius: 10, padding: '1px 6px',
-                    }}>
-                      {count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-          {isSearching && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--s400)' }}>
-              <Info size={11} />Búsqueda exacta por privacidad
-            </div>
-          )}
+        {/* Status filter pills */}
+        <div style={{ display: 'flex', gap: 5 }}>
+          {([
+            { id: 'all'      as StatusFilter, label: 'Todos',     count: total    },
+            { id: 'active'   as StatusFilter, label: 'Activos',   count: actives  },
+            { id: 'inactive' as StatusFilter, label: 'Inactivos', count: inactive },
+          ] as const).map(f => (
+            <button
+              key={f.id}
+              onClick={() => setStatusFilter(f.id)}
+              style={{ padding: '6px 14px', borderRadius: 99, border: 'none', background: statusFilter === f.id ? 'var(--teal)' : 'var(--s100)', color: statusFilter === f.id ? '#fff' : 'var(--s500)', fontSize: 12.5, fontWeight: statusFilter === f.id ? 700 : 400, transition: 'all .12s', whiteSpace: 'nowrap', cursor: 'pointer' }}
+            >
+              {f.label}{!isLoading ? ` (${f.count})` : ''}
+            </button>
+          ))}
         </div>
+
+        <div style={{ flex: 1 }} />
+
+        {!isLoading && (
+          <div style={{ fontSize: 12.5, color: 'var(--s400)' }}>
+            {shown.length} paciente{shown.length !== 1 ? 's' : ''}
+          </div>
+        )}
+
+        {/* View toggle */}
+        <div style={{ display: 'flex', background: 'var(--s100)', borderRadius: 9, padding: 3, gap: 2 }}>
+          {([
+            { id: 'grid'  as ViewMode, icon: LayoutGrid },
+            { id: 'table' as ViewMode, icon: List       },
+          ] as const).map(({ id, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setViewMode(id)}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 28, borderRadius: 7, border: 'none', background: viewMode === id ? '#fff' : 'transparent', boxShadow: viewMode === id ? '0 1px 4px rgba(0,0,0,.08)' : 'none', transition: 'all .15s', cursor: 'pointer' }}
+            >
+              <Icon size={14} color={viewMode === id ? 'var(--teal)' : 'var(--s400)'} />
+            </button>
+          ))}
+        </div>
+
+        {/* New patient */}
+        <button
+          onClick={() => navigate('/patients/new')}
+          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 10, border: 'none', background: 'var(--teal)', color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(20,184,166,.35)', whiteSpace: 'nowrap', transition: 'all .15s' }}
+          onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.08)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onMouseLeave={e => { e.currentTarget.style.filter = ''; e.currentTarget.style.transform = ''; }}
+        >
+          <UserPlus size={15} />Nuevo paciente
+        </button>
       </div>
 
-      {/* ── Error ───────────────────────────────────────────── */}
+      {/* Error */}
       {isError && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          color: '#ef4444', padding: '12px 16px', marginBottom: 16,
-          background: '#fef2f2', borderRadius: 10, border: '1px solid #fecaca',
-          fontSize: 13,
-        }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#ef4444', padding: '10px 24px', background: '#fef2f2', borderBottom: '1px solid #fecaca', fontSize: 13, flexShrink: 0 }}>
           <AlertCircle size={15} />Error al cargar pacientes. Intenta de nuevo.
         </div>
       )}
 
-      {/* ── Content ─────────────────────────────────────────── */}
-      {isLoading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
-          <Spinner size={28} color="var(--teal)" />
-        </div>
-      ) : shown.length === 0 ? (
-        <div style={{ background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, overflow: 'hidden' }}>
-          <EmptyState query={isSearching ? dq : ''} filter={filter} onNew={() => navigate('/patients/new')} />
-        </div>
-      ) : (
-        <>
-          <div style={{ background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, overflow: 'hidden' }}>
+      {/* ── Scrollable content ───────────────────────────────────────────────── */}
+      <main style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
+        {isLoading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
+            <Spinner size={28} color="var(--teal)" />
+          </div>
+        ) : shown.length === 0 ? (
+          <EmptyState
+            query={isSearching ? dq : ''}
+            filter={statusFilter}
+            onNew={() => navigate('/patients/new')}
+          />
+        ) : viewMode === 'grid' ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+            {shown.map(p => (
+              <PatientCard key={p.id} patient={p} onClick={() => setSelected(p)} />
+            ))}
+          </div>
+        ) : (
+          <div style={{ background: '#fff', borderRadius: 14, border: '1px solid var(--s200)', overflow: 'hidden' }}>
             <TableHeader />
-            {shown.map((patient, idx) => (
-              <PatientRow
-                key={patient.id}
-                patient={patient}
+            {shown.map((p, idx) => (
+              <PatientTableRow
+                key={p.id}
+                patient={p}
                 isLast={idx === shown.length - 1}
-                onClick={() => navigate(`/patients/${patient.id}`)}
+                onClick={() => setSelected(p)}
               />
             ))}
           </div>
+        )}
 
-          {/* Pagination */}
-          {(all.length === LIMIT || page > 0) && (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 16 }}>
-              <button
-                disabled={page === 0}
-                onClick={() => setPage(p => p - 1)}
-                style={{
-                  padding: '7px 16px', borderRadius: 8,
-                  border: '1.5px solid var(--s200)',
-                  background: page === 0 ? 'var(--s50)' : '#fff',
-                  color: page === 0 ? 'var(--s300)' : 'var(--s700)',
-                  cursor: page === 0 ? 'not-allowed' : 'pointer',
-                  fontSize: 13, fontWeight: 500, transition: 'all .12s',
-                }}
-              >
-                ← Anterior
-              </button>
-              <span style={{ fontSize: 13, color: 'var(--s400)', padding: '0 8px' }}>
-                Página {page + 1}
-              </span>
-              <button
-                disabled={all.length < LIMIT}
-                onClick={() => setPage(p => p + 1)}
-                style={{
-                  padding: '7px 16px', borderRadius: 8,
-                  border: '1.5px solid var(--s200)',
-                  background: all.length < LIMIT ? 'var(--s50)' : '#fff',
-                  color: all.length < LIMIT ? 'var(--s300)' : 'var(--s700)',
-                  cursor: all.length < LIMIT ? 'not-allowed' : 'pointer',
-                  fontSize: 13, fontWeight: 500, transition: 'all .12s',
-                }}
-              >
-                Siguiente →
-              </button>
-            </div>
-          )}
-        </>
-      )}
+        {/* Pagination */}
+        {(all.length === LIMIT || page > 0) && !isLoading && (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 20 }}>
+            <button
+              disabled={page === 0}
+              onClick={() => setPage(p => p - 1)}
+              style={{ padding: '7px 16px', borderRadius: 8, border: '1.5px solid var(--s200)', background: page === 0 ? 'var(--s50)' : '#fff', color: page === 0 ? 'var(--s300)' : 'var(--s700)', cursor: page === 0 ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
+            >
+              ← Anterior
+            </button>
+            <span style={{ fontSize: 13, color: 'var(--s400)' }}>Página {page + 1}</span>
+            <button
+              disabled={all.length < LIMIT}
+              onClick={() => setPage(p => p + 1)}
+              style={{ padding: '7px 16px', borderRadius: 8, border: '1.5px solid var(--s200)', background: all.length < LIMIT ? 'var(--s50)' : '#fff', color: all.length < LIMIT ? 'var(--s300)' : 'var(--s700)', cursor: all.length < LIMIT ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
+            >
+              Siguiente →
+            </button>
+          </div>
+        )}
+      </main>
+
+      {/* Quick-view panel */}
+      {selected && <QuickViewPanel patient={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }
