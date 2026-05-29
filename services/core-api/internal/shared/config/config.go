@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -24,6 +25,8 @@ type Config struct {
 
 	AIServiceURL string
 	AudioDir     string
+
+	CORSAllowedOrigins []string
 }
 
 func Load() Config {
@@ -45,6 +48,12 @@ func Load() Config {
 
 		AIServiceURL: getEnv("AI_SERVICE_URL", "http://ai-service:8000"),
 		AudioDir:     getEnv("AUDIO_DIR", "/data/audio"),
+
+		CORSAllowedOrigins: getEnvSlice("CORS_ALLOWED_ORIGINS", []string{
+			"http://localhost:5173",
+			"http://localhost:5174",
+			"http://localhost:80",
+		}),
 	}
 }
 
@@ -62,6 +71,23 @@ func mustGetEnv(key string) string {
 		os.Exit(1)
 	}
 	return v
+}
+
+func getEnvSlice(key string, fallback []string) []string {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	var out []string
+	for _, s := range strings.Split(v, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	if len(out) == 0 {
+		return fallback
+	}
+	return out
 }
 
 func getEnvInt(key string, fallback int) int {

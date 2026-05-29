@@ -8,10 +8,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 
-	authhandler "sghcp/core-api/internal/auth/handler"
-	apptshandler "sghcp/core-api/internal/appointments/handler"
 	aidraftshandler "sghcp/core-api/internal/aidrafts/handler"
+	apptshandler "sghcp/core-api/internal/appointments/handler"
+	authhandler "sghcp/core-api/internal/auth/handler"
 	patientshandler "sghcp/core-api/internal/patients/handler"
 	"sghcp/core-api/internal/shared/middleware"
 )
@@ -21,12 +22,22 @@ import (
 func (a *app) buildRouter() http.Handler {
 	r := chi.NewRouter()
 
+	// ── CORS — must be first so preflight OPTIONS requests are handled before auth ──
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   a.cfg.CORSAllowedOrigins,
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID"},
+		ExposedHeaders:   []string{"X-Request-ID"},
+		AllowCredentials: false,
+		MaxAge:           300,
+	}))
+
 	// ── Global middleware (runs on every request, in order) ───────────────────
-	r.Use(chimiddleware.RequestID)                        // injects unique X-Request-ID
-	r.Use(chimiddleware.RealIP)                           // reads real IP from X-Real-IP (set by Caddy)
-	r.Use(middleware.StructuredLogger(slog.Default()))    // JSON log per request
-	r.Use(chimiddleware.Recoverer)                        // turns panics into 500s — never crashes the process
-	r.Use(chimiddleware.Timeout(30 * time.Second))        // aborts requests that exceed 30 s
+	r.Use(chimiddleware.RequestID)
+	r.Use(chimiddleware.RealIP)
+	r.Use(middleware.StructuredLogger(slog.Default()))
+	r.Use(chimiddleware.Recoverer)
+	r.Use(chimiddleware.Timeout(30 * time.Second))
 
 	// ── Infrastructure ────────────────────────────────────────────────────────
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
