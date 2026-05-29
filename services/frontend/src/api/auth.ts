@@ -20,8 +20,17 @@ export const authApi = {
   login: (org_slug: string, email: string, password: string) =>
     api.post<TokenPair>('/auth/login', { org_slug, email, password }),
 
+  register: (invite_code: string, email: string, password: string, display_name: string) =>
+    api.post<TokenPair>('/auth/register', { invite_code, email, password, display_name }),
+
   me: () => api.get<Me>('/auth/me'),
 
   logout: (refresh_token: string) =>
     api.post<void>('/auth/logout', { refresh_token }),
+
+  invite: (role_name = 'PROFESSIONAL') =>
+    api.post<{ invite_code: string; expires_at: string }>('/auth/invite', { role_name }),
+
+  resetPassword: (target_email: string, new_password: string) =>
+    api.post<void>('/auth/reset-password', { target_email, new_password }),
 };

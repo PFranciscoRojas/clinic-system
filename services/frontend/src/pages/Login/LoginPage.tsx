@@ -175,7 +175,7 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 }
 
 /* ── Main component ──────────────────────────────────────────── */
-type Screen = 'login' | 'forgot' | 'onboard';
+type Screen = 'login' | 'forgot' | 'register' | 'onboard';
 
 const DAYS_SHORT = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const HOURS = ['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00'];
@@ -196,9 +196,13 @@ export function LoginPage() {
   const [loading,  setLoading]  = useState(false);
   const [loginErr, setLoginErr] = useState('');
 
-  // Forgot password
-  const [forgotEmail, setForgotEmail] = useState('');
-  const [forgotSent,  setForgotSent]  = useState(false);
+  // Register (invite code flow)
+  const [regCode,        setRegCode]        = useState('');
+  const [regEmail,       setRegEmail]       = useState('');
+  const [regPassword,    setRegPassword]    = useState('');
+  const [regDisplayName, setRegDisplayName] = useState('');
+  const [regErr,         setRegErr]         = useState('');
+  const [regLoading,     setRegLoading]     = useState(false);
 
   // Onboarding — step 0: Profile
   const [name,         setName]         = useState('');
@@ -258,9 +262,32 @@ export function LoginPage() {
       return;
     }
     setPinErr(''); setSaving(true);
-    setTimeout(() => { setSaving(false); setDone(true); }, 1600);
+    // Persist profile and preferences to localStorage — backend profile endpoints come in BC-2.
+    localStorage.setItem('sghcp_profile', JSON.stringify({ name, cedula, specialty, regNum, phone }));
+    localStorage.setItem('sghcp_schedule', JSON.stringify({ activeDays, startHour, endHour, sessionLen }));
+    localStorage.setItem('sghcp_ai_prefs', JSON.stringify({ aiEnabled, soapStyle, reminders }));
+    localStorage.setItem('sghcp_pin', pin);
     localStorage.setItem('sghcp_onboarding_done', 'true');
+    setTimeout(() => { setSaving(false); setDone(true); }, 1600);
     setTimeout(() => navigate('/'), 3000);
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRegErr(''); setRegLoading(true);
+    try {
+      const { authApi } = await import('@/api/auth');
+      const tokens = await authApi.register(regCode.trim().toUpperCase(), regEmail.trim(), regPassword, regDisplayName.trim());
+      localStorage.setItem('access_token', tokens.access_token);
+      localStorage.setItem('refresh_token', tokens.refresh_token);
+      // Re-fetch user then show onboarding (first login).
+      window.location.reload();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al registrar';
+      setRegErr(msg);
+    } finally {
+      setRegLoading(false);
+    }
   };
 
 
@@ -345,21 +372,24 @@ export function LoginPage() {
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-                {[
-                  { label: 'SSO Clínica', color: '#1e40af' },
-                  { label: 'Código OTP',  color: '#7c3aed' },
-                ].map(p => (
-                  <button key={p.label} type="button" style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                    padding: '10px', borderRadius: 10, border: '1.5px solid var(--s200)',
-                    background: '#fff', color: 'var(--s600)', fontSize: 13, fontWeight: 600,
-                    transition: 'all .12s',
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = p.color; (e.currentTarget as HTMLElement).style.color = p.color; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--s200)'; (e.currentTarget as HTMLElement).style.color = 'var(--s600)'; }}>
-                    {p.label}
-                  </button>
-                ))}
+                <button type="button" disabled title="Próximamente" style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  padding: '10px', borderRadius: 10, border: '1.5px solid var(--s200)',
+                  background: 'var(--s50)', color: 'var(--s400)', fontSize: 13, fontWeight: 600,
+                  cursor: 'not-allowed', opacity: 0.7,
+                }}>
+                  SSO Clínica
+                </button>
+                <button type="button" onClick={() => setScreen('register')} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  padding: '10px', borderRadius: 10, border: '1.5px solid var(--s200)',
+                  background: '#fff', color: 'var(--s600)', fontSize: 13, fontWeight: 600,
+                  transition: 'all .12s', cursor: 'pointer',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#7c3aed'; (e.currentTarget as HTMLElement).style.color = '#7c3aed'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--s200)'; (e.currentTarget as HTMLElement).style.color = 'var(--s600)'; }}>
+                  Código de invitación
+                </button>
               </div>
 
               <div style={{ padding: '12px 14px', background: 'var(--s50)', borderRadius: 9, border: '1px solid var(--s200)', display: 'flex', gap: 9 }}>
@@ -381,34 +411,77 @@ export function LoginPage() {
           <div className="anim-scale-in" style={{ width: '100%', maxWidth: 400 }}>
             <div style={{ textAlign: 'center', marginBottom: 28 }}>
               <div style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', border: '1.5px solid rgba(255,255,255,0.20)' }}>
-                <Mail size={26} color="white" />
+                <Lock size={26} color="white" />
               </div>
-              <div style={{ fontWeight: 800, fontSize: 22, color: '#fff', marginBottom: 6 }}>Recuperar contraseña</div>
+              <div style={{ fontWeight: 800, fontSize: 22, color: '#fff', marginBottom: 6 }}>¿Olvidaste tu contraseña?</div>
               <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.65)', lineHeight: 1.6 }}>
-                Te enviaremos un enlace de acceso temporal a tu correo.
+                El administrador de tu clínica puede restablecerla.
               </div>
             </div>
             <div className="glass" style={{ borderRadius: 18, padding: '28px 30px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
-              {forgotSent ? (
-                <div style={{ textAlign: 'center', padding: '8px 0' }}>
-                  <div style={{ fontSize: 40, marginBottom: 12 }}>📬</div>
-                  <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--s800)', marginBottom: 8 }}>Enlace enviado</div>
-                  <div style={{ fontSize: 13, color: 'var(--s500)', lineHeight: 1.6, marginBottom: 20 }}>Revisa tu bandeja de entrada en {forgotEmail}</div>
-                  <button onClick={() => setScreen('login')} style={{ width: '100%', padding: 11, borderRadius: 11, border: 'none', background: 'var(--teal)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-                    Volver al inicio de sesión
-                  </button>
+              <div style={{ textAlign: 'center', padding: '8px 0' }}>
+                <div style={{ fontSize: 40, marginBottom: 16 }}>🔑</div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--s800)', marginBottom: 10 }}>
+                  Contacta a tu administrador
                 </div>
-              ) : (
-                <>
-                  <TField label="Correo electrónico" value={forgotEmail} onChange={setForgotEmail} placeholder="tu@correo.com" icon={Mail} type="email" required />
-                  <button onClick={() => setForgotSent(true)} style={{ width: '100%', padding: 13, borderRadius: 11, border: 'none', background: 'var(--teal)', color: '#fff', fontSize: 14.5, fontWeight: 800, boxShadow: '0 4px 14px rgba(20,184,166,0.40)', marginBottom: 12, cursor: 'pointer' }}>
-                    Enviar enlace de recuperación
-                  </button>
-                  <button onClick={() => setScreen('login')} style={{ width: '100%', padding: 10, borderRadius: 11, border: '1.5px solid var(--s200)', background: 'transparent', color: 'var(--s500)', fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }}>
-                    ← Volver al inicio de sesión
-                  </button>
-                </>
-              )}
+                <div style={{ fontSize: 13, color: 'var(--s500)', lineHeight: 1.7, marginBottom: 8 }}>
+                  Por seguridad, el restablecimiento de contraseñas requiere la intervención del administrador de tu organización.
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--s500)', lineHeight: 1.7, marginBottom: 24, padding: '10px 14px', background: 'var(--s50)', borderRadius: 9, border: '1px solid var(--s200)' }}>
+                  <strong>Si eres el administrador,</strong> ingresa al panel de Configuración → Usuarios y usa la opción "Restablecer contraseña".
+                </div>
+                <button onClick={() => setScreen('login')} style={{ width: '100%', padding: 11, borderRadius: 11, border: 'none', background: 'var(--teal)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                  ← Volver al inicio de sesión
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── REGISTER (invite code) ────────────────────────────── */}
+        {screen === 'register' && (
+          <div className="anim-scale-in" style={{ width: '100%', maxWidth: 420 }}>
+            <div style={{ textAlign: 'center', marginBottom: 28 }}>
+              <div style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', border: '1.5px solid rgba(255,255,255,0.20)' }}>
+                <User size={26} color="white" />
+              </div>
+              <div style={{ fontWeight: 800, fontSize: 22, color: '#fff', marginBottom: 6 }}>Crear cuenta</div>
+              <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.65)', lineHeight: 1.6 }}>
+                Ingresa el código de invitación que te compartió el administrador.
+              </div>
+            </div>
+            <div className="glass" style={{ borderRadius: 18, padding: '28px 30px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+              <form onSubmit={handleRegister}>
+                <TField label="Código de invitación" value={regCode} onChange={v => { setRegCode(v); setRegErr(''); }}
+                  placeholder="XXXXXXXX" icon={Award} required />
+                <TField label="Nombre completo" value={regDisplayName} onChange={setRegDisplayName}
+                  placeholder="Dra. / Dr. Nombre Apellido" icon={User} required />
+                <TField label="Correo electrónico" value={regEmail} onChange={setRegEmail}
+                  placeholder="nombre@clinica.com" icon={Mail} type="email" required />
+                <PwField value={regPassword} onChange={setRegPassword} />
+
+                {regErr && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: 'var(--red)' }}>
+                    <AlertCircle size={14} />{regErr}
+                  </div>
+                )}
+
+                <button type="submit" disabled={regLoading} style={{
+                  width: '100%', padding: 14, borderRadius: 12, border: 'none',
+                  background: regLoading ? 'var(--s200)' : 'linear-gradient(135deg, var(--teal) 0%, var(--teal-d) 100%)',
+                  color: regLoading ? 'var(--s400)' : '#fff',
+                  fontSize: 15, fontWeight: 800, marginBottom: 12,
+                  boxShadow: regLoading ? 'none' : '0 4px 18px rgba(14,118,110,0.40)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, cursor: regLoading ? 'not-allowed' : 'pointer',
+                }}>
+                  {regLoading
+                    ? <><span style={{ width: 18, height: 18, border: '2.5px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: 99, animation: 'spin .7s linear infinite', display: 'inline-block' }} />Creando cuenta…</>
+                    : 'Crear cuenta'}
+                </button>
+                <button type="button" onClick={() => setScreen('login')} style={{ width: '100%', padding: 10, borderRadius: 11, border: '1.5px solid var(--s200)', background: 'transparent', color: 'var(--s500)', fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }}>
+                  ← Volver al inicio de sesión
+                </button>
+              </form>
             </div>
           </div>
         )}

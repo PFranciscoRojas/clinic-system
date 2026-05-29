@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/Badge';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type SectionId = 'profile' | 'schedule' | 'notifications' | 'ai' | 'security' | 'billing' | 'templates' | 'integrations';
+type SectionId = 'profile' | 'schedule' | 'notifications' | 'ai' | 'security' | 'billing' | 'templates' | 'integrations' | 'users';
 
 const SECTIONS: { id: SectionId; icon: React.ElementType; label: string; color?: string }[] = [
   { id: 'profile',       icon: UserRound,  label: 'Perfil profesional' },
@@ -22,6 +22,7 @@ const SECTIONS: { id: SectionId; icon: React.ElementType; label: string; color?:
   { id: 'billing',       icon: CreditCard,  label: 'Plan y facturación', color: '#10b981' },
   { id: 'templates',     icon: FileText,    label: 'Plantillas clínicas',color: '#8b5cf6' },
   { id: 'integrations',  icon: Plug,        label: 'Integraciones',      color: '#6366f1' },
+  { id: 'users',         icon: Users,       label: 'Usuarios',            color: '#0ea5e9' },
 ];
 
 const ROLE_COLORS: Record<string, { color: string; bg: string }> = {
@@ -586,6 +587,7 @@ function SecuritySection({ setDirty }: { setDirty: (v: boolean) => void }) {
   const handlePinSave = () => {
     if (pin.length !== 4 || pin !== pin2) { setPinErr('Los PINs no coinciden o son muy cortos'); return; }
     setPinErr('');
+    localStorage.setItem('sghcp_pin', pin);
     setPinSaved(true);
     setDirty(true);
     setTimeout(() => setPinSaved(false), 2500);
@@ -897,6 +899,151 @@ function IntegrationsSection() {
   );
 }
 
+// ── Users section ────────────────────────────────────────────────────────────
+
+const ROLES = [
+  { value: 'PROFESSIONAL',  label: 'Psicólogo/a profesional' },
+  { value: 'INTERN',        label: 'Practicante supervisado' },
+  { value: 'RECEPTIONIST',  label: 'Recepcionista' },
+  { value: 'CLINIC_ADMIN',  label: 'Administrador' },
+];
+
+function UsersSection() {
+  const [roleName,     setRoleName]     = useState('PROFESSIONAL');
+  const [inviteCode,   setInviteCode]   = useState('');
+  const [inviteExp,    setInviteExp]    = useState('');
+  const [inviteLoading,setInviteLoading]= useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
+
+  const [resetEmail,   setResetEmail]   = useState('');
+  const [resetPwd,     setResetPwd]     = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetDone,    setResetDone]    = useState(false);
+  const [resetErr,     setResetErr]     = useState('');
+
+  const handleGenerateInvite = async () => {
+    setInviteLoading(true); setInviteCode(''); setInviteCopied(false);
+    try {
+      const { authApi } = await import('@/api/auth');
+      const res = await authApi.invite(roleName);
+      setInviteCode(res.invite_code);
+      setInviteExp(new Date(res.expires_at).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }));
+    } catch {
+      setInviteCode('ERROR');
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  const copyCode = () => {
+    navigator.clipboard.writeText(inviteCode);
+    setInviteCopied(true);
+    setTimeout(() => setInviteCopied(false), 2000);
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetErr(''); setResetDone(false); setResetLoading(true);
+    try {
+      const { authApi } = await import('@/api/auth');
+      await authApi.resetPassword(resetEmail.trim(), resetPwd);
+      setResetDone(true); setResetEmail(''); setResetPwd('');
+      setTimeout(() => setResetDone(false), 3000);
+    } catch (err: unknown) {
+      setResetErr(err instanceof Error ? err.message : 'Error al restablecer');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <SectionCard title="Invitar nuevo usuario" icon={Plus} color="#0ea5e9">
+        <div style={{ padding: '12px 0' }}>
+          <div style={{ fontSize: 13, color: 'var(--s500)', marginBottom: 14, lineHeight: 1.6 }}>
+            Genera un código de invitación de un solo uso (válido 48 horas). El nuevo usuario lo ingresa en la pantalla de registro.
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: 'var(--s500)', marginBottom: 6, fontWeight: 500 }}>Rol a asignar</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+              {ROLES.map(r => (
+                <button key={r.value} onClick={() => setRoleName(r.value)} style={{
+                  padding: '6px 13px', borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', transition: 'all .12s',
+                  border: `1.5px solid ${roleName === r.value ? '#0ea5e9' : 'var(--s200)'}`,
+                  background: roleName === r.value ? '#e0f2fe' : '#fff',
+                  color: roleName === r.value ? '#0369a1' : 'var(--s600)',
+                }}>{r.label}</button>
+              ))}
+            </div>
+          </div>
+          <button onClick={handleGenerateInvite} disabled={inviteLoading} style={{
+            display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none',
+            background: inviteLoading ? 'var(--s200)' : '#0ea5e9', color: inviteLoading ? 'var(--s400)' : '#fff',
+            fontSize: 13, fontWeight: 700, cursor: inviteLoading ? 'not-allowed' : 'pointer', marginBottom: inviteCode ? 14 : 0,
+          }}>
+            {inviteLoading
+              ? <><span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: 99, animation: 'spin .7s linear infinite', display: 'inline-block' }} />Generando…</>
+              : <><Plus size={14} />Generar código de invitación</>}
+          </button>
+
+          {inviteCode && inviteCode !== 'ERROR' && (
+            <div style={{ padding: '14px 16px', background: '#f0f9ff', border: '1.5px solid #7dd3fc', borderRadius: 11 }}>
+              <div style={{ fontSize: 11.5, color: '#0369a1', fontWeight: 600, marginBottom: 6 }}>Código generado — expira el {inviteExp}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ fontFamily: 'monospace', fontSize: 22, fontWeight: 900, letterSpacing: 6, color: '#0c4a6e', flex: 1 }}>
+                  {inviteCode}
+                </div>
+                <button onClick={copyCode} style={{
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8,
+                  border: `1.5px solid ${inviteCopied ? '#10b981' : '#7dd3fc'}`,
+                  background: inviteCopied ? '#ecfdf5' : '#fff',
+                  color: inviteCopied ? '#059669' : '#0369a1',
+                  fontSize: 12.5, fontWeight: 600, cursor: 'pointer', transition: 'all .15s',
+                }}>
+                  {inviteCopied ? <><CheckCircle size={13} />Copiado</> : 'Copiar'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Restablecer contraseña" icon={Key} color="#ef4444">
+        <form onSubmit={handleResetPassword} style={{ padding: '12px 0' }}>
+          <div style={{ fontSize: 13, color: 'var(--s500)', marginBottom: 14, lineHeight: 1.6 }}>
+            Como administrador puedes restablecer la contraseña de cualquier usuario de tu organización.
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--s500)', marginBottom: 6, fontWeight: 500 }}>Correo del usuario</div>
+              <input value={resetEmail} onChange={e => setResetEmail(e.target.value)} type="email" required
+                placeholder="usuario@clinica.co"
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 9, border: '1.5px solid var(--s200)', fontSize: 13, boxSizing: 'border-box' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--s500)', marginBottom: 6, fontWeight: 500 }}>Nueva contraseña</div>
+              <input value={resetPwd} onChange={e => setResetPwd(e.target.value)} type="password" required minLength={8}
+                placeholder="Mínimo 8 caracteres"
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 9, border: '1.5px solid var(--s200)', fontSize: 13, boxSizing: 'border-box' }} />
+            </div>
+          </div>
+          {resetErr && <div style={{ fontSize: 12.5, color: 'var(--red)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}><AlertCircle size={13} />{resetErr}</div>}
+          {resetDone && <div style={{ fontSize: 12.5, color: '#10b981', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}><CheckCircle size={13} />Contraseña restablecida correctamente.</div>}
+          <button type="submit" disabled={resetLoading} style={{
+            display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none',
+            background: resetLoading ? 'var(--s200)' : '#ef4444', color: resetLoading ? 'var(--s400)' : '#fff',
+            fontSize: 13, fontWeight: 700, cursor: resetLoading ? 'not-allowed' : 'pointer',
+          }}>
+            {resetLoading
+              ? <><span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: 99, animation: 'spin .7s linear infinite', display: 'inline-block' }} />Restableciendo…</>
+              : <><Key size={14} />Restablecer contraseña</>}
+          </button>
+        </form>
+      </SectionCard>
+    </>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function SettingsPage() {
@@ -977,6 +1124,7 @@ export function SettingsPage() {
             {section === 'billing'       && <BillingSection />}
             {section === 'templates'     && <TemplatesSection     setDirty={markDirty} />}
             {section === 'integrations'  && <IntegrationsSection />}
+            {section === 'users'         && <UsersSection />}
           </div>
           <SaveBar dirty={dirty} saving={saving} saved={saved} onSave={handleSave} />
         </div>
