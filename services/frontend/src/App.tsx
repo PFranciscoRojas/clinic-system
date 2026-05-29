@@ -9,8 +9,8 @@ import { PatientProfilePage } from '@/pages/Patients/PatientProfilePage';
 import { NewPatientPage } from '@/pages/Patients/NewPatientPage';
 import { NewAppointmentPage } from '@/pages/Appointments/NewAppointmentPage';
 import { AIDraftPage } from '@/pages/AIDrafts/AIDraftPage';
+import { EvaluationsPage } from '@/pages/Evaluations/EvaluationsPage';
 import { BillingPage } from '@/pages/Billing/BillingPage';
-import { StubPage } from '@/pages/StubPage';
 import { SettingsPage } from '@/pages/Settings/SettingsPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -57,7 +57,7 @@ export function App() {
                 <Route path="patients/:id" element={<PatientProfilePage />} />
                 <Route path="appointments/new" element={<NewAppointmentPage />} />
                 <Route path="ai-drafts/:id" element={<AIDraftPage />} />
-                <Route path="evaluations" element={<StubPage title="Evaluaciones" />} />
+                <Route path="evaluations" element={<EvaluationsPage />} />
                 <Route path="billing" element={<BillingPage />} />
                 <Route path="settings" element={<SettingsPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
