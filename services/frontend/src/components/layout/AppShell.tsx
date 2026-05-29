@@ -26,8 +26,10 @@ export function AppShell({ children }: Props) {
   const [locked,      setLocked]      = useState(false);
   const [search,      setSearch]      = useState('');
   const [searchFocus, setSearchFocus] = useState(false);
-  const profileRef = useRef<HTMLDivElement>(null);
-  const notifRef   = useRef<HTMLDivElement>(null);
+  const profileRef  = useRef<HTMLDivElement>(null);
+  const notifRef    = useRef<HTMLDivElement>(null);
+  const idleTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const IDLE_MS     = 5 * 60 * 1000; // 5 minutes
 
   useEffect(() => {
     function handle(e: MouseEvent) {
@@ -36,6 +38,26 @@ export function AppShell({ children }: Props) {
     }
     document.addEventListener('mousedown', handle);
     return () => document.removeEventListener('mousedown', handle);
+  }, []);
+
+  // Auto-lock after IDLE_MS of inactivity — only when PIN is set.
+  useEffect(() => {
+    const hasPin = !!localStorage.getItem('sghcp_pin');
+    if (!hasPin) return;
+
+    const resetTimer = () => {
+      if (idleTimer.current) clearTimeout(idleTimer.current);
+      idleTimer.current = setTimeout(() => setLocked(true), IDLE_MS);
+    };
+
+    const events = ['mousemove', 'keydown', 'touchstart', 'click'] as const;
+    events.forEach(ev => window.addEventListener(ev, resetTimer, { passive: true }));
+    resetTimer();
+
+    return () => {
+      if (idleTimer.current) clearTimeout(idleTimer.current);
+      events.forEach(ev => window.removeEventListener(ev, resetTimer));
+    };
   }, []);
 
   const displayName = user?.display_name ?? user?.email?.split('@')[0] ?? 'Usuario';
@@ -265,7 +287,8 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
     const next = pin + k;
     setPin(next);
     if (next.length === 4) {
-      if (next === '1234') { onUnlock(); setPin(''); }
+      const saved = localStorage.getItem('sghcp_pin') ?? '';
+      if (next === saved) { onUnlock(); setPin(''); }
       else { setShake(true); setTimeout(() => { setShake(false); setPin(''); }, 500); }
     }
   };
