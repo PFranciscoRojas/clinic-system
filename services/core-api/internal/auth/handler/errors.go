@@ -14,6 +14,16 @@ var authErrors = httputil.ErrorMapper(func(err error) (int, string) {
 		return http.StatusUnauthorized, "invalid credentials"
 	case errors.Is(err, auth.ErrAccountInactive):
 		return http.StatusUnauthorized, "account inactive"
+	case errors.Is(err, auth.ErrInviteInvalid):
+		return http.StatusBadRequest, "invite code is invalid or expired"
+	case errors.Is(err, auth.ErrEmailAlreadyExists):
+		return http.StatusConflict, "email already registered in this organization"
+	case errors.Is(err, auth.ErrWeakPassword):
+		return http.StatusBadRequest, "password must be at least 8 characters"
+	case errors.Is(err, auth.ErrUserNotFound):
+		return http.StatusNotFound, "user not found"
+	case errors.Is(err, auth.ErrRoleNotFound):
+		return http.StatusBadRequest, "role not found"
 	default:
 		return 0, ""
 	}
