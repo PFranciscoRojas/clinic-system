@@ -33,4 +33,7 @@ export const authApi = {
 
   resetPassword: (target_email: string, new_password: string) =>
     api.post<void>('/auth/reset-password', { target_email, new_password }),
+
+  updateProfile: (display_name: string) =>
+    api.patch<TokenPair>('/auth/profile', { display_name }),
 };

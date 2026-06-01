@@ -345,7 +345,7 @@ export function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [filter, setFilter]             = useState<FilterTab>('all');
 
-  const displayName = user?.display_name ?? user?.email ?? 'Usuario';
+  const displayName = user?.display_name || user?.email?.split('@')[0] || user?.email || '';
 
   // ── Day query ─────────────────────────────────────────────────────────────
   const { data: appointments = [], isLoading } = useQuery({

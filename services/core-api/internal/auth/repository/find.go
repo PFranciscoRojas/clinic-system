@@ -22,11 +22,11 @@ func (r *Repository) FindByEmail(ctx context.Context, orgSlug, email string) (*a
 
 	u := &auth.User{}
 	err = r.db.QueryRow(ctx, `
-		SELECT id, organization_id, password_hash, is_active, failed_attempts, locked_until
+		SELECT id, organization_id, email, display_name, password_hash, is_active, failed_attempts, locked_until
 		FROM users
 		WHERE organization_id = $1 AND email_hash = $2
 	`, orgID, hashEmail(email)).Scan(
-		&u.ID, &u.OrganizationID, &u.PasswordHash,
+		&u.ID, &u.OrganizationID, &u.Email, &u.DisplayName, &u.PasswordHash,
 		&u.IsActive, &u.FailedAttempts, &u.LockedUntil,
 	)
 	if err != nil {

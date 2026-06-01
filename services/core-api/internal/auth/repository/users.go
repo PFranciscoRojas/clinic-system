@@ -16,11 +16,11 @@ import (
 func (r *Repository) FindUserByEmailInOrg(ctx context.Context, orgID, email string) (*auth.User, error) {
 	u := &auth.User{}
 	err := r.db.QueryRow(ctx, `
-		SELECT id, organization_id, password_hash, is_active, failed_attempts, locked_until
+		SELECT id, organization_id, email, display_name, password_hash, is_active, failed_attempts, locked_until
 		FROM users
 		WHERE organization_id = $1 AND email_hash = $2
 	`, orgID, hash.Normalize(email)).Scan(
-		&u.ID, &u.OrganizationID, &u.PasswordHash,
+		&u.ID, &u.OrganizationID, &u.Email, &u.DisplayName, &u.PasswordHash,
 		&u.IsActive, &u.FailedAttempts, &u.LockedUntil,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -68,6 +68,76 @@ func (r *Repository) FindUserByEmailInOrg(ctx context.Context, orgID, email stri
 	return u, nil
 }
 
+// FindUserByID loads a user by primary key including roles and permissions (for token reissuance).
+func (r *Repository) FindUserByID(ctx context.Context, userID string) (*auth.User, error) {
+	u := &auth.User{}
+	err := r.db.QueryRow(ctx, `
+		SELECT id, organization_id, email, display_name, password_hash, is_active, failed_attempts, locked_until
+		FROM users WHERE id = $1
+	`, userID).Scan(
+		&u.ID, &u.OrganizationID, &u.Email, &u.DisplayName, &u.PasswordHash,
+		&u.IsActive, &u.FailedAttempts, &u.LockedUntil,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, auth.ErrUserNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find user by id: %w", err)
+	}
+
+	rows, err := r.db.Query(ctx, `
+		SELECT r.name FROM user_roles ur
+		JOIN roles r ON r.id = ur.role_id
+		WHERE ur.user_id = $1
+	`, u.ID)
+	if err != nil {
+		return nil, fmt.Errorf("loading roles: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var role string
+		if err := rows.Scan(&role); err != nil {
+			return nil, err
+		}
+		u.Roles = append(u.Roles, role)
+	}
+
+	permRows, err := r.db.Query(ctx, `
+		SELECT DISTINCT p.code FROM user_roles ur
+		JOIN role_permissions rp ON rp.role_id = ur.role_id
+		JOIN permissions p ON p.id = rp.permission_id
+		WHERE ur.user_id = $1
+	`, u.ID)
+	if err != nil {
+		return nil, fmt.Errorf("loading permissions: %w", err)
+	}
+	defer permRows.Close()
+	for permRows.Next() {
+		var code string
+		if err := permRows.Scan(&code); err != nil {
+			return nil, err
+		}
+		u.Permissions = append(u.Permissions, code)
+	}
+
+	return u, nil
+}
+
+// UpdateDisplayName sets the display_name for the given user.
+func (r *Repository) UpdateDisplayName(ctx context.Context, userID, displayName string) error {
+	tag, err := r.db.Exec(ctx,
+		`UPDATE users SET display_name = $2, updated_at = NOW() WHERE id = $1`,
+		userID, displayName,
+	)
+	if err != nil {
+		return fmt.Errorf("update display_name: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return auth.ErrUserNotFound
+	}
+	return nil
+}
+
 // FindRoleIDByName returns the UUID of a system role by name (e.g. "PROFESSIONAL").
 func (r *Repository) FindRoleIDByName(ctx context.Context, roleName string) (string, error) {
 	var id string
@@ -89,10 +159,10 @@ func (r *Repository) FindRoleIDByName(ctx context.Context, roleName string) (str
 func (r *Repository) CreateUser(ctx context.Context, orgID, email, passwordHash, displayName string) (string, error) {
 	var id string
 	err := r.db.QueryRow(ctx, `
-		INSERT INTO users (organization_id, email, email_hash, password_hash)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO users (organization_id, email, email_hash, password_hash, display_name)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id
-	`, orgID, email, hash.Normalize(email), passwordHash).Scan(&id)
+	`, orgID, email, hash.Normalize(email), passwordHash, displayName).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("create user: %w", err)
 	}

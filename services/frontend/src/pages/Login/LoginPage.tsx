@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Brain, Mail, Lock, Building2, Eye, EyeOff, ShieldCheck, AlertCircle, User, CreditCard, Award, Stethoscope, Phone } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { authApi } from '@/api/auth';
 
 /* ── Animated blobs ──────────────────────────────────────────── */
 function Blobs() {
@@ -181,7 +182,7 @@ const DAYS_SHORT = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const HOURS = ['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00'];
 
 export function LoginPage() {
-  const { login } = useAuth();
+  const { login, refreshUser, updateProfile, user } = useAuth();
   const navigate = useNavigate();
 
   const [screen,   setScreen]   = useState<Screen>('login');
@@ -205,7 +206,8 @@ export function LoginPage() {
   const [regLoading,     setRegLoading]     = useState(false);
 
   // Onboarding — step 0: Profile
-  const [name,         setName]         = useState('');
+  // Pre-fill with the display_name set during registration so the user doesn't re-type it.
+  const [name,         setName]         = useState(user?.display_name ?? '');
   const [cedula,       setCedula]       = useState('');
   const [specialty,    setSpecialty]    = useState('Psicología clínica');
   const [regNum,       setRegNum]       = useState('');
@@ -240,8 +242,8 @@ export function LoginPage() {
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setErrors({}); setLoginErr(''); setLoading(true);
     try {
-      await login(org.trim().toLowerCase(), email.trim(), password);
-      if (!localStorage.getItem('sghcp_onboarding_done')) {
+      const me = await login(org.trim().toLowerCase(), email.trim(), password);
+      if (!localStorage.getItem(`sghcp_onboarding_done_${me.user_id}`)) {
         setScreen('onboard');
       } else {
         navigate('/');
@@ -256,32 +258,38 @@ export function LoginPage() {
   const toggleDay = (d: string) =>
     setActiveDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
 
-  const handleFinish = () => {
+  const handleFinish = async () => {
     if (pin.length < 4 || pin !== pin2) {
       setPinErr(pin.length < 4 ? 'El PIN debe tener 4 dígitos' : 'Los PINs no coinciden');
       return;
     }
+    if (!user) return;
     setPinErr(''); setSaving(true);
-    // Persist profile and preferences to localStorage — backend profile endpoints come in BC-2.
     localStorage.setItem('sghcp_profile', JSON.stringify({ name, cedula, specialty, regNum, phone }));
     localStorage.setItem('sghcp_schedule', JSON.stringify({ activeDays, startHour, endHour, sessionLen }));
     localStorage.setItem('sghcp_ai_prefs', JSON.stringify({ aiEnabled, soapStyle, reminders }));
-    localStorage.setItem('sghcp_pin', pin);
-    localStorage.setItem('sghcp_onboarding_done', 'true');
-    setTimeout(() => { setSaving(false); setDone(true); }, 1600);
-    setTimeout(() => navigate('/'), 3000);
+    localStorage.setItem(`sghcp_pin_${user.user_id}`, pin);
+    localStorage.setItem(`sghcp_onboarding_done_${user.user_id}`, 'true');
+    // Sync the onboarding name to the backend so display_name is always up-to-date.
+    if (name.trim() && name.trim() !== user.display_name) {
+      try { await updateProfile(name.trim()); } catch { /* non-blocking */ }
+    }
+    setSaving(false);
+    setDone(true);
+    await new Promise(r => setTimeout(r, 1500));
+    navigate('/');
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegErr(''); setRegLoading(true);
     try {
-      const { authApi } = await import('@/api/auth');
       const tokens = await authApi.register(regCode.trim().toUpperCase(), regEmail.trim(), regPassword, regDisplayName.trim());
       localStorage.setItem('access_token', tokens.access_token);
       localStorage.setItem('refresh_token', tokens.refresh_token);
-      // Re-fetch user then show onboarding (first login).
-      window.location.reload();
+      const me = await refreshUser(); // load user into context so handleFinish has user.user_id
+      if (me?.display_name) setName(me.display_name); // pre-fill onboarding name field
+      setScreen('onboard');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error al registrar';
       setRegErr(msg);
@@ -539,7 +547,18 @@ export function LoginPage() {
                         <TField label="Cédula / RUT" value={cedula} onChange={setCedula} placeholder="1.234.567-8" icon={CreditCard} required />
                         <TField label="Nº de registro" value={regNum} onChange={setRegNum} placeholder="Ej: 4891-RM" icon={Award} required />
                         <div style={{ gridColumn: '1/-1' }}>
-                          <TField label="Especialidad" value={specialty} onChange={setSpecialty} placeholder="Psicología clínica…" icon={Stethoscope} required />
+                          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--s700)', marginBottom: 6 }}>
+                            Especialidad <span style={{ color: 'var(--red)' }}>*</span>
+                          </label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--s50)', border: '1.5px solid var(--s200)', borderRadius: 11, padding: '11px 14px', marginBottom: 16 }}>
+                            <Stethoscope size={16} color="var(--s400)" />
+                            <select value={specialty} onChange={e => setSpecialty(e.target.value)}
+                              style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 14, color: 'var(--s800)', minWidth: 0, outline: 'none' }}>
+                              {['Psicología clínica','Psicología educativa','Psicología organizacional','Neuropsicología','Psicología forense','Psicología de la salud','Psicoanálisis','Psicología cognitivo-conductual','Psicología sistémica','Otra'].map(s => (
+                                <option key={s}>{s}</option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
                         <div style={{ gridColumn: '1/-1' }}>
                           <TField label="Teléfono de contacto" value={phone} onChange={setPhone} placeholder="+57 300 000 0000" icon={Phone} />

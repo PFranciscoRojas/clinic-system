@@ -42,7 +42,7 @@ export function AppShell({ children }: Props) {
 
   // Auto-lock after IDLE_MS of inactivity — only when PIN is set.
   useEffect(() => {
-    const hasPin = !!localStorage.getItem('sghcp_pin');
+    const hasPin = !!localStorage.getItem(`sghcp_pin_${user?.user_id}`);
     if (!hasPin) return;
 
     const resetTimer = () => {
@@ -60,16 +60,28 @@ export function AppShell({ children }: Props) {
     };
   }, []);
 
-  const displayName = user?.display_name ?? user?.email?.split('@')[0] ?? 'Usuario';
+  const emailPrefix = user?.email?.split('@')[0] ?? '';
+  const displayName = user?.display_name || emailPrefix || user?.email || '';
   const initials = (() => {
     if (user?.display_name) {
       const words = user.display_name.trim().split(/\s+/);
       const first = words[0]?.[0] ?? '';
       const last  = words.length > 1 ? (words[words.length - 1]?.[0] ?? '') : '';
-      return (first + last).toUpperCase();
+      return (first + last).toUpperCase() || '?';
     }
-    return user?.email?.slice(0, 2).toUpperCase() ?? 'US';
+    return emailPrefix.slice(0, 2).toUpperCase() || '?';
   })();
+  const ROLE_LABEL: Record<string, string> = {
+    CLINIC_ADMIN: 'Administrador',
+    PROFESSIONAL: 'Psicólogo/a',
+    INTERN: 'Practicante',
+    RECEPTIONIST: 'Recepcionista',
+  };
+  const roleLabel = user?.roles?.[0] ? (ROLE_LABEL[user.roles[0]] ?? user.roles[0]) : '';
+  const savedSpecialty = (() => {
+    try { return JSON.parse(localStorage.getItem('sghcp_profile') ?? '{}').specialty ?? ''; } catch { return ''; }
+  })();
+  const subtitleLabel = savedSpecialty || roleLabel;
 
   const handleLogout = async () => {
     await logout();
@@ -78,7 +90,7 @@ export function AppShell({ children }: Props) {
 
   return (
     <>
-      {locked && <LockScreen onUnlock={() => setLocked(false)} />}
+      {locked && <LockScreen userId={user?.user_id} onUnlock={() => setLocked(false)} />}
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
 
         {/* ── Sidebar ─────────────────────────────────────────── */}
@@ -143,7 +155,7 @@ export function AppShell({ children }: Props) {
                 <div style={{ fontSize: 12.5, fontWeight: 500, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {displayName}
                 </div>
-                <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.50)' }}>Psicólog@ clínic@</div>
+                <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.50)' }}>{subtitleLabel}</div>
               </div>
             </div>
           </div>
@@ -241,7 +253,7 @@ export function AppShell({ children }: Props) {
                     <div style={{ fontSize: 11.5, color: 'var(--s500)', marginTop: 2 }}>{user?.email ?? '—'}</div>
                   </div>
                   {[
-                    { Icon: UserCircle, label: 'Mi perfil',      action: () => setProfileOpen(false) },
+                    { Icon: UserCircle, label: 'Mi perfil',      action: () => { navigate('/settings'); setProfileOpen(false); } },
                     { Icon: Calendar,   label: 'Mi agenda',      action: () => { navigate('/'); setProfileOpen(false); } },
                     { Icon: Settings,   label: 'Configuración',  action: () => { navigate('/settings'); setProfileOpen(false); } },
                   ].map(({ Icon, label, action }) => (
@@ -278,7 +290,7 @@ export function AppShell({ children }: Props) {
 }
 
 /* ── Lock screen ────────────────────────────────────────────────── */
-function LockScreen({ onUnlock }: { onUnlock: () => void }) {
+function LockScreen({ userId, onUnlock }: { userId?: string; onUnlock: () => void }) {
   const [pin, setPin] = useState('');
   const [shake, setShake] = useState(false);
 
@@ -287,7 +299,7 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
     const next = pin + k;
     setPin(next);
     if (next.length === 4) {
-      const saved = localStorage.getItem('sghcp_pin') ?? '';
+      const saved = localStorage.getItem(userId ? `sghcp_pin_${userId}` : '') ?? '';
       if (next === saved) { onUnlock(); setPin(''); }
       else { setShake(true); setTimeout(() => { setShake(false); setPin(''); }, 500); }
     }

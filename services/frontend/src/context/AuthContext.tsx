@@ -4,8 +4,10 @@ import { authApi, type Me } from '@/api/auth';
 interface AuthState {
   user: Me | null;
   isLoading: boolean;
-  login: (orgSlug: string, email: string, password: string) => Promise<void>;
+  login: (orgSlug: string, email: string, password: string) => Promise<Me>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<Me | null>;
+  updateProfile: (displayName: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -14,13 +16,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser]       = useState<Me | null>(null);
   const [isLoading, setLoading] = useState(true);
 
-  const fetchMe = useCallback(async () => {
-    if (!localStorage.getItem('access_token')) { setLoading(false); return; }
+  const fetchMe = useCallback(async (): Promise<Me | null> => {
+    if (!localStorage.getItem('access_token')) { setLoading(false); return null; }
     try {
       const me = await authApi.me();
       setUser(me);
+      return me;
     } catch {
-      localStorage.clear();
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      return null;
     } finally {
       setLoading(false);
     }
@@ -28,8 +33,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { fetchMe(); }, [fetchMe]);
 
-  const login = async (orgSlug: string, email: string, password: string) => {
+  const login = async (orgSlug: string, email: string, password: string): Promise<Me> => {
     const tokens = await authApi.login(orgSlug, email, password);
+    localStorage.setItem('access_token', tokens.access_token);
+    localStorage.setItem('refresh_token', tokens.refresh_token);
+    const me = await fetchMe();
+    if (!me) throw new Error('auth/me failed after login');
+    return me;
+  };
+
+  const updateProfile = async (displayName: string) => {
+    const tokens = await authApi.updateProfile(displayName);
     localStorage.setItem('access_token', tokens.access_token);
     localStorage.setItem('refresh_token', tokens.refresh_token);
     await fetchMe();
@@ -38,12 +52,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     const refresh = localStorage.getItem('refresh_token') ?? '';
     try { await authApi.logout(refresh); } catch { /* ignore */ }
-    localStorage.clear();
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, logout, refreshUser: fetchMe, updateProfile }}>
       {children}
     </AuthContext.Provider>
   );

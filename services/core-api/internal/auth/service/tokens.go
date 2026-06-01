@@ -28,6 +28,8 @@ func (s *Service) issueTokenPair(ctx context.Context, user *auth.User) (*token.P
 	claims := token.Claims{
 		UserID:         user.ID,
 		OrganizationID: user.OrganizationID,
+		Email:          user.Email,
+		DisplayName:    user.DisplayName,
 		Roles:          user.Roles,
 		Permissions:    user.Permissions,
 		RegisteredClaims: jwt.RegisteredClaims{

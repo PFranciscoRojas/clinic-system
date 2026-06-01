@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Badge } from '@/components/ui/Badge';
+import { ACCENT_COLORS, saveAccentColor } from '@/lib/theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -182,18 +183,48 @@ function ChipBtn({ active, color = 'var(--teal)', onClick, children }: {
 // ── Profile section ───────────────────────────────────────────────────────────
 
 function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
-  const { user, logout } = useAuth();
+  const { user, logout, updateProfile } = useAuth();
   const mark = <T,>(fn: (v: T) => void) => (v: T) => { fn(v); setDirty(true); };
 
-  const [name,      setName]      = useState(user?.display_name ?? '');
-  const [specialty, setSpecialty] = useState('Psicología clínica');
+  const savedProfile = (() => { try { return JSON.parse(localStorage.getItem('sghcp_profile') ?? '{}'); } catch { return {}; } })();
+  // display_name from the JWT is the source of truth; localStorage is only a fallback for fields not yet in the backend.
+  const [name,      setName]      = useState(user?.display_name || savedProfile.name || '');
+  const [specialty, setSpecialty] = useState(savedProfile.specialty ?? 'Psicología clínica');
   const [email,     setEmail]     = useState(user?.email ?? '');
-  const [phone,     setPhone]     = useState('');
+  const [phone,     setPhone]     = useState(savedProfile.phone ?? '');
   const [bio,       setBio]       = useState('');
-  const [color,     setColor]     = useState('#14b8a6');
+  const savedAccent = localStorage.getItem(`sghcp_accent_${user?.user_id}`) ?? '#14b8a6';
+  const [color,     setColor]     = useState(savedAccent);
+  const [saving,    setSaving]    = useState(false);
+  const [saved,     setSaved]     = useState(false);
+  const [saveErr,   setSaveErr]   = useState('');
 
-  const ACCENT_COLORS = ['#14b8a6', '#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#f97316', '#0ea5e9'];
-  const ini = (user?.display_name ?? user?.email ?? 'U').slice(0, 2).toUpperCase();
+  const handleSaveName = async () => {
+    if (!name.trim()) return;
+    setSaving(true); setSaveErr('');
+    try {
+      await updateProfile(name.trim());
+      localStorage.setItem('sghcp_profile', JSON.stringify({ ...savedProfile, name: name.trim(), specialty, phone }));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+      setDirty(false);
+    } catch {
+      setSaveErr('No se pudo guardar. Intenta de nuevo.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ACCENT_COLORS imported from lib/theme
+  const ini = (() => {
+    if (user?.display_name) {
+      const words = user.display_name.trim().split(/\s+/);
+      const first = words[0]?.[0] ?? '';
+      const last  = words.length > 1 ? (words[words.length - 1]?.[0] ?? '') : '';
+      return (first + last).toUpperCase() || '?';
+    }
+    return user?.email?.split('@')[0]?.slice(0, 2).toUpperCase() || '?';
+  })();
 
   return (
     <>
@@ -203,7 +234,7 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
         </FieldRow>
         <FieldRow label="Especialidad">
           <FSelect value={specialty} onChange={mark(setSpecialty)}>
-            {['Psicología clínica', 'Neuropsicología', 'Psicología infantil', 'Psicología forense', 'Psicología organizacional', 'Psiquiatría'].map(s => <option key={s}>{s}</option>)}
+            {['Psicología clínica','Psicología educativa','Psicología organizacional','Neuropsicología','Psicología forense','Psicología de la salud','Psicoanálisis','Psicología cognitivo-conductual','Psicología sistémica','Psicología infantil','Psiquiatría','Otra'].map(s => <option key={s}>{s}</option>)}
           </FSelect>
         </FieldRow>
         <FieldRow label="Correo electrónico">
@@ -223,32 +254,52 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
             onBlur={e => (e.target.style.borderColor = 'var(--s200)')}
           />
         </FieldRow>
+        <div style={{ paddingTop: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={handleSaveName} disabled={saving} style={{
+            display: 'flex', alignItems: 'center', gap: 7, padding: '9px 20px',
+            borderRadius: 9, border: 'none',
+            background: saving ? 'var(--s200)' : 'var(--teal)',
+            color: saving ? 'var(--s400)' : '#fff',
+            fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer',
+          }}>
+            {saving
+              ? <><span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: 99, animation: 'spin .7s linear infinite', display: 'inline-block' }} />Guardando…</>
+              : <><Save size={13} />Guardar nombre</>}
+          </button>
+          {saved    && <span style={{ fontSize: 12.5, color: '#10b981', display: 'flex', alignItems: 'center', gap: 5 }}><CheckCircle size={13} />Nombre actualizado</span>}
+          {saveErr  && <span style={{ fontSize: 12.5, color: 'var(--red)' }}>{saveErr}</span>}
+        </div>
       </SectionCard>
 
       <SectionCard title="Apariencia del perfil" icon={Palette}>
-        <FieldRow label="Color de acento" sub="Color del sidebar y elementos de marca">
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <FieldRow label="Color de acento" sub="Cambia el color del sidebar y botones en toda la app">
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             {ACCENT_COLORS.map(c => (
               <button
                 key={c}
-                onClick={() => { setColor(c); setDirty(true); }}
-                style={{ width: 28, height: 28, borderRadius: 99, background: c, border: `2.5px solid ${color === c ? 'var(--s800)' : 'transparent'}`, boxShadow: color === c ? `0 0 0 2px #fff, 0 0 0 4px ${c}` : 'none', transition: 'all .15s', cursor: 'pointer' }}
+                onClick={() => { setColor(c); saveAccentColor(c, user?.user_id); setDirty(false); }}
+                title={c}
+                style={{ width: 30, height: 30, borderRadius: 99, background: c, border: `2.5px solid ${color === c ? 'var(--s800)' : 'transparent'}`, boxShadow: color === c ? `0 0 0 2px #fff, 0 0 0 4px ${c}` : 'none', transition: 'all .15s', cursor: 'pointer', flexShrink: 0 }}
               />
             ))}
+            {color !== '#14b8a6' && (
+              <button onClick={() => { setColor('#14b8a6'); saveAccentColor('#14b8a6', user?.user_id); }} style={{ fontSize: 11.5, color: 'var(--s400)', border: 'none', background: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
+                Restablecer
+              </button>
+            )}
           </div>
         </FieldRow>
-        <FieldRow label="Avatar / foto de perfil" sub="Visible para tus pacientes">
+        <FieldRow label="Avatar / foto de perfil" sub="Disponible próximamente — almacenamiento de archivos en desarrollo">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 48, height: 48, borderRadius: 99, background: `linear-gradient(135deg, ${color}, ${color}99)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
               {ini}
             </div>
-            <button
-              style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid var(--s200)', background: '#fff', borderRadius: 9, padding: '7px 14px', fontSize: 12.5, color: 'var(--s600)', transition: 'all .12s', cursor: 'pointer' }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--teal)'; e.currentTarget.style.color = 'var(--teal)'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--s200)'; e.currentTarget.style.color = 'var(--s600)'; }}
-            >
-              <Upload size={13} />Subir foto
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <button disabled style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid var(--s200)', background: 'var(--s50)', borderRadius: 9, padding: '7px 14px', fontSize: 12.5, color: 'var(--s400)', cursor: 'not-allowed', opacity: 0.6 }}>
+                <Upload size={13} />Subir foto
+              </button>
+              <span style={{ fontSize: 11, color: 'var(--s400)' }}>Próximamente</span>
+            </div>
           </div>
         </FieldRow>
       </SectionCard>
@@ -308,10 +359,11 @@ const HOURS   = Array.from({ length: 25 }, (_, i) => `${String(i).padStart(2, '0
 function ScheduleSection({ setDirty }: { setDirty: (v: boolean) => void }) {
   const mark = <T,>(fn: (v: T) => void) => (v: T) => { fn(v); setDirty(true); };
 
-  const [activeDays,  setActiveDays]  = useState(['Lun', 'Mar', 'Mié', 'Jue', 'Vie']);
-  const [startHour,   setStartHour]   = useState('08:00');
-  const [endHour,     setEndHour]     = useState('19:00');
-  const [sessionDur,  setSessionDur]  = useState(50);
+  const savedSched = (() => { try { return JSON.parse(localStorage.getItem('sghcp_schedule') ?? '{}'); } catch { return {}; } })();
+  const [activeDays,  setActiveDays]  = useState<string[]>(savedSched.activeDays ?? ['Lun', 'Mar', 'Mié', 'Jue', 'Vie']);
+  const [startHour,   setStartHour]   = useState(savedSched.startHour ?? '08:00');
+  const [endHour,     setEndHour]     = useState(savedSched.endHour ?? '19:00');
+  const [sessionDur,  setSessionDur]  = useState(savedSched.sessionLen ?? 50);
   const [breakStart,  setBreakStart]  = useState('13:00');
   const [breakEnd,    setBreakEnd]    = useState('14:00');
   const [buffer,      setBuffer]      = useState(10);
@@ -465,10 +517,11 @@ function AISection({ setDirty }: { setDirty: (v: boolean) => void }) {
   const tog = (fn: (v: boolean) => void) => (v: boolean) => { fn(v); setDirty(true); };
   const mrk = <T,>(fn: (v: T) => void) => (v: T) => { fn(v); setDirty(true); };
 
-  const [enabled,    setEnabled]    = useState(true);
+  const savedAI = (() => { try { return JSON.parse(localStorage.getItem('sghcp_ai_prefs') ?? '{}'); } catch { return {}; } })();
+  const [enabled,    setEnabled]    = useState(savedAI.aiEnabled ?? true);
   const [autoGen,    setAutoGen]    = useState(true);
   const [confidence, setConfidence] = useState(85);
-  const [style,      setStyle]      = useState('structured');
+  const [style,      setStyle]      = useState(savedAI.soapStyle ?? 'structured');
   const [tone,       setTone]       = useState('formal');
   const [lang,       setLang]       = useState('es');
   const [auditLog,   setAuditLog]   = useState(true);
@@ -487,7 +540,7 @@ function AISection({ setDirty }: { setDirty: (v: boolean) => void }) {
               <div style={{ fontSize: 12, color: '#92400e', marginTop: 2 }}>Genera borradores SOAP desde el audio de sesión. Requiere aprobación del profesional.</div>
             </div>
             <button
-              onClick={() => { setEnabled(v => !v); setDirty(true); }}
+              onClick={() => { setEnabled((v: boolean) => !v); setDirty(true); }}
               style={{ width: 44, height: 26, borderRadius: 99, border: 'none', background: enabled ? 'var(--teal)' : 'var(--s200)', position: 'relative', transition: 'background .2s', cursor: 'pointer', flexShrink: 0 }}
             >
               <div style={{ position: 'absolute', top: 3, left: enabled ? 21 : 3, width: 20, height: 20, borderRadius: 99, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.2)', transition: 'left .2s' }} />
@@ -573,6 +626,7 @@ const ACTIVE_SESSIONS = [
 ];
 
 function SecuritySection({ setDirty }: { setDirty: (v: boolean) => void }) {
+  const { user } = useAuth();
   const tog = (fn: (v: boolean) => void) => (v: boolean) => { fn(v); setDirty(true); };
 
   const [autoLock,    setAutoLock]    = useState(true);
@@ -587,7 +641,7 @@ function SecuritySection({ setDirty }: { setDirty: (v: boolean) => void }) {
   const handlePinSave = () => {
     if (pin.length !== 4 || pin !== pin2) { setPinErr('Los PINs no coinciden o son muy cortos'); return; }
     setPinErr('');
-    localStorage.setItem('sghcp_pin', pin);
+    if (user?.user_id) localStorage.setItem(`sghcp_pin_${user.user_id}`, pin);
     setPinSaved(true);
     setDirty(true);
     setTimeout(() => setPinSaved(false), 2500);
@@ -905,10 +959,11 @@ const ROLES = [
   { value: 'PROFESSIONAL',  label: 'Psicólogo/a profesional' },
   { value: 'INTERN',        label: 'Practicante supervisado' },
   { value: 'RECEPTIONIST',  label: 'Recepcionista' },
-  { value: 'CLINIC_ADMIN',  label: 'Administrador' },
 ];
 
 function UsersSection() {
+  const { user } = useAuth();
+  const isAdmin = user?.roles?.includes('CLINIC_ADMIN') ?? false;
   const [roleName,     setRoleName]     = useState('PROFESSIONAL');
   const [inviteCode,   setInviteCode]   = useState('');
   const [inviteExp,    setInviteExp]    = useState('');
@@ -1008,7 +1063,7 @@ function UsersSection() {
         </div>
       </SectionCard>
 
-      <SectionCard title="Restablecer contraseña" icon={Key} color="#ef4444">
+      {isAdmin && <SectionCard title="Restablecer contraseña" icon={Key} color="#ef4444">
         <form onSubmit={handleResetPassword} style={{ padding: '12px 0' }}>
           <div style={{ fontSize: 13, color: 'var(--s500)', marginBottom: 14, lineHeight: 1.6 }}>
             Como administrador puedes restablecer la contraseña de cualquier usuario de tu organización.
@@ -1039,7 +1094,7 @@ function UsersSection() {
               : <><Key size={14} />Restablecer contraseña</>}
           </button>
         </form>
-      </SectionCard>
+      </SectionCard>}
     </>
   );
 }

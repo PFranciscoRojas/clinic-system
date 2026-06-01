@@ -7,6 +7,8 @@ import "time"
 type User struct {
 	ID             string
 	OrganizationID string
+	Email          string
+	DisplayName    *string
 	PasswordHash   string
 	IsActive       bool
 	FailedAttempts int

@@ -19,6 +19,7 @@ func (h *Handler) Routes(jwtSecret []byte) chi.Router {
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RequireAuth(jwtSecret))
 		r.Get("/me", h.me)
+		r.Patch("/profile", h.updateProfile)
 		r.With(middleware.RequirePermission("users:create")).Post("/invite", h.invite)
 		r.With(middleware.RequirePermission("users:update")).Post("/reset-password", h.resetPassword)
 	})

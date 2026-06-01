@@ -127,3 +127,28 @@ func (h *Handler) resetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// PATCH /api/v1/auth/profile — updates the caller's display_name and returns fresh tokens.
+func (h *Handler) updateProfile(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+
+	var body struct {
+		DisplayName string `json:"display_name"`
+	}
+	if err := httputil.DecodeJSON(r, &body); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.DisplayName == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "display_name is required")
+		return
+	}
+
+	pair, err := h.svc.UpdateProfile(r.Context(), claims.UserID, body.DisplayName)
+	if err != nil {
+		slog.Error("auth.update-profile", "err", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "could not update profile")
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, pair)
+}

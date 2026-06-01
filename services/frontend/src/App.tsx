@@ -1,5 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { loadSavedAccent } from '@/lib/theme';
 import { AppShell } from '@/components/layout/AppShell';
 import { Spinner } from '@/components/ui/Spinner';
 import { LoginPage } from '@/pages/Login/LoginPage';
@@ -31,6 +33,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 export function App() {
   const { user, isLoading } = useAuth();
 
+  useEffect(() => { loadSavedAccent(user?.user_id); }, [user?.user_id]);
+
   if (isLoading) {
     return (
       <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -43,7 +47,7 @@ export function App() {
     <Routes>
       <Route
         path="/login"
-        element={user ? <Navigate to="/" replace /> : <LoginPage />}
+        element={user && localStorage.getItem(`sghcp_onboarding_done_${user.user_id}`) ? <Navigate to="/" replace /> : <LoginPage />}
       />
       <Route
         path="/*"
