@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   ChevronLeft, ChevronRight, Clock, MapPin, Video, Repeat,
@@ -742,6 +742,8 @@ const secondaryBtn: React.CSSProperties = {
 
 export function NewAppointmentPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnPatientId = searchParams.get('patient_id');
   const { user } = useAuth();
 
   const [patient,     setPatient]     = useState<Patient | null>(null);
@@ -755,6 +757,12 @@ export function NewAppointmentPage() {
   const [reminder,    setReminder]    = useState<boolean>(true);
   const [showModal,   setShowModal]   = useState<boolean>(false);
   const [confirmed,   setConfirmed]   = useState<boolean>(false);
+
+  // Pre-load patient from URL param (e.g. coming from patient profile)
+  useEffect(() => {
+    if (!returnPatientId || patient) return;
+    patientsApi.get(returnPatientId).then(setPatient).catch(() => {});
+  }, [returnPatientId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Staff appointments for the selected day (slot blocking + workload) ────────
   const { data: dayAppointments = [] } = useQuery<Appointment[]>({
@@ -857,7 +865,8 @@ export function NewAppointmentPage() {
     },
     onSuccess: () => {
       setConfirmed(true);
-      setTimeout(() => navigate('/appointments'), 2000);
+      const dest = returnPatientId ? `/patients/${returnPatientId}` : '/';
+      setTimeout(() => navigate(dest), 2000);
     },
   });
 
@@ -890,7 +899,7 @@ export function NewAppointmentPage() {
         display: 'flex', flexDirection: 'column',
       }}>
         <button
-          onClick={() => navigate('/appointments')}
+          onClick={() => navigate(returnPatientId ? `/patients/${returnPatientId}` : '/')}
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             color: 'var(--s500)', fontSize: 13, marginBottom: 20,
