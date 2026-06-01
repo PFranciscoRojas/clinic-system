@@ -1,0 +1,88 @@
+package repository
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/jackc/pgx/v5"
+
+	"sghcp/core-api/internal/clinicalrecords"
+)
+
+func (r *Repository) FindEncKey(ctx context.Context, dekID string) (*clinicalrecords.EncKeyRow, error) {
+	var k clinicalrecords.EncKeyRow
+	err := r.db.QueryRow(ctx,
+		`SELECT id, encrypted_dek, key_source FROM encryption_keys WHERE id = $1`,
+		dekID,
+	).Scan(&k.ID, &k.EncryptedDEK, &k.KeySource)
+	if err != nil {
+		return nil, fmt.Errorf("find enc_key: %w", err)
+	}
+	return &k, nil
+}
+
+func (r *Repository) FindByID(ctx context.Context, orgID, recordID string) (*clinicalrecords.RawRecord, error) {
+	row := r.db.QueryRow(ctx, `
+		SELECT id, organization_id, patient_id, responsible_staff_id, created_by,
+		       COALESCE(appointment_id::text, ''), dek_id,
+		       record_type, session_date,
+		       subjective_enc, objective_enc, assessment_enc, plan_enc,
+		       status, approved_at, requires_cosign,
+		       COALESCE(supervisor_id::text, ''), supervisor_cosigned_at,
+		       created_at, updated_at
+		FROM clinical_records
+		WHERE id = $1 AND organization_id = $2
+	`, recordID, orgID)
+
+	var rec clinicalrecords.RawRecord
+	err := row.Scan(
+		&rec.ID, &rec.OrganizationID, &rec.PatientID,
+		&rec.ResponsibleStaffID, &rec.CreatedBy,
+		&rec.AppointmentID, &rec.DEKID,
+		&rec.RecordType, &rec.SessionDate,
+		&rec.SubjectiveEnc, &rec.ObjectiveEnc, &rec.AssessmentEnc, &rec.PlanEnc,
+		&rec.Status, &rec.ApprovedAt, &rec.RequiresCosign,
+		&rec.SupervisorID, &rec.SupervisorCosignedAt,
+		&rec.CreatedAt, &rec.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, clinicalrecords.ErrNotFound
+		}
+		return nil, fmt.Errorf("find clinical_record: %w", err)
+	}
+	return &rec, nil
+}
+
+func (r *Repository) List(ctx context.Context, f clinicalrecords.ListFilter) ([]*clinicalrecords.RecordMeta, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, patient_id, responsible_staff_id, created_by,
+		       COALESCE(appointment_id::text, ''), record_type,
+		       session_date, status, requires_cosign,
+		       COALESCE(supervisor_id::text, ''), created_at
+		FROM clinical_records
+		WHERE organization_id = $1 AND patient_id = $2
+		ORDER BY session_date DESC, created_at DESC
+		LIMIT $3 OFFSET $4
+	`, f.OrganizationID, f.PatientID, f.Limit, f.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("list clinical_records: %w", err)
+	}
+	defer rows.Close()
+
+	var result []*clinicalrecords.RecordMeta
+	for rows.Next() {
+		var m clinicalrecords.RecordMeta
+		if err := rows.Scan(
+			&m.ID, &m.PatientID, &m.ResponsibleStaffID, &m.CreatedBy,
+			&m.AppointmentID, &m.RecordType,
+			&m.SessionDate, &m.Status, &m.RequiresCosign,
+			&m.SupervisorID, &m.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan record_meta: %w", err)
+		}
+		result = append(result, &m)
+	}
+	return result, rows.Err()
+}
