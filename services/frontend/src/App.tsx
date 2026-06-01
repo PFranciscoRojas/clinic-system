@@ -10,6 +10,7 @@ import { PatientsPage } from '@/pages/Patients/PatientsPage';
 import { PatientProfilePage } from '@/pages/Patients/PatientProfilePage';
 import { NewPatientPage } from '@/pages/Patients/NewPatientPage';
 import { NewAppointmentPage } from '@/pages/Appointments/NewAppointmentPage';
+import { AppointmentPage } from '@/pages/Appointments/AppointmentPage';
 import { AIDraftPage } from '@/pages/AIDrafts/AIDraftPage';
 import { ClinicalRecordPage } from '@/pages/ClinicalRecords/ClinicalRecordPage';
 import { EvaluationsPage } from '@/pages/Evaluations/EvaluationsPage';
@@ -61,6 +62,7 @@ export function App() {
                 <Route path="patients/new" element={<NewPatientPage />} />
                 <Route path="patients/:id" element={<PatientProfilePage />} />
                 <Route path="appointments/new" element={<NewAppointmentPage />} />
+                <Route path="appointments/:id" element={<AppointmentPage />} />
                 <Route path="ai-drafts/:id" element={<AIDraftPage />} />
                 <Route path="clinical-records/:id" element={<ClinicalRecordPage />} />
                 <Route path="evaluations" element={<EvaluationsPage />} />

@@ -212,7 +212,10 @@ function HistorialTab({
               {cfg.label}
             </span>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s700)', cursor: 'pointer' }}>
+              <button
+                onClick={() => navigate(`/appointments/${appt.id}`)}
+                style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s700)', cursor: 'pointer' }}
+              >
                 Ver
               </button>
             </div>
