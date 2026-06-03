@@ -13,6 +13,7 @@ import (
 	aidraftshandler "sghcp/core-api/internal/aidrafts/handler"
 	apptshandler "sghcp/core-api/internal/appointments/handler"
 	authhandler "sghcp/core-api/internal/auth/handler"
+	bookingrequestshandler "sghcp/core-api/internal/bookingrequests/handler"
 	crrhandler "sghcp/core-api/internal/clinicalrecords/handler"
 	consentshandler "sghcp/core-api/internal/consents/handler"
 	patientshandler "sghcp/core-api/internal/patients/handler"
@@ -49,6 +50,9 @@ func (a *app) buildRouter() http.Handler {
 	// ── Public routes — no JWT required ──────────────────────────────────────
 	r.Mount("/api/v1/auth", authhandler.New(a.pool, a.rdb, a.cfg).Routes([]byte(a.cfg.JWTSecret)))
 
+	bookingH := bookingrequestshandler.New(a.pool)
+	r.Mount("/api/v1/public/booking", bookingH.PublicRoutes())
+
 	// ── Protected routes — valid JWT required on every request ────────────────
 	// RequireAuth validates the Bearer token and injects claims into context.
 	// RequirePermission (per-endpoint) checks a specific permission code from those claims.
@@ -67,6 +71,8 @@ func (a *app) buildRouter() http.Handler {
 		aiDrafts := aidraftshandler.New(a.pool, a.km, a.rdb, a.cfg.AudioDir)
 		r.Mount("/api/v1/ai-drafts", aiDrafts.Routes())
 		r.Method(http.MethodPost, "/api/v1/appointments/{appointment_id}/audio", aiDrafts.AppointmentAudioRoute())
+
+		r.Mount("/api/v1/booking-requests", bookingH.Routes())
 	})
 
 	return r

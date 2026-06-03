@@ -13,6 +13,8 @@ import { NewAppointmentPage } from '@/pages/Appointments/NewAppointmentPage';
 import { AppointmentPage } from '@/pages/Appointments/AppointmentPage';
 import { AIDraftPage } from '@/pages/AIDrafts/AIDraftPage';
 import { ClinicalRecordPage } from '@/pages/ClinicalRecords/ClinicalRecordPage';
+import { BookingPage } from '@/pages/Booking/BookingPage';
+import { BookingRequestsPage } from '@/pages/BookingRequests/BookingRequestsPage';
 import { EvaluationsPage } from '@/pages/Evaluations/EvaluationsPage';
 import { BillingPage } from '@/pages/Billing/BillingPage';
 import { SettingsPage } from '@/pages/Settings/SettingsPage';
@@ -51,6 +53,9 @@ export function App() {
         path="/login"
         element={user && localStorage.getItem(`sghcp_onboarding_done_${user.user_id}`) ? <Navigate to="/" replace /> : <LoginPage />}
       />
+      {/* Public booking page — no auth required */}
+      <Route path="/booking" element={<BookingPage />} />
+
       <Route
         path="/*"
         element={
@@ -65,6 +70,7 @@ export function App() {
                 <Route path="appointments/:id" element={<AppointmentPage />} />
                 <Route path="ai-drafts/:id" element={<AIDraftPage />} />
                 <Route path="clinical-records/:id" element={<ClinicalRecordPage />} />
+                <Route path="booking-requests" element={<BookingRequestsPage />} />
                 <Route path="evaluations" element={<EvaluationsPage />} />
                 <Route path="billing" element={<BillingPage />} />
                 <Route path="settings" element={<SettingsPage />} />
