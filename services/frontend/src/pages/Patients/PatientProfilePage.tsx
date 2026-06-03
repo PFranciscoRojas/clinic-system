@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import { patientsApi } from '@/api/patients';
 import { appointmentsApi, type Appointment } from '@/api/appointments';
+import { clinicalRecordsApi, consentsApi, type RecordMeta, type Consent, type ConsentType } from '@/api/clinicalRecords';
 import { Spinner } from '@/components/ui/Spinner';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -56,14 +57,26 @@ const RECORD_STATUS_CONFIG: Record<string, { label: string; color: string; bg: s
   NO_SHOW:    { label: 'Pendiente',  color: '#374151', bg: '#f1f5f9' },
 };
 
+const RECORD_TYPE_LABEL: Record<string, string> = {
+  INITIAL: 'Inicial', EVOLUTION: 'Evolución',
+  DISCHARGE: 'Alta', INTERCONSULTATION: 'Interconsulta',
+};
+
+const CR_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  DRAFT:    { label: 'Borrador',  color: '#92400e', bg: '#fef3c7' },
+  APPROVED: { label: 'Aprobado', color: '#065f46', bg: '#d1fae5' },
+};
+
 // ─── Tab: Historial ───────────────────────────────────────────────────────────
 
 function HistorialTab({
   appointments,
+  records,
   navigate,
   patientId,
 }: {
   appointments: Appointment[];
+  records: RecordMeta[];
   navigate: (path: string) => void;
   patientId: string;
 }) {
@@ -84,7 +97,71 @@ function HistorialTab({
   }
 
   return (
-    <div className="anim-fade-in" style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+    <div className="anim-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+    {/* ── Registros clínicos ─────────────────────────────────────────────── */}
+    <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--s100)' }}>
+        <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)' }}>Registros clínicos</span>
+        <button
+          onClick={() => navigate(`/patients/${patientId}/records/new`)}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+        >
+          <FileText size={12} /> Nuevo registro
+        </button>
+      </div>
+      {records.length === 0 ? (
+        <div style={{ padding: '32px 20px', textAlign: 'center' }}>
+          <FileText size={32} color="var(--s200)" style={{ marginBottom: 8 }} />
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--s400)' }}>Sin registros clínicos aún</p>
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 130px 110px 110px', gap: 8, padding: '8px 20px', background: 'var(--s50)', borderBottom: '1px solid var(--s200)' }}>
+            {['Fecha', 'Tipo', 'Estado', 'Co-firma', 'Acción'].map(h => (
+              <span key={h} style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</span>
+            ))}
+          </div>
+          {records.map((rec, idx) => {
+            const cfg = CR_STATUS_CONFIG[rec.status] ?? CR_STATUS_CONFIG.DRAFT;
+            return (
+              <div key={rec.id} style={{ display: 'grid', gridTemplateColumns: '1fr 130px 130px 110px 110px', gap: 8, alignItems: 'center', padding: '12px 20px', borderBottom: idx < records.length - 1 ? '1px solid var(--s100)' : 'none' }}>
+                <span style={{ fontSize: 13, color: 'var(--s700)' }}>{fmtDate(rec.session_date)}</span>
+                <span style={{ fontSize: 13, color: 'var(--s600)' }}>{RECORD_TYPE_LABEL[rec.record_type] ?? rec.record_type}</span>
+                <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 6, background: cfg.bg, color: cfg.color, display: 'inline-flex', width: 'fit-content' }}>
+                  {cfg.label}
+                </span>
+                <span style={{ fontSize: 12, color: rec.requires_cosign && !rec.supervisor_id ? 'var(--red)' : 'var(--s400)' }}>
+                  {rec.requires_cosign ? (rec.supervisor_id ? 'Firmado' : 'Pendiente') : '—'}
+                </span>
+                <button
+                  onClick={() => navigate(`/clinical-records/${rec.id}`)}
+                  style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s700)', cursor: 'pointer', width: 'fit-content' }}
+                >
+                  Ver
+                </button>
+              </div>
+            );
+          })}
+        </>
+      )}
+    </div>
+
+    {/* ── Citas ──────────────────────────────────────────────────────────── */}
+    <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+      <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--s100)' }}>
+        <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)' }}>Citas agendadas</span>
+      </div>
+      {appointments.length === 0 ? (
+        <div style={{ padding: '32px 20px', textAlign: 'center' }}>
+          <Calendar size={32} color="var(--s200)" style={{ marginBottom: 8 }} />
+          <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--s400)' }}>Sin citas registradas</p>
+          <button onClick={() => navigate(`/appointments/new?patient_id=${patientId}`)} style={{ padding: '8px 16px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            Agendar primera cita
+          </button>
+        </div>
+      ) : (
+    <>
       {/* Table header */}
       <div style={{ display: 'grid', gridTemplateColumns: '48px 1fr 1fr 1fr 80px 100px 120px', gap: 8, padding: '10px 20px', background: 'var(--s50)', borderBottom: '1px solid var(--s200)' }}>
         {['Ses#', 'Fecha', 'Tipo', 'Modalidad', 'Duración', 'Estado', 'Acciones'].map(h => (
@@ -96,7 +173,6 @@ function HistorialTab({
         const status = appt.status as AppointmentStatus;
         const cfg = RECORD_STATUS_CONFIG[status] ?? RECORD_STATUS_CONFIG.pendiente;
         const isVirtual = appt.modality === 'VIRTUAL';
-        const isDraft = status === ('SCHEDULED' as AppointmentStatus) && false; // placeholder — no draft status in appointments
 
         return (
           <div
@@ -139,15 +215,13 @@ function HistorialTab({
               <button style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s700)', cursor: 'pointer' }}>
                 Ver
               </button>
-              {isDraft && (
-                <button style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid #c7d2fe', background: '#eef2ff', color: '#6366f1', cursor: 'pointer' }}>
-                  Revisar
-                </button>
-              )}
             </div>
           </div>
         );
       })}
+    </>
+    )}
+    </div>
     </div>
   );
 }
@@ -232,38 +306,102 @@ function PlanTab() {
 
 // ─── Tab: Consentimientos ─────────────────────────────────────────────────────
 
-function ConsentimientosTab() {
-  const docs = [
-    { name: 'Consentimiento informado psicoterapia', status: 'pendiente' },
-    { name: 'Autorización de tratamiento de datos',  status: 'pendiente' },
-  ];
+const CONSENT_TYPE_LABEL: Record<ConsentType, string> = {
+  TREATMENT:           'Consentimiento de tratamiento',
+  RECORDING:           'Autorización de grabación',
+  DATA_PROCESSING:     'Tratamiento de datos personales',
+  INFORMATION_SHARING: 'Compartir información clínica',
+};
+
+function ConsentimientosTab({ patientId }: { patientId: string }) {
+  const [adding, setAdding] = useState(false);
+  const [newType, setNewType] = useState<ConsentType>('TREATMENT');
+  const [saving, setSaving] = useState(false);
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['consents', patientId],
+    queryFn: () => consentsApi.list(patientId),
+    enabled: !!patientId,
+  });
+  const consents: Consent[] = data?.items ?? [];
+
+  const handleCreate = async () => {
+    setSaving(true);
+    try {
+      await consentsApi.create(patientId, { consent_type: newType });
+      await refetch();
+      setAdding(false);
+    } catch {
+      // silent for now
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="anim-fade-in" style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--s100)' }}>
         <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--s800)' }}>Documentos de consentimiento</span>
-        <button style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-          <Upload size={13} /> Subir documento
+        <button
+          onClick={() => setAdding(v => !v)}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+        >
+          <Upload size={13} /> Registrar consentimiento
         </button>
       </div>
 
-      {docs.map((doc, idx) => (
-        <div key={doc.name} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', borderBottom: idx < docs.length - 1 ? '1px solid var(--s100)' : 'none' }}>
-          <div style={{ width: 36, height: 36, borderRadius: 8, background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <FileCheck size={16} color="#92400e" />
+      {adding && (
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--s100)', background: 'var(--s50)', display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--s600)', display: 'block', marginBottom: 4 }}>Tipo de consentimiento</label>
+            <select
+              value={newType}
+              onChange={e => setNewType(e.target.value as ConsentType)}
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid var(--s200)', fontSize: 13, color: 'var(--s700)', background: '#fff' }}
+            >
+              {(Object.keys(CONSENT_TYPE_LABEL) as ConsentType[]).map(t => (
+                <option key={t} value={t}>{CONSENT_TYPE_LABEL[t]}</option>
+              ))}
+            </select>
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--s800)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{doc.name}</p>
-            <span style={{ fontSize: 11, fontWeight: 600, color: '#92400e', background: '#fef3c7', borderRadius: 6, padding: '2px 8px', display: 'inline-block', marginTop: 4 }}>
-              {doc.status}
-            </span>
-          </div>
-          <button style={{ fontSize: 12, fontWeight: 600, padding: '6px 14px', borderRadius: 8, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s700)', cursor: 'pointer' }}>
-            Subir
+          <button
+            onClick={handleCreate}
+            disabled={saving}
+            style={{ padding: '9px 16px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, opacity: saving ? 0.7 : 1 }}
+          >
+            {saving ? 'Guardando…' : 'Guardar'}
+          </button>
+          <button
+            onClick={() => setAdding(false)}
+            style={{ padding: '9px 16px', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+          >
+            Cancelar
           </button>
         </div>
-      ))}
+      )}
+
+      {isLoading ? (
+        <div style={{ padding: 32, textAlign: 'center' }}><Spinner size={22} color="var(--teal)" /></div>
+      ) : consents.length === 0 ? (
+        <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+          <FileCheck size={36} color="var(--s200)" style={{ marginBottom: 10 }} />
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--s400)' }}>Sin consentimientos registrados</p>
+        </div>
+      ) : (
+        consents.map((c, idx) => (
+          <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', borderBottom: idx < consents.length - 1 ? '1px solid var(--s100)' : 'none' }}>
+            <div style={{ width: 36, height: 36, borderRadius: 8, background: c.revoked_at ? '#fee2e2' : '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <FileCheck size={16} color={c.revoked_at ? '#991b1b' : '#059669'} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--s800)' }}>{CONSENT_TYPE_LABEL[c.consent_type] ?? c.consent_type}</p>
+              <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--s400)' }}>
+                Firmado: {c.signed_at} · Método: {c.signing_method}
+                {c.revoked_at && <span style={{ color: 'var(--red)', marginLeft: 8 }}>· Revocado</span>}
+              </p>
+            </div>
+          </div>
+        ))
+      )}
     </div>
   );
 }
@@ -370,6 +508,14 @@ export function PatientProfilePage() {
     queryFn: () => appointmentsApi.list({ patient_id: id!, limit: 50 }),
     enabled: !!id,
   });
+
+  // Clinical records list (metadata only — no decryption)
+  const { data: recordsData } = useQuery({
+    queryKey: ['clinical-records', 'patient', id],
+    queryFn: () => clinicalRecordsApi.list(id!),
+    enabled: !!id,
+  });
+  const records: RecordMeta[] = recordsData?.items ?? [];
 
   // ── Loading / error states ──────────────────────────────────────────────────
 
@@ -535,9 +681,9 @@ export function PatientProfilePage() {
         </div>
 
         {/* ── Tab Content ───────────────────────────────────────────────────── */}
-        {tab === 'historial'       && <HistorialTab appointments={appointments} navigate={navigate} patientId={id!} />}
+        {tab === 'historial'       && <HistorialTab appointments={appointments} records={records} navigate={navigate} patientId={id!} />}
         {tab === 'plan'            && <PlanTab />}
-        {tab === 'consentimientos' && <ConsentimientosTab />}
+        {tab === 'consentimientos' && <ConsentimientosTab patientId={id!} />}
         {tab === 'graficas'        && <GraficasTab appointments={appointments} />}
       </div>
     </div>

@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Brain, Clock, CheckCircle2, AlertTriangle, RefreshCw,
-  Edit3, Save, ChevronDown, ChevronUp, Sparkles,
+  Edit3, Save, ChevronDown, ChevronUp, Sparkles, FileText,
 } from 'lucide-react';
 import { aiDraftsApi, type DraftStatus } from '@/api/aiDrafts';
 import { Badge } from '@/components/ui/Badge';
@@ -34,9 +34,13 @@ const SOAP_SECTIONS: SOAPSection[] = [
 export function AIDraftPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set(['subjective']));
   const [soapEdit, setSoapEdit] = useState<Record<string, string>>({});
+  const [approving, setApproving] = useState(false);
+  const [approveErr, setApproveErr] = useState('');
+  const [createdRecordId, setCreatedRecordId] = useState('');
 
   const { data: draft, isLoading, isError, refetch } = useQuery({
     queryKey: ['ai-draft', id],
@@ -47,6 +51,26 @@ export function AIDraftPage() {
       return (status === 'PENDING' || status === 'PROCESSING') ? 3000 : false;
     },
   });
+
+  const handleApprove = async () => {
+    if (!id) return;
+    setApproving(true);
+    setApproveErr('');
+    try {
+      const res = await aiDraftsApi.approve(id, {
+        subjective:  soapEdit['subjective']  ?? content?.['subjective'],
+        objective:   soapEdit['objective']   ?? content?.['objective'],
+        assessment:  soapEdit['assessment']  ?? content?.['assessment'],
+        plan:        soapEdit['plan']        ?? content?.['plan'],
+      });
+      setCreatedRecordId(res.clinical_record_id);
+      queryClient.invalidateQueries({ queryKey: ['ai-draft', id] });
+    } catch {
+      setApproveErr('Error al aprobar. Intenta de nuevo.');
+    } finally {
+      setApproving(false);
+    }
+  };
 
   const toggleSection = (key: string) => {
     setExpanded(prev => {
@@ -225,19 +249,39 @@ export function AIDraftPage() {
                     <Edit3 size={16} /> Editar borrador
                   </button>
                   <button
-                    style={{ flex: 2, padding: 13, borderRadius: 11, background: 'var(--teal)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                    onClick={handleApprove}
+                    disabled={approving}
+                    style={{ flex: 2, padding: 13, borderRadius: 11, background: 'var(--teal)', color: '#fff', border: 'none', cursor: approving ? 'not-allowed' : 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: approving ? 0.7 : 1 }}
                   >
-                    <CheckCircle2 size={16} /> Aprobar historia clínica
+                    {approving ? <Spinner size={16} color="#fff" /> : <CheckCircle2 size={16} />}
+                    {approving ? 'Aprobando…' : 'Aprobar historia clínica'}
                   </button>
                 </>
               )}
             </div>
           )}
 
-          {draft.status === 'APPROVED' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 20px', background: '#d1fae5', borderRadius: 12, border: '1.5px solid #6ee7b7' }}>
-              <CheckCircle2 size={18} color="#059669" />
-              <span style={{ fontSize: 14, fontWeight: 600, color: '#065f46' }}>Historia clínica aprobada y firmada</span>
+          {approveErr && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', background: '#fee2e2', borderRadius: 10, border: '1.5px solid #fca5a5', marginTop: 8 }}>
+              <AlertTriangle size={15} color="#dc2626" />
+              <span style={{ fontSize: 13, color: '#991b1b' }}>{approveErr}</span>
+            </div>
+          )}
+
+          {(draft.status === 'APPROVED' || createdRecordId) && (
+            <div style={{ padding: '16px 20px', background: '#d1fae5', borderRadius: 12, border: '1.5px solid #6ee7b7' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: createdRecordId ? 12 : 0 }}>
+                <CheckCircle2 size={18} color="#059669" />
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#065f46' }}>Historia clínica aprobada y firmada</span>
+              </div>
+              {createdRecordId && (
+                <button
+                  onClick={() => navigate(`/clinical-records/${createdRecordId}`)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 14px', background: '#059669', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                >
+                  <FileText size={14} /> Ver registro clínico
+                </button>
+              )}
             </div>
           )}
         </>
