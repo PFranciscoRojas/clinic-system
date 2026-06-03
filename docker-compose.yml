@@ -112,29 +112,9 @@ services:
 
 volumes:
   postgres_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_DIR:-./data}/postgres
   redis_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_DIR:-./data}/redis
   audio_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_DIR:-./data}/audio
   caddy_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_DIR:-./data}/caddy
   caddy_config:
 
 networks:

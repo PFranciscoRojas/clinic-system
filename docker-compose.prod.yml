@@ -1,0 +1,28 @@
+# Production overlay — bind mounts data directories to host paths.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Requires: DATA_DIR set in .env (e.g. DATA_DIR=/data on VPS)
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR}/postgres
+  redis_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR}/redis
+  audio_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR}/audio
+  caddy_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR}/caddy

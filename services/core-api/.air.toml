@@ -3,6 +3,7 @@
 
 root = "."
 tmp_dir = "tmp"
+dot_env = [".env"]
 
 [build]
   cmd = "go build -o ./tmp/core-api ./cmd/api"
