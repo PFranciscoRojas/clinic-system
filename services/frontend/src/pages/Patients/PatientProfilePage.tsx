@@ -103,12 +103,21 @@ function HistorialTab({
     <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--s100)' }}>
         <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)' }}>Registros clínicos</span>
-        <button
-          onClick={() => navigate(`/patients/${patientId}/records/new`)}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
-        >
-          <FileText size={12} /> Nuevo registro
-        </button>
+        {(() => {
+          const target =
+            appointments.find(a => a.status === 'IN_PROGRESS') ??
+            appointments.filter(a => a.status === 'SCHEDULED').sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))[0] ??
+            appointments[0];
+          if (!target) return null;
+          return (
+            <button
+              onClick={() => navigate(`/appointments/${target.id}`)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+            >
+              <FileText size={12} /> Nuevo registro
+            </button>
+          );
+        })()}
       </div>
       {records.length === 0 ? (
         <div style={{ padding: '32px 20px', textAlign: 'center' }}>
