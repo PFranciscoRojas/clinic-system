@@ -1,11 +1,9 @@
 {
-    local_certs
     email {$CADDY_EMAIL}
 }
 
 {$CADDY_DOMAIN} {
     encode gzip zstd
-    tls internal
 
     # Security headers
     header {
