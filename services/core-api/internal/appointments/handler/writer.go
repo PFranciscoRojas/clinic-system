@@ -65,3 +65,23 @@ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// PATCH /api/v1/appointments/{id}/status
+func (h *Handler) updateStatus(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	appointmentID := chi.URLParam(r, "id")
+
+	var body struct {
+		Status string `json:"status"`
+	}
+	if err := httputil.DecodeJSON(r, &body); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	if err := h.svc.UpdateStatus(r.Context(), claims.OrganizationID, appointmentID, body.Status); err != nil {
+		writeErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

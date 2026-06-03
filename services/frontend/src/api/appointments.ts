@@ -51,6 +51,9 @@ export const appointmentsApi = {
 
   create: (body: CreateAppointmentBody) => api.post<{ id: string }>('/appointments', body),
 
+  updateStatus: (id: string, status: AppointmentStatus) =>
+    api.patch<void>(`/appointments/${id}/status`, { status }),
+
   cancel: (id: string, reason: string) =>
     api.delete<void>(`/appointments/${id}`, { reason }),
 

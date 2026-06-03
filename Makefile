@@ -62,9 +62,15 @@ sqlc:
 	cd services/core-api && sqlc generate
 
 # ── Desarrollo local (sin Caddy, core-api directo en :8080) ──────────────────
+AIR ?= $(shell which air 2>/dev/null || echo $$(go env GOPATH)/bin/air)
+
 dev:
 	docker compose up postgres redis -d
-	cd services/core-api && air
+	cd services/core-api && set -a && . ./.env && set +a && $(AIR)
+
+# ── Seed de desarrollo ────────────────────────────────────────────────────────
+seed:
+	docker compose exec -T postgres psql -U $${DB_USER} -d $${DB_NAME} < scripts/seed_dev.sql
 
 # ── Frontend ──────────────────────────────────────────────────────────────────
 frontend-build:

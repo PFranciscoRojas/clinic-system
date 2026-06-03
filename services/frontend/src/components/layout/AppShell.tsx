@@ -3,16 +3,17 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   CalendarDays, Users, ClipboardList, Receipt, Settings,
   Brain, Bell, Search, Plus, ChevronDown, Lock, LogOut,
-  UserCircle, Calendar, X,
+  UserCircle, Calendar, X, Globe,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 const NAV = [
-  { to: '/',            label: 'Agenda',        Icon: CalendarDays,  perm: 'appointments:read', badge: null },
-  { to: '/patients',    label: 'Pacientes',      Icon: Users,         perm: 'patients:read',     badge: null },
-  { to: '/evaluations', label: 'Evaluaciones',   Icon: ClipboardList, perm: null,                badge: 2   },
-  { to: '/billing',     label: 'Facturación',    Icon: Receipt,       perm: null,                badge: null },
-  { to: '/settings',    label: 'Configuración',  Icon: Settings,      perm: null,                badge: null },
+  { to: '/',                  label: 'Agenda',          Icon: CalendarDays,  perm: 'appointments:read', badge: null },
+  { to: '/patients',          label: 'Pacientes',        Icon: Users,         perm: 'patients:read',     badge: null },
+  { to: '/booking-requests',  label: 'Solicitudes web',  Icon: Globe,         perm: null,                badge: null },
+  { to: '/evaluations',       label: 'Evaluaciones',     Icon: ClipboardList, perm: null,                badge: 2   },
+  { to: '/billing',           label: 'Facturación',      Icon: Receipt,       perm: null,                badge: null },
+  { to: '/settings',          label: 'Configuración',    Icon: Settings,      perm: null,                badge: null },
 ];
 
 interface Props { children: ReactNode }

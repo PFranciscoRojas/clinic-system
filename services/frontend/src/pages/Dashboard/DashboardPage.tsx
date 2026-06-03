@@ -232,9 +232,9 @@ function AppointmentRow({
             {meta.label}
           </span>
 
-          {appt.status === 'SCHEDULED' && (
+          {(appt.status === 'SCHEDULED' || appt.status === 'IN_PROGRESS') && (
             <button
-              onClick={() => navigate(`/patients/${appt.patient_id}`)}
+              onClick={() => navigate(`/appointments/${appt.id}`)}
               style={{ fontSize: 12, color: 'var(--teal)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}
             >
               Abrir

@@ -12,6 +12,7 @@ func (h *Handler) Routes() chi.Router {
 	r.With(middleware.RequirePermission("appointments:create")).Post("/", h.create)
 	r.With(middleware.RequirePermission("appointments:read")).Get("/", h.list)
 	r.With(middleware.RequirePermission("appointments:read")).Get("/{id}", h.get)
+	r.With(middleware.RequirePermission("appointments:update")).Patch("/{id}/status", h.updateStatus)
 	r.With(middleware.RequirePermission("appointments:cancel")).Delete("/{id}", h.cancel)
 
 	return r
