@@ -96,22 +96,47 @@ func (s *Service) List(ctx context.Context, orgID string, status *Status) ([]*Bo
 	return out, rows.Err()
 }
 
-func (s *Service) Resolve(ctx context.Context, in ResolveInput) error {
+func (s *Service) Resolve(ctx context.Context, in ResolveInput) (*BookingRequest, error) {
 	now := time.Now()
-	tag, err := s.pool.Exec(ctx, `
+	var br BookingRequest
+	err := s.pool.QueryRow(ctx, `
 		UPDATE booking_requests
 		SET status = $1, staff_note = $2, resolved_at = $3, resolved_by = $4
-		WHERE id = $5 AND organization_id = $6 AND status = 'PENDING'`,
+		WHERE id = $5 AND organization_id = $6 AND status = 'PENDING'
+		RETURNING id, organization_id, first_name, last_name, email, phone,
+		          modality, preferred_date::text, preferred_time, notes, status,
+		          staff_note, created_at, resolved_at, resolved_by`,
 		string(in.Status), in.StaffNote, now, in.ResolvedBy,
 		in.ID, in.OrganizationID,
+	).Scan(
+		&br.ID, &br.OrganizationID, &br.FirstName, &br.LastName, &br.Email,
+		&br.Phone, &br.Modality, &br.PreferredDate, &br.PreferredTime,
+		&br.Notes, &br.Status, &br.StaffNote, &br.CreatedAt,
+		&br.ResolvedAt, &br.ResolvedBy,
 	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+	return &br, nil
+}
+
+func (s *Service) OrgAdminEmail(ctx context.Context, orgID string) (string, error) {
+	var email string
+	err := s.pool.QueryRow(ctx, `
+		SELECT u.email FROM users u
+		JOIN user_roles ur ON ur.user_id = u.id
+		JOIN roles r ON r.id = ur.role_id
+		WHERE u.organization_id = $1 AND r.name = 'CLINIC_ADMIN'
+		LIMIT 1`,
+		orgID,
+	).Scan(&email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
 	}
-	return nil
+	return email, err
 }
 
 func (s *Service) PendingCount(ctx context.Context, orgID string) (int, error) {
