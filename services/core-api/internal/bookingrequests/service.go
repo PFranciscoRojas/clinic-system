@@ -36,7 +36,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*BookingRequest, 
 			 preferred_date, preferred_time, notes)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 		RETURNING id, organization_id, first_name, last_name, email, phone,
-		          modality, preferred_date, preferred_time, notes, status, created_at`,
+		          modality, preferred_date::text, preferred_time, notes, status, created_at`,
 		in.OrganizationID, in.FirstName, in.LastName, in.Email,
 		nullStr(in.Phone), in.Modality,
 		in.PreferredDate, in.PreferredTime, in.Notes,
