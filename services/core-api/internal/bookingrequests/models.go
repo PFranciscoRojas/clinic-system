@@ -17,7 +17,7 @@ type BookingRequest struct {
 	FirstName      string     `json:"first_name"`
 	LastName       string     `json:"last_name"`
 	Email          string     `json:"email"`
-	Phone          string     `json:"phone,omitempty"`
+	Phone          *string    `json:"phone,omitempty"`
 	Modality       string     `json:"modality"`
 	PreferredDate  *string    `json:"preferred_date,omitempty"`
 	PreferredTime  *string    `json:"preferred_time,omitempty"`
