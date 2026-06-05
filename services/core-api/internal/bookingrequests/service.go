@@ -63,7 +63,7 @@ func (s *Service) OrgIDBySlug(ctx context.Context, slug string) (string, error) 
 func (s *Service) List(ctx context.Context, orgID string, status *Status) ([]*BookingRequest, error) {
 	query := `
 		SELECT id, organization_id, first_name, last_name, email, phone,
-		       modality, preferred_date, preferred_time, notes, status,
+		       modality, preferred_date::text, preferred_time, notes, status,
 		       staff_note, created_at, resolved_at, resolved_by
 		FROM booking_requests
 		WHERE organization_id = $1`
