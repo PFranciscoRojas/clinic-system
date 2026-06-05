@@ -16,6 +16,7 @@ import (
 	bookingrequestshandler "sghcp/core-api/internal/bookingrequests/handler"
 	crrhandler "sghcp/core-api/internal/clinicalrecords/handler"
 	consentshandler "sghcp/core-api/internal/consents/handler"
+	"sghcp/core-api/internal/notify"
 	patientshandler "sghcp/core-api/internal/patients/handler"
 	"sghcp/core-api/internal/shared/middleware"
 )
@@ -50,7 +51,11 @@ func (a *app) buildRouter() http.Handler {
 	// ── Public routes — no JWT required ──────────────────────────────────────
 	r.Mount("/api/v1/auth", authhandler.New(a.pool, a.rdb, a.cfg).Routes([]byte(a.cfg.JWTSecret)))
 
-	bookingH := bookingrequestshandler.New(a.pool)
+	var notifier notify.Notifier = notify.NoopNotifier{}
+	if a.cfg.ResendAPIKey != "" {
+		notifier = notify.NewResend(a.cfg.ResendAPIKey, a.cfg.ResendFrom)
+	}
+	bookingH := bookingrequestshandler.New(a.pool, notifier)
 	r.Mount("/api/v1/public/booking", bookingH.PublicRoutes())
 
 	// ── Protected routes — valid JWT required on every request ────────────────

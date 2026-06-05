@@ -27,6 +27,9 @@ type Config struct {
 	AudioDir     string
 
 	CORSAllowedOrigins []string
+
+	ResendAPIKey string
+	ResendFrom   string
 }
 
 func Load() Config {
@@ -54,6 +57,9 @@ func Load() Config {
 			"http://localhost:5174",
 			"http://localhost:80",
 		}),
+
+		ResendAPIKey: getEnv("RESEND_API_KEY", ""),
+		ResendFrom:   getEnv("RESEND_FROM", ""),
 	}
 }
 

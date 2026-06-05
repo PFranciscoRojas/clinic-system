@@ -1,23 +1,30 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"sghcp/core-api/internal/bookingrequests"
+	"sghcp/core-api/internal/notify"
 	"sghcp/core-api/internal/shared/middleware"
 )
 
 type Handler struct {
-	svc *bookingrequests.Service
+	svc      *bookingrequests.Service
+	notifier notify.Notifier
 }
 
-func New(pool *pgxpool.Pool) *Handler {
-	return &Handler{svc: bookingrequests.NewService(pool)}
+func New(pool *pgxpool.Pool, notifier notify.Notifier) *Handler {
+	return &Handler{
+		svc:      bookingrequests.NewService(pool),
+		notifier: notifier,
+	}
 }
 
 // PublicRoutes — no JWT required. Mounted at /api/v1/public/booking
@@ -91,6 +98,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	go h.sendNewBookingNotifications(br)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"id": br.ID})
@@ -151,7 +160,7 @@ func (h *Handler) resolve(w http.ResponseWriter, r *http.Request, status booking
 	}
 	json.NewDecoder(r.Body).Decode(&body) //nolint:errcheck — body is optional
 
-	err := h.svc.Resolve(r.Context(), bookingrequests.ResolveInput{
+	br, err := h.svc.Resolve(r.Context(), bookingrequests.ResolveInput{
 		ID:             id,
 		OrganizationID: claims.OrganizationID,
 		Status:         status,
@@ -166,5 +175,55 @@ func (h *Handler) resolve(w http.ResponseWriter, r *http.Request, status booking
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+
+	go h.sendResolvedNotification(br)
+
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ── Notification helpers ──────────────────────────────────────────────────────
+
+func (h *Handler) sendNewBookingNotifications(br *bookingrequests.BookingRequest) {
+	ctx := context.Background()
+	adminEmail, err := h.svc.OrgAdminEmail(ctx, br.OrganizationID)
+	if err != nil {
+		slog.Default().Warn("notify: could not fetch org admin email", "org_id", br.OrganizationID, "err", err)
+	}
+	h.notifier.NewBooking(ctx, toDetails(br), adminEmail)
+}
+
+func (h *Handler) sendResolvedNotification(br *bookingrequests.BookingRequest) {
+	ctx := context.Background()
+	d := toDetails(br)
+	switch br.Status {
+	case bookingrequests.StatusConfirmed:
+		h.notifier.BookingConfirmed(ctx, d)
+	case bookingrequests.StatusRejected:
+		h.notifier.BookingRejected(ctx, d)
+	}
+}
+
+func toDetails(br *bookingrequests.BookingRequest) notify.BookingDetails {
+	modality := "Presencial"
+	if br.Modality == "VIRTUAL" {
+		modality = "Virtual"
+	}
+	return notify.BookingDetails{
+		ID:            br.ID,
+		FirstName:     br.FirstName,
+		LastName:      br.LastName,
+		PatientEmail:  br.Email,
+		Modality:      modality,
+		PreferredDate: deref(br.PreferredDate),
+		PreferredTime: deref(br.PreferredTime),
+		Notes:         deref(br.Notes),
+		StaffNote:     deref(br.StaffNote),
+	}
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
