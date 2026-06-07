@@ -48,13 +48,13 @@ func (r *Repository) Create(ctx context.Context, p patients.CreateParams) (strin
 		)
 		RETURNING id
 	`,
-		p.OrganizationID, p.DocumentTypeCode, p.DEKID,
+		p.OrganizationID, nullableString(p.DocumentTypeCode), p.DEKID,
 		p.FirstNameEnc, nullableBytes(p.MiddleNameEnc),
 		p.PaternalLastNameEnc, nullableBytes(p.MaternalLastNameEnc),
 		p.PaternalLastNameHash, p.FullNameSearchHash,
-		p.DocumentNumberEnc, p.DocSearchHash,
+		nullableBytes(p.DocumentNumberEnc), nullableString(p.DocSearchHash),
 		nullableBytes(p.PhoneEnc), nullableBytes(p.EmailEnc), nullableBytes(p.AddressEnc),
-		p.BirthDate, nullableString(p.Gender),
+		nullableDate(p.BirthDate), nullableString(p.Gender),
 	).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("insert patient: %w", err)

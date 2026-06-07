@@ -51,6 +51,30 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*BookingRequest, 
 	return &br, nil
 }
 
+func (s *Service) GetByID(ctx context.Context, id, orgID string) (*BookingRequest, error) {
+	var br BookingRequest
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, organization_id, first_name, last_name, email, phone,
+		       modality, preferred_date::text, preferred_time, notes, status,
+		       staff_note, created_at, resolved_at, resolved_by
+		FROM booking_requests
+		WHERE id = $1 AND organization_id = $2`,
+		id, orgID,
+	).Scan(
+		&br.ID, &br.OrganizationID, &br.FirstName, &br.LastName, &br.Email,
+		&br.Phone, &br.Modality, &br.PreferredDate, &br.PreferredTime,
+		&br.Notes, &br.Status, &br.StaffNote, &br.CreatedAt,
+		&br.ResolvedAt, &br.ResolvedBy,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &br, nil
+}
+
 func (s *Service) OrgIDBySlug(ctx context.Context, slug string) (string, error) {
 	var id string
 	err := s.pool.QueryRow(ctx, `SELECT id FROM organizations WHERE slug = $1`, slug).Scan(&id)

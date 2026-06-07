@@ -52,8 +52,16 @@ export const bookingRequestsApi = {
       .then(r => r.items ?? []);
   },
   count: () => api.get<{ count: number }>('/booking-requests/count').then(r => r.count),
-  confirm: (id: string, staffNote?: string) =>
-    api.post<void>(`/booking-requests/${id}/confirm`, { staff_note: staffNote ?? null }),
+  confirm: (id: string, staffNote?: string, patient?: {
+    document_type_code?: string;
+    document_number?: string;
+    birth_date?: string;
+    gender?: string;
+  }) =>
+    api.post<void>(`/booking-requests/${id}/confirm`, {
+      staff_note: staffNote ?? null,
+      patient: patient ?? null,
+    }),
   reject: (id: string, staffNote?: string) =>
     api.post<void>(`/booking-requests/${id}/reject`, { staff_note: staffNote ?? null }),
 };

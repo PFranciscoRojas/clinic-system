@@ -55,7 +55,7 @@ func (a *app) buildRouter() http.Handler {
 	if a.cfg.ResendAPIKey != "" {
 		notifier = notify.NewResend(a.cfg.ResendAPIKey, a.cfg.ResendFrom)
 	}
-	bookingH := bookingrequestshandler.New(a.pool, notifier)
+	bookingH := bookingrequestshandler.New(a.pool, a.km, notifier)
 	r.Mount("/api/v1/public/booking", bookingH.PublicRoutes())
 
 	// ── Protected routes — valid JWT required on every request ────────────────

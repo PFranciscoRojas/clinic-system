@@ -9,7 +9,7 @@ import (
 )
 
 func (s *Service) Create(ctx context.Context, in CreateInput) (string, error) {
-	if in.OrganizationID == "" || in.FirstName == "" || in.PaternalLastName == "" || in.DocumentNumber == "" {
+	if in.OrganizationID == "" || in.FirstName == "" || in.PaternalLastName == "" {
 		return "", patients.ErrInvalidInput
 	}
 
@@ -31,9 +31,14 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (string, error) {
 		return "", err
 	}
 
-	docEnc, err := sealField(dek, in.DocumentNumber)
-	if err != nil {
-		return "", fmt.Errorf("encrypt document_number: %w", err)
+	var docEnc []byte
+	var docHash string
+	if in.DocumentNumber != "" {
+		docEnc, err = sealField(dek, in.DocumentNumber)
+		if err != nil {
+			return "", fmt.Errorf("encrypt document_number: %w", err)
+		}
+		docHash = hash.Normalize(in.DocumentNumber)
 	}
 
 	fullName := in.FirstName + " " + in.PaternalLastName
@@ -52,7 +57,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (string, error) {
 		PaternalLastNameHash: hash.Normalize(in.PaternalLastName),
 		FullNameSearchHash:   hash.Normalize(fullName),
 		DocumentNumberEnc:    docEnc,
-		DocSearchHash:        hash.Normalize(in.DocumentNumber),
+		DocSearchHash:        docHash,
 		PhoneEnc:             sealed.PhoneEnc,
 		EmailEnc:             sealed.EmailEnc,
 		AddressEnc:           sealed.AddressEnc,

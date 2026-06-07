@@ -14,22 +14,34 @@ var (
 
 func renderReceived(b BookingDetails) (string, error) {
 	var buf bytes.Buffer
-	return buf.String(), tmplReceived.Execute(&buf, b)
+	if err := tmplReceived.Execute(&buf, b); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 func renderReceivedAdmin(b BookingDetails) (string, error) {
 	var buf bytes.Buffer
-	return buf.String(), tmplReceivedAdmin.Execute(&buf, b)
+	if err := tmplReceivedAdmin.Execute(&buf, b); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 func renderConfirmed(b BookingDetails) (string, error) {
 	var buf bytes.Buffer
-	return buf.String(), tmplConfirmed.Execute(&buf, b)
+	if err := tmplConfirmed.Execute(&buf, b); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 func renderRejected(b BookingDetails) (string, error) {
 	var buf bytes.Buffer
-	return buf.String(), tmplRejected.Execute(&buf, b)
+	if err := tmplRejected.Execute(&buf, b); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 // ── Email templates ───────────────────────────────────────────────────────────

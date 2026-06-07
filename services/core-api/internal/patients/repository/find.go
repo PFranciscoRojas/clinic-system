@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"sghcp/core-api/internal/patients"
 )
@@ -113,18 +114,24 @@ func scanPatient(row interface {
 	Scan(...any) error
 }) (*patients.RawPatient, error) {
 	var p patients.RawPatient
+	var docTypeCode pgtype.Text
+	var birthDate pgtype.Date
 	err := row.Scan(
-		&p.ID, &p.OrganizationID, &p.DocumentTypeCode, &p.DEKID,
+		&p.ID, &p.OrganizationID, &docTypeCode, &p.DEKID,
 		&p.FirstNameEnc, &p.MiddleNameEnc,
 		&p.PaternalLastNameEnc, &p.MaternalLastNameEnc,
 		&p.DocumentNumberEnc, &p.PhoneEnc, &p.EmailEnc, &p.AddressEnc,
-		&p.BirthDate, &p.Gender, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
+		&birthDate, &p.Gender, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, patients.ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("scan patient: %w", err)
+	}
+	p.DocumentTypeCode = docTypeCode.String
+	if birthDate.Valid {
+		p.BirthDate = birthDate.Time
 	}
 	return &p, nil
 }

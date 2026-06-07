@@ -6,24 +6,42 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"sghcp/core-api/internal/bookingrequests"
 	"sghcp/core-api/internal/notify"
+	apptsrepo "sghcp/core-api/internal/appointments/repository"
+	apptssvc "sghcp/core-api/internal/appointments/service"
+	patientsrepo "sghcp/core-api/internal/patients/repository"
+	patientssvc "sghcp/core-api/internal/patients/service"
+	"sghcp/core-api/internal/shared/crypto"
 	"sghcp/core-api/internal/shared/middleware"
 )
 
-type Handler struct {
-	svc      *bookingrequests.Service
-	notifier notify.Notifier
+type patientCreator interface {
+	Create(ctx context.Context, in patientssvc.CreateInput) (string, error)
 }
 
-func New(pool *pgxpool.Pool, notifier notify.Notifier) *Handler {
+type apptCreator interface {
+	Create(ctx context.Context, in apptssvc.CreateInput) (string, error)
+}
+
+type Handler struct {
+	svc        *bookingrequests.Service
+	patientSvc patientCreator
+	apptSvc    apptCreator
+	notifier   notify.Notifier
+}
+
+func New(pool *pgxpool.Pool, km *crypto.KeyManager, notifier notify.Notifier) *Handler {
 	return &Handler{
-		svc:      bookingrequests.NewService(pool),
-		notifier: notifier,
+		svc:        bookingrequests.NewService(pool),
+		patientSvc: patientssvc.New(patientsrepo.New(pool), km),
+		apptSvc:    apptssvc.New(apptsrepo.New(pool)),
+		notifier:   notifier,
 	}
 }
 
@@ -141,11 +159,93 @@ func (h *Handler) count(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]int{"count": n})
 }
 
-// ── Private: confirm / reject ─────────────────────────────────────────────────
+// ── Private: confirm ──────────────────────────────────────────────────────────
 
 func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
-	h.resolve(w, r, bookingrequests.StatusConfirmed)
+	claims := middleware.ClaimsFromContext(r.Context())
+	id := chi.URLParam(r, "id")
+
+	var body struct {
+		StaffNote *string `json:"staff_note"`
+		Patient   *struct {
+			DocumentTypeCode string `json:"document_type_code"`
+			DocumentNumber   string `json:"document_number"`
+			BirthDate        string `json:"birth_date"` // YYYY-MM-DD or empty
+			Gender           string `json:"gender"`
+		} `json:"patient"`
+	}
+	json.NewDecoder(r.Body).Decode(&body) //nolint:errcheck — body is optional
+
+	if body.Patient != nil {
+		br, err := h.svc.GetByID(r.Context(), id, claims.OrganizationID)
+		if err != nil {
+			if errors.Is(err, bookingrequests.ErrNotFound) {
+				http.Error(w, "not found or already resolved", http.StatusNotFound)
+			} else {
+				http.Error(w, "internal error", http.StatusInternalServerError)
+			}
+			return
+		}
+
+		var birthDate time.Time
+		if body.Patient.BirthDate != "" {
+			birthDate, _ = time.Parse("2006-01-02", body.Patient.BirthDate)
+		}
+
+		patientID, err := h.patientSvc.Create(r.Context(), patientssvc.CreateInput{
+			OrganizationID:   claims.OrganizationID,
+			FirstName:        br.FirstName,
+			PaternalLastName: br.LastName,
+			Email:            br.Email,
+			Phone:            deref(br.Phone),
+			DocumentTypeCode: body.Patient.DocumentTypeCode,
+			DocumentNumber:   body.Patient.DocumentNumber,
+			BirthDate:        birthDate,
+			Gender:           body.Patient.Gender,
+		})
+		if err != nil {
+			slog.Default().Error("confirm: create patient failed", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+
+		if br.PreferredDate != nil && *br.PreferredDate != "" {
+			scheduledAt := parseScheduledAt(*br.PreferredDate, deref(br.PreferredTime))
+			if !scheduledAt.IsZero() {
+				if _, err := h.apptSvc.Create(r.Context(), apptssvc.CreateInput{
+					OrganizationID: claims.OrganizationID,
+					PatientID:      patientID,
+					StaffID:        claims.UserID,
+					ScheduledAt:    scheduledAt,
+					Modality:       br.Modality,
+				}); err != nil {
+					slog.Default().Warn("confirm: create appointment failed", "patient_id", patientID, "err", err)
+				}
+			}
+		}
+	}
+
+	br, err := h.svc.Resolve(r.Context(), bookingrequests.ResolveInput{
+		ID:             id,
+		OrganizationID: claims.OrganizationID,
+		Status:         bookingrequests.StatusConfirmed,
+		StaffNote:      body.StaffNote,
+		ResolvedBy:     claims.UserID,
+	})
+	if errors.Is(err, bookingrequests.ErrNotFound) {
+		http.Error(w, "not found or already resolved", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	go h.sendResolvedNotification(br)
+	w.WriteHeader(http.StatusNoContent)
 }
+
+// ── Private: reject ───────────────────────────────────────────────────────────
 
 func (h *Handler) reject(w http.ResponseWriter, r *http.Request) {
 	h.resolve(w, r, bookingrequests.StatusRejected)
@@ -219,6 +319,21 @@ func toDetails(br *bookingrequests.BookingRequest) notify.BookingDetails {
 		Notes:         deref(br.Notes),
 		StaffNote:     deref(br.StaffNote),
 	}
+}
+
+// parseScheduledAt combines a "YYYY-MM-DD" date and optional "HH:MM" time into a time.Time
+// in the Colombia timezone (America/Bogota, UTC-5). Returns zero time on parse failure.
+func parseScheduledAt(date, t string) time.Time {
+	bogota := time.FixedZone("America/Bogota", -5*60*60)
+	timeStr := "00:00"
+	if t != "" {
+		timeStr = t
+	}
+	parsed, err := time.ParseInLocation("2006-01-02 15:04", date+" "+timeStr, bogota)
+	if err != nil {
+		return time.Time{}
+	}
+	return parsed
 }
 
 func deref(s *string) string {
