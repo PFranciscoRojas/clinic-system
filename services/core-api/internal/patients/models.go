@@ -79,6 +79,10 @@ type UpdateParams struct {
 	EmailEnc             []byte
 	AddressEnc           []byte
 	Gender               string
+	DocumentTypeCode     string
+	DocumentNumberEnc    []byte
+	DocSearchHash        string
+	BirthDate            time.Time
 }
 
 // EncKeyRow is the raw row from encryption_keys used to decrypt a patient's DEK.

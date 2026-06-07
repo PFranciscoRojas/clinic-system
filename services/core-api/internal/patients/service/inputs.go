@@ -22,6 +22,8 @@ type CreateInput struct {
 type UpdateInput struct {
 	OrganizationID   string
 	PatientID        string
+	DocumentTypeCode string
+	DocumentNumber   string
 	FirstName        string
 	MiddleName       string
 	PaternalLastName string

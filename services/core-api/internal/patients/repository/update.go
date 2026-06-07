@@ -10,17 +10,21 @@ import (
 func (r *Repository) Update(ctx context.Context, p patients.UpdateParams) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE patients SET
-			first_name_enc         = $3,
-			middle_name_enc        = $4,
-			paternal_last_name_enc = $5,
-			maternal_last_name_enc = $6,
+			first_name_enc          = $3,
+			middle_name_enc         = $4,
+			paternal_last_name_enc  = $5,
+			maternal_last_name_enc  = $6,
 			paternal_last_name_hash = $7,
-			full_name_search_hash  = $8,
-			phone_enc              = $9,
-			email_enc              = $10,
-			address_enc            = $11,
-			gender                 = $12,
-			updated_at             = NOW()
+			full_name_search_hash   = $8,
+			phone_enc               = $9,
+			email_enc               = $10,
+			address_enc             = $11,
+			gender                  = $12,
+			document_type_code      = $13,
+			document_number_enc     = $14,
+			doc_search_hash         = $15,
+			birth_date              = $16,
+			updated_at              = NOW()
 		WHERE id = $1 AND organization_id = $2
 	`,
 		p.PatientID, p.OrganizationID,
@@ -29,6 +33,8 @@ func (r *Repository) Update(ctx context.Context, p patients.UpdateParams) error 
 		p.PaternalLastNameHash, p.FullNameSearchHash,
 		nullableBytes(p.PhoneEnc), nullableBytes(p.EmailEnc), nullableBytes(p.AddressEnc),
 		nullableString(p.Gender),
+		nullableString(p.DocumentTypeCode), nullableBytes(p.DocumentNumberEnc),
+		nullableString(p.DocSearchHash), nullableDate(p.BirthDate),
 	)
 	if err != nil {
 		return fmt.Errorf("update patient: %w", err)

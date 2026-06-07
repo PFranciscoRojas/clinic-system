@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	patientssvc "sghcp/core-api/internal/patients/service"
+	"sghcp/core-api/internal/shared/hash"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
 )
@@ -66,6 +67,8 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	patientID := chi.URLParam(r, "id")
 
 	var body struct {
+		DocumentTypeCode string `json:"document_type_code"`
+		DocumentNumber   string `json:"document_number"`
 		FirstName        string `json:"first_name"`
 		MiddleName       string `json:"middle_name"`
 		PaternalLastName string `json:"paternal_last_name"`
@@ -81,15 +84,21 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	birthDate, err := time.Parse("2006-01-02", body.BirthDate)
-	if err != nil {
-		httputil.WriteError(w, http.StatusUnprocessableEntity, "birth_date must be YYYY-MM-DD")
-		return
+	var birthDate time.Time
+	if body.BirthDate != "" {
+		var err error
+		birthDate, err = time.Parse("2006-01-02", body.BirthDate)
+		if err != nil {
+			httputil.WriteError(w, http.StatusUnprocessableEntity, "birth_date must be YYYY-MM-DD")
+			return
+		}
 	}
 
 	if err := h.svc.Update(r.Context(), patientssvc.UpdateInput{
 		OrganizationID:   claims.OrganizationID,
 		PatientID:        patientID,
+		DocumentTypeCode: body.DocumentTypeCode,
+		DocumentNumber:   body.DocumentNumber,
 		FirstName:        body.FirstName,
 		MiddleName:       body.MiddleName,
 		PaternalLastName: body.PaternalLastName,
@@ -103,6 +112,14 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+
+	go h.writePatientAudit(
+		claims.OrganizationID, claims.UserID,
+		hash.Normalize(claims.Email),
+		patientID,
+		r.RemoteAddr, r.UserAgent(),
+	)
+
 	w.WriteHeader(http.StatusNoContent)
 }
 

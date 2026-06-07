@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 
 	"sghcp/core-api/internal/patients"
 	"sghcp/core-api/internal/shared/hash"
@@ -34,6 +35,16 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) error {
 		return err
 	}
 
+	var docEnc []byte
+	var docHash string
+	if in.DocumentNumber != "" {
+		docEnc, err = sealField(dek, in.DocumentNumber)
+		if err != nil {
+			return fmt.Errorf("encrypt document_number: %w", err)
+		}
+		docHash = hash.Normalize(in.DocumentNumber)
+	}
+
 	fullName := in.FirstName + " " + in.PaternalLastName
 	if in.MaternalLastName != "" {
 		fullName += " " + in.MaternalLastName
@@ -52,6 +63,10 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) error {
 		EmailEnc:             sealed.EmailEnc,
 		AddressEnc:           sealed.AddressEnc,
 		Gender:               in.Gender,
+		DocumentTypeCode:     in.DocumentTypeCode,
+		DocumentNumberEnc:    docEnc,
+		DocSearchHash:        docHash,
+		BirthDate:            in.BirthDate,
 	})
 }
 
