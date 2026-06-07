@@ -35,21 +35,24 @@ interface ConfirmModalProps {
 }
 
 function ConfirmModal({ req, onClose, onConfirmed }: ConfirmModalProps) {
-  const [note, setNote]     = useState('');
-  const [docType, setDocType]   = useState('CC');
+  const [note, setNote]         = useState('');
+  const [docType, setDocType]   = useState('');
   const [docNumber, setDocNumber] = useState('');
   const [birthDate, setBirthDate] = useState('');
-  const [gender, setGender]   = useState('');
-  const [error, setError]     = useState('');
+  const [gender, setGender]     = useState('');
+  const [error, setError]       = useState('');
 
   const qc = useQueryClient();
   const confirm = useMutation({
-    mutationFn: () => bookingRequestsApi.confirm(req.id, note || undefined, {
-      document_type_code: docType || undefined,
-      document_number:    docNumber || undefined,
-      birth_date:         birthDate || undefined,
-      gender:             gender || undefined,
-    }),
+    mutationFn: () => {
+      // Only send patient sub-object; all fields are optional
+      const patient: Record<string, string> = {};
+      if (docType)   patient.document_type_code = docType;
+      if (docNumber) patient.document_number    = docNumber;
+      if (birthDate) patient.birth_date         = birthDate;
+      if (gender)    patient.gender             = gender;
+      return bookingRequestsApi.confirm(req.id, note || undefined, patient);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['booking-requests'] });
       onConfirmed();
@@ -70,7 +73,7 @@ function ConfirmModal({ req, onClose, onConfirmed }: ConfirmModalProps) {
             <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: 'var(--s800)' }}>Confirmar y crear expediente</h2>
           </div>
           <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--s500)' }}>
-            Se creará un paciente y la cita en el sistema.
+            Se creará el expediente del paciente. Documento y fecha de nacimiento son <strong>opcionales</strong> — puedes completarlos desde el perfil del paciente después.
           </p>
         </div>
 
@@ -90,7 +93,7 @@ function ConfirmModal({ req, onClose, onConfirmed }: ConfirmModalProps) {
           {/* Document */}
           <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 10, marginBottom: 14 }}>
             <div>
-              <label style={labelStyle}>Tipo documento</label>
+              <label style={labelStyle}>Tipo documento <span style={{ fontWeight: 400, color: 'var(--s400)' }}>(opcional)</span></label>
               <select value={docType} onChange={e => setDocType(e.target.value)} style={inputStyle}>
                 <option value="">Sin documento</option>
                 {DOC_TYPES.map(d => <option key={d.value} value={d.value}>{d.value} — {d.label}</option>)}
@@ -110,7 +113,7 @@ function ConfirmModal({ req, onClose, onConfirmed }: ConfirmModalProps) {
           {/* Birth date + gender */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
             <div>
-              <label style={labelStyle}>Fecha de nacimiento</label>
+              <label style={labelStyle}>Fecha de nacimiento <span style={{ fontWeight: 400, color: 'var(--s400)' }}>(opcional)</span></label>
               <input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} style={inputStyle} />
             </div>
             <div>
