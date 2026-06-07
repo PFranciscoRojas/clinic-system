@@ -1,17 +1,18 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Phone, Mail, Calendar, FileText,
   Clock, AlertCircle,
   CreditCard, MapPin, Video, Upload, Target, Layers,
   Info, FileCheck, TrendingDown, Cake, Stethoscope, UserRound,
-  Pencil, Lock, X,
+  Pencil,
 } from 'lucide-react';
+import { EditPatientModal } from '@/components/patients/EditPatientModal';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { patientsApi, type Patient } from '@/api/patients';
+import { patientsApi } from '@/api/patients';
 import { appointmentsApi, type Appointment } from '@/api/appointments';
 import { clinicalRecordsApi, consentsApi, type RecordMeta, type Consent, type ConsentType } from '@/api/clinicalRecords';
 import { Spinner } from '@/components/ui/Spinner';
@@ -496,202 +497,6 @@ function GraficasTab({ appointments }: { appointments: Appointment[] }) {
         <p style={{ margin: 0, fontSize: 13, color: 'var(--teal-d)', lineHeight: 1.6 }}>
           Los datos de evaluaciones se cargarán automáticamente desde los registros clínicos
         </p>
-      </div>
-    </div>
-  );
-}
-
-// ─── Edit patient modal ───────────────────────────────────────────────────────
-
-const DOC_TYPES = [
-  { code: 'CC',  name: 'CC — Cédula de Ciudadanía'  },
-  { code: 'TI',  name: 'TI — Tarjeta de Identidad'  },
-  { code: 'CE',  name: 'CE — Cédula de Extranjería'  },
-  { code: 'PA',  name: 'PA — Pasaporte'              },
-  { code: 'RC',  name: 'RC — Registro Civil'         },
-  { code: 'PPT', name: 'PPT — Permiso de Protección Temporal' },
-  { code: 'PEP', name: 'PEP — Permiso Especial de Permanencia' },
-];
-
-function EditPatientModal({ patient, onClose, onSaved }: {
-  patient: Patient;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [docType,   setDocType]   = useState(patient.document_type_code ?? '');
-  const [docNumber, setDocNumber] = useState(patient.document_number ?? '');
-  const [firstName,   setFirstName]   = useState(patient.first_name);
-  const [middleName,  setMiddleName]  = useState(patient.middle_name ?? '');
-  const [paternalLn,  setPaternalLn]  = useState(patient.paternal_last_name);
-  const [maternalLn,  setMaternalLn]  = useState(patient.maternal_last_name ?? '');
-  const [phone,    setPhone]    = useState(patient.phone ?? '');
-  const [email,    setEmail]    = useState(patient.email ?? '');
-  const [address,  setAddress]  = useState(patient.address ?? '');
-  const [birthDate, setBirthDate] = useState(patient.birth_date ?? '');
-  const [gender,   setGender]   = useState(patient.gender ?? '');
-  const [error,    setError]    = useState('');
-
-  const mutation = useMutation({
-    mutationFn: () => patientsApi.update(patient.id, {
-      document_type_code: docType || undefined,
-      document_number:    docNumber || undefined,
-      first_name:         firstName,
-      middle_name:        middleName || undefined,
-      paternal_last_name: paternalLn,
-      maternal_last_name: maternalLn || undefined,
-      phone:              phone || undefined,
-      email:              email || undefined,
-      address:            address || undefined,
-      birth_date:         birthDate || undefined,
-      gender:             gender || undefined,
-    }),
-    onSuccess: () => { onSaved(); onClose(); },
-    onError: () => setError('No se pudo guardar. Intenta de nuevo.'),
-  });
-
-  const iLabel = (label: string, required?: boolean) => (
-    <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--s600)', display: 'block', marginBottom: 4 }}>
-      {label}{required && <span style={{ color: 'var(--red)', marginLeft: 2 }}>*</span>}
-    </label>
-  );
-
-  const iStyle: React.CSSProperties = {
-    width: '100%', padding: '8px 11px', borderRadius: 7,
-    border: '1.5px solid var(--s200)', fontSize: 13, color: 'var(--s800)',
-    background: '#fff', boxSizing: 'border-box',
-  };
-
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 1000, padding: 20,
-    }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div style={{
-        background: '#fff', borderRadius: 16, width: '100%', maxWidth: 600,
-        maxHeight: '90vh', overflow: 'auto',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
-      }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid var(--s100)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Pencil size={16} color="var(--teal)" />
-            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--s800)' }}>Editar datos administrativos</span>
-          </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)', padding: 4 }}>
-            <X size={18} />
-          </button>
-        </div>
-
-        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-          {/* Legal notice */}
-          <div style={{ display: 'flex', gap: 10, background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 10, padding: '11px 14px' }}>
-            <Lock size={14} color="var(--teal)" style={{ flexShrink: 0, marginTop: 1 }} />
-            <p style={{ margin: 0, fontSize: 12, color: 'var(--teal-d)', lineHeight: 1.6 }}>
-              <strong>Datos administrativos editables</strong> (Ley 1581/2012 — habeas data).
-              Los registros clínicos son inmutables una vez aprobados (Res. 1995/1999).
-              Todos los cambios quedan registrados en la bitácora de auditoría.
-            </p>
-          </div>
-
-          {/* Nombre */}
-          <div>
-            <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 700, color: 'var(--s500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Nombre completo</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div>
-                {iLabel('Primer nombre', true)}
-                <input style={iStyle} value={firstName} onChange={e => setFirstName(e.target.value)} />
-              </div>
-              <div>
-                {iLabel('Segundo nombre')}
-                <input style={iStyle} value={middleName} onChange={e => setMiddleName(e.target.value)} />
-              </div>
-              <div>
-                {iLabel('Primer apellido', true)}
-                <input style={iStyle} value={paternalLn} onChange={e => setPaternalLn(e.target.value)} />
-              </div>
-              <div>
-                {iLabel('Segundo apellido')}
-                <input style={iStyle} value={maternalLn} onChange={e => setMaternalLn(e.target.value)} />
-              </div>
-            </div>
-          </div>
-
-          {/* Documento */}
-          <div>
-            <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 700, color: 'var(--s500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Documento de identidad</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div>
-                {iLabel('Tipo')}
-                <select style={iStyle} value={docType} onChange={e => setDocType(e.target.value)}>
-                  <option value="">— Sin especificar —</option>
-                  {DOC_TYPES.map(d => <option key={d.code} value={d.code}>{d.name}</option>)}
-                </select>
-              </div>
-              <div>
-                {iLabel('Número')}
-                <input style={iStyle} value={docNumber} onChange={e => setDocNumber(e.target.value)} placeholder="Ej. 1234567890" />
-              </div>
-            </div>
-          </div>
-
-          {/* Datos de contacto */}
-          <div>
-            <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 700, color: 'var(--s500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contacto y datos personales</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div>
-                {iLabel('Teléfono')}
-                <input style={iStyle} value={phone} onChange={e => setPhone(e.target.value)} placeholder="+57 300 000 0000" />
-              </div>
-              <div>
-                {iLabel('Correo electrónico')}
-                <input style={iStyle} type="email" value={email} onChange={e => setEmail(e.target.value)} />
-              </div>
-              <div>
-                {iLabel('Fecha de nacimiento')}
-                <input style={iStyle} type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} />
-              </div>
-              <div>
-                {iLabel('Género')}
-                <input style={iStyle} value={gender} onChange={e => setGender(e.target.value)} placeholder="Según Decreto 1227/2015" />
-              </div>
-              <div style={{ gridColumn: '1 / -1' }}>
-                {iLabel('Dirección')}
-                <input style={iStyle} value={address} onChange={e => setAddress(e.target.value)} />
-              </div>
-            </div>
-          </div>
-
-          {error && (
-            <p style={{ margin: 0, fontSize: 12, color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <AlertCircle size={13} /> {error}
-            </p>
-          )}
-
-          {/* Actions */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 4, borderTop: '1px solid var(--s100)' }}>
-            <button
-              onClick={onClose}
-              style={{ padding: '9px 18px', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={() => { setError(''); mutation.mutate(); }}
-              disabled={mutation.isPending || !firstName || !paternalLn}
-              style={{
-                padding: '9px 18px', background: 'var(--teal)', color: '#fff', border: 'none',
-                borderRadius: 8, fontSize: 13, fontWeight: 600,
-                cursor: mutation.isPending ? 'wait' : 'pointer',
-                opacity: mutation.isPending || !firstName || !paternalLn ? 0.7 : 1,
-              }}
-            >
-              {mutation.isPending ? 'Guardando…' : 'Guardar cambios'}
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

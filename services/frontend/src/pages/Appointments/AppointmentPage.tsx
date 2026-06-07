@@ -7,7 +7,8 @@ import {
   Mic, Upload, ChevronDown, ChevronUp, Save, X,
 } from 'lucide-react';
 import { appointmentsApi, type AppointmentStatus } from '@/api/appointments';
-import { patientsApi } from '@/api/patients';
+import { patientsApi, type Patient } from '@/api/patients';
+import { EditPatientModal } from '@/components/patients/EditPatientModal';
 import { clinicalRecordsApi, type RecordMeta } from '@/api/clinicalRecords';
 import { aiDraftsApi } from '@/api/aiDrafts';
 import { useAuth } from '@/context/AuthContext';
@@ -284,6 +285,8 @@ export function AppointmentPage() {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const [showSOAPForm, setShowSOAPForm] = useState(false);
+  // When true, the edit modal is open and closing it after saving starts the session
+  const [completeDataOpen, setCompleteDataOpen] = useState(false);
 
   // draft_id stored per appointment in localStorage
   const draftKey = `sghcp_draft_${id}`;
@@ -416,7 +419,11 @@ export function AppointmentPage() {
           <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--s100)', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             {isScheduled && (
               <button
-                onClick={() => handleStatusChange('IN_PROGRESS')}
+                onClick={() => {
+                  const missing = !patient?.document_number || !patient?.birth_date;
+                  if (missing) { setCompleteDataOpen(true); }
+                  else { handleStatusChange('IN_PROGRESS'); }
+                }}
                 disabled={statusLoading}
                 style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 20px', background: '#059669', color: '#fff', border: 'none', borderRadius: 9, cursor: statusLoading ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 700, opacity: statusLoading ? 0.7 : 1 }}
               >
@@ -566,6 +573,18 @@ export function AppointmentPage() {
         </div>
 
       </div>
+
+      {completeDataOpen && patient && (
+        <EditPatientModal
+          patient={patient as Patient}
+          requiredContext="El número de documento y la fecha de nacimiento son necesarios para iniciar la sesión clínica. Completa los datos y guarda para continuar."
+          onClose={() => setCompleteDataOpen(false)}
+          onSaved={() => {
+            queryClient.invalidateQueries({ queryKey: ['patient', appt?.patient_id] });
+            handleStatusChange('IN_PROGRESS');
+          }}
+        />
+      )}
     </div>
   );
 }
