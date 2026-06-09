@@ -39,8 +39,13 @@ docker exec sghcp_postgres pg_dump \
 SIZE=$(du -sh "$DEST" | cut -f1)
 echo "[backup] Backup written: ${DEST} (${SIZE})"
 
-# Validate: the file must be non-empty and GPG-parseable
-if ! gpg --batch --list-packets "$DEST" > /dev/null 2>&1; then
+# Validate: the file must start with a public-key-encrypted packet.
+# gpg exits non-zero here because this host holds only the public key
+# (it can encrypt but never decrypt its own backups), so capture the
+# listing with || true — under pipefail gpg's exit code would otherwise
+# mask a successful grep — and check the packet type instead.
+packets=$(gpg --batch --list-packets "$DEST" 2>/dev/null || true)
+if ! grep -q "pubkey enc packet" <<< "$packets"; then
     echo "[backup] ERROR: GPG validation failed for ${DEST}" >&2
     rm -f "$DEST"
     exit 1
