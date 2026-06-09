@@ -45,7 +45,7 @@ function ConfirmModal({ req, onClose, onConfirmed }: ConfirmModalProps) {
   const qc = useQueryClient();
   const confirm = useMutation({
     mutationFn: () => {
-      // Only send patient sub-object; all fields are optional
+      // Always create patient on confirm; optional fields only sent when filled
       const patient: Record<string, string> = {};
       if (docType)   patient.document_type_code = docType;
       if (docNumber) patient.document_number    = docNumber;

@@ -149,7 +149,7 @@ export function AIDraftPage() {
           <p style={{ color: 'var(--s400)', fontSize: 14, margin: '0 0 20px' }}>
             {draft.status === 'PENDING'
               ? 'El audio está esperando ser transcrito por Whisper'
-              : 'Whisper está transcribiendo el audio y el modelo IA está generando el SOAP'}
+              : 'Whisper está transcribiendo el audio y el modelo IA está generando el borrador'}
           </p>
           <button onClick={() => refetch()} style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 auto', padding: '8px 16px', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
             <RefreshCw size={14} /> Actualizar estado

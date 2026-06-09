@@ -499,7 +499,7 @@ function NotificationsSection({ setDirty }: { setDirty: (v: boolean) => void }) 
         <Toggle value={newPat}      onChange={tog(setNewPat)}      label="Nuevo paciente registrado"      sub="Notificación cuando se crea un expediente" />
         <Toggle value={cancelAlert} onChange={tog(setCancelAlert)} label="Cancelación de cita"            sub="Alerta inmediata cuando un paciente cancela" />
         <Toggle value={weekSummary} onChange={tog(setWeekSummary)} label="Resumen semanal"                sub="Reporte cada lunes con métricas de la semana anterior" />
-        <Toggle value={aiReady}     onChange={tog(setAiReady)}     label="Borrador IA listo para revisar" sub="Notificación cuando el sistema genera un nuevo borrador SOAP" />
+        <Toggle value={aiReady}     onChange={tog(setAiReady)}     label="Borrador IA listo para revisar" sub="Notificación cuando el sistema genera un nuevo borrador clínico" />
       </SectionCard>
     </>
   );

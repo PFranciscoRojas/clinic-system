@@ -4,24 +4,21 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Phone, Mail, Calendar, FileText,
   Clock, AlertCircle,
-  CreditCard, MapPin, Video, Upload, Target, Layers,
-  Info, FileCheck, TrendingDown, Cake, Stethoscope, UserRound,
+  CreditCard, MapPin, Video, Upload, FileCheck, Cake, Stethoscope, AlertTriangle,
   Pencil,
 } from 'lucide-react';
 import { EditPatientModal } from '@/components/patients/EditPatientModal';
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from 'recharts';
 import { patientsApi } from '@/api/patients';
 import { appointmentsApi, type Appointment } from '@/api/appointments';
 import { clinicalRecordsApi, consentsApi, type RecordMeta, type Consent, type ConsentType } from '@/api/clinicalRecords';
+import { diagnosesApi } from '@/api/diagnoses';
 import { Spinner } from '@/components/ui/Spinner';
 import { DiagnosesPanel } from '@/components/clinical/DiagnosesPanel';
 import { riskMeta } from '@/components/clinical/constants';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Tab = 'historial' | 'diagnosticos' | 'plan' | 'consentimientos' | 'graficas';
+type Tab = 'historial' | 'diagnosticos' | 'consentimientos';
 
 type AppointmentStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
 
@@ -119,14 +116,14 @@ function HistorialTab({
           })()}
         </span>
         {(() => {
+          // An in-progress/scheduled appointment keeps the note linked to it;
+          // otherwise the standalone form covers walk-ins and late notes.
           const target =
             appointments.find(a => a.status === 'IN_PROGRESS') ??
-            appointments.filter(a => a.status === 'SCHEDULED').sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))[0] ??
-            appointments[0];
-          if (!target) return null;
+            appointments.filter(a => a.status === 'SCHEDULED').sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))[0];
           return (
             <button
-              onClick={() => navigate(`/appointments/${target.id}`)}
+              onClick={() => navigate(target ? `/appointments/${target.id}` : `/patients/${patientId}/records/new`)}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
             >
               <FileText size={12} /> Nuevo registro
@@ -259,91 +256,11 @@ function HistorialTab({
   );
 }
 
-// ─── Tab: Plan terapéutico ────────────────────────────────────────────────────
-
-function PlanTab() {
-  return (
-    <div className="anim-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Info notice */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 10, padding: '12px 16px' }}>
-        <Info size={14} color="var(--teal)" style={{ flexShrink: 0, marginTop: 1 }} />
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--teal-d)', lineHeight: 1.6 }}>
-          Este módulo se completará con datos clínicos reales en la siguiente fase
-        </p>
-      </div>
-
-      {/* 2-col grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        {/* Objetivos */}
-        <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', padding: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <div style={{ width: 30, height: 30, borderRadius: 8, background: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Target size={15} color="var(--teal)" />
-            </div>
-            <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)' }}>Objetivos terapéuticos</span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {['Reducir síntomas de ansiedad generalizada', 'Desarrollar habilidades de regulación emocional', 'Mejorar calidad del sueño y rutinas'].map(obj => (
-              <label key={obj} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
-                <input type="checkbox" style={{ marginTop: 2, accentColor: 'var(--teal)', width: 14, height: 14 }} />
-                <span style={{ fontSize: 13, color: 'var(--s700)', lineHeight: 1.5 }}>{obj}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Right column */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Técnicas */}
-          <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', padding: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: '#f5f3ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Layers size={15} color="#7c3aed" />
-              </div>
-              <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)' }}>Técnicas aplicadas</span>
-            </div>
-            <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {['Terapia cognitivo-conductual (TCC)', 'Mindfulness y técnicas de relajación', 'Activación conductual'].map(t => (
-                <li key={t} style={{ fontSize: 13, color: 'var(--s700)', lineHeight: 1.5 }}>{t}</li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Detalles */}
-          <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', padding: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Info size={15} color="#1d4ed8" />
-              </div>
-              <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)' }}>Detalles del plan</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[
-                { label: 'Enfoque', value: 'TCC + Mindfulness' },
-                { label: 'Frecuencia', value: 'Semanal' },
-                { label: 'Inicio', value: 'Mayo 2026' },
-                { label: 'Duración estimada', value: '6 meses' },
-              ].map(({ label, value }) => (
-                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--s100)' }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--s500)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
-                  <span style={{ fontSize: 13, color: 'var(--s700)', fontWeight: 500 }}>{value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Tab: Consentimientos ─────────────────────────────────────────────────────
-
-const CONSENT_TYPE_LABEL: Record<ConsentType, string> = {
-  TREATMENT:           'Consentimiento de tratamiento',
-  RECORDING:           'Autorización de grabación',
-  DATA_PROCESSING:     'Tratamiento de datos personales',
-  INFORMATION_SHARING: 'Compartir información clínica',
+const CONSENT_TYPE_LABEL: Record<string, string> = {
+  TREATMENT: 'Tratamiento',
+  RECORDING: 'Grabación de sesiones',
+  DATA_PROCESSING: 'Tratamiento de datos',
+  INFORMATION_SHARING: 'Compartir información',
 };
 
 function ConsentimientosTab({ patientId }: { patientId: string }) {
@@ -439,90 +356,6 @@ function ConsentimientosTab({ patientId }: { patientId: string }) {
   );
 }
 
-// ─── Tab: Gráficas ────────────────────────────────────────────────────────────
-
-const SYMPTOM_DATA = [
-  { session: 'Ses. 1', phq9: 19 },
-  { session: 'Ses. 2', phq9: 16 },
-  { session: 'Ses. 3', phq9: 13 },
-  { session: 'Ses. 4', phq9: 10 },
-  { session: 'Ses. 5', phq9: 8  },
-];
-
-interface KpiCardProps {
-  label: string;
-  value: string;
-  color: string;
-  bg: string;
-}
-
-function KpiCard({ label, value, color, bg }: KpiCardProps) {
-  return (
-    <div style={{ background: bg, borderRadius: 12, padding: '16px 20px', flex: 1, minWidth: 0 }}>
-      <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</p>
-      <p style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--s800)' }}>{value}</p>
-    </div>
-  );
-}
-
-function GraficasTab({ appointments }: { appointments: Appointment[] }) {
-  const total     = appointments.length;
-  const completed = appointments.filter(a => a.status === 'COMPLETED').length;
-  const pending   = appointments.filter(a => a.status === 'SCHEDULED').length;
-  const now       = new Date();
-  const nextAppt  = appointments
-    .filter(a => a.status === 'SCHEDULED' && new Date(a.scheduled_at) >= now)
-    .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())[0];
-
-  return (
-    <div className="anim-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* KPI row */}
-      <div style={{ display: 'flex', gap: 12 }}>
-        <KpiCard label="Sesiones totales" value={String(total)}     color="var(--teal-d)"  bg="#f0fdfa" />
-        <KpiCard label="Completadas"       value={String(completed)} color="#065f46"        bg="#d1fae5" />
-        <KpiCard label="Pendientes"        value={String(pending)}   color="#92400e"        bg="#fef3c7" />
-        <KpiCard label="Próxima"           value={nextAppt ? fmtShortDate(nextAppt.scheduled_at) : 'Sin citas'} color="#1e40af" bg="#dbeafe" />
-      </div>
-
-      {/* Chart */}
-      <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', padding: 24 }}>
-        <div style={{ marginBottom: 16 }}>
-          <p style={{ margin: '0 0 2px', fontSize: 15, fontWeight: 700, color: 'var(--s800)' }}>Evolución de síntomas</p>
-          <p style={{ margin: 0, fontSize: 12, color: 'var(--s400)' }}>PHQ-9 · GAD-7</p>
-        </div>
-        <ResponsiveContainer width="100%" height={220}>
-          <AreaChart data={SYMPTOM_DATA} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
-            <defs>
-              <linearGradient id="tealGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%"  stopColor="#14b8a6" stopOpacity={0.25} />
-                <stop offset="95%" stopColor="#14b8a6" stopOpacity={0}    />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--s100)" />
-            <XAxis dataKey="session" tick={{ fontSize: 11, fill: 'var(--s500)' }} axisLine={false} tickLine={false} />
-            <YAxis domain={[0, 27]} tick={{ fontSize: 11, fill: 'var(--s500)' }} axisLine={false} tickLine={false} />
-            <Tooltip
-              contentStyle={{ borderRadius: 10, border: '1px solid var(--s200)', fontSize: 12 }}
-              formatter={(v) => [v, 'PHQ-9']}
-            />
-            <Area type="monotone" dataKey="phq9" stroke="#14b8a6" strokeWidth={2.5} fill="url(#tealGrad)" dot={{ fill: '#14b8a6', r: 4 }} activeDot={{ r: 6 }} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Info notice */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 10, padding: '12px 16px' }}>
-        <Info size={14} color="var(--teal)" style={{ flexShrink: 0, marginTop: 1 }} />
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--teal-d)', lineHeight: 1.6 }}>
-          Los datos de evaluaciones se cargarán automáticamente desde los registros clínicos
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
 export function PatientProfilePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -551,6 +384,24 @@ export function PatientProfilePage() {
     enabled: !!id,
   });
   const records: RecordMeta[] = recordsData?.items ?? [];
+
+  // Active principal diagnosis feeds the header chip (was a hardcoded demo label)
+  const { data: dxData } = useQuery({
+    queryKey: ['diagnoses', id],
+    queryFn: () => diagnosesApi.list(id!),
+    enabled: !!id,
+  });
+  const activeDx = (dxData?.items ?? []).find(d => d.status === 'ACTIVE' && d.diagnosis_type === 'PRINCIPAL')
+    ?? (dxData?.items ?? []).find(d => d.status === 'ACTIVE');
+
+  // Consent evidence — Ley 1581/Ley 1090 require it before treatment
+  const { data: consentsData } = useQuery({
+    queryKey: ['consents', id],
+    queryFn: () => consentsApi.list(id!),
+    enabled: !!id,
+  });
+  const hasTreatmentConsent = (consentsData?.items ?? [])
+    .some(c => !c.revoked_at && (c.consent_type === 'TREATMENT' || c.consent_type === 'DATA_PROCESSING'));
 
   // ── Loading / error states ──────────────────────────────────────────────────
 
@@ -590,9 +441,7 @@ export function PatientProfilePage() {
   const TABS: { id: Tab; label: string; Icon: React.ElementType }[] = [
     { id: 'historial',       label: 'Historial de consultas', Icon: Clock      },
     { id: 'diagnosticos',    label: 'Diagnósticos',           Icon: Stethoscope },
-    { id: 'plan',            label: 'Plan terapéutico',       Icon: Target     },
     { id: 'consentimientos', label: 'Consentimientos',         Icon: FileCheck  },
-    { id: 'graficas',        label: 'Gráficas de evolución',  Icon: TrendingDown },
   ];
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -662,13 +511,14 @@ export function PatientProfilePage() {
 
                 {/* Info row 2 */}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  <InfoChip
-                    icon={<Stethoscope size={12} />}
-                    text="Ansiedad generalizada"
-                    style={{ background: '#f5f3ff', color: '#6d28d9', border: '1px solid #ddd6fe' }}
-                  />
+                  {activeDx && (
+                    <InfoChip
+                      icon={<Stethoscope size={12} />}
+                      text={`${activeDx.icd10_code} · ${activeDx.description}`}
+                      style={{ background: '#f5f3ff', color: '#6d28d9', border: '1px solid #ddd6fe' }}
+                    />
+                  )}
                   <InfoChip icon={<Calendar size={12} />} text={`Próxima: ${nextApptLabel}`} />
-                  <InfoChip icon={<UserRound size={12} />} text="Terapeuta asignado" />
                 </div>
               </div>
             </div>
@@ -681,11 +531,11 @@ export function PatientProfilePage() {
               >
                 <Pencil size={13} /> Editar datos
               </button>
-              <button style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: 'var(--s700)', border: '1px solid var(--s200)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                <Upload size={13} /> Subir documento
-              </button>
-              <button style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: '#7c3aed', border: '1px solid #ddd6fe', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                <FileText size={13} /> Nueva evaluación
+              <button
+                onClick={() => navigate(`/patients/${patient.id}/records/new`)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: 'var(--teal)', border: '1px solid var(--s200)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+              >
+                <FileText size={13} /> Nuevo registro
               </button>
               <button
                 onClick={() => navigate(`/appointments/new?patient_id=${patient.id}`)}
@@ -696,6 +546,22 @@ export function PatientProfilePage() {
             </div>
           </div>
         </div>
+
+        {/* ── Consent warning (Ley 1581 / Ley 1090) ─────────────────────────── */}
+        {consentsData && !hasTreatmentConsent && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: 12, marginBottom: 20 }}>
+            <AlertTriangle size={16} color="#d97706" style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: 13, color: '#92400e' }}>
+              <strong>Sin consentimiento informado registrado.</strong> El consentimiento es obligatorio antes de iniciar tratamiento (Ley 1581/2012 · Ley 1090/2006).
+            </span>
+            <button
+              onClick={() => setTab('consentimientos')}
+              style={{ padding: '7px 14px', background: '#d97706', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, flexShrink: 0 }}
+            >
+              Registrar ahora
+            </button>
+          </div>
+        )}
 
         {/* ── Pill Tab Bar ──────────────────────────────────────────────────── */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: 'var(--s100)', borderRadius: 12, padding: 4 }}>
@@ -725,9 +591,7 @@ export function PatientProfilePage() {
         {/* ── Tab Content ───────────────────────────────────────────────────── */}
         {tab === 'historial'       && <HistorialTab appointments={appointments} records={records} navigate={navigate} patientId={id!} />}
         {tab === 'diagnosticos'    && <DiagnosesPanel patientId={id!} />}
-        {tab === 'plan'            && <PlanTab />}
         {tab === 'consentimientos' && <ConsentimientosTab patientId={id!} />}
-        {tab === 'graficas'        && <GraficasTab appointments={appointments} />}
       </div>
 
       {editOpen && patient && (

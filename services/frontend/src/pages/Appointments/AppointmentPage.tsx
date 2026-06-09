@@ -1,17 +1,16 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Calendar, Clock, MapPin, Video, User,
   Play, CheckCircle2, AlertTriangle, Brain, FileText,
-  Mic, Upload, Save, X, Copy,
+  Mic, Upload, X,
 } from 'lucide-react';
 import { appointmentsApi, type AppointmentStatus } from '@/api/appointments';
 import { patientsApi, type Patient } from '@/api/patients';
 import { EditPatientModal } from '@/components/patients/EditPatientModal';
-import { clinicalRecordsApi, type RecordMeta, type RecordType } from '@/api/clinicalRecords';
-import { RecordSectionsForm, emptyDraft, draftToPayload, recordToDraft, validateDraft, type ClinicalDraft } from '@/components/clinical/RecordSectionsForm';
-import { RECORD_TYPE_LABELS } from '@/components/clinical/constants';
+import { clinicalRecordsApi, type RecordMeta } from '@/api/clinicalRecords';
+import { RecordForm } from '@/components/clinical/RecordForm';
 import { aiDraftsApi } from '@/api/aiDrafts';
 import { useAuth } from '@/context/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
@@ -44,147 +43,6 @@ function fmtDateTime(iso: string) {
     date: d.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
     time: d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
   };
-}
-
-// ─── Clinical record form (template v2) ──────────────────────────────────────
-
-interface RecordFormProps {
-  patientId: string;
-  appointmentId: string;
-  onSaved: () => void;
-}
-
-const V2_TYPES = ['INITIAL', 'EVOLUTION', 'DISCHARGE'] as const;
-
-function RecordForm({ patientId, appointmentId, onSaved }: RecordFormProps) {
-  const storageKey = `clinical-draft-${appointmentId}`;
-  const [recordType, setRecordType] = useState<RecordType>('EVOLUTION');
-  const [draft, setDraft] = useState<ClinicalDraft>(emptyDraft);
-  const [sessionDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [saving, setSaving] = useState(false);
-  const [copying, setCopying] = useState(false);
-  const [restored, setRestored] = useState(false);
-  const [err, setErr] = useState('');
-
-  // Autosave: the in-progress note survives a closed tab or session lock.
-  // Nothing reaches the server until the professional saves explicitly.
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw) {
-        const saved = JSON.parse(raw);
-        if (saved.recordType) setRecordType(saved.recordType);
-        if (saved.draft) { setDraft({ ...emptyDraft(), ...saved.draft }); setRestored(true); }
-      }
-    } catch { /* corrupt draft — start clean */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appointmentId]);
-
-  useEffect(() => {
-    const t = setTimeout(() => {
-      try { localStorage.setItem(storageKey, JSON.stringify({ recordType, draft })); } catch { /* storage full */ }
-    }, 600);
-    return () => clearTimeout(t);
-  }, [storageKey, recordType, draft]);
-
-  // Copy-forward: start from the latest approved-or-draft evolution note.
-  // Risk is intentionally NOT copied — it must be re-assessed every session.
-  const handleCopyForward = async () => {
-    setCopying(true); setErr('');
-    try {
-      const { items } = await clinicalRecordsApi.list(patientId);
-      const lastEvolution = items.find(m => m.record_type === 'EVOLUTION' && m.template_version >= 2);
-      if (!lastEvolution) { setErr('No hay una evolución anterior para copiar.'); return; }
-      const rec = await clinicalRecordsApi.get(lastEvolution.id);
-      const base = recordToDraft(rec.sections, undefined, undefined);
-      base.riskNote = '';
-      setDraft(base);
-    } catch { setErr('No se pudo cargar la evolución anterior.'); }
-    finally { setCopying(false); }
-  };
-
-  const handleSave = async () => {
-    const validation = validateDraft(recordType, draft);
-    if (validation) { setErr(validation); return; }
-    setSaving(true); setErr('');
-    try {
-      await clinicalRecordsApi.create(patientId, {
-        appointment_id: appointmentId,
-        record_type: recordType,
-        session_date: sessionDate,
-        ...draftToPayload(recordType, draft),
-      });
-      localStorage.removeItem(storageKey);
-      onSaved();
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : '';
-      if (msg.includes('open clinical process')) {
-        setErr(recordType === 'INITIAL'
-          ? 'Este paciente ya tiene un proceso abierto — registra una Evolución o un Cierre.'
-          : 'Este paciente no tiene proceso abierto — registra primero la Apertura.');
-      } else {
-        setErr('Error al guardar el registro. Intenta de nuevo.');
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div>
-      {/* Record type selector */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        {V2_TYPES.map(val => (
-          <button
-            key={val}
-            onClick={() => setRecordType(val)}
-            style={{
-              padding: '6px 14px', borderRadius: 20, border: '1.5px solid',
-              borderColor: recordType === val ? 'var(--teal)' : 'var(--s200)',
-              background: recordType === val ? 'var(--teal)' : '#fff',
-              color: recordType === val ? '#fff' : 'var(--s600)',
-              fontSize: 12, fontWeight: 600, cursor: 'pointer',
-            }}
-          >{RECORD_TYPE_LABELS[val]}</button>
-        ))}
-        {recordType === 'EVOLUTION' && (
-          <button
-            onClick={handleCopyForward}
-            disabled={copying}
-            style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 20, border: '1.5px dashed var(--s300)', background: '#fff', color: 'var(--s600)', fontSize: 12, fontWeight: 600, cursor: copying ? 'wait' : 'pointer' }}
-          >
-            {copying ? <Spinner size={12} color="var(--s500)" /> : <Copy size={12} />}
-            Partir de la evolución anterior
-          </button>
-        )}
-      </div>
-      {restored && (
-        <p style={{ margin: '0 0 12px', fontSize: 12, color: 'var(--s400)', fontStyle: 'italic' }}>
-          Borrador restaurado automáticamente.
-        </p>
-      )}
-
-      <div style={{ marginBottom: 16 }}>
-        <RecordSectionsForm recordType={recordType} value={draft} onChange={setDraft} />
-      </div>
-
-      {err && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#fee2e2', borderRadius: 8, marginBottom: 12 }}>
-          <AlertTriangle size={14} color="#dc2626" />
-          <span style={{ fontSize: 13, color: '#991b1b' }}>{err}</span>
-        </div>
-      )}
-
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        style={{ width: '100%', padding: '12px', borderRadius: 10, background: 'var(--teal)', color: '#fff', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: saving ? 0.7 : 1 }}
-      >
-        {saving ? <Spinner size={16} color="#fff" /> : <Save size={16} />}
-        {saving ? 'Guardando registro…' : 'Guardar registro clínico'}
-      </button>
-    </div>
-  );
 }
 
 // ─── Audio upload section ─────────────────────────────────────────────────────
@@ -317,6 +175,7 @@ export function AppointmentPage() {
 
   const [statusLoading, setStatusLoading] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [statusErr, setStatusErr] = useState('');
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const [showSOAPForm, setShowSOAPForm] = useState(false);
@@ -350,10 +209,12 @@ export function AppointmentPage() {
 
   const handleStatusChange = async (status: AppointmentStatus) => {
     if (!id) return;
-    setStatusLoading(true);
+    setStatusLoading(true); setStatusErr('');
     try {
       await appointmentsApi.updateStatus(id, status);
-      queryClient.invalidateQueries({ queryKey: ['appointment', id] });
+      await queryClient.invalidateQueries({ queryKey: ['appointment', id] });
+    } catch {
+      setStatusErr('No se pudo cambiar el estado de la cita. Intenta de nuevo.');
     } finally {
       setStatusLoading(false);
     }
@@ -377,6 +238,13 @@ export function AppointmentPage() {
   };
 
   const handleRecordSaved = async () => {
+    // The session note closes the appointment lifecycle: once the clinical
+    // record exists the appointment is done — no manual step, and the cancel
+    // button disappears with it.
+    if (appt && (appt.status === 'SCHEDULED' || appt.status === 'IN_PROGRESS')) {
+      try { await appointmentsApi.updateStatus(id!, 'COMPLETED'); } catch { /* note saved; status stays */ }
+      queryClient.invalidateQueries({ queryKey: ['appointment', id] });
+    }
     await refetchRecords();
     queryClient.invalidateQueries({ queryKey: ['clinical-records', 'patient', appt?.patient_id] });
     setShowSOAPForm(false);
@@ -405,7 +273,7 @@ export function AppointmentPage() {
     : '?';
 
   return (
-    <div style={{ maxWidth: 820, margin: '0 auto' }}>
+    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
       {/* Back */}
       <button onClick={() => navigate(-1)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s500)', fontSize: 14, marginBottom: 24, padding: 0 }}>
         <ArrowLeft size={16} /> Volver
@@ -449,6 +317,13 @@ export function AppointmentPage() {
           </button>
         </div>
 
+        {statusErr && (
+          <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#fee2e2', borderRadius: 8 }}>
+            <AlertTriangle size={14} color="#dc2626" />
+            <span style={{ fontSize: 13, color: '#991b1b' }}>{statusErr}</span>
+          </div>
+        )}
+
         {/* ── Status action bar ──────────────────────────────────────────────── */}
         {isActive && (
           <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--s100)', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -476,12 +351,14 @@ export function AppointmentPage() {
                 Finalizar sesión
               </button>
             )}
-            <button
+            {linkedRecords.length === 0 && (
+              <button
               onClick={() => setCancelOpen(v => !v)}
               style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', background: '#fff', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: 9, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
             >
               <X size={14} /> Cancelar cita
             </button>
+            )}
           </div>
         )}
 
@@ -558,7 +435,7 @@ export function AppointmentPage() {
           ) : showSOAPForm ? (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s600)' }}>Nuevo registro SOAP</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s600)' }}>Nuevo registro clínico</span>
                 <button onClick={() => setShowSOAPForm(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)' }}><X size={16} /></button>
               </div>
               <RecordForm patientId={appt.patient_id} appointmentId={id!} onSaved={handleRecordSaved} />

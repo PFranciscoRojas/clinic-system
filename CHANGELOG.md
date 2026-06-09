@@ -9,6 +9,23 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+- Patient list 500 when a patient has NULL gender (booking-created patients) — scan with nullable type; a single undecryptable patient row no longer takes the whole list down
+- "Iniciar sesión" on appointments swallowed errors silently — failures now surface in the UI
+- Residual "SOAP" wording in user-facing copy replaced with clinical-record terminology
+- Patient profile header showed hardcoded demo chips ("Ansiedad generalizada", "Terapeuta asignado") — now shows the patient's real active principal diagnosis, or nothing
+
+### Changed
+- Clinical note pages use the full screen width (1100px) with a two-column layout: text sections left, mental exam/risk right
+- Section fields auto-grow while typing instead of fixed 3-row boxes
+- Saving a session note automatically completes the appointment; the cancel button hides once a record is linked
+- "Nuevo registro" works without an appointment (standalone form for walk-ins and retroactive notes)
+- Consent warning banner on the patient profile when no TREATMENT/DATA_PROCESSING consent is registered (Ley 1581/2012 · Ley 1090/2006) + reminder on intake notes
+
+### Removed
+- "Evaluaciones" nav item, "Gráficas de evolución" tab (demo chart) and "Plan terapéutico" tab (static mockup) — hidden until their real implementations (assessments postponed by decision 2026-06-09; treatment plan in Phase 2)
+- Dead "Subir documento" and "Nueva evaluación" buttons on the patient profile
+
 ### Added
 - Clinical record template v2 — psychology-native formats per record type: intake (INITIAL, 9 sections incl. 10-domain mental exam), evolution note (DAP-style, 5 sections) and discharge epicrisis; sections stored as one encrypted JSON blob (`sections_enc`) so future format changes need no schema migration (migration 000008)
 - Structured suicide/self-harm risk level (`NONE`/`IDEATION`/`PLAN`/`ATTEMPT`) — mandatory on every v2 record, exposed in record list for the patient profile
