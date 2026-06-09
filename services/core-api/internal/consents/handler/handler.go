@@ -12,6 +12,7 @@ import (
 
 	"sghcp/core-api/internal/consents"
 	consentsrepo "sghcp/core-api/internal/consents/repository"
+	"sghcp/core-api/internal/shared/audit"
 	"sghcp/core-api/internal/shared/crypto"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
@@ -24,12 +25,13 @@ type repo interface {
 }
 
 type Handler struct {
-	repo repo
-	km   *crypto.KeyManager
+	repo  repo
+	km    *crypto.KeyManager
+	audit *audit.Writer
 }
 
 func New(db *pgxpool.Pool, km *crypto.KeyManager) *Handler {
-	return &Handler{repo: consentsrepo.New(db), km: km}
+	return &Handler{repo: consentsrepo.New(db), km: km, audit: audit.New(db)}
 }
 
 func (h *Handler) Routes() chi.Router {
@@ -111,6 +113,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	h.audit.Record(r, "CONSENT_CREATE", "consent", id)
 	httputil.WriteJSON(w, http.StatusCreated, map[string]string{"id": id})
 }
 
@@ -124,6 +127,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	h.audit.Record(r, "CONSENT_LIST", "patient", patientID)
 
 	out := make([]map[string]any, 0, len(items))
 	for _, c := range items {

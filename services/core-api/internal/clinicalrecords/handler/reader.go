@@ -22,6 +22,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.audit.Record(r, "CLINICAL_RECORD_READ", "clinical_record", recordID)
 	httputil.WriteJSON(w, http.StatusOK, toResponse(rec))
 }
 
@@ -47,6 +48,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.audit.Record(r, "CLINICAL_RECORD_LIST", "patient", patientID)
 	items := make([]map[string]any, 0, len(metas))
 	for _, m := range metas {
 		items = append(items, toMetaResponse(m))

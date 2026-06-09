@@ -71,6 +71,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	h.audit.Record(r, "CLINICAL_RECORD_CREATE", "clinical_record", id)
 	httputil.WriteJSON(w, http.StatusCreated, map[string]string{"id": id})
 }
 
@@ -101,6 +102,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	h.audit.Record(r, "CLINICAL_RECORD_UPDATE", "clinical_record", recordID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -113,6 +115,7 @@ func (h *Handler) approve(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	h.audit.Record(r, "CLINICAL_RECORD_APPROVE", "clinical_record", recordID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -125,5 +128,6 @@ func (h *Handler) cosign(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	h.audit.Record(r, "CLINICAL_RECORD_COSIGN", "clinical_record", recordID)
 	w.WriteHeader(http.StatusNoContent)
 }
