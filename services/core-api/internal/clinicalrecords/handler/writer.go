@@ -26,6 +26,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Objective          string `json:"objective"`
 		Assessment         string `json:"assessment"`
 		Plan               string `json:"plan"`
+		Sections           map[string]any `json:"sections"`
+		RiskLevel          string `json:"risk_level"`
+		DischargeReason    string `json:"discharge_reason"`
 		SupervisorID       string `json:"supervisor_id"`
 	}
 	if err := httputil.DecodeJSON(r, &body); err != nil {
@@ -64,6 +67,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Objective:          body.Objective,
 		Assessment:         body.Assessment,
 		Plan:               body.Plan,
+		Sections:           body.Sections,
+		RiskLevel:          clinicalrecords.RiskLevel(body.RiskLevel),
+		DischargeReason:    clinicalrecords.DischargeReason(body.DischargeReason),
 		RequiresCosign:     requiresCosign,
 		SupervisorID:       body.SupervisorID,
 	})
@@ -85,6 +91,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		Objective  string `json:"objective"`
 		Assessment string `json:"assessment"`
 		Plan       string `json:"plan"`
+		Sections        map[string]any `json:"sections"`
+		RiskLevel       string `json:"risk_level"`
+		DischargeReason string `json:"discharge_reason"`
 	}
 	if err := httputil.DecodeJSON(r, &body); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid JSON")
@@ -98,6 +107,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		Objective:      body.Objective,
 		Assessment:     body.Assessment,
 		Plan:           body.Plan,
+		Sections:        body.Sections,
+		RiskLevel:       clinicalrecords.RiskLevel(body.RiskLevel),
+		DischargeReason: clinicalrecords.DischargeReason(body.DischargeReason),
 	}); err != nil {
 		writeErr(w, err)
 		return

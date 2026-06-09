@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 
 	"sghcp/core-api/internal/shared/crypto"
@@ -51,5 +52,41 @@ func openField(dek, ciphertext []byte) (string, error) {
 func contentHash(subjective, objective, assessment, plan string) string {
 	h := sha256.New()
 	h.Write([]byte(subjective + "|" + objective + "|" + assessment + "|" + plan))
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+// sealSections marshals the section map once and encrypts the JSON; the
+// marshaled bytes are also returned so the caller can hash exactly what
+// was stored.
+func sealSections(dek []byte, sections map[string]any) (enc []byte, plain []byte, err error) {
+	plain, err = json.Marshal(sections)
+	if err != nil {
+		return nil, nil, err
+	}
+	enc, err = crypto.Seal(dek, plain)
+	return enc, plain, err
+}
+
+func openSections(dek, ciphertext []byte) (map[string]any, error) {
+	if len(ciphertext) == 0 {
+		return nil, nil
+	}
+	b, err := crypto.Open(dek, ciphertext)
+	if err != nil {
+		return nil, err
+	}
+	var sections map[string]any
+	if err := json.Unmarshal(b, &sections); err != nil {
+		return nil, err
+	}
+	return sections, nil
+}
+
+// contentHashV2 fingerprints the stored sections JSON plus the structured
+// fields that participate in the record's clinical meaning.
+func contentHashV2(sectionsJSON []byte, risk, dischargeReason string) string {
+	h := sha256.New()
+	h.Write(sectionsJSON)
+	h.Write([]byte("|" + risk + "|" + dischargeReason))
 	return fmt.Sprintf("%x", h.Sum(nil))
 }

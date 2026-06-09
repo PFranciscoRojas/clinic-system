@@ -1,15 +1,17 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Calendar, Clock, MapPin, Video, User,
   Play, CheckCircle2, AlertTriangle, Brain, FileText,
-  Mic, Upload, ChevronDown, ChevronUp, Save, X,
+  Mic, Upload, Save, X, Copy,
 } from 'lucide-react';
 import { appointmentsApi, type AppointmentStatus } from '@/api/appointments';
 import { patientsApi, type Patient } from '@/api/patients';
 import { EditPatientModal } from '@/components/patients/EditPatientModal';
-import { clinicalRecordsApi, type RecordMeta } from '@/api/clinicalRecords';
+import { clinicalRecordsApi, type RecordMeta, type RecordType } from '@/api/clinicalRecords';
+import { RecordSectionsForm, emptyDraft, draftToPayload, recordToDraft, validateDraft, type ClinicalDraft } from '@/components/clinical/RecordSectionsForm';
+import { RECORD_TYPE_LABELS } from '@/components/clinical/constants';
 import { aiDraftsApi } from '@/api/aiDrafts';
 import { useAuth } from '@/context/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
@@ -44,44 +46,85 @@ function fmtDateTime(iso: string) {
   };
 }
 
-// ─── SOAP Form ────────────────────────────────────────────────────────────────
+// ─── Clinical record form (template v2) ──────────────────────────────────────
 
-const SOAP_FIELDS = [
-  { key: 'subjective' as const, label: 'S — Subjetivo',  placeholder: 'Lo que reporta el paciente en sus propias palabras…' },
-  { key: 'objective'  as const, label: 'O — Objetivo',   placeholder: 'Observaciones clínicas, comportamiento, apariencia…' },
-  { key: 'assessment' as const, label: 'A — Evaluación', placeholder: 'Análisis clínico, hipótesis diagnóstica, avance…' },
-  { key: 'plan'       as const, label: 'P — Plan',        placeholder: 'Intervenciones, tareas, próximos pasos…' },
-];
-
-interface SOAPFormProps {
+interface RecordFormProps {
   patientId: string;
   appointmentId: string;
   onSaved: () => void;
 }
 
-function SOAPForm({ patientId, appointmentId, onSaved }: SOAPFormProps) {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set(['subjective']));
-  const [soap, setSoap] = useState({ subjective: '', objective: '', assessment: '', plan: '' });
-  const [recordType, setRecordType] = useState('EVOLUTION');
+const V2_TYPES = ['INITIAL', 'EVOLUTION', 'DISCHARGE'] as const;
+
+function RecordForm({ patientId, appointmentId, onSaved }: RecordFormProps) {
+  const storageKey = `clinical-draft-${appointmentId}`;
+  const [recordType, setRecordType] = useState<RecordType>('EVOLUTION');
+  const [draft, setDraft] = useState<ClinicalDraft>(emptyDraft);
   const [sessionDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [saving, setSaving] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [restored, setRestored] = useState(false);
   const [err, setErr] = useState('');
 
-  const toggle = (k: string) =>
-    setExpanded(p => { const s = new Set(p); s.has(k) ? s.delete(k) : s.add(k); return s; });
+  // Autosave: the in-progress note survives a closed tab or session lock.
+  // Nothing reaches the server until the professional saves explicitly.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (saved.recordType) setRecordType(saved.recordType);
+        if (saved.draft) { setDraft({ ...emptyDraft(), ...saved.draft }); setRestored(true); }
+      }
+    } catch { /* corrupt draft — start clean */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appointmentId]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try { localStorage.setItem(storageKey, JSON.stringify({ recordType, draft })); } catch { /* storage full */ }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [storageKey, recordType, draft]);
+
+  // Copy-forward: start from the latest approved-or-draft evolution note.
+  // Risk is intentionally NOT copied — it must be re-assessed every session.
+  const handleCopyForward = async () => {
+    setCopying(true); setErr('');
+    try {
+      const { items } = await clinicalRecordsApi.list(patientId);
+      const lastEvolution = items.find(m => m.record_type === 'EVOLUTION' && m.template_version >= 2);
+      if (!lastEvolution) { setErr('No hay una evolución anterior para copiar.'); return; }
+      const rec = await clinicalRecordsApi.get(lastEvolution.id);
+      const base = recordToDraft(rec.sections, undefined, undefined);
+      base.riskNote = '';
+      setDraft(base);
+    } catch { setErr('No se pudo cargar la evolución anterior.'); }
+    finally { setCopying(false); }
+  };
 
   const handleSave = async () => {
+    const validation = validateDraft(recordType, draft);
+    if (validation) { setErr(validation); return; }
     setSaving(true); setErr('');
     try {
       await clinicalRecordsApi.create(patientId, {
         appointment_id: appointmentId,
-        record_type: recordType as 'INITIAL' | 'EVOLUTION' | 'DISCHARGE' | 'INTERCONSULTATION',
+        record_type: recordType,
         session_date: sessionDate,
-        ...soap,
+        ...draftToPayload(recordType, draft),
       });
+      localStorage.removeItem(storageKey);
       onSaved();
-    } catch {
-      setErr('Error al guardar el registro. Intenta de nuevo.');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : '';
+      if (msg.includes('open clinical process')) {
+        setErr(recordType === 'INITIAL'
+          ? 'Este paciente ya tiene un proceso abierto — registra una Evolución o un Cierre.'
+          : 'Este paciente no tiene proceso abierto — registra primero la Apertura.');
+      } else {
+        setErr('Error al guardar el registro. Intenta de nuevo.');
+      }
     } finally {
       setSaving(false);
     }
@@ -90,8 +133,8 @@ function SOAPForm({ patientId, appointmentId, onSaved }: SOAPFormProps) {
   return (
     <div>
       {/* Record type selector */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        {Object.entries(RECORD_TYPE_LABEL).map(([val, lbl]) => (
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        {V2_TYPES.map(val => (
           <button
             key={val}
             onClick={() => setRecordType(val)}
@@ -102,35 +145,27 @@ function SOAPForm({ patientId, appointmentId, onSaved }: SOAPFormProps) {
               color: recordType === val ? '#fff' : 'var(--s600)',
               fontSize: 12, fontWeight: 600, cursor: 'pointer',
             }}
-          >{lbl}</button>
+          >{RECORD_TYPE_LABELS[val]}</button>
         ))}
+        {recordType === 'EVOLUTION' && (
+          <button
+            onClick={handleCopyForward}
+            disabled={copying}
+            style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 20, border: '1.5px dashed var(--s300)', background: '#fff', color: 'var(--s600)', fontSize: 12, fontWeight: 600, cursor: copying ? 'wait' : 'pointer' }}
+          >
+            {copying ? <Spinner size={12} color="var(--s500)" /> : <Copy size={12} />}
+            Partir de la evolución anterior
+          </button>
+        )}
       </div>
+      {restored && (
+        <p style={{ margin: '0 0 12px', fontSize: 12, color: 'var(--s400)', fontStyle: 'italic' }}>
+          Borrador restaurado automáticamente.
+        </p>
+      )}
 
-      {/* SOAP accordion */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-        {SOAP_FIELDS.map(({ key, label, placeholder }) => {
-          const isOpen = expanded.has(key);
-          return (
-            <div key={key} style={{ border: '1.5px solid var(--s200)', borderRadius: 10, overflow: 'hidden' }}>
-              <button
-                onClick={() => toggle(key)}
-                style={{ width: '100%', padding: '12px 16px', background: isOpen ? 'var(--s50)' : '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', textAlign: 'left' }}
-              >
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--s800)' }}>{label}</span>
-                {isOpen ? <ChevronUp size={15} color="var(--s400)" /> : <ChevronDown size={15} color="var(--s400)" />}
-              </button>
-              {isOpen && (
-                <textarea
-                  value={soap[key]}
-                  onChange={e => setSoap(p => ({ ...p, [key]: e.target.value }))}
-                  placeholder={placeholder}
-                  rows={5}
-                  style={{ width: '100%', padding: '12px 16px', border: 'none', borderTop: '1px solid var(--s100)', fontSize: 13, color: 'var(--s700)', resize: 'vertical', lineHeight: 1.7, boxSizing: 'border-box' }}
-                />
-              )}
-            </div>
-          );
-        })}
+      <div style={{ marginBottom: 16 }}>
+        <RecordSectionsForm recordType={recordType} value={draft} onChange={setDraft} />
       </div>
 
       {err && (
@@ -526,7 +561,7 @@ export function AppointmentPage() {
                 <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s600)' }}>Nuevo registro SOAP</span>
                 <button onClick={() => setShowSOAPForm(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)' }}><X size={16} /></button>
               </div>
-              <SOAPForm patientId={appt.patient_id} appointmentId={id!} onSaved={handleRecordSaved} />
+              <RecordForm patientId={appt.patient_id} appointmentId={id!} onSaved={handleRecordSaved} />
             </div>
           ) : isActive ? (
             <div style={{ textAlign: 'center', padding: '24px 0' }}>

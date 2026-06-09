@@ -31,10 +31,14 @@ type ClinicalRecord struct {
 	DEKID               string
 	RecordType          RecordType
 	SessionDate         time.Time
+	TemplateVersion     int16
 	Subjective          string
 	Objective           string
 	Assessment          string
 	Plan                string
+	Sections            map[string]any
+	RiskLevel           *string
+	DischargeReason     *string
 	Status              RecordStatus
 	ApprovedAt          *time.Time
 	RequiresCosign      bool
@@ -55,10 +59,14 @@ type RawRecord struct {
 	DEKID               string
 	RecordType          RecordType
 	SessionDate         time.Time
+	TemplateVersion     int16
 	SubjectiveEnc       []byte
 	ObjectiveEnc        []byte
 	AssessmentEnc       []byte
 	PlanEnc             []byte
+	SectionsEnc         []byte
+	RiskLevel           *string
+	DischargeReason     *string
 	Status              RecordStatus
 	ApprovedAt          *time.Time
 	RequiresCosign      bool
@@ -77,6 +85,8 @@ type RecordMeta struct {
 	AppointmentID      string
 	RecordType         RecordType
 	SessionDate        time.Time
+	TemplateVersion    int16
+	RiskLevel          *string
 	Status             RecordStatus
 	RequiresCosign     bool
 	SupervisorID       string
@@ -93,10 +103,14 @@ type CreateParams struct {
 	DEKID              string
 	RecordType         RecordType
 	SessionDate        time.Time
+	TemplateVersion    int16
 	SubjectiveEnc      []byte
 	ObjectiveEnc       []byte
 	AssessmentEnc      []byte
 	PlanEnc            []byte
+	SectionsEnc        []byte
+	RiskLevel          *string
+	DischargeReason    *string
 	RequiresCosign     bool
 	SupervisorID       string
 	ContentHash        string
@@ -110,7 +124,26 @@ type UpdateParams struct {
 	ObjectiveEnc   []byte
 	AssessmentEnc  []byte
 	PlanEnc        []byte
+	SectionsEnc    []byte
+	RiskLevel      *string
+	DischargeReason *string
 	ContentHash    string
+}
+
+// ProcessDates carries the latest INITIAL and DISCHARGE session dates for a
+// patient — the basis of the open-process business rules.
+type ProcessDates struct {
+	LastInitial   *time.Time
+	LastDischarge *time.Time
+}
+
+// HasOpenProcess reports whether the patient has an INITIAL not yet closed
+// by a later (or same-day) DISCHARGE.
+func (p ProcessDates) HasOpenProcess() bool {
+	if p.LastInitial == nil {
+		return false
+	}
+	return p.LastDischarge == nil || p.LastDischarge.Before(*p.LastInitial)
 }
 
 // EncKeyRow is the encrypted DEK row fetched for decryption.

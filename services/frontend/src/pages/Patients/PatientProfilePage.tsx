@@ -16,10 +16,12 @@ import { patientsApi } from '@/api/patients';
 import { appointmentsApi, type Appointment } from '@/api/appointments';
 import { clinicalRecordsApi, consentsApi, type RecordMeta, type Consent, type ConsentType } from '@/api/clinicalRecords';
 import { Spinner } from '@/components/ui/Spinner';
+import { DiagnosesPanel } from '@/components/clinical/DiagnosesPanel';
+import { riskMeta } from '@/components/clinical/constants';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Tab = 'historial' | 'plan' | 'consentimientos' | 'graficas';
+type Tab = 'historial' | 'diagnosticos' | 'plan' | 'consentimientos' | 'graficas';
 
 type AppointmentStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
 
@@ -104,7 +106,18 @@ function HistorialTab({
     {/* ── Registros clínicos ─────────────────────────────────────────────── */}
     <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--s100)' }}>
-        <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)' }}>Registros clínicos</span>
+        <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          Registros clínicos
+          {(() => {
+            const last = records.find(r => r.risk_level);
+            const rm = riskMeta(last?.risk_level);
+            return rm ? (
+              <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 12, background: rm.bg, color: rm.color, border: `1px solid ${rm.border}` }}>
+                Último riesgo: {rm.label}
+              </span>
+            ) : null;
+          })()}
+        </span>
         {(() => {
           const target =
             appointments.find(a => a.status === 'IN_PROGRESS') ??
@@ -128,17 +141,23 @@ function HistorialTab({
         </div>
       ) : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 130px 110px 110px', gap: 8, padding: '8px 20px', background: 'var(--s50)', borderBottom: '1px solid var(--s200)' }}>
-            {['Fecha', 'Tipo', 'Estado', 'Co-firma', 'Acción'].map(h => (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 110px 90px 90px', gap: 8, padding: '8px 20px', background: 'var(--s50)', borderBottom: '1px solid var(--s200)' }}>
+            {['Fecha', 'Tipo', 'Riesgo', 'Estado', 'Co-firma', 'Acción'].map(h => (
               <span key={h} style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</span>
             ))}
           </div>
           {records.map((rec, idx) => {
             const cfg = CR_STATUS_CONFIG[rec.status] ?? CR_STATUS_CONFIG.DRAFT;
             return (
-              <div key={rec.id} style={{ display: 'grid', gridTemplateColumns: '1fr 130px 130px 110px 110px', gap: 8, alignItems: 'center', padding: '12px 20px', borderBottom: idx < records.length - 1 ? '1px solid var(--s100)' : 'none' }}>
+              <div key={rec.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 110px 90px 90px', gap: 8, alignItems: 'center', padding: '12px 20px', borderBottom: idx < records.length - 1 ? '1px solid var(--s100)' : 'none' }}>
                 <span style={{ fontSize: 13, color: 'var(--s700)' }}>{fmtDate(rec.session_date)}</span>
                 <span style={{ fontSize: 13, color: 'var(--s600)' }}>{RECORD_TYPE_LABEL[rec.record_type] ?? rec.record_type}</span>
+                {(() => {
+                  const rm = riskMeta(rec.risk_level);
+                  return rm ? (
+                    <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 6, background: rm.bg, color: rm.color, display: 'inline-flex', width: 'fit-content' }}>{rm.label}</span>
+                  ) : <span style={{ fontSize: 12, color: 'var(--s300)' }}>—</span>;
+                })()}
                 <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 6, background: cfg.bg, color: cfg.color, display: 'inline-flex', width: 'fit-content' }}>
                   {cfg.label}
                 </span>
@@ -570,6 +589,7 @@ export function PatientProfilePage() {
   // Tab definitions
   const TABS: { id: Tab; label: string; Icon: React.ElementType }[] = [
     { id: 'historial',       label: 'Historial de consultas', Icon: Clock      },
+    { id: 'diagnosticos',    label: 'Diagnósticos',           Icon: Stethoscope },
     { id: 'plan',            label: 'Plan terapéutico',       Icon: Target     },
     { id: 'consentimientos', label: 'Consentimientos',         Icon: FileCheck  },
     { id: 'graficas',        label: 'Gráficas de evolución',  Icon: TrendingDown },
@@ -704,6 +724,7 @@ export function PatientProfilePage() {
 
         {/* ── Tab Content ───────────────────────────────────────────────────── */}
         {tab === 'historial'       && <HistorialTab appointments={appointments} records={records} navigate={navigate} patientId={id!} />}
+        {tab === 'diagnosticos'    && <DiagnosesPanel patientId={id!} />}
         {tab === 'plan'            && <PlanTab />}
         {tab === 'consentimientos' && <ConsentimientosTab patientId={id!} />}
         {tab === 'graficas'        && <GraficasTab appointments={appointments} />}
