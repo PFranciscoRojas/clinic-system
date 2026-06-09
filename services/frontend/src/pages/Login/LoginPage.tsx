@@ -625,14 +625,14 @@ export function LoginPage() {
                         <div style={{ width: 40, height: 40, borderRadius: 10, background: '#fffbeb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 20 }}>✨</div>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 700, fontSize: 14, color: '#78350f' }}>Asistente IA de redacción</div>
-                          <div style={{ fontSize: 12.5, color: '#92400e', marginTop: 2, lineHeight: 1.5 }}>Transcribe y redacta borradores SOAP automáticamente desde el audio.</div>
+                          <div style={{ fontSize: 12.5, color: '#92400e', marginTop: 2, lineHeight: 1.5 }}>Transcribe y redacta borradores clínicos automáticamente desde el audio.</div>
                         </div>
                         <Toggle value={aiEnabled} onChange={setAiEnabled} />
                       </div>
 
                       {aiEnabled && (
                         <div style={{ marginBottom: 18 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--s700)', marginBottom: 10 }}>Estilo de redacción SOAP</div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--s700)', marginBottom: 10 }}>Estilo de redacción clínica</div>
                           {[
                             { id: 'structured', label: 'Estructurado y formal', desc: 'Lenguaje técnico-clínico estándar.' },
                             { id: 'narrative',  label: 'Narrativo',             desc: 'Redacción fluida, como nota clínica convencional.' },

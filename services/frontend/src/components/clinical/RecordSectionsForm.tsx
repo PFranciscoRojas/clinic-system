@@ -2,6 +2,7 @@ import type { RecordSections, RecordType, RiskLevel, DischargeReason, MentalExam
 import { TEMPLATE_SECTIONS, DISCHARGE_REASONS } from './constants';
 import { RiskSelector } from './RiskSelector';
 import { MentalExamChecklist, defaultMentalExam, type MentalExam } from './MentalExamChecklist';
+import { AutoGrowTextarea } from './AutoGrowTextarea';
 
 // Editable state of one template-v2 record, shared by the creation form,
 // the edit view, copy-forward and autosave.
@@ -82,8 +83,8 @@ export function RecordSectionsForm({ recordType, value, onChange, disabled }: Pr
   const setSection = (key: string, v: string) =>
     onChange({ ...value, sections: { ...value.sections, [key]: v } });
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+  const sideColumn = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
       {recordType === 'DISCHARGE' && (
         <div className="card" style={{ padding: '16px 20px', border: value.dischargeReason ? undefined : '1.5px solid #fde68a' }}>
           <p style={{ margin: '0 0 10px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
@@ -108,22 +109,6 @@ export function RecordSectionsForm({ recordType, value, onChange, disabled }: Pr
         </div>
       )}
 
-      {defs.map(def => (
-        <div key={def.key} className="card" style={{ padding: '16px 20px' }}>
-          <p style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
-            {def.label} {def.required && <span style={{ color: '#dc2626' }}>*</span>}
-          </p>
-          <textarea
-            value={value.sections[def.key] ?? ''}
-            disabled={disabled}
-            onChange={e => setSection(def.key, e.target.value)}
-            placeholder={def.placeholder}
-            rows={def.rows ?? 3}
-            style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid var(--s200)', fontSize: 14, color: 'var(--s700)', resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.6, background: '#fff' }}
-          />
-        </div>
-      ))}
-
       {recordType === 'INITIAL' && (
         <MentalExamChecklist
           value={value.mentalExam}
@@ -136,16 +121,40 @@ export function RecordSectionsForm({ recordType, value, onChange, disabled }: Pr
       {value.risk && value.risk !== 'NONE' && (
         <div className="card" style={{ padding: '14px 20px' }}>
           <p style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600, color: 'var(--s700)' }}>Nota sobre el riesgo</p>
-          <textarea
+          <AutoGrowTextarea
             value={value.riskNote}
             disabled={disabled}
+            minRows={3}
             onChange={e => onChange({ ...value, riskNote: e.target.value })}
             placeholder="Evaluación, factores protectores, plan de seguridad acordado…"
-            rows={2}
-            style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #fde68a', fontSize: 14, color: 'var(--s700)', resize: 'vertical', boxSizing: 'border-box', background: '#fffbeb' }}
+            style={{ border: '1.5px solid #fde68a', background: '#fffbeb' }}
           />
         </div>
       )}
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: 16, alignItems: 'start' }}>
+      {/* One card with every text section — fields grow as the professional writes */}
+      <div className="card" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
+        {defs.map(def => (
+          <div key={def.key}>
+            <p style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
+              {def.label} {def.required && <span style={{ color: '#dc2626' }}>*</span>}
+            </p>
+            <AutoGrowTextarea
+              value={value.sections[def.key] ?? ''}
+              disabled={disabled}
+              minRows={Math.max(def.rows ?? 3, 4)}
+              onChange={e => setSection(def.key, e.target.value)}
+              placeholder={def.placeholder}
+            />
+          </div>
+        ))}
+      </div>
+
+      {sideColumn}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import {
-  CalendarDays, Users, ClipboardList, Receipt, Settings,
+  CalendarDays, Users, Receipt, Settings,
   Brain, Bell, Search, Plus, ChevronDown, Lock, LogOut,
   UserCircle, Calendar, X, Globe,
 } from 'lucide-react';
@@ -11,7 +11,6 @@ const NAV = [
   { to: '/',                  label: 'Agenda',          Icon: CalendarDays,  perm: 'appointments:read', badge: null },
   { to: '/patients',          label: 'Pacientes',        Icon: Users,         perm: 'patients:read',     badge: null },
   { to: '/booking-requests',  label: 'Solicitudes web',  Icon: Globe,         perm: null,                badge: null },
-  { to: '/evaluations',       label: 'Evaluaciones',     Icon: ClipboardList, perm: null,                badge: 2   },
   { to: '/billing',           label: 'Facturación',      Icon: Receipt,       perm: null,                badge: null },
   { to: '/settings',          label: 'Configuración',    Icon: Settings,      perm: null,                badge: null },
 ];

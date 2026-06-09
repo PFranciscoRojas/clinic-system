@@ -104,7 +104,7 @@ export function ClinicalRecordPage() {
   const dischargeLabel = DISCHARGE_REASONS.find(r => r.value === record.discharge_reason)?.label;
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto' }}>
+    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
       <button onClick={() => navigate(-1)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s500)', fontSize: 14, marginBottom: 24, padding: 0 }}>
         <ArrowLeft size={16} /> Volver
       </button>
