@@ -116,12 +116,15 @@ func scanPatient(row interface {
 	var p patients.RawPatient
 	var docTypeCode pgtype.Text
 	var birthDate pgtype.Date
+	// gender is nullable since migration 000006 (booking-created patients
+	// arrive without it) — scanning into a plain string 500s the whole list.
+	var gender pgtype.Text
 	err := row.Scan(
 		&p.ID, &p.OrganizationID, &docTypeCode, &p.DEKID,
 		&p.FirstNameEnc, &p.MiddleNameEnc,
 		&p.PaternalLastNameEnc, &p.MaternalLastNameEnc,
 		&p.DocumentNumberEnc, &p.PhoneEnc, &p.EmailEnc, &p.AddressEnc,
-		&birthDate, &p.Gender, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
+		&birthDate, &gender, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, patients.ErrNotFound
@@ -130,6 +133,7 @@ func scanPatient(row interface {
 		return nil, fmt.Errorf("scan patient: %w", err)
 	}
 	p.DocumentTypeCode = docTypeCode.String
+	p.Gender = gender.String
 	if birthDate.Valid {
 		p.BirthDate = birthDate.Time
 	}
