@@ -2,6 +2,11 @@ import { api } from './client';
 
 export type RecordType = 'INITIAL' | 'EVOLUTION' | 'DISCHARGE' | 'INTERCONSULTATION';
 export type RecordStatus = 'DRAFT' | 'APPROVED';
+export type RiskLevel = 'NONE' | 'IDEATION' | 'PLAN' | 'ATTEMPT';
+export type DischargeReason = 'THERAPEUTIC_DISCHARGE' | 'DROPOUT' | 'REFERRAL' | 'MUTUAL_AGREEMENT';
+
+export type MentalExamEntry = { status: 'NORMAL' | 'ALTERED'; note?: string };
+export type RecordSections = Record<string, string | Record<string, MentalExamEntry>>;
 export type ConsentType = 'TREATMENT' | 'RECORDING' | 'DATA_PROCESSING' | 'INFORMATION_SHARING';
 
 export interface ClinicalRecord {
@@ -12,6 +17,10 @@ export interface ClinicalRecord {
   appointment_id: string;
   record_type: RecordType;
   session_date: string;
+  template_version: number;
+  sections?: RecordSections;
+  risk_level?: RiskLevel;
+  discharge_reason?: DischargeReason;
   subjective: string;
   objective: string;
   assessment: string;
@@ -33,6 +42,8 @@ export interface RecordMeta {
   appointment_id: string;
   record_type: RecordType;
   session_date: string;
+  template_version: number;
+  risk_level?: RiskLevel;
   status: RecordStatus;
   requires_cosign: boolean;
   supervisor_id: string;
@@ -60,6 +71,9 @@ export interface CreateRecordInput {
   objective?: string;
   assessment?: string;
   plan?: string;
+  sections?: RecordSections;
+  risk_level?: RiskLevel;
+  discharge_reason?: DischargeReason;
   supervisor_id?: string;
 }
 
@@ -68,6 +82,9 @@ export interface UpdateRecordInput {
   objective?: string;
   assessment?: string;
   plan?: string;
+  sections?: RecordSections;
+  risk_level?: RiskLevel;
+  discharge_reason?: DischargeReason;
 }
 
 export const clinicalRecordsApi = {

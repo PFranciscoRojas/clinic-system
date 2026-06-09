@@ -15,6 +15,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Open-process business rules: one INITIAL per open process, EVOLUTION/DISCHARGE require an open process, DISCHARGE requires a reason (therapeutic/dropout/referral/mutual agreement)
 - ICD-10 diagnosis module: searchable catalog (61 psychology-relevant codes seeded, Spanish labels), patient diagnoses with PRINCIPAL/RELATED type and ACTIVE/RESOLVED/RULED_OUT lifecycle, full audit trail
 - Unit tests for template validation and open-process rules
+- Frontend: differentiated clinical forms per record type — guided intake with 10-domain mental exam checklist (normals pre-marked), DAP-style evolution note, discharge epicrisis with reason selector
+- Frontend: mandatory one-click risk selector on every note; risk badge on record view, per-record risk column and "último riesgo" badge on the patient profile
+- Frontend: copy-forward ("partir de la evolución anterior" — risk intentionally not copied) and local autosave of in-progress notes
+- Frontend: Diagnósticos tab on patient profile — ICD-10 search, assign, and lifecycle (activo/resuelto/descartado)
 
 ### Fixed
 - New-booking notification now reaches every active CLINIC_ADMIN of the organization (was limited to one arbitrary admin)

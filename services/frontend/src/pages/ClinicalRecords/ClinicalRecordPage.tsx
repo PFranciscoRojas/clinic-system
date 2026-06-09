@@ -2,18 +2,15 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowLeft, FileText, CheckCircle2, Clock, AlertTriangle,
+  ArrowLeft, FileText, CheckCircle2, AlertTriangle,
   Edit3, Save, ChevronDown, ChevronUp, Shield,
 } from 'lucide-react';
-import { clinicalRecordsApi, type ClinicalRecord } from '@/api/clinicalRecords';
+import { clinicalRecordsApi, type ClinicalRecord, type MentalExamEntry } from '@/api/clinicalRecords';
 import { useAuth } from '@/context/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
-
-const RECORD_TYPE_LABEL: Record<string, string> = {
-  INITIAL: 'Inicial', EVOLUTION: 'Evolución',
-  DISCHARGE: 'Alta', INTERCONSULTATION: 'Interconsulta',
-};
+import { RecordSectionsForm, recordToDraft, draftToPayload, validateDraft, type ClinicalDraft } from '@/components/clinical/RecordSectionsForm';
+import { TEMPLATE_SECTIONS, MENTAL_EXAM_DOMAINS, RECORD_TYPE_LABELS, DISCHARGE_REASONS, riskMeta } from '@/components/clinical/constants';
 
 const SOAP_SECTIONS = [
   { key: 'subjective' as const, label: 'S — Subjetivo',  description: 'Lo que reporta el paciente en sus propias palabras.' },
@@ -31,6 +28,7 @@ export function ClinicalRecordPage() {
   const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set(['subjective']));
   const [soapEdit, setSoapEdit] = useState<Partial<ClinicalRecord>>({});
+  const [draft, setDraft] = useState<ClinicalDraft | null>(null);
   const [saving, setSaving] = useState(false);
   const [approving, setApproving] = useState(false);
   const [cosigning, setCosigning] = useState(false);
@@ -45,13 +43,27 @@ export function ClinicalRecordPage() {
   const toggle = (key: string) =>
     setExpanded(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s; });
 
+  const isV2 = (record?.template_version ?? 1) >= 2;
+
+  const startEditing = () => {
+    if (record && isV2) {
+      setDraft(recordToDraft(record.sections, record.risk_level, record.discharge_reason));
+    }
+    setEditing(true);
+  };
+
   const handleSave = async () => {
-    if (!id) return;
-    setSaving(true); setErr('');
+    if (!id || !record) return;
+    setErr('');
+    if (isV2 && draft) {
+      const validation = validateDraft(record.record_type, draft);
+      if (validation) { setErr(validation); return; }
+    }
+    setSaving(true);
     try {
-      await clinicalRecordsApi.update(id, soapEdit);
+      await clinicalRecordsApi.update(id, isV2 && draft ? draftToPayload(record.record_type, draft) : soapEdit);
       queryClient.invalidateQueries({ queryKey: ['clinical-record', id] });
-      setEditing(false); setSoapEdit({});
+      setEditing(false); setSoapEdit({}); setDraft(null);
     } catch { setErr('Error al guardar. Intenta de nuevo.'); }
     finally { setSaving(false); }
   };
@@ -88,6 +100,8 @@ export function ClinicalRecordPage() {
   const isSupervisor = record.supervisor_id === user?.user_id;
   const needsCosign = record.requires_cosign && !record.supervisor_cosigned_at;
   const getSoap = (key: keyof typeof soapEdit) => soapEdit[key] as string ?? record[key] ?? '';
+  const risk = riskMeta(record.risk_level);
+  const dischargeLabel = DISCHARGE_REASONS.find(r => r.value === record.discharge_reason)?.label;
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto' }}>
@@ -104,13 +118,17 @@ export function ClinicalRecordPage() {
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
               <h1 style={{ fontSize: 18, fontWeight: 700, color: 'var(--s800)', margin: 0 }}>
-                Registro clínico · {RECORD_TYPE_LABEL[record.record_type] ?? record.record_type}
+                Registro clínico · {RECORD_TYPE_LABELS[record.record_type] ?? record.record_type}
               </h1>
               <Badge
                 label={isDraft ? 'Borrador' : 'Aprobado'}
                 color={isDraft ? '#92400e' : '#065f46'}
                 bg={isDraft ? '#fef3c7' : '#d1fae5'}
               />
+              {risk && !editing && (
+                <Badge label={`Riesgo: ${risk.label}`} color={risk.color} bg={risk.bg} />
+              )}
+              {dischargeLabel && <Badge label={dischargeLabel} color="#374151" bg="#f1f5f9" />}
             </div>
             <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
               <InfoLine label="Fecha de sesión" value={record.session_date} />
@@ -119,7 +137,7 @@ export function ClinicalRecordPage() {
             </div>
           </div>
           {isDraft && !editing && (
-            <button onClick={() => setEditing(true)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            <button onClick={startEditing} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
               <Edit3 size={14} /> Editar
             </button>
           )}
@@ -136,40 +154,50 @@ export function ClinicalRecordPage() {
         )}
       </div>
 
-      {/* SOAP sections */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-        {SOAP_SECTIONS.map(({ key, label, description }) => {
-          const isOpen = expanded.has(key);
-          return (
-            <div key={key} className="card" style={{ overflow: 'hidden', padding: 0 }}>
-              <button onClick={() => toggle(key)} style={{ width: '100%', padding: '16px 20px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', textAlign: 'left' }}>
-                <div>
-                  <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>{label}</p>
-                  {!isOpen && <p style={{ margin: 0, fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>{description}</p>}
-                </div>
-                {isOpen ? <ChevronUp size={16} color="var(--s400)" /> : <ChevronDown size={16} color="var(--s400)" />}
-              </button>
-              {isOpen && (
-                <div style={{ padding: '0 20px 20px', borderTop: '1px solid var(--s100)' }}>
-                  <p style={{ fontSize: 12, color: 'var(--s400)', margin: '12px 0 10px', fontStyle: 'italic' }}>{description}</p>
-                  {editing && isDraft ? (
-                    <textarea
-                      value={getSoap(key)}
-                      onChange={e => setSoapEdit(p => ({ ...p, [key]: e.target.value }))}
-                      rows={6}
-                      style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: '1.5px solid var(--teal)', fontSize: 14, color: 'var(--s700)', resize: 'vertical', background: '#fff', boxSizing: 'border-box', lineHeight: 1.7 }}
-                    />
-                  ) : (
-                    <p style={{ margin: 0, fontSize: 14, color: 'var(--s700)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
-                      {getSoap(key) || <em style={{ color: 'var(--s300)' }}>Sin contenido</em>}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      {/* Content — template v2 sections or legacy SOAP */}
+      {isV2 ? (
+        editing && draft ? (
+          <div style={{ marginBottom: 24 }}>
+            <RecordSectionsForm recordType={record.record_type} value={draft} onChange={setDraft} />
+          </div>
+        ) : (
+          <V2RecordView record={record} />
+        )
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
+          {SOAP_SECTIONS.map(({ key, label, description }) => {
+            const isOpen = expanded.has(key);
+            return (
+              <div key={key} className="card" style={{ overflow: 'hidden', padding: 0 }}>
+                <button onClick={() => toggle(key)} style={{ width: '100%', padding: '16px 20px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', textAlign: 'left' }}>
+                  <div>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>{label}</p>
+                    {!isOpen && <p style={{ margin: 0, fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>{description}</p>}
+                  </div>
+                  {isOpen ? <ChevronUp size={16} color="var(--s400)" /> : <ChevronDown size={16} color="var(--s400)" />}
+                </button>
+                {isOpen && (
+                  <div style={{ padding: '0 20px 20px', borderTop: '1px solid var(--s100)' }}>
+                    <p style={{ fontSize: 12, color: 'var(--s400)', margin: '12px 0 10px', fontStyle: 'italic' }}>{description}</p>
+                    {editing && isDraft ? (
+                      <textarea
+                        value={getSoap(key)}
+                        onChange={e => setSoapEdit(p => ({ ...p, [key]: e.target.value }))}
+                        rows={6}
+                        style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: '1.5px solid var(--teal)', fontSize: 14, color: 'var(--s700)', resize: 'vertical', background: '#fff', boxSizing: 'border-box', lineHeight: 1.7 }}
+                      />
+                    ) : (
+                      <p style={{ margin: 0, fontSize: 14, color: 'var(--s700)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
+                        {getSoap(key) || <em style={{ color: 'var(--s300)' }}>Sin contenido</em>}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {err && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', background: '#fee2e2', borderRadius: 10, border: '1.5px solid #fca5a5', marginBottom: 12 }}>
@@ -183,7 +211,7 @@ export function ClinicalRecordPage() {
         <div style={{ display: 'flex', gap: 12 }}>
           {editing ? (
             <>
-              <button onClick={() => { setSoapEdit({}); setEditing(false); }} style={{ flex: 1, padding: 13, borderRadius: 11, background: 'var(--s100)', color: 'var(--s700)', border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 600 }}>
+              <button onClick={() => { setSoapEdit({}); setDraft(null); setEditing(false); }} style={{ flex: 1, padding: 13, borderRadius: 11, background: 'var(--s100)', color: 'var(--s700)', border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 600 }}>
                 Descartar
               </button>
               <button onClick={handleSave} disabled={saving} style={{ flex: 1, padding: 13, borderRadius: 11, background: '#6366f1', color: '#fff', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: saving ? 0.7 : 1 }}>
@@ -221,6 +249,58 @@ export function ClinicalRecordPage() {
   );
 }
 
+// Read-only view of a template-v2 record, in the section order of its type.
+function V2RecordView({ record }: { record: ClinicalRecord }) {
+  const defs = TEMPLATE_SECTIONS[record.record_type as keyof typeof TEMPLATE_SECTIONS] ?? [];
+  const sections = record.sections ?? {};
+  const mentalExam = (sections.mental_exam ?? null) as Record<string, MentalExamEntry> | null;
+  const riskNote = typeof sections.risk_note === 'string' ? sections.risk_note : '';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
+      {defs.map(def => {
+        const content = sections[def.key];
+        if (typeof content !== 'string' || !content) return null;
+        return (
+          <div key={def.key} className="card" style={{ padding: '16px 20px' }}>
+            <p style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>{def.label}</p>
+            <p style={{ margin: 0, fontSize: 14, color: 'var(--s700)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{content}</p>
+          </div>
+        );
+      })}
+
+      {mentalExam && (
+        <div className="card" style={{ padding: '16px 20px' }}>
+          <p style={{ margin: '0 0 10px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>Examen mental</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {MENTAL_EXAM_DOMAINS.map(d => {
+              const entry = mentalExam[d.key];
+              if (!entry) return null;
+              const altered = entry.status === 'ALTERED';
+              return (
+                <div key={d.key} style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '6px 10px', borderRadius: 8, background: altered ? '#fffbeb' : 'transparent' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s700)', width: 180, flexShrink: 0 }}>{d.label}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: altered ? '#92400e' : '#065f46' }}>
+                    {altered ? 'Alterado' : 'Normal'}
+                  </span>
+                  {altered && entry.note && <span style={{ fontSize: 13, color: 'var(--s600)' }}>— {entry.note}</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {riskNote && (
+        <div className="card" style={{ padding: '16px 20px', background: '#fffbeb', border: '1px solid #fde68a' }}>
+          <p style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: '#92400e' }}>Nota sobre el riesgo</p>
+          <p style={{ margin: 0, fontSize: 14, color: 'var(--s700)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{riskNote}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InfoLine({ label, value }: { label: string; value: string }) {
   return (
     <span style={{ fontSize: 12, color: 'var(--s400)' }}>
@@ -228,8 +308,3 @@ function InfoLine({ label, value }: { label: string; value: string }) {
     </span>
   );
 }
-
-function Clock2({ size, color }: { size: number; color: string }) {
-  return <Clock size={size} color={color} />;
-}
-void Clock2;
