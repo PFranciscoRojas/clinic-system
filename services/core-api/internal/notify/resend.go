@@ -19,17 +19,19 @@ func NewResend(apiKey, from string) *ResendNotifier {
 	return &ResendNotifier{apiKey: apiKey, from: from}
 }
 
-func (n *ResendNotifier) NewBooking(ctx context.Context, b BookingDetails, adminEmail string) {
+func (n *ResendNotifier) NewBooking(ctx context.Context, b BookingDetails, adminEmails []string) {
 	if html, err := renderReceived(b); err == nil {
 		if err := n.send(ctx, b.PatientEmail, "Recibimos tu solicitud de cita · Marcela Chapués", html); err != nil {
 			slog.Default().Warn("notify: booking-received to patient failed", "err", err)
 		}
 	}
-	if adminEmail != "" {
+	if len(adminEmails) > 0 {
 		if html, err := renderReceivedAdmin(b); err == nil {
 			subj := fmt.Sprintf("Nueva solicitud: %s %s", b.FirstName, b.LastName)
-			if err := n.send(ctx, adminEmail, subj, html); err != nil {
-				slog.Default().Warn("notify: booking-received to admin failed", "err", err)
+			for _, adminEmail := range adminEmails {
+				if err := n.send(ctx, adminEmail, subj, html); err != nil {
+					slog.Default().Warn("notify: booking-received to admin failed", "to", adminEmail, "err", err)
+				}
 			}
 		}
 	}

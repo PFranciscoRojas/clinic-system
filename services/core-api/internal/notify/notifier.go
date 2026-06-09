@@ -20,7 +20,7 @@ type BookingDetails struct {
 // Implementations must not block — callers fire them in goroutines.
 // Errors are logged internally; they never reach the HTTP response.
 type Notifier interface {
-	NewBooking(ctx context.Context, b BookingDetails, adminEmail string)
+	NewBooking(ctx context.Context, b BookingDetails, adminEmails []string)
 	BookingConfirmed(ctx context.Context, b BookingDetails)
 	BookingRejected(ctx context.Context, b BookingDetails)
 }
@@ -29,6 +29,6 @@ type Notifier interface {
 // Used when RESEND_API_KEY is absent (dev/CI environments).
 type NoopNotifier struct{}
 
-func (NoopNotifier) NewBooking(_ context.Context, _ BookingDetails, _ string)  {}
+func (NoopNotifier) NewBooking(_ context.Context, _ BookingDetails, _ []string) {}
 func (NoopNotifier) BookingConfirmed(_ context.Context, _ BookingDetails)       {}
 func (NoopNotifier) BookingRejected(_ context.Context, _ BookingDetails)        {}

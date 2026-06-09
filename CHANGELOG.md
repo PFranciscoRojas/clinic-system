@@ -9,6 +9,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+- New-booking notification now reaches every active CLINIC_ADMIN of the organization (was limited to one arbitrary admin)
+
 ### Added
 - Shared audit writer (`internal/shared/audit`) — best-effort async inserts into append-only `audit_log`
 - Audit trail for clinical records: read, list, create, update, approve and cosign events
