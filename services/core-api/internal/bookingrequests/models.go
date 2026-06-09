@@ -39,6 +39,10 @@ type CreateInput struct {
 	PreferredDate  *string
 	PreferredTime  *string
 	Notes          *string
+	// Consent evidence (Ley 1581/2012): set when the visitor checked the
+	// data-processing box; version identifies the policy text they saw.
+	ConsentAccepted      bool
+	ConsentPolicyVersion string
 }
 
 type ResolveInput struct {

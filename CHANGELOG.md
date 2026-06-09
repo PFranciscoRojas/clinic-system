@@ -9,6 +9,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+- Shared audit writer (`internal/shared/audit`) — best-effort async inserts into append-only `audit_log`
+- Audit trail for clinical records: read, list, create, update, approve and cosign events
+- Audit trail for consents: create and list events
+- Per-IP rate limiting on public endpoints: 5 req/min on `POST /public/booking/`, 20 req/min on `/auth/*`
+- Booking consent evidence (Ley 1581/2012): `consent_accepted_at` + `consent_policy_version` on `booking_requests` (migration 000007), accepted from the public booking payload
+
 ---
 
 ## [0.4.0] — 2026-05-06 · PR #5 · feature/bc5-frontend

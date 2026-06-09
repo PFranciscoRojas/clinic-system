@@ -14,9 +14,8 @@ fi
 : "${DB_NAME:?DB_NAME not set}"
 : "${DB_USER:?DB_USER not set}"
 : "${GPG_RECIPIENT:?GPG_RECIPIENT not set}"
-: "${B2_BUCKET_NAME:?B2_BUCKET_NAME not set}"
 
-BACKUP_DIR="${DATA_DIR:-/data}/backups"
+BACKUP_DIR="${BACKUP_DIR:-${DATA_DIR:-/data}/backups}"
 DATE=$(date +%Y-%m-%d)
 FILENAME="sghcp-${DATE}.sql.gz.gpg"
 DEST="${BACKUP_DIR}/${FILENAME}"
@@ -34,24 +33,34 @@ docker exec sghcp_postgres pg_dump \
     --no-owner \
     --no-privileges \
     | gzip -9 \
-    | gpg --batch --yes --recipient "$GPG_RECIPIENT" --encrypt \
+    | gpg --batch --yes --trust-model always --recipient "$GPG_RECIPIENT" --encrypt \
     > "$DEST"
 
 SIZE=$(du -sh "$DEST" | cut -f1)
 echo "[backup] Backup written: ${DEST} (${SIZE})"
 
-# Validate: the file must be non-empty and GPG-parseable
-if ! gpg --batch --list-packets "$DEST" > /dev/null 2>&1; then
+# Validate: the file must start with a public-key-encrypted packet.
+# gpg exits non-zero here because this host holds only the public key
+# (it can encrypt but never decrypt its own backups), so capture the
+# listing with || true — under pipefail gpg's exit code would otherwise
+# mask a successful grep — and check the packet type instead.
+packets=$(gpg --batch --list-packets "$DEST" 2>/dev/null || true)
+if ! grep -q "pubkey enc packet" <<< "$packets"; then
     echo "[backup] ERROR: GPG validation failed for ${DEST}" >&2
     rm -f "$DEST"
     exit 1
 fi
 
-# Sync to Backblaze B2
-echo "[backup] Uploading to B2 bucket ${B2_BUCKET_NAME}..."
-rclone copy "$DEST" "b2:${B2_BUCKET_NAME}/daily/"
-
-echo "[backup] Upload complete at $(date -u +%T) UTC"
+# Sync to Backblaze B2 — only when an rclone remote named "b2" is configured.
+# Until then the encrypted backup stays local; the warning keeps the gap visible.
+if command -v rclone > /dev/null && rclone listremotes 2>/dev/null | grep -q '^b2:'; then
+    : "${B2_BUCKET_NAME:?B2_BUCKET_NAME not set}"
+    echo "[backup] Uploading to B2 bucket ${B2_BUCKET_NAME}..."
+    rclone copy "$DEST" "b2:${B2_BUCKET_NAME}/daily/"
+    echo "[backup] Upload complete at $(date -u +%T) UTC"
+else
+    echo "[backup] WARNING: rclone remote 'b2' not configured — backup is LOCAL ONLY" >&2
+fi
 
 # Clean up local backups older than 7 days (B2 retains for 15 years via lifecycle rule)
 find "$BACKUP_DIR" -name "*.gpg" -mtime +7 -delete

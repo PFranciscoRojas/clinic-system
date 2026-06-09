@@ -49,14 +49,23 @@ func (a *app) buildRouter() http.Handler {
 	})
 
 	// ── Public routes — no JWT required ──────────────────────────────────────
-	r.Mount("/api/v1/auth", authhandler.New(a.pool, a.rdb, a.cfg).Routes([]byte(a.cfg.JWTSecret)))
+	// Per-IP rate limits: these endpoints are reachable without credentials,
+	// so they are the abuse surface (credential stuffing, booking spam that
+	// triggers outbound notification emails).
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.RateLimit(20, time.Minute))
+		r.Mount("/api/v1/auth", authhandler.New(a.pool, a.rdb, a.cfg).Routes([]byte(a.cfg.JWTSecret)))
+	})
 
 	var notifier notify.Notifier = notify.NoopNotifier{}
 	if a.cfg.ResendAPIKey != "" {
 		notifier = notify.NewResend(a.cfg.ResendAPIKey, a.cfg.ResendFrom)
 	}
 	bookingH := bookingrequestshandler.New(a.pool, a.km, notifier)
-	r.Mount("/api/v1/public/booking", bookingH.PublicRoutes())
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.RateLimit(5, time.Minute))
+		r.Mount("/api/v1/public/booking", bookingH.PublicRoutes())
+	})
 
 	// ── Protected routes — valid JWT required on every request ────────────────
 	// RequireAuth validates the Bearer token and injects claims into context.

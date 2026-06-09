@@ -66,15 +66,17 @@ func (h *Handler) Routes() chi.Router {
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		OrgSlug       string  `json:"org_slug"`
-		FirstName     string  `json:"first_name"`
-		LastName      string  `json:"last_name"`
-		Email         string  `json:"email"`
-		Phone         string  `json:"phone"`
-		Modality      string  `json:"modality"`
-		PreferredDate *string `json:"preferred_date"`
-		PreferredTime *string `json:"preferred_time"`
-		Notes         *string `json:"notes"`
+		OrgSlug              string  `json:"org_slug"`
+		FirstName            string  `json:"first_name"`
+		LastName             string  `json:"last_name"`
+		Email                string  `json:"email"`
+		Phone                string  `json:"phone"`
+		Modality             string  `json:"modality"`
+		PreferredDate        *string `json:"preferred_date"`
+		PreferredTime        *string `json:"preferred_time"`
+		Notes                *string `json:"notes"`
+		ConsentAccepted      bool    `json:"consent_accepted"`
+		ConsentPolicyVersion string  `json:"consent_policy_version"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
@@ -97,15 +99,17 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	br, err := h.svc.Create(r.Context(), bookingrequests.CreateInput{
-		OrganizationID: orgID,
-		FirstName:      body.FirstName,
-		LastName:       body.LastName,
-		Email:          body.Email,
-		Phone:          body.Phone,
-		Modality:       modality,
-		PreferredDate:  body.PreferredDate,
-		PreferredTime:  body.PreferredTime,
-		Notes:          body.Notes,
+		OrganizationID:       orgID,
+		FirstName:            body.FirstName,
+		LastName:             body.LastName,
+		Email:                body.Email,
+		Phone:                body.Phone,
+		Modality:             modality,
+		PreferredDate:        body.PreferredDate,
+		PreferredTime:        body.PreferredTime,
+		Notes:                body.Notes,
+		ConsentAccepted:      body.ConsentAccepted,
+		ConsentPolicyVersion: body.ConsentPolicyVersion,
 	})
 	if errors.Is(err, bookingrequests.ErrInvalidInput) {
 		http.Error(w, "nombre, apellido y correo son requeridos", http.StatusUnprocessableEntity)

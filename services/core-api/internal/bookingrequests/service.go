@@ -29,17 +29,31 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*BookingRequest, 
 		return nil, ErrInvalidInput
 	}
 
+	var consentAt *time.Time
+	var consentVersion *string
+	if in.ConsentAccepted {
+		now := time.Now()
+		consentAt = &now
+		v := in.ConsentPolicyVersion
+		if v == "" {
+			v = "v1"
+		}
+		consentVersion = &v
+	}
+
 	var br BookingRequest
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO booking_requests
 			(organization_id, first_name, last_name, email, phone, modality,
-			 preferred_date, preferred_time, notes)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+			 preferred_date, preferred_time, notes,
+			 consent_accepted_at, consent_policy_version)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 		RETURNING id, organization_id, first_name, last_name, email, phone,
 		          modality, preferred_date::text, preferred_time, notes, status, created_at`,
 		in.OrganizationID, in.FirstName, in.LastName, in.Email,
 		nullStr(in.Phone), in.Modality,
 		in.PreferredDate, in.PreferredTime, in.Notes,
+		consentAt, consentVersion,
 	).Scan(
 		&br.ID, &br.OrganizationID, &br.FirstName, &br.LastName, &br.Email,
 		&br.Phone, &br.Modality, &br.PreferredDate, &br.PreferredTime,
