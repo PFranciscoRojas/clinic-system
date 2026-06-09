@@ -28,6 +28,7 @@ func (r *Repository) FindByID(ctx context.Context, orgID, recordID string) (*cli
 		       COALESCE(appointment_id::text, ''), dek_id,
 		       record_type, session_date,
 		       subjective_enc, objective_enc, assessment_enc, plan_enc,
+		       template_version, sections_enc, risk_level::text, discharge_reason::text,
 		       status, approved_at, requires_cosign,
 		       COALESCE(supervisor_id::text, ''), supervisor_cosigned_at,
 		       created_at, updated_at
@@ -42,6 +43,7 @@ func (r *Repository) FindByID(ctx context.Context, orgID, recordID string) (*cli
 		&rec.AppointmentID, &rec.DEKID,
 		&rec.RecordType, &rec.SessionDate,
 		&rec.SubjectiveEnc, &rec.ObjectiveEnc, &rec.AssessmentEnc, &rec.PlanEnc,
+		&rec.TemplateVersion, &rec.SectionsEnc, &rec.RiskLevel, &rec.DischargeReason,
 		&rec.Status, &rec.ApprovedAt, &rec.RequiresCosign,
 		&rec.SupervisorID, &rec.SupervisorCosignedAt,
 		&rec.CreatedAt, &rec.UpdatedAt,
@@ -59,7 +61,8 @@ func (r *Repository) List(ctx context.Context, f clinicalrecords.ListFilter) ([]
 	rows, err := r.db.Query(ctx, `
 		SELECT id, patient_id, responsible_staff_id, created_by,
 		       COALESCE(appointment_id::text, ''), record_type,
-		       session_date, status, requires_cosign,
+		       session_date, template_version, risk_level::text,
+		       status, requires_cosign,
 		       COALESCE(supervisor_id::text, ''), created_at
 		FROM clinical_records
 		WHERE organization_id = $1 AND patient_id = $2
@@ -77,7 +80,8 @@ func (r *Repository) List(ctx context.Context, f clinicalrecords.ListFilter) ([]
 		if err := rows.Scan(
 			&m.ID, &m.PatientID, &m.ResponsibleStaffID, &m.CreatedBy,
 			&m.AppointmentID, &m.RecordType,
-			&m.SessionDate, &m.Status, &m.RequiresCosign,
+			&m.SessionDate, &m.TemplateVersion, &m.RiskLevel,
+			&m.Status, &m.RequiresCosign,
 			&m.SupervisorID, &m.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan record_meta: %w", err)
@@ -85,4 +89,21 @@ func (r *Repository) List(ctx context.Context, f clinicalrecords.ListFilter) ([]
 		result = append(result, &m)
 	}
 	return result, rows.Err()
+}
+
+// GetProcessDates returns the latest INITIAL and DISCHARGE session dates for
+// a patient, the basis of the open-process rules for template v2 records.
+func (r *Repository) GetProcessDates(ctx context.Context, orgID, patientID string) (clinicalrecords.ProcessDates, error) {
+	var d clinicalrecords.ProcessDates
+	err := r.db.QueryRow(ctx, `
+		SELECT
+			MAX(session_date) FILTER (WHERE record_type = 'INITIAL'),
+			MAX(session_date) FILTER (WHERE record_type = 'DISCHARGE')
+		FROM clinical_records
+		WHERE organization_id = $1 AND patient_id = $2
+	`, orgID, patientID).Scan(&d.LastInitial, &d.LastDischarge)
+	if err != nil {
+		return d, fmt.Errorf("get process dates: %w", err)
+	}
+	return d, nil
 }

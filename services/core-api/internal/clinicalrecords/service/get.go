@@ -20,6 +20,9 @@ func (s *Service) Get(ctx context.Context, orgID, recordID string) (*clinicalrec
 
 	rec := &clinicalrecords.ClinicalRecord{
 		ID:                  raw.ID,
+		TemplateVersion:     raw.TemplateVersion,
+		RiskLevel:           raw.RiskLevel,
+		DischargeReason:     raw.DischargeReason,
 		OrganizationID:      raw.OrganizationID,
 		PatientID:           raw.PatientID,
 		ResponsibleStaffID:  raw.ResponsibleStaffID,
@@ -35,6 +38,13 @@ func (s *Service) Get(ctx context.Context, orgID, recordID string) (*clinicalrec
 		SupervisorCosignedAt: raw.SupervisorCosignedAt,
 		CreatedAt:           raw.CreatedAt,
 		UpdatedAt:           raw.UpdatedAt,
+	}
+
+	if raw.TemplateVersion >= 2 {
+		if rec.Sections, err = openSections(dek, raw.SectionsEnc); err != nil {
+			return nil, fmt.Errorf("decrypt sections: %w", err)
+		}
+		return rec, nil
 	}
 
 	type field struct {

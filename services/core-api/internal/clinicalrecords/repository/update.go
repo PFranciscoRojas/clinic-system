@@ -10,17 +10,22 @@ import (
 func (r *Repository) Update(ctx context.Context, p clinicalrecords.UpdateParams) error {
 	tag, err := r.db.Exec(ctx, `
 		UPDATE clinical_records
-		SET subjective_enc  = $3,
-		    objective_enc   = $4,
-		    assessment_enc  = $5,
-		    plan_enc        = $6,
-		    content_hash    = $7,
-		    updated_at      = NOW()
+		SET subjective_enc   = $3,
+		    objective_enc    = $4,
+		    assessment_enc   = $5,
+		    plan_enc         = $6,
+		    sections_enc     = $7,
+		    risk_level       = COALESCE($8, risk_level),
+		    discharge_reason = COALESCE($9, discharge_reason),
+		    content_hash     = $10,
+		    updated_at       = NOW()
 		WHERE id = $1 AND organization_id = $2 AND status = 'DRAFT'
 	`,
 		p.ID, p.OrganizationID,
 		nullableBytes(p.SubjectiveEnc), nullableBytes(p.ObjectiveEnc),
 		nullableBytes(p.AssessmentEnc), nullableBytes(p.PlanEnc),
+		nullableBytes(p.SectionsEnc),
+		p.RiskLevel, p.DischargeReason,
 		nullableString(p.ContentHash),
 	)
 	if err != nil {

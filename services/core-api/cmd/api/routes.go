@@ -16,6 +16,7 @@ import (
 	bookingrequestshandler "sghcp/core-api/internal/bookingrequests/handler"
 	crrhandler "sghcp/core-api/internal/clinicalrecords/handler"
 	consentshandler "sghcp/core-api/internal/consents/handler"
+	diagnoseshandler "sghcp/core-api/internal/diagnoses/handler"
 	"sghcp/core-api/internal/notify"
 	patientshandler "sghcp/core-api/internal/patients/handler"
 	"sghcp/core-api/internal/shared/middleware"
@@ -81,6 +82,11 @@ func (a *app) buildRouter() http.Handler {
 		r.Mount("/api/v1/clinical-records", crr.Routes())
 
 		r.Mount("/api/v1/patients/{patient_id}/consents", consentshandler.New(a.pool, a.km).Routes())
+
+		diag := diagnoseshandler.New(a.pool)
+		r.Mount("/api/v1/icd10", diag.CatalogRoutes())
+		r.Mount("/api/v1/patients/{patient_id}/diagnoses", diag.PatientRoutes())
+		r.Mount("/api/v1/diagnoses", diag.Routes())
 
 		aiDrafts := aidraftshandler.New(a.pool, a.km, a.rdb, a.cfg.AudioDir)
 		r.Mount("/api/v1/ai-drafts", aiDrafts.Routes())

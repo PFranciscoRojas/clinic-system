@@ -9,6 +9,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+- Clinical record template v2 — psychology-native formats per record type: intake (INITIAL, 9 sections incl. 10-domain mental exam), evolution note (DAP-style, 5 sections) and discharge epicrisis; sections stored as one encrypted JSON blob (`sections_enc`) so future format changes need no schema migration (migration 000008)
+- Structured suicide/self-harm risk level (`NONE`/`IDEATION`/`PLAN`/`ATTEMPT`) — mandatory on every v2 record, exposed in record list for the patient profile
+- Open-process business rules: one INITIAL per open process, EVOLUTION/DISCHARGE require an open process, DISCHARGE requires a reason (therapeutic/dropout/referral/mutual agreement)
+- ICD-10 diagnosis module: searchable catalog (61 psychology-relevant codes seeded, Spanish labels), patient diagnoses with PRINCIPAL/RELATED type and ACTIVE/RESOLVED/RULED_OUT lifecycle, full audit trail
+- Unit tests for template validation and open-process rules
+
 ### Fixed
 - New-booking notification now reaches every active CLINIC_ADMIN of the organization (was limited to one arbitrary admin)
 

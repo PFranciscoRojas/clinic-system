@@ -19,6 +19,9 @@ type CreateInput struct {
 	Objective          string
 	Assessment         string
 	Plan               string
+	Sections           map[string]any
+	RiskLevel          clinicalrecords.RiskLevel
+	DischargeReason    clinicalrecords.DischargeReason
 	RequiresCosign     bool
 	SupervisorID       string
 }
@@ -31,4 +34,7 @@ type UpdateInput struct {
 	Objective      string
 	Assessment     string
 	Plan           string
+	Sections       map[string]any
+	RiskLevel      clinicalrecords.RiskLevel
+	DischargeReason clinicalrecords.DischargeReason
 }

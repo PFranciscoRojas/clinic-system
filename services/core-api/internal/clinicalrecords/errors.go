@@ -10,4 +10,11 @@ var (
 	ErrAlreadyApproved = errors.New("record is already approved")
 	ErrCosignRequired = errors.New("supervisor cosign is required before approval")
 	ErrInternCannotApprove = errors.New("interns cannot approve clinical records")
+
+	// Template v2 business rules
+	ErrRiskRequired      = errors.New("risk_level is required and must be valid")
+	ErrMissingSection    = errors.New("a required section is missing or empty")
+	ErrOpenProcessExists = errors.New("patient already has an open clinical process (INITIAL without DISCHARGE)")
+	ErrNoOpenProcess     = errors.New("patient has no open clinical process (INITIAL required first)")
+	ErrTemplateMismatch  = errors.New("payload template does not match the record's template version")
 )
