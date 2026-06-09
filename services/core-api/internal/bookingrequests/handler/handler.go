@@ -289,11 +289,11 @@ func (h *Handler) resolve(w http.ResponseWriter, r *http.Request, status booking
 
 func (h *Handler) sendNewBookingNotifications(br *bookingrequests.BookingRequest) {
 	ctx := context.Background()
-	adminEmail, err := h.svc.OrgAdminEmail(ctx, br.OrganizationID)
+	adminEmails, err := h.svc.OrgAdminEmails(ctx, br.OrganizationID)
 	if err != nil {
-		slog.Default().Warn("notify: could not fetch org admin email", "org_id", br.OrganizationID, "err", err)
+		slog.Default().Warn("notify: could not fetch org admin emails", "org_id", br.OrganizationID, "err", err)
 	}
-	h.notifier.NewBooking(ctx, toDetails(br), adminEmail)
+	h.notifier.NewBooking(ctx, toDetails(br), adminEmails)
 }
 
 func (h *Handler) sendResolvedNotification(br *bookingrequests.BookingRequest) {

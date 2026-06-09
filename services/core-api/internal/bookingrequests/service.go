@@ -161,20 +161,29 @@ func (s *Service) Resolve(ctx context.Context, in ResolveInput) (*BookingRequest
 	return &br, nil
 }
 
-func (s *Service) OrgAdminEmail(ctx context.Context, orgID string) (string, error) {
-	var email string
-	err := s.pool.QueryRow(ctx, `
-		SELECT u.email FROM users u
+func (s *Service) OrgAdminEmails(ctx context.Context, orgID string) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT DISTINCT u.email FROM users u
 		JOIN user_roles ur ON ur.user_id = u.id
 		JOIN roles r ON r.id = ur.role_id
-		WHERE u.organization_id = $1 AND r.name = 'CLINIC_ADMIN'
-		LIMIT 1`,
+		WHERE u.organization_id = $1 AND r.name = 'CLINIC_ADMIN' AND u.is_active
+		ORDER BY u.email`,
 		orgID,
-	).Scan(&email)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "", nil
+	)
+	if err != nil {
+		return nil, err
 	}
-	return email, err
+	defer rows.Close()
+
+	var emails []string
+	for rows.Next() {
+		var email string
+		if err := rows.Scan(&email); err != nil {
+			return nil, err
+		}
+		emails = append(emails, email)
+	}
+	return emails, rows.Err()
 }
 
 func (s *Service) PendingCount(ctx context.Context, orgID string) (int, error) {
