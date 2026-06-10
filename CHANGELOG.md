@@ -10,12 +10,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Fixed
+- "Start session" no longer fails with a 500 — `IN_PROGRESS` added to the appointment status enum (migration 000009)
+- Every remaining user-visible "SOAP" string removed: appointment page button, settings labels and demo template, legacy record viewer section labels, AI draft section labels
 - Patient list 500 when a patient has NULL gender (booking-created patients) — scan with nullable type; a single undecryptable patient row no longer takes the whole list down
 - "Iniciar sesión" on appointments swallowed errors silently — failures now surface in the UI
 - Residual "SOAP" wording in user-facing copy replaced with clinical-record terminology
 - Patient profile header showed hardcoded demo chips ("Ansiedad generalizada", "Terapeuta asignado") — now shows the patient's real active principal diagnosis, or nothing
 
 ### Changed
+- Agenda session types reduced to the 3 clinical formats: initial session, follow-up, discharge
 - Clinical note pages use the full screen width (1100px) with a two-column layout: text sections left, mental exam/risk right
 - Section fields auto-grow while typing instead of fixed 3-row boxes
 - Saving a session note automatically completes the appointment; the cancel button hides once a record is linked

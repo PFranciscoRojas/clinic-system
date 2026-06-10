@@ -12,11 +12,12 @@ import { Badge } from '@/components/ui/Badge';
 import { RecordSectionsForm, recordToDraft, draftToPayload, validateDraft, type ClinicalDraft } from '@/components/clinical/RecordSectionsForm';
 import { TEMPLATE_SECTIONS, MENTAL_EXAM_DOMAINS, RECORD_TYPE_LABELS, DISCHARGE_REASONS, riskMeta } from '@/components/clinical/constants';
 
-const SOAP_SECTIONS = [
-  { key: 'subjective' as const, label: 'S — Subjetivo',  description: 'Lo que reporta el paciente en sus propias palabras.' },
-  { key: 'objective'  as const, label: 'O — Objetivo',   description: 'Observaciones clínicas, comportamiento y apariencia.' },
-  { key: 'assessment' as const, label: 'A — Evaluación', description: 'Análisis clínico y avance terapéutico.' },
-  { key: 'plan'       as const, label: 'P — Plan',        description: 'Intervenciones, tareas y próximos pasos.' },
+// Legacy v1 records (pre-template era) store four fixed sections.
+const LEGACY_SECTIONS = [
+  { key: 'subjective' as const, label: 'Relato del paciente', description: 'Lo que reporta el paciente en sus propias palabras.' },
+  { key: 'objective'  as const, label: 'Observación clínica', description: 'Observaciones clínicas, comportamiento y apariencia.' },
+  { key: 'assessment' as const, label: 'Análisis',            description: 'Análisis clínico y avance terapéutico.' },
+  { key: 'plan'       as const, label: 'Plan',                description: 'Intervenciones, tareas y próximos pasos.' },
 ];
 
 export function ClinicalRecordPage() {
@@ -154,7 +155,7 @@ export function ClinicalRecordPage() {
         )}
       </div>
 
-      {/* Content — template v2 sections or legacy SOAP */}
+      {/* Content — template v2 sections or legacy v1 sections */}
       {isV2 ? (
         editing && draft ? (
           <div style={{ marginBottom: 24 }}>
@@ -165,7 +166,7 @@ export function ClinicalRecordPage() {
         )
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-          {SOAP_SECTIONS.map(({ key, label, description }) => {
+          {LEGACY_SECTIONS.map(({ key, label, description }) => {
             const isOpen = expanded.has(key);
             return (
               <div key={key} className="card" style={{ overflow: 'hidden', padding: 0 }}>

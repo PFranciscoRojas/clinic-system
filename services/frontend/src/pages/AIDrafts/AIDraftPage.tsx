@@ -18,17 +18,18 @@ const STATUS_CONFIG: Record<DraftStatus, { label: string; color: string; bg: str
   ERROR:        { label: 'Error',          color: '#991b1b', bg: '#fee2e2', Icon: AlertTriangle },
 };
 
-interface SOAPSection {
+interface DraftSection {
   key: 'subjective' | 'objective' | 'assessment' | 'plan';
   label: string;
   description: string;
 }
 
-const SOAP_SECTIONS: SOAPSection[] = [
-  { key: 'subjective', label: 'S — Subjetivo',  description: 'Lo que reporta el paciente: síntomas, sentimientos, preocupaciones en sus propias palabras.' },
-  { key: 'objective',  label: 'O — Objetivo',   description: 'Observaciones clínicas: comportamiento, afecto, apariencia, pruebas aplicadas.' },
-  { key: 'assessment', label: 'A — Evaluación', description: 'Análisis clínico, diagnóstico diferencial, avance terapéutico.' },
-  { key: 'plan',       label: 'P — Plan',        description: 'Intervenciones, tareas, próximos pasos, ajustes al tratamiento.' },
+// The v1 AI pipeline still emits four fixed sections; only the wording changed.
+const DRAFT_SECTIONS: DraftSection[] = [
+  { key: 'subjective', label: 'Relato del paciente', description: 'Lo que reporta el paciente: síntomas, sentimientos, preocupaciones en sus propias palabras.' },
+  { key: 'objective',  label: 'Observación clínica', description: 'Observaciones clínicas: comportamiento, afecto, apariencia, pruebas aplicadas.' },
+  { key: 'assessment', label: 'Análisis',            description: 'Análisis clínico, diagnóstico diferencial, avance terapéutico.' },
+  { key: 'plan',       label: 'Plan',                description: 'Intervenciones, tareas, próximos pasos, ajustes al tratamiento.' },
 ];
 
 export function AIDraftPage() {
@@ -167,7 +168,7 @@ export function AIDraftPage() {
         </div>
       )}
 
-      {/* SOAP Content */}
+      {/* Draft content */}
       {(isReady || draft.status === 'APPROVED') && content && (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
@@ -178,7 +179,7 @@ export function AIDraftPage() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-            {SOAP_SECTIONS.map(({ key, label, description }) => {
+            {DRAFT_SECTIONS.map(({ key, label, description }) => {
               const isOpen = expanded.has(key);
               return (
                 <div key={key} className="card" style={{ overflow: 'hidden', padding: 0 }}>

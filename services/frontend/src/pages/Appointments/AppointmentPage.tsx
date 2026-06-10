@@ -178,7 +178,7 @@ export function AppointmentPage() {
   const [statusErr, setStatusErr] = useState('');
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
-  const [showSOAPForm, setShowSOAPForm] = useState(false);
+  const [showRecordForm, setShowRecordForm] = useState(false);
   // When true, the edit modal is open and closing it after saving starts the session
   const [completeDataOpen, setCompleteDataOpen] = useState(false);
 
@@ -247,7 +247,7 @@ export function AppointmentPage() {
     }
     await refetchRecords();
     queryClient.invalidateQueries({ queryKey: ['clinical-records', 'patient', appt?.patient_id] });
-    setShowSOAPForm(false);
+    setShowRecordForm(false);
   };
 
   if (isLoading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><Spinner size={28} color="var(--teal)" /></div>;
@@ -399,9 +399,9 @@ export function AppointmentPage() {
               </div>
               <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--s800)' }}>Historia clínica</span>
             </div>
-            {linkedRecords.length > 0 && !showSOAPForm && isActive && (
+            {linkedRecords.length > 0 && !showRecordForm && isActive && (
               <button
-                onClick={() => setShowSOAPForm(true)}
+                onClick={() => setShowRecordForm(true)}
                 style={{ fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, border: '1px solid var(--teal)', background: '#f0fdfa', color: 'var(--teal)', cursor: 'pointer' }}
               >
                 + Nuevo
@@ -409,7 +409,7 @@ export function AppointmentPage() {
             )}
           </div>
 
-          {linkedRecords.length > 0 && !showSOAPForm ? (
+          {linkedRecords.length > 0 && !showRecordForm ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {linkedRecords.map(rec => (
                 <div key={rec.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'var(--s50)', borderRadius: 10, border: '1px solid var(--s200)' }}>
@@ -432,11 +432,11 @@ export function AppointmentPage() {
                 </div>
               ))}
             </div>
-          ) : showSOAPForm ? (
+          ) : showRecordForm ? (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s600)' }}>Nuevo registro clínico</span>
-                <button onClick={() => setShowSOAPForm(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)' }}><X size={16} /></button>
+                <button onClick={() => setShowRecordForm(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)' }}><X size={16} /></button>
               </div>
               <RecordForm patientId={appt.patient_id} appointmentId={id!} onSaved={handleRecordSaved} />
             </div>
@@ -445,10 +445,10 @@ export function AppointmentPage() {
               <FileText size={36} color="var(--s200)" style={{ marginBottom: 12 }} />
               <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--s500)' }}>Sin registro para esta sesión</p>
               <button
-                onClick={() => setShowSOAPForm(true)}
+                onClick={() => setShowRecordForm(true)}
                 style={{ padding: '10px 20px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 7 }}
               >
-                <FileText size={14} /> Crear registro SOAP
+                <FileText size={14} /> Crear registro clínico
               </button>
             </div>
           ) : (
@@ -466,7 +466,7 @@ export function AppointmentPage() {
             </div>
             <div>
               <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--s800)', display: 'block' }}>Borrador IA</span>
-              <span style={{ fontSize: 11, color: 'var(--s400)' }}>Audio → Whisper → SOAP automático</span>
+              <span style={{ fontSize: 11, color: 'var(--s400)' }}>Audio → transcripción → borrador automático</span>
             </div>
           </div>
 
