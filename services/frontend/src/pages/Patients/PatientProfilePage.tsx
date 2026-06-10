@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Phone, Mail, Calendar, FileText,
   Clock, AlertCircle,
-  CreditCard, MapPin, Video, Upload, FileCheck, Cake, Stethoscope, AlertTriangle,
+  CreditCard, MapPin, Video, FileCheck, Cake, Stethoscope, AlertTriangle,
   Pencil,
 } from 'lucide-react';
 import { EditPatientModal } from '@/components/patients/EditPatientModal';
@@ -13,6 +13,8 @@ import { appointmentsApi, type Appointment } from '@/api/appointments';
 import { clinicalRecordsApi, consentsApi, type RecordMeta, type Consent, type ConsentType } from '@/api/clinicalRecords';
 import { diagnosesApi } from '@/api/diagnoses';
 import { Spinner } from '@/components/ui/Spinner';
+import { ConsentSignModal } from '@/components/consents/ConsentSignModal';
+import { ConsentViewModal } from '@/components/consents/ConsentViewModal';
 import { DiagnosesPanel } from '@/components/clinical/DiagnosesPanel';
 import { riskMeta } from '@/components/clinical/constants';
 
@@ -263,95 +265,188 @@ const CONSENT_TYPE_LABEL: Record<string, string> = {
   INFORMATION_SHARING: 'Compartir información',
 };
 
+const METHOD_SHORT: Record<string, string> = {
+  DIGITAL: 'Firma digital',
+  PHYSICAL_SCAN: 'Documento físico',
+};
+
 function ConsentimientosTab({ patientId }: { patientId: string }) {
-  const [adding, setAdding] = useState(false);
-  const [newType, setNewType] = useState<ConsentType>('TREATMENT');
-  const [saving, setSaving] = useState(false);
-  const { data, isLoading, refetch } = useQuery({
+  const queryClient = useQueryClient();
+  const [signType, setSignType] = useState<ConsentType | null>(null);
+  const [viewId, setViewId] = useState<string | null>(null);
+  const [revokeId, setRevokeId] = useState<string | null>(null);
+  const [revokeReason, setRevokeReason] = useState('');
+  const [linkSentFor, setLinkSentFor] = useState<ConsentType | null>(null);
+  const [error, setError] = useState('');
+  const fileInputType = useRef<ConsentType>('TREATMENT');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const { data, isLoading } = useQuery({
     queryKey: ['consents', patientId],
     queryFn: () => consentsApi.list(patientId),
     enabled: !!patientId,
   });
   const consents: Consent[] = data?.items ?? [];
 
-  const handleCreate = async () => {
-    setSaving(true);
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['consents', patientId] });
+
+  // Latest consent per type; an active (non-revoked) one wins over revoked ones.
+  const latestByType = (type: ConsentType): Consent | undefined => {
+    const ofType = consents.filter(c => c.consent_type === type);
+    return ofType.find(c => !c.revoked_at) ?? ofType[0];
+  };
+
+  const handleSendLink = async (type: ConsentType) => {
+    setError('');
     try {
-      await consentsApi.create(patientId, { consent_type: newType });
-      await refetch();
-      setAdding(false);
-    } catch {
-      // silent for now
-    } finally {
-      setSaving(false);
+      await consentsApi.sendLink(patientId, { consent_type: type });
+      setLinkSentFor(type);
+      setTimeout(() => setLinkSentFor(null), 6000);
+    } catch (e) {
+      setError(e instanceof Error && e.message.includes('email')
+        ? 'El paciente no tiene email registrado — agrégalo en sus datos para enviar el link.'
+        : 'No se pudo enviar el link. Intenta de nuevo.');
     }
   };
 
+  const handleFilePicked = async (file: File) => {
+    setError('');
+    const form = new FormData();
+    form.append('consent_type', fileInputType.current);
+    form.append('signed_at', new Date().toISOString().slice(0, 10));
+    form.append('file', file);
+    try {
+      await consentsApi.upload(patientId, form);
+      invalidate();
+    } catch {
+      setError('No se pudo subir el archivo. Verifica que sea PDF, JPG o PNG de máximo 10 MB.');
+    }
+  };
+
+  const handleRevoke = async () => {
+    if (!revokeId || !revokeReason.trim()) return;
+    setError('');
+    try {
+      await consentsApi.revoke(revokeId, revokeReason.trim());
+      setRevokeId(null);
+      setRevokeReason('');
+      invalidate();
+    } catch {
+      setError('No se pudo revocar el consentimiento.');
+    }
+  };
+
+  const actionBtn = (label: string, onClick: () => void, primary = false) => (
+    <button
+      onClick={onClick}
+      style={{
+        fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, cursor: 'pointer',
+        border: primary ? 'none' : '1px solid var(--s200)',
+        background: primary ? 'var(--teal)' : '#fff',
+        color: primary ? '#fff' : 'var(--s700)',
+      }}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <div className="anim-fade-in" style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--s100)' }}>
+      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--s100)' }}>
         <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--s800)' }}>Documentos de consentimiento</span>
-        <button
-          onClick={() => setAdding(v => !v)}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
-        >
-          <Upload size={13} /> Registrar consentimiento
-        </button>
+        <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--s400)' }}>
+          Firma en consultorio, envío por link al email del paciente, o carga del documento firmado físicamente.
+        </p>
       </div>
 
-      {adding && (
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--s100)', background: 'var(--s50)', display: 'flex', gap: 10, alignItems: 'flex-end' }}>
-          <div style={{ flex: 1 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--s600)', display: 'block', marginBottom: 4 }}>Tipo de consentimiento</label>
-            <select
-              value={newType}
-              onChange={e => setNewType(e.target.value as ConsentType)}
-              style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid var(--s200)', fontSize: 13, color: 'var(--s700)', background: '#fff' }}
-            >
-              {(Object.keys(CONSENT_TYPE_LABEL) as ConsentType[]).map(t => (
-                <option key={t} value={t}>{CONSENT_TYPE_LABEL[t]}</option>
-              ))}
-            </select>
-          </div>
-          <button
-            onClick={handleCreate}
-            disabled={saving}
-            style={{ padding: '9px 16px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, opacity: saving ? 0.7 : 1 }}
-          >
-            {saving ? 'Guardando…' : 'Guardar'}
-          </button>
-          <button
-            onClick={() => setAdding(false)}
-            style={{ padding: '9px 16px', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
-          >
-            Cancelar
-          </button>
-        </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="application/pdf,image/jpeg,image/png"
+        style={{ display: 'none' }}
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleFilePicked(f); e.target.value = ''; }}
+      />
+
+      {error && (
+        <div style={{ padding: '10px 20px', background: '#fee2e2', fontSize: 13, color: '#991b1b' }}>{error}</div>
       )}
 
       {isLoading ? (
         <div style={{ padding: 32, textAlign: 'center' }}><Spinner size={22} color="var(--teal)" /></div>
-      ) : consents.length === 0 ? (
-        <div style={{ padding: '40px 20px', textAlign: 'center' }}>
-          <FileCheck size={36} color="var(--s200)" style={{ marginBottom: 10 }} />
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--s400)' }}>Sin consentimientos registrados</p>
-        </div>
       ) : (
-        consents.map((c, idx) => (
-          <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', borderBottom: idx < consents.length - 1 ? '1px solid var(--s100)' : 'none' }}>
-            <div style={{ width: 36, height: 36, borderRadius: 8, background: c.revoked_at ? '#fee2e2' : '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <FileCheck size={16} color={c.revoked_at ? '#991b1b' : '#059669'} />
+        (Object.keys(CONSENT_TYPE_LABEL) as ConsentType[]).map((type, idx, arr) => {
+          const c = latestByType(type);
+          const active = c && !c.revoked_at;
+          const revoked = c && c.revoked_at;
+          return (
+            <div key={type} style={{ padding: '14px 20px', borderBottom: idx < arr.length - 1 ? '1px solid var(--s100)' : 'none' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: active ? '#d1fae5' : revoked ? '#fee2e2' : 'var(--s100)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <FileCheck size={16} color={active ? '#059669' : revoked ? '#991b1b' : 'var(--s400)'} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--s800)' }}>{CONSENT_TYPE_LABEL[type]}</p>
+                  <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--s400)' }}>
+                    {active && <>Firmado el {c.signed_at} · {METHOD_SHORT[c.signing_method] ?? c.signing_method}</>}
+                    {revoked && <span style={{ color: 'var(--red)' }}>Revocado el {new Date(c.revoked_at!).toLocaleDateString('es-CO')}</span>}
+                    {!c && 'Sin firmar'}
+                    {linkSentFor === type && <span style={{ color: '#059669', marginLeft: 8, fontWeight: 600 }}>✓ Link enviado — vence en 7 días</span>}
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  {active ? (
+                    <>
+                      {actionBtn('Ver', () => setViewId(c.id))}
+                      {actionBtn('Revocar', () => { setRevokeId(c.id); setRevokeReason(''); })}
+                    </>
+                  ) : (
+                    <>
+                      {actionBtn('Firmar ahora', () => setSignType(type), true)}
+                      {actionBtn('Enviar link', () => handleSendLink(type))}
+                      {actionBtn('Subir firmado', () => { fileInputType.current = type; fileRef.current?.click(); })}
+                      {revoked && actionBtn('Ver anterior', () => setViewId(c.id))}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {revokeId === c?.id && (
+                <div style={{ marginTop: 12, padding: '12px 14px', background: '#fef2f2', borderRadius: 9, border: '1px solid #fecaca' }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#991b1b', display: 'block', marginBottom: 6 }}>
+                    Motivo de la revocación (requerido — habeas data)
+                  </label>
+                  <textarea
+                    value={revokeReason}
+                    onChange={e => setRevokeReason(e.target.value)}
+                    rows={2}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1px solid #fecaca', fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }}
+                  />
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'flex-end' }}>
+                    {actionBtn('Cancelar', () => setRevokeId(null))}
+                    <button
+                      onClick={handleRevoke}
+                      disabled={!revokeReason.trim()}
+                      style={{ fontSize: 12, fontWeight: 600, padding: '6px 14px', borderRadius: 7, border: 'none', background: revokeReason.trim() ? 'var(--red)' : 'var(--s200)', color: '#fff', cursor: revokeReason.trim() ? 'pointer' : 'not-allowed' }}
+                    >
+                      Confirmar revocación
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--s800)' }}>{CONSENT_TYPE_LABEL[c.consent_type] ?? c.consent_type}</p>
-              <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--s400)' }}>
-                Firmado: {c.signed_at} · Método: {c.signing_method}
-                {c.revoked_at && <span style={{ color: 'var(--red)', marginLeft: 8 }}>· Revocado</span>}
-              </p>
-            </div>
-          </div>
-        ))
+          );
+        })
       )}
+
+      {signType && (
+        <ConsentSignModal
+          patientId={patientId}
+          consentType={signType}
+          onClose={() => setSignType(null)}
+          onSigned={invalidate}
+        />
+      )}
+      {viewId && <ConsentViewModal consentId={viewId} onClose={() => setViewId(null)} />}
     </div>
   );
 }

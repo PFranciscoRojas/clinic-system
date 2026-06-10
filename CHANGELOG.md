@@ -9,7 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+- Informed consent management: versioned editable templates (Settings), in-office digital signature (canvas), remote signature via single-use 7-day emailed link, physical-scan upload (PDF/JPEG/PNG ≤10MB) stored encrypted in-DB, document viewer with signature image and read-and-accepted evidence (timestamp/channel/IP), and revocation with reason (migration 000010)
+- Appointment page shows the covering TREATMENT consent (signed date + view button) or a warning chip when missing
+
 ### Fixed
+- Multipart uploads no longer send a JSON content type from the SPA API client
 - "Start session" no longer fails with a 500 — `IN_PROGRESS` added to the appointment status enum (migration 000009)
 - Every remaining user-visible "SOAP" string removed: appointment page button, settings labels and demo template, legacy record viewer section labels, AI draft section labels
 - Patient list 500 when a patient has NULL gender (booking-created patients) — scan with nullable type; a single undecryptable patient row no longer takes the whole list down

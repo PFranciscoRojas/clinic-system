@@ -30,6 +30,10 @@ type Config struct {
 
 	ResendAPIKey string
 	ResendFrom   string
+
+	// AppBaseURL is the public origin of the SPA, used to build links sent to
+	// patients (e.g. remote consent signature).
+	AppBaseURL string
 }
 
 func Load() Config {
@@ -60,6 +64,8 @@ func Load() Config {
 
 		ResendAPIKey: getEnv("RESEND_API_KEY", ""),
 		ResendFrom:   getEnv("RESEND_FROM", ""),
+
+		AppBaseURL: getEnv("APP_BASE_URL", "http://localhost:5173"),
 	}
 }
 

@@ -10,6 +10,7 @@ var (
 	tmplReceivedAdmin = template.Must(template.New("received-admin").Parse(tmplReceivedAdminSrc))
 	tmplConfirmed     = template.Must(template.New("confirmed").Parse(tmplConfirmedSrc))
 	tmplRejected      = template.Must(template.New("rejected").Parse(tmplRejectedSrc))
+	tmplConsentLink   = template.Must(template.New("consent-link").Parse(tmplConsentLinkSrc))
 )
 
 func renderReceived(b BookingDetails) (string, error) {
@@ -39,6 +40,14 @@ func renderConfirmed(b BookingDetails) (string, error) {
 func renderRejected(b BookingDetails) (string, error) {
 	var buf bytes.Buffer
 	if err := tmplRejected.Execute(&buf, b); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+func renderConsentSignLink(d ConsentLinkDetails) (string, error) {
+	var buf bytes.Buffer
+	if err := tmplConsentLink.Execute(&buf, d); err != nil {
 		return "", err
 	}
 	return buf.String(), nil
@@ -151,6 +160,44 @@ const tmplConfirmedSrc = `<!DOCTYPE html>
           <p style="margin:0;font-size:14px;color:#777;line-height:1.6;">
             ¿Tienes preguntas? Escríbeme a
             <a href="mailto:hola@marcelachapues.com" style="color:#5e8265;text-decoration:none;">hola@marcelachapues.com</a>
+          </p>
+        </td></tr>
+        <tr><td style="padding:16px 36px 24px;border-top:1px solid #ece9e3;">
+          <p style="margin:0;font-size:12px;color:#aaa;line-height:1.6;">
+            Marcela Chapués · Psicóloga Clínica · Bogotá, Colombia<br>
+            <a href="mailto:hola@marcelachapues.com" style="color:#5e8265;text-decoration:none;">hola@marcelachapues.com</a>
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+
+const tmplConsentLinkSrc = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f5f4f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f5f4f0;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="background:#fff;border-radius:10px;overflow:hidden;max-width:560px;width:100%;">
+        <tr><td style="background:#5e8265;padding:28px 36px;">
+          <p style="margin:0;color:#fff;font-size:16px;font-weight:600;letter-spacing:.02em;">Marcela Chapués · Psicóloga Clínica</p>
+        </td></tr>
+        <tr><td style="padding:36px;">
+          <h1 style="margin:0 0 16px;font-size:20px;color:#1a1a1a;font-weight:600;">Documento para tu lectura y firma</h1>
+          <p style="margin:0 0 24px;font-size:15px;color:#555;line-height:1.7;">
+            Hola <strong>{{.PatientFirstName}}</strong>,<br>
+            tu psicóloga te envió el documento <strong>{{.ConsentTitle}}</strong> para que lo leas y lo firmes en línea.
+          </p>
+          <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 0 24px;">
+            <tr><td style="border-radius:8px;background:#5e8265;">
+              <a href="{{.Link}}" style="display:inline-block;padding:13px 28px;color:#fff;font-size:15px;font-weight:600;text-decoration:none;">Leer y firmar</a>
+            </td></tr>
+          </table>
+          <p style="margin:0;font-size:13px;color:#999;line-height:1.6;">
+            El enlace es personal, de un solo uso y vence en 7 días.<br>
+            Si no esperabas este correo, puedes ignorarlo.
           </p>
         </td></tr>
         <tr><td style="padding:16px 36px 24px;border-top:1px solid #ece9e3;">

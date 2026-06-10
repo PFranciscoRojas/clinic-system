@@ -100,8 +100,82 @@ export const clinicalRecordsApi = {
     api.post<void>(`/clinical-records/${id}/cosign`, {}),
 };
 
+export interface ConsentTemplate {
+  id: string;
+  consent_type: ConsentType;
+  version: number;
+  title: string;
+  body: string;
+  created_at: string;
+}
+
+export interface ConsentEvidence {
+  accepted_at: string;
+  channel: string;
+  ip?: string;
+  user_agent?: string;
+}
+
+export interface ConsentDocument {
+  id: string;
+  patient_id: string;
+  consent_type: ConsentType;
+  signing_method: string;
+  signed_at: string;
+  revoked_at: string | null;
+  template_id: string;
+  document_text?: string;
+  signature_png?: string;
+  scan_file_base64?: string;
+  scan_file_type?: string;
+  evidence?: string; // JSON string — parse to ConsentEvidence
+}
+
 export const consentsApi = {
-  list:   (patientId: string) => api.get<{ items: Consent[] }>(`/patients/${patientId}/consents`),
-  create: (patientId: string, body: { consent_type: ConsentType; signed_at?: string; scan_file_type?: string }) =>
-    api.post<{ id: string }>(`/patients/${patientId}/consents`, body),
+  list:     (patientId: string) => api.get<{ items: Consent[] }>(`/patients/${patientId}/consents`),
+  sign:     (patientId: string, body: { consent_type: ConsentType; accepted: boolean; signature_png: string }) =>
+    api.post<{ id: string }>(`/patients/${patientId}/consents/sign`, body),
+  upload:   (patientId: string, form: FormData) =>
+    api.upload<{ id: string }>(`/patients/${patientId}/consents/upload`, form),
+  sendLink: (patientId: string, body: { consent_type: ConsentType }) =>
+    api.post<{ expires_at: string }>(`/patients/${patientId}/consents/send-link`, body),
+  document: (consentId: string) => api.get<ConsentDocument>(`/consents/${consentId}/document`),
+  revoke:   (consentId: string, reason: string) =>
+    api.post<void>(`/consents/${consentId}/revoke`, { reason }),
+};
+
+export const consentTemplatesApi = {
+  list:   () => api.get<{ items: ConsentTemplate[] }>(`/consent-templates`),
+  update: (type: ConsentType, body: { title: string; body: string }) =>
+    api.put<ConsentTemplate>(`/consent-templates/${type}`, body),
+};
+
+// Public (no auth) — consumed by the remote sign page at /sign/:token.
+export interface PublicConsentInfo {
+  patient_first_name: string;
+  consent_type: ConsentType;
+  title: string;
+  body: string;
+  expires_at: string;
+}
+
+async function publicRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`/api/v1${path}`, init);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    const err = new Error(body.error ?? res.statusText) as Error & { status: number };
+    err.status = res.status;
+    throw err;
+  }
+  return res.json() as Promise<T>;
+}
+
+export const publicConsentsApi = {
+  get: (token: string) => publicRequest<PublicConsentInfo>(`/public/consents/sign/${token}`),
+  sign: (token: string, body: { accepted: boolean; signature_png: string }) =>
+    publicRequest<{ id: string }>(`/public/consents/sign/${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
 };

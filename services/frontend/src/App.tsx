@@ -15,6 +15,7 @@ import { AIDraftPage } from '@/pages/AIDrafts/AIDraftPage';
 import { ClinicalRecordPage } from '@/pages/ClinicalRecords/ClinicalRecordPage';
 import { NewClinicalRecordPage } from '@/pages/ClinicalRecords/NewClinicalRecordPage';
 import { BookingPage } from '@/pages/Booking/BookingPage';
+import { ConsentSignPage } from '@/pages/Public/ConsentSignPage';
 import { BookingRequestsPage } from '@/pages/BookingRequests/BookingRequestsPage';
 import { EvaluationsPage } from '@/pages/Evaluations/EvaluationsPage';
 import { BillingPage } from '@/pages/Billing/BillingPage';
@@ -56,6 +57,8 @@ export function App() {
       />
       {/* Public booking page — no auth required */}
       <Route path="/booking" element={<BookingPage />} />
+      {/* Public remote consent signature — the single-use token is the credential */}
+      <Route path="/sign/:token" element={<ConsentSignPage />} />
 
       <Route
         path="/*"
