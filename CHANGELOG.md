@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-06-10 · psychology-native clinical history, consents, treatment plans & PDF export
+
 ### Added
 - Treatment plans: per-patient therapeutic goals with progress notes and status tracking (pending/in progress/achieved/abandoned), plan lifecycle (active/completed/abandoned, one active plan per patient), all clinical content encrypted at rest with a per-plan DEK; new "Plan terapéutico" tab in the patient profile (migration 000011)
 - Approved clinical records can be exported as PDF (header with organization and responsible professional, template sections, mental exam, active ICD-10 diagnoses, confidentiality footer)
