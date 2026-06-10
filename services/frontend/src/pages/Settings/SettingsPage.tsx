@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   UserRound, Clock, Bell, Sparkles, ShieldCheck, CreditCard,
   FileText, Plug, Settings, CalendarDays, Send, AlertCircle,
@@ -11,6 +11,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
 import { consentTemplatesApi, type ConsentType } from '@/api/clinicalRecords';
+import { profilesApi, splitName, type Specialty } from '@/api/profiles';
 import { ACCENT_COLORS, saveAccentColor } from '@/lib/theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -190,11 +191,9 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
   const mark = <T,>(fn: (v: T) => void) => (v: T) => { fn(v); setDirty(true); };
 
   const savedProfile = (() => { try { return JSON.parse(localStorage.getItem('sghcp_profile') ?? '{}'); } catch { return {}; } })();
-  // display_name from the JWT is the source of truth; localStorage is only a fallback for fields not yet in the backend.
+  // display_name from the JWT is the source of truth for the app UI.
   const [name,      setName]      = useState(user?.display_name || savedProfile.name || '');
-  const [specialty, setSpecialty] = useState(savedProfile.specialty ?? 'Psicología clínica');
   const [email,     setEmail]     = useState(user?.email ?? '');
-  const [phone,     setPhone]     = useState(savedProfile.phone ?? '');
   const [bio,       setBio]       = useState('');
   const savedAccent = localStorage.getItem(`sghcp_accent_${user?.user_id}`) ?? '#14b8a6';
   const [color,     setColor]     = useState(savedAccent);
@@ -202,12 +201,56 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
   const [saved,     setSaved]     = useState(false);
   const [saveErr,   setSaveErr]   = useState('');
 
+  // Professional profile — persisted in the backend (professional_profiles);
+  // this is what signed clinical PDFs print (name + tarjeta profesional).
+  const [nombres,     setNombres]     = useState('');
+  const [apellidos,   setApellidos]   = useState('');
+  const [license,     setLicense]     = useState('');
+  const [specialtyId, setSpecialtyId] = useState('');
+  const [phone,       setPhone]       = useState(savedProfile.phone ?? '');
+  const [specialties, setSpecialties] = useState<Specialty[]>([]);
+
+  useEffect(() => {
+    profilesApi.specialties()
+      .then(r => {
+        setSpecialties(r.items);
+        setSpecialtyId(prev => prev || (r.items.find(s => s.code === 'PSI_CLI')?.id ?? r.items[0]?.id ?? ''));
+      })
+      .catch(() => {});
+    profilesApi.get()
+      .then(p => {
+        setNombres([p.first_name, p.middle_name].filter(Boolean).join(' '));
+        setApellidos([p.paternal_last_name, p.maternal_last_name].filter(Boolean).join(' '));
+        setLicense(p.license_number);
+        setSpecialtyId(p.specialty_id);
+        if (p.phone) setPhone(p.phone);
+      })
+      .catch(() => { /* 404 — no profile yet */ });
+  }, []);
+
   const handleSaveName = async () => {
     if (!name.trim()) return;
     setSaving(true); setSaveErr('');
     try {
       await updateProfile(name.trim());
-      localStorage.setItem('sghcp_profile', JSON.stringify({ ...savedProfile, name: name.trim(), specialty, phone }));
+      if (nombres.trim() && apellidos.trim() && license.trim() && specialtyId) {
+        const [firstName, middleName] = splitName(nombres);
+        const [paternal, maternal] = splitName(apellidos);
+        await profilesApi.save({
+          first_name: firstName,
+          middle_name: middleName,
+          paternal_last_name: paternal,
+          maternal_last_name: maternal,
+          license_number: license.trim(),
+          specialty_id: specialtyId,
+          phone: phone.trim(),
+        });
+      } else if (nombres.trim() || apellidos.trim() || license.trim()) {
+        setSaveErr('Para guardar el perfil profesional completa nombres, apellidos, tarjeta profesional y especialidad.');
+        setSaving(false);
+        return;
+      }
+      localStorage.setItem('sghcp_profile', JSON.stringify({ ...savedProfile, name: name.trim(), phone }));
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
       setDirty(false);
@@ -232,12 +275,22 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
   return (
     <>
       <SectionCard title="Datos personales y profesionales" icon={UserRound}>
-        <FieldRow label="Nombre completo con título" sub="Aparece en documentos firmados">
+        <FieldRow label="Nombre para mostrar" sub="Como apareces dentro de la aplicación">
           <FInput value={name} onChange={mark(setName)} placeholder="Dra. Nombre Apellido" />
         </FieldRow>
+        <FieldRow label="Nombres" sub="Aparece en los documentos clínicos firmados">
+          <FInput value={nombres} onChange={mark(setNombres)} placeholder="Ej: Marcela" />
+        </FieldRow>
+        <FieldRow label="Apellidos">
+          <FInput value={apellidos} onChange={mark(setApellidos)} placeholder="Ej: Chapués Rodríguez" />
+        </FieldRow>
+        <FieldRow label="Tarjeta profesional" sub="Nº de registro expedido por Colpsic (Ley 1090/2006)">
+          <FInput value={license} onChange={mark(setLicense)} placeholder="Ej: 123456" />
+        </FieldRow>
         <FieldRow label="Especialidad">
-          <FSelect value={specialty} onChange={mark(setSpecialty)}>
-            {['Psicología clínica','Psicología educativa','Psicología organizacional','Neuropsicología','Psicología forense','Psicología de la salud','Psicoanálisis','Psicología cognitivo-conductual','Psicología sistémica','Psicología infantil','Psiquiatría','Otra'].map(s => <option key={s}>{s}</option>)}
+          <FSelect value={specialtyId} onChange={mark(setSpecialtyId)}>
+            {specialties.length === 0 && <option value="">Cargando catálogo…</option>}
+            {specialties.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </FSelect>
         </FieldRow>
         <FieldRow label="Correo electrónico">
@@ -267,9 +320,9 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
           }}>
             {saving
               ? <><span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: 99, animation: 'spin .7s linear infinite', display: 'inline-block' }} />Guardando…</>
-              : <><Save size={13} />Guardar nombre</>}
+              : <><Save size={13} />Guardar perfil</>}
           </button>
-          {saved    && <span style={{ fontSize: 12.5, color: '#10b981', display: 'flex', alignItems: 'center', gap: 5 }}><CheckCircle size={13} />Nombre actualizado</span>}
+          {saved    && <span style={{ fontSize: 12.5, color: '#10b981', display: 'flex', alignItems: 'center', gap: 5 }}><CheckCircle size={13} />Perfil actualizado</span>}
           {saveErr  && <span style={{ fontSize: 12.5, color: 'var(--red)' }}>{saveErr}</span>}
         </div>
       </SectionCard>
