@@ -13,6 +13,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(init.headers as Record<string, string> | undefined),
   };
+  // FormData bodies must let the browser set the multipart boundary.
+  if (init.body instanceof FormData) {
+    delete headers['Content-Type'];
+  }
 
   const res = await fetch(`${BASE}${path}`, { ...init, headers });
 
