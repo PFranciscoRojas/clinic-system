@@ -507,7 +507,7 @@ function NotificationsSection({ setDirty }: { setDirty: (v: boolean) => void }) 
 
 // ── AI section ────────────────────────────────────────────────────────────────
 
-const SOAP_STYLES = [
+const NOTE_STYLES = [
   { id: 'structured', label: 'Estructurado', desc: 'Técnico-clínico estándar' },
   { id: 'narrative',  label: 'Narrativo',    desc: 'Redacción fluida'         },
   { id: 'bullet',     label: 'Con viñetas',  desc: 'Puntos concisos'          },
@@ -537,7 +537,7 @@ function AISection({ setDirty }: { setDirty: (v: boolean) => void }) {
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700, fontSize: 14, color: '#78350f' }}>SGHCP-IA v2.1</div>
-              <div style={{ fontSize: 12, color: '#92400e', marginTop: 2 }}>Genera borradores SOAP desde el audio de sesión. Requiere aprobación del profesional.</div>
+              <div style={{ fontSize: 12, color: '#92400e', marginTop: 2 }}>Genera borradores de nota clínica desde el audio de sesión. Requiere aprobación del profesional.</div>
             </div>
             <button
               onClick={() => { setEnabled((v: boolean) => !v); setDirty(true); }}
@@ -562,9 +562,9 @@ function AISection({ setDirty }: { setDirty: (v: boolean) => void }) {
       </SectionCard>
 
       <SectionCard title="Estilo y tono de los borradores" icon={PenLine} color="#f59e0b">
-        <FieldRow label="Formato SOAP" sub="Cómo estructura el texto la IA">
+        <FieldRow label="Formato de nota" sub="Cómo estructura el texto la IA">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7, opacity: enabled ? 1 : 0.5 }}>
-            {SOAP_STYLES.map(opt => {
+            {NOTE_STYLES.map(opt => {
               const sel = style === opt.id;
               return (
                 <button
@@ -819,8 +819,7 @@ interface Template { id: number; name: string; type: string; default: boolean; c
 
 function TemplatesSection({ setDirty }: { setDirty: (v: boolean) => void }) {
   const [templates, setTemplates] = useState<Template[]>([
-    { id: 1, name: 'SOAP estándar',     type: 'Evolución', default: true,  content: 'S: [subjetivo]\nO: [objetivo]\nA: [análisis]\nP: [plan]' },
-    { id: 2, name: 'Sesión inicial',    type: 'Anamnesis', default: false, content: 'Motivo de consulta:\nAntecedentes:\nHistoria familiar:\nObservaciones:' },
+    { id: 2, name: 'Sesión inicial',    type: 'Anamnesis', default: true,  content: 'Motivo de consulta:\nAntecedentes:\nHistoria familiar:\nObservaciones:' },
     { id: 3, name: 'Alta terapéutica', type: 'Cierre',    default: false, content: 'Resumen del proceso:\nLogros alcanzados:\nRecomendaciones:\nSeguimiento:' },
   ]);
   const [editing, setEditing] = useState<number | null>(null);
