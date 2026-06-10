@@ -5,6 +5,7 @@ import (
 
 	crrrepo "sghcp/core-api/internal/clinicalrecords/repository"
 	crrsvc "sghcp/core-api/internal/clinicalrecords/service"
+	diagrepo "sghcp/core-api/internal/diagnoses/repository"
 	patsrepo "sghcp/core-api/internal/patients/repository"
 	patssvc "sghcp/core-api/internal/patients/service"
 	"sghcp/core-api/internal/shared/audit"
@@ -12,17 +13,21 @@ import (
 )
 
 type Handler struct {
-	svc     svcPort
+	svc      svcPort
 	patients patientGetterPort
-	audit   *audit.Writer
+	diag     *diagrepo.Repository
+	db       *pgxpool.Pool
+	audit    *audit.Writer
 }
 
 func New(db *pgxpool.Pool, km *crypto.KeyManager) *Handler {
 	crrRepo := crrrepo.New(db)
 	patsRepo := patsrepo.New(db)
 	return &Handler{
-		svc:     crrsvc.New(crrRepo, km),
+		svc:      crrsvc.New(crrRepo, km),
 		patients: patssvc.New(patsRepo, km),
-		audit:   audit.New(db),
+		diag:     diagrepo.New(db),
+		db:       db,
+		audit:    audit.New(db),
 	}
 }

@@ -24,3 +24,4 @@ services/frontend/dist/
 # OS
 .DS_Store
 *.swp
+/services/core-api/api
