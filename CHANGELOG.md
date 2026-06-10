@@ -10,6 +10,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- Treatment plans: per-patient therapeutic goals with progress notes and status tracking (pending/in progress/achieved/abandoned), plan lifecycle (active/completed/abandoned, one active plan per patient), all clinical content encrypted at rest with a per-plan DEK; new "Plan terapéutico" tab in the patient profile (migration 000011)
+- Approved clinical records can be exported as PDF (header with organization and responsible professional, template sections, mental exam, active ICD-10 diagnoses, confidentiality footer)
 - Informed consent management: versioned editable templates (Settings), in-office digital signature (canvas), remote signature via single-use 7-day emailed link, physical-scan upload (PDF/JPEG/PNG ≤10MB) stored encrypted in-DB, document viewer with signature image and read-and-accepted evidence (timestamp/channel/IP), and revocation with reason (migration 000010)
 - Appointment page shows the covering TREATMENT consent (signed date + view button) or a warning chip when missing
 
