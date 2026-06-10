@@ -19,6 +19,7 @@ import (
 	diagnoseshandler "sghcp/core-api/internal/diagnoses/handler"
 	"sghcp/core-api/internal/notify"
 	patientshandler "sghcp/core-api/internal/patients/handler"
+	profileshandler "sghcp/core-api/internal/profiles/handler"
 	"sghcp/core-api/internal/shared/middleware"
 	tphandler "sghcp/core-api/internal/treatmentplans/handler"
 )
@@ -100,6 +101,10 @@ func (a *app) buildRouter() http.Handler {
 		tpH := tphandler.New(a.pool, a.km)
 		r.Mount("/api/v1/patients/{patient_id}/treatment-plans", tpH.PatientRoutes())
 		r.Mount("/api/v1/treatment-plans", tpH.Routes())
+
+		profH := profileshandler.New(a.pool)
+		r.Mount("/api/v1/specialties", profH.SpecialtyRoutes())
+		r.Mount("/api/v1/me/professional-profile", profH.Routes())
 
 		aiDrafts := aidraftshandler.New(a.pool, a.km, a.rdb, a.cfg.AudioDir)
 		r.Mount("/api/v1/ai-drafts", aiDrafts.Routes())

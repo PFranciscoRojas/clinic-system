@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Brain, Mail, Lock, Building2, Eye, EyeOff, ShieldCheck, AlertCircle, User, CreditCard, Award, Stethoscope, Phone } from 'lucide-react';
+import { Brain, Mail, Lock, Building2, Eye, EyeOff, ShieldCheck, AlertCircle, User, Award, Stethoscope, Phone } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { authApi } from '@/api/auth';
+import { profilesApi, splitName, type Specialty } from '@/api/profiles';
 
 /* ── Animated blobs ──────────────────────────────────────────── */
 function Blobs() {
@@ -208,10 +209,26 @@ export function LoginPage() {
   // Onboarding — step 0: Profile
   // Pre-fill with the display_name set during registration so the user doesn't re-type it.
   const [name,         setName]         = useState(user?.display_name ?? '');
-  const [cedula,       setCedula]       = useState('');
-  const [specialty,    setSpecialty]    = useState('Psicología clínica');
+  const [nombres,      setNombres]      = useState('');
+  const [apellidos,    setApellidos]    = useState('');
+  const [specialtyId,  setSpecialtyId]  = useState('');
+  const [specialties,  setSpecialties]  = useState<Specialty[]>([]);
   const [regNum,       setRegNum]       = useState('');
   const [phone,        setPhone]        = useState('');
+
+  // The catalog needs an authenticated session — fetch it once the user
+  // lands in onboarding (right after register).
+  useEffect(() => {
+    if (!user) return;
+    profilesApi.specialties()
+      .then(r => {
+        setSpecialties(r.items);
+        if (r.items.length > 0) {
+          setSpecialtyId(prev => prev || (r.items.find(s => s.code === 'PSI_CLI')?.id ?? r.items[0].id));
+        }
+      })
+      .catch(() => { /* offline — profile save will be skipped */ });
+  }, [user]);
 
   // Onboarding — step 1: Schedule
   const [activeDays,   setActiveDays]   = useState(['Lun','Mar','Mié','Jue','Vie']);
@@ -265,7 +282,7 @@ export function LoginPage() {
     }
     if (!user) return;
     setPinErr(''); setSaving(true);
-    localStorage.setItem('sghcp_profile', JSON.stringify({ name, cedula, specialty, regNum, phone }));
+    localStorage.setItem('sghcp_profile', JSON.stringify({ name, regNum, phone }));
     localStorage.setItem('sghcp_schedule', JSON.stringify({ activeDays, startHour, endHour, sessionLen }));
     localStorage.setItem('sghcp_ai_prefs', JSON.stringify({ aiEnabled, soapStyle, reminders }));
     localStorage.setItem(`sghcp_pin_${user.user_id}`, pin);
@@ -273,6 +290,23 @@ export function LoginPage() {
     // Sync the onboarding name to the backend so display_name is always up-to-date.
     if (name.trim() && name.trim() !== user.display_name) {
       try { await updateProfile(name.trim()); } catch { /* non-blocking */ }
+    }
+    // Persist the professional profile — this is what signed PDFs print
+    // (name + tarjeta profesional, Ley 1090/2006).
+    if (nombres.trim() && apellidos.trim() && regNum.trim() && specialtyId) {
+      const [firstName, middleName] = splitName(nombres);
+      const [paternal, maternal] = splitName(apellidos);
+      try {
+        await profilesApi.save({
+          first_name: firstName,
+          middle_name: middleName,
+          paternal_last_name: paternal,
+          maternal_last_name: maternal,
+          license_number: regNum.trim(),
+          specialty_id: specialtyId,
+          phone: phone.trim(),
+        });
+      } catch { /* non-blocking — editable later in Settings */ }
     }
     setSaving(false);
     setDone(true);
@@ -544,18 +578,22 @@ export function LoginPage() {
                         <div style={{ gridColumn: '1/-1' }}>
                           <TField label="Nombre completo con título" value={name} onChange={setName} placeholder="Dra. / Dr. Nombre Apellido" icon={User} required />
                         </div>
-                        <TField label="Cédula / RUT" value={cedula} onChange={setCedula} placeholder="1.234.567-8" icon={CreditCard} required />
-                        <TField label="Nº de registro" value={regNum} onChange={setRegNum} placeholder="Ej: 4891-RM" icon={Award} required />
+                        <TField label="Nombres" value={nombres} onChange={setNombres} placeholder="Ej: Marcela" icon={User} required />
+                        <TField label="Apellidos" value={apellidos} onChange={setApellidos} placeholder="Ej: Chapués Rodríguez" icon={User} required />
+                        <div style={{ gridColumn: '1/-1' }}>
+                          <TField label="Tarjeta profesional (Nº de registro)" value={regNum} onChange={setRegNum} placeholder="Expedida por Colpsic" icon={Award} required />
+                        </div>
                         <div style={{ gridColumn: '1/-1' }}>
                           <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--s700)', marginBottom: 6 }}>
                             Especialidad <span style={{ color: 'var(--red)' }}>*</span>
                           </label>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--s50)', border: '1.5px solid var(--s200)', borderRadius: 11, padding: '11px 14px', marginBottom: 16 }}>
                             <Stethoscope size={16} color="var(--s400)" />
-                            <select value={specialty} onChange={e => setSpecialty(e.target.value)}
+                            <select value={specialtyId} onChange={e => setSpecialtyId(e.target.value)}
                               style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 14, color: 'var(--s800)', minWidth: 0, outline: 'none' }}>
-                              {['Psicología clínica','Psicología educativa','Psicología organizacional','Neuropsicología','Psicología forense','Psicología de la salud','Psicoanálisis','Psicología cognitivo-conductual','Psicología sistémica','Otra'].map(s => (
-                                <option key={s}>{s}</option>
+                              {specialties.length === 0 && <option value="">Cargando catálogo…</option>}
+                              {specialties.map(s => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
                               ))}
                             </select>
                           </div>

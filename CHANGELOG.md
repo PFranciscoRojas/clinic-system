@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+- Professional profile API (BC-2): own-profile GET/PUT and specialties catalog; onboarding and Settings forms now persist names, tarjeta profesional and specialty to the backend instead of localStorage, so signed PDFs print the real license number
+
+### Removed
+- "Cédula / RUT" field from the onboarding wizard (never persisted, Chilean placeholder; the clinical document legally requires name + tarjeta profesional)
+
 ## [0.5.0] — 2026-06-10 · psychology-native clinical history, consents, treatment plans & PDF export
 
 ### Added
