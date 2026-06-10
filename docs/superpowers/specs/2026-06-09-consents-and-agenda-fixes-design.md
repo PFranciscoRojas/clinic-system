@@ -19,8 +19,8 @@ queda con 3 tipos alineados con los formatos de historia clínica (Apertura/Evol
 | `followup` | Seguimiento | 50 min |
 | `discharge` | Sesión de alta | 50 min |
 
-Se eliminan `psychometric` (Evaluación psicométrica) y `crisis` (Atención en crisis),
-junto con sus iconos importados si quedan sin uso.
+Se eliminan `psychometric` (Evaluación psicométrica), `crisis` (Atención en crisis) y
+`family` (Sesión familiar), junto con sus iconos importados si quedan sin uso.
 
 ### 1.2 Error 500 al "Iniciar sesión"
 
