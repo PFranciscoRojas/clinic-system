@@ -209,6 +209,9 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
   const [specialtyId, setSpecialtyId] = useState('');
   const [phone,       setPhone]       = useState(savedProfile.phone ?? '');
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
+  const [signature,   setSignature]   = useState<string | null>(null);
+  const [sigBusy,     setSigBusy]     = useState(false);
+  const [sigErr,      setSigErr]      = useState('');
 
   useEffect(() => {
     profilesApi.specialties()
@@ -224,9 +227,43 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
         setLicense(p.license_number);
         setSpecialtyId(p.specialty_id);
         if (p.phone) setPhone(p.phone);
+        setSignature(p.signature_png ?? null);
       })
       .catch(() => { /* 404 — no profile yet */ });
   }, []);
+
+  const handleSignatureFile = (file: File | null) => {
+    if (!file) return;
+    setSigErr('');
+    if (file.type !== 'image/png') { setSigErr('La firma debe ser una imagen PNG (idealmente con fondo transparente).'); return; }
+    if (file.size > 500 * 1024) { setSigErr('La imagen no puede superar 500KB.'); return; }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      setSigBusy(true);
+      try {
+        await profilesApi.uploadSignature(dataUrl);
+        setSignature(dataUrl);
+      } catch {
+        setSigErr('No se pudo guardar. Completa y guarda primero el perfil profesional.');
+      } finally {
+        setSigBusy(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSignatureDelete = async () => {
+    setSigBusy(true); setSigErr('');
+    try {
+      await profilesApi.deleteSignature();
+      setSignature(null);
+    } catch {
+      setSigErr('No se pudo eliminar la firma.');
+    } finally {
+      setSigBusy(false);
+    }
+  };
 
   const handleSaveName = async () => {
     if (!name.trim()) return;
@@ -298,6 +335,27 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
         </FieldRow>
         <FieldRow label="Teléfono">
           <FInput value={phone} onChange={mark(setPhone)} type="tel" placeholder="+57 3XX XXX XXXX" />
+        </FieldRow>
+        <FieldRow label="Firma manuscrita" sub="Imagen PNG (fondo transparente, máx. 500KB). Se imprime automáticamente en los PDF de historia clínica.">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+            {signature ? (
+              <img src={signature} alt="Firma" style={{ height: 56, maxWidth: 220, objectFit: 'contain', border: '1px dashed var(--s200)', borderRadius: 8, padding: 6, background: '#fff' }} />
+            ) : (
+              <span style={{ fontSize: 12.5, color: 'var(--s400)' }}>Sin firma cargada — el PDF muestra solo la línea de firma.</span>
+            )}
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1.5px solid var(--s200)', background: '#fff', color: 'var(--s700)', fontSize: 12.5, fontWeight: 600, cursor: sigBusy ? 'wait' : 'pointer' }}>
+              <Upload size={13} /> {sigBusy ? 'Guardando…' : signature ? 'Reemplazar' : 'Cargar firma'}
+              <input type="file" accept="image/png" style={{ display: 'none' }} disabled={sigBusy}
+                onChange={e => { handleSignatureFile(e.target.files?.[0] ?? null); e.target.value = ''; }} />
+            </label>
+            {signature && (
+              <button onClick={handleSignatureDelete} disabled={sigBusy}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 12px', borderRadius: 8, border: 'none', background: '#fee2e2', color: '#991b1b', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+                <Trash2 size={13} /> Quitar
+              </button>
+            )}
+          </div>
+          {sigErr && <p style={{ margin: '8px 0 0', fontSize: 12.5, color: 'var(--red)' }}>{sigErr}</p>}
         </FieldRow>
         <FieldRow label="Bio profesional" sub="Se muestra en el portal de pacientes">
           <textarea

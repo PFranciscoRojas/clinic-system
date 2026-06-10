@@ -102,7 +102,7 @@ func (a *app) buildRouter() http.Handler {
 		r.Mount("/api/v1/patients/{patient_id}/treatment-plans", tpH.PatientRoutes())
 		r.Mount("/api/v1/treatment-plans", tpH.Routes())
 
-		profH := profileshandler.New(a.pool)
+		profH := profileshandler.New(a.pool, a.km)
 		r.Mount("/api/v1/specialties", profH.SpecialtyRoutes())
 		r.Mount("/api/v1/me/professional-profile", profH.Routes())
 

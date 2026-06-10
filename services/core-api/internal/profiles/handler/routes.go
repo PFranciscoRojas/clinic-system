@@ -17,5 +17,7 @@ func (h *Handler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", h.getOwn)
 	r.Put("/", h.upsertOwn)
+	r.Put("/signature", h.putSignature)
+	r.Delete("/signature", h.deleteSignature)
 	return r
 }

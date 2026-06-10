@@ -16,6 +16,7 @@ export interface ProfessionalProfile {
   maternal_last_name: string;
   license_number: string;
   phone: string;
+  signature_png?: string; // data URL, present when a signature stamp is uploaded
 }
 
 export interface SaveProfileInput {
@@ -32,6 +33,10 @@ export const profilesApi = {
   specialties: () => api.get<{ items: Specialty[] }>('/specialties'),
   get: () => api.get<ProfessionalProfile>('/me/professional-profile'),
   save: (body: SaveProfileInput) => api.put<{ status: string }>('/me/professional-profile', body),
+  uploadSignature: (signaturePng: string) =>
+    api.put<{ status: string }>('/me/professional-profile/signature', { signature_png: signaturePng }),
+  deleteSignature: () =>
+    api.delete<{ status: string }>('/me/professional-profile/signature'),
 };
 
 // splitName breaks a free-text name into (first, rest) on the first space —
