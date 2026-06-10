@@ -9,7 +9,8 @@ import {
 import { appointmentsApi, type AppointmentStatus } from '@/api/appointments';
 import { patientsApi, type Patient } from '@/api/patients';
 import { EditPatientModal } from '@/components/patients/EditPatientModal';
-import { clinicalRecordsApi, type RecordMeta } from '@/api/clinicalRecords';
+import { clinicalRecordsApi, consentsApi, type RecordMeta } from '@/api/clinicalRecords';
+import { ConsentViewModal } from '@/components/consents/ConsentViewModal';
 import { RecordForm } from '@/components/clinical/RecordForm';
 import { aiDraftsApi } from '@/api/aiDrafts';
 import { useAuth } from '@/context/AuthContext';
@@ -204,6 +205,16 @@ export function AppointmentPage() {
     enabled: !!appt?.patient_id,
   });
 
+  // The TREATMENT consent covering this appointment (one signature per process)
+  const { data: consentsData } = useQuery({
+    queryKey: ['consents', appt?.patient_id],
+    queryFn: () => consentsApi.list(appt!.patient_id),
+    enabled: !!appt?.patient_id,
+  });
+  const treatmentConsent = (consentsData?.items ?? [])
+    .find(c => c.consent_type === 'TREATMENT' && !c.revoked_at);
+  const [viewConsentId, setViewConsentId] = useState<string | null>(null);
+
   // Records linked to this appointment
   const linkedRecords: RecordMeta[] = (recordsData?.items ?? []).filter(r => r.appointment_id === id);
 
@@ -305,6 +316,25 @@ export function AppointmentPage() {
                 color={isVirtual ? '#6366f1' : undefined}
               />
               {user && <InfoChip icon={<User size={13} />} text={user.display_name ?? user.email ?? 'Terapeuta'} />}
+              {/* Consent coverage — derived from the active TREATMENT consent */}
+              {treatmentConsent ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 7, background: '#d1fae5', color: '#065f46' }}>
+                  <CheckCircle2 size={13} /> Consentimiento firmado el {treatmentConsent.signed_at}
+                  <button
+                    onClick={() => setViewConsentId(treatmentConsent.id)}
+                    style={{ marginLeft: 2, border: 'none', background: 'none', color: '#065f46', cursor: 'pointer', fontSize: 12, fontWeight: 700, textDecoration: 'underline', padding: 0 }}
+                  >
+                    Ver
+                  </button>
+                </span>
+              ) : (
+                <button
+                  onClick={() => navigate(`/patients/${appt.patient_id}`)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 7, background: '#fef3c7', color: '#92400e', border: 'none', cursor: 'pointer' }}
+                >
+                  <AlertTriangle size={13} /> Sin consentimiento — firmar
+                </button>
+              )}
             </div>
           </div>
 
@@ -485,6 +515,8 @@ export function AppointmentPage() {
         </div>
 
       </div>
+
+      {viewConsentId && <ConsentViewModal consentId={viewConsentId} onClose={() => setViewConsentId(null)} />}
 
       {completeDataOpen && patient && (
         <EditPatientModal
