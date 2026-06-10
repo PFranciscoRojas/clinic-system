@@ -5,7 +5,7 @@ import {
   ArrowLeft, Phone, Mail, Calendar, FileText,
   Clock, AlertCircle,
   CreditCard, MapPin, Video, FileCheck, Cake, Stethoscope, AlertTriangle,
-  Pencil,
+  Pencil, Target,
 } from 'lucide-react';
 import { EditPatientModal } from '@/components/patients/EditPatientModal';
 import { patientsApi } from '@/api/patients';
@@ -16,11 +16,12 @@ import { Spinner } from '@/components/ui/Spinner';
 import { ConsentSignModal } from '@/components/consents/ConsentSignModal';
 import { ConsentViewModal } from '@/components/consents/ConsentViewModal';
 import { DiagnosesPanel } from '@/components/clinical/DiagnosesPanel';
+import { TreatmentPlanPanel } from '@/components/clinical/TreatmentPlanPanel';
 import { riskMeta } from '@/components/clinical/constants';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Tab = 'historial' | 'diagnosticos' | 'consentimientos';
+type Tab = 'historial' | 'diagnosticos' | 'plan' | 'consentimientos';
 
 type AppointmentStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
 
@@ -536,6 +537,7 @@ export function PatientProfilePage() {
   const TABS: { id: Tab; label: string; Icon: React.ElementType }[] = [
     { id: 'historial',       label: 'Historial de consultas', Icon: Clock      },
     { id: 'diagnosticos',    label: 'Diagnósticos',           Icon: Stethoscope },
+    { id: 'plan',            label: 'Plan terapéutico',        Icon: Target     },
     { id: 'consentimientos', label: 'Consentimientos',         Icon: FileCheck  },
   ];
 
@@ -686,6 +688,7 @@ export function PatientProfilePage() {
         {/* ── Tab Content ───────────────────────────────────────────────────── */}
         {tab === 'historial'       && <HistorialTab appointments={appointments} records={records} navigate={navigate} patientId={id!} />}
         {tab === 'diagnosticos'    && <DiagnosesPanel patientId={id!} />}
+        {tab === 'plan'            && <TreatmentPlanPanel patientId={id!} />}
         {tab === 'consentimientos' && <ConsentimientosTab patientId={id!} />}
       </div>
 
