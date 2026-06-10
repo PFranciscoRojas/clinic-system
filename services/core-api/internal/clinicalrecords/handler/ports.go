@@ -5,6 +5,8 @@ import (
 
 	"sghcp/core-api/internal/clinicalrecords"
 	crrsvc "sghcp/core-api/internal/clinicalrecords/service"
+	"sghcp/core-api/internal/patients"
+	patsvc "sghcp/core-api/internal/patients/service"
 )
 
 type svcPort interface {
@@ -17,3 +19,9 @@ type svcPort interface {
 }
 
 var _ svcPort = (*crrsvc.Service)(nil)
+
+type patientGetterPort interface {
+	Get(ctx context.Context, orgID, patientID string) (*patients.Patient, error)
+}
+
+var _ patientGetterPort = (*patsvc.Service)(nil)
