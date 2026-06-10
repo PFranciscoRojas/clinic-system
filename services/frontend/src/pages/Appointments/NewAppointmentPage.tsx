@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronRight, Clock, MapPin, Video, Repeat,
   CalendarCheck, CalendarPlus, CheckCircle2, Bell, BellOff,
   Search, X, UserPlus, RefreshCw, ClipboardList,
-  TriangleAlert, Award, Users, Minus, ArrowLeft, User,
+  TriangleAlert, Award, Minus, ArrowLeft, User,
   AlertCircle,
 } from 'lucide-react';
 
@@ -28,12 +28,9 @@ interface SessionType {
 }
 
 const SESSION_TYPES: SessionType[] = [
-  { id: 'initial',      label: 'Sesión inicial',          icon: UserPlus,       duration: 60, color: '#0d9488' },
-  { id: 'followup',     label: 'Seguimiento',             icon: RefreshCw,      duration: 50, color: '#0d9488' },
-  { id: 'psychometric', label: 'Evaluación psicométrica', icon: ClipboardList,  duration: 60, color: '#6366f1' },
-  { id: 'crisis',       label: 'Atención en crisis',      icon: TriangleAlert,  duration: 90, color: '#ef4444' },
-  { id: 'discharge',    label: 'Sesión de alta',          icon: Award,          duration: 50, color: '#0d9488' },
-  { id: 'family',       label: 'Sesión familiar',         icon: Users,          duration: 60, color: '#8b5cf6' },
+  { id: 'initial',   label: 'Sesión inicial', icon: UserPlus,  duration: 60, color: '#0d9488' },
+  { id: 'followup',  label: 'Seguimiento',    icon: RefreshCw, duration: 50, color: '#0d9488' },
+  { id: 'discharge', label: 'Sesión de alta', icon: Award,     duration: 50, color: '#0d9488' },
 ];
 
 const SLOT_START = 8 * 60;
