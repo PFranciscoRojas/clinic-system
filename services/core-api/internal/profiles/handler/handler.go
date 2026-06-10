@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,17 +12,19 @@ import (
 
 	"sghcp/core-api/internal/profiles"
 	"sghcp/core-api/internal/shared/audit"
+	"sghcp/core-api/internal/shared/crypto"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
 )
 
 type Handler struct {
 	db    *pgxpool.Pool
+	km    *crypto.KeyManager
 	audit *audit.Writer
 }
 
-func New(db *pgxpool.Pool) *Handler {
-	return &Handler{db: db, audit: audit.New(db)}
+func New(db *pgxpool.Pool, km *crypto.KeyManager) *Handler {
+	return &Handler{db: db, km: km, audit: audit.New(db)}
 }
 
 // GET /api/v1/specialties
@@ -74,7 +77,11 @@ func (h *Handler) getOwn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, toResponse(&p))
+	resp := toResponse(&p)
+	if sig := loadSignature(r, h, claims.UserID); sig != nil {
+		resp["signature_png"] = signaturePrefix + base64.StdEncoding.EncodeToString(sig)
+	}
+	httputil.WriteJSON(w, http.StatusOK, resp)
 }
 
 // PUT /api/v1/me/professional-profile

@@ -13,6 +13,7 @@ import (
 	"sghcp/core-api/internal/clinicalrecords"
 	"sghcp/core-api/internal/clinicalrecords/pdf"
 	"sghcp/core-api/internal/diagnoses"
+	"sghcp/core-api/internal/shared/crypto"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
 )
@@ -77,6 +78,7 @@ func (h *Handler) exportPDF(w http.ResponseWriter, r *http.Request) {
 
 	// The PDF must credit the responsible professional, not whoever exports.
 	prof := h.professionalInfo(ctx, rec.ResponsibleStaffID, claims.OrganizationID)
+	signature := h.professionalSignature(ctx, rec.ResponsibleStaffID)
 
 	org := h.orgInfo(ctx, claims.OrganizationID)
 
@@ -126,6 +128,7 @@ func (h *Handler) exportPDF(w http.ResponseWriter, r *http.Request) {
 		Org:            org,
 		Patient:        patientInfo,
 		Professional:   prof,
+		SignaturePNG:   signature,
 		SupervisorName: supervisorName,
 		RecordType:     recordTypeLabel,
 		Diagnoses:      diagLines,
@@ -168,6 +171,35 @@ func (h *Handler) professionalInfo(ctx context.Context, userID, orgID string) pd
 		displayName = "—"
 	}
 	return pdf.ProfessionalInfo{FullName: displayName, License: "—"}
+}
+
+// professionalSignature decrypts the stored signature stamp; nil when absent
+// or undecryptable (the PDF then falls back to the plain signature line).
+func (h *Handler) professionalSignature(ctx context.Context, userID string) []byte {
+	var sealed []byte
+	var dekID *string
+	if err := h.db.QueryRow(ctx, `
+		SELECT signature_enc, signature_dek_id::text FROM professional_profiles WHERE user_id = $1
+	`, userID).Scan(&sealed, &dekID); err != nil || len(sealed) == 0 || dekID == nil {
+		return nil
+	}
+
+	var encDEK []byte
+	var keySource string
+	if err := h.db.QueryRow(ctx,
+		`SELECT encrypted_dek, key_source FROM encryption_keys WHERE id = $1`, *dekID,
+	).Scan(&encDEK, &keySource); err != nil {
+		return nil
+	}
+	dek, err := h.km.DecryptDEK(keySource, encDEK)
+	if err != nil {
+		return nil
+	}
+	raw, err := crypto.Open(dek, sealed)
+	if err != nil {
+		return nil
+	}
+	return raw
 }
 
 // orgInfo builds the letterhead from organizations.name, nit and the

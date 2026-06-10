@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"strings"
@@ -54,6 +55,7 @@ type RenderInput struct {
 	Org            OrgInfo
 	Patient        PatientInfo
 	Professional   ProfessionalInfo
+	SignaturePNG   []byte // optional handwritten signature stamp
 	SupervisorName string // set when the record was cosigned
 	RecordType     string // Spanish label (e.g., "Evolución")
 	Diagnoses      []DiagnosisLine
@@ -198,7 +200,12 @@ func Render(w io.Writer, in RenderInput) error {
 	doc.Ln(3)
 
 	// ── 1. Patient identification (art. 6) ────────────────────────────────
-	numberedHeader(doc, tr, "1. Identificación del paciente")
+	section := 0
+	nextSection := func(title string) {
+		section++
+		numberedHeader(doc, tr, fmt.Sprintf("%d. %s", section, title))
+	}
+	nextSection("Identificación del paciente")
 	rows := [][2]string{
 		{"Nombre completo", in.Patient.FullName},
 		{"Documento", strings.TrimSpace(in.Patient.DocumentType + " " + in.Patient.DocumentNumber)},
@@ -213,7 +220,7 @@ func Render(w io.Writer, in RenderInput) error {
 	doc.Ln(2)
 
 	// ── 2. Responsible professional (Ley 1090/2006) ───────────────────────
-	numberedHeader(doc, tr, "2. Profesional responsable")
+	nextSection("Profesional responsable")
 	prof := [][2]string{
 		{"Nombre completo", in.Professional.FullName},
 		{"Tarjeta profesional", in.Professional.License},
@@ -223,7 +230,7 @@ func Render(w io.Writer, in RenderInput) error {
 	doc.Ln(2)
 
 	// ── 3. Care data (art. 5: date and time of every entry) ───────────────
-	numberedHeader(doc, tr, "3. Datos de la atención")
+	nextSection("Datos de la atención")
 	care := [][2]string{
 		{"Tipo de nota", in.RecordType},
 		{"Fecha de la sesión", in.Record.SessionDate.Format("2006-01-02")},
@@ -243,7 +250,7 @@ func Render(w io.Writer, in RenderInput) error {
 	doc.Ln(2)
 
 	// ── 4. Clinical content ───────────────────────────────────────────────
-	numberedHeader(doc, tr, "4. Contenido clínico")
+	nextSection("Contenido clínico")
 	if in.Record.TemplateVersion >= 2 {
 		renderSectionsV2(doc, tr, in.Record)
 	} else {
@@ -253,7 +260,7 @@ func Render(w io.Writer, in RenderInput) error {
 	// ── 5. Active diagnoses ───────────────────────────────────────────────
 	if len(in.Diagnoses) > 0 {
 		doc.Ln(1)
-		numberedHeader(doc, tr, "5. Diagnósticos activos (CIE-10)")
+		nextSection("Diagnósticos activos (CIE-10)")
 		doc.SetFont("Helvetica", "", 9.5)
 		var b strings.Builder
 		for _, d := range in.Diagnoses {
@@ -268,7 +275,7 @@ func Render(w io.Writer, in RenderInput) error {
 
 	// ── 6. Electronic signature (Ley 527/1999) ────────────────────────────
 	doc.Ln(3)
-	numberedHeader(doc, tr, "6. Firma del profesional")
+	nextSection("Firma del profesional")
 
 	approvedAt := ""
 	if in.Record.ApprovedAt != nil {
@@ -287,8 +294,20 @@ func Render(w io.Writer, in RenderInput) error {
 		doc.MultiCell(0, 5, tr(cosig), "", "L", false)
 	}
 
+	// Handwritten signature stamp (when uploaded in the professional profile)
+	if len(in.SignaturePNG) > 0 {
+		doc.Ln(4)
+		opts := fpdf.ImageOptions{ImageType: "PNG", ReadDpi: false}
+		doc.RegisterImageOptionsReader("prof-signature", opts, bytes.NewReader(in.SignaturePNG))
+		// Width 55mm, height auto (keeps aspect ratio); fpdf advances Y itself
+		// when flow=true.
+		doc.ImageOptions("prof-signature", pageLeft, doc.GetY(), 55, 0, true, opts, 0, "")
+		doc.Ln(1)
+	} else {
+		doc.Ln(8)
+	}
+
 	// Signature line representation
-	doc.Ln(8)
 	doc.SetLineWidth(0.3)
 	doc.Line(pageLeft, doc.GetY(), pageLeft+75, doc.GetY())
 	doc.Ln(1.5)
@@ -327,23 +346,41 @@ func numberedHeader(doc *fpdf.Fpdf, tr func(string) string, title string) {
 }
 
 // fieldGrid prints label/value pairs in two columns, skipping empty values.
+// Values too wide for half a column get a full-width row so long names
+// never overlap the neighbouring field.
 func fieldGrid(doc *fpdf.Fpdf, tr func(string) string, rows [][2]string) {
 	const labelW, valueW = 38.0, 49.0
+	fullValueW := pageRight - pageLeft - labelW
 	col := 0
 	for _, row := range rows {
 		if strings.TrimSpace(row[1]) == "" {
 			continue
 		}
+		value := tr(row[1])
+
+		doc.SetFont("Helvetica", "", 9)
+		wide := doc.GetStringWidth(value) > valueW-2
+
+		if wide && col == 1 {
+			// Close the half-filled line before the full-width row.
+			doc.Ln(5.2)
+			col = 0
+		}
+
 		doc.SetFont("Helvetica", "B", 8.5)
 		doc.SetTextColor(100, 100, 100)
 		doc.CellFormat(labelW, 5.2, tr(row[0]), "", 0, "L", false, 0, "")
 		doc.SetFont("Helvetica", "", 9)
 		doc.SetTextColor(0, 0, 0)
-		if col == 0 {
-			doc.CellFormat(valueW, 5.2, tr(row[1]), "", 0, "L", false, 0, "")
+
+		switch {
+		case wide:
+			doc.MultiCell(fullValueW, 5.2, value, "", "L", false)
+		case col == 0:
+			doc.CellFormat(valueW, 5.2, value, "", 0, "L", false, 0, "")
 			col = 1
-		} else {
-			doc.CellFormat(valueW, 5.2, tr(row[1]), "", 1, "L", false, 0, "")
+		default:
+			doc.CellFormat(valueW, 5.2, value, "", 1, "L", false, 0, "")
 			col = 0
 		}
 	}

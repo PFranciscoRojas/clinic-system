@@ -17,6 +17,7 @@ type Handler struct {
 	patients patientGetterPort
 	diag     *diagrepo.Repository
 	db       *pgxpool.Pool
+	km       *crypto.KeyManager
 	audit    *audit.Writer
 }
 
@@ -28,6 +29,7 @@ func New(db *pgxpool.Pool, km *crypto.KeyManager) *Handler {
 		patients: patssvc.New(patsRepo, km),
 		diag:     diagrepo.New(db),
 		db:       db,
+		km:       km,
 		audit:    audit.New(db),
 	}
 }
