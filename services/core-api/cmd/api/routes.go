@@ -68,6 +68,12 @@ func (a *app) buildRouter() http.Handler {
 		r.Mount("/api/v1/public/booking", bookingH.PublicRoutes())
 	})
 
+	consentsH := consentshandler.New(a.pool, a.km, notifier, a.cfg.AppBaseURL)
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.RateLimit(10, time.Minute))
+		r.Mount("/api/v1/public/consents", consentsH.PublicRoutes())
+	})
+
 	// ── Protected routes — valid JWT required on every request ────────────────
 	// RequireAuth validates the Bearer token and injects claims into context.
 	// RequirePermission (per-endpoint) checks a specific permission code from those claims.
@@ -81,7 +87,9 @@ func (a *app) buildRouter() http.Handler {
 		r.Mount("/api/v1/patients/{patient_id}/records", crr.PatientRoutes())
 		r.Mount("/api/v1/clinical-records", crr.Routes())
 
-		r.Mount("/api/v1/patients/{patient_id}/consents", consentshandler.New(a.pool, a.km).Routes())
+		r.Mount("/api/v1/patients/{patient_id}/consents", consentsH.Routes())
+		r.Mount("/api/v1/consents", consentsH.OrgRoutes())
+		r.Mount("/api/v1/consent-templates", consentsH.TemplateRoutes())
 
 		diag := diagnoseshandler.New(a.pool)
 		r.Mount("/api/v1/icd10", diag.CatalogRoutes())
