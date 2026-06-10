@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, FileText, CheckCircle2, AlertTriangle,
-  Edit3, Save, ChevronDown, ChevronUp, Shield,
+  Edit3, Save, ChevronDown, ChevronUp, Shield, Download,
 } from 'lucide-react';
 import { clinicalRecordsApi, type ClinicalRecord, type MentalExamEntry } from '@/api/clinicalRecords';
 import { useAuth } from '@/context/AuthContext';
@@ -33,6 +33,7 @@ export function ClinicalRecordPage() {
   const [saving, setSaving] = useState(false);
   const [approving, setApproving] = useState(false);
   const [cosigning, setCosigning] = useState(false);
+  const [exportingPDF, setExportingPDF] = useState(false);
   const [err, setErr] = useState('');
 
   const { data: record, isLoading, isError } = useQuery({
@@ -89,6 +90,24 @@ export function ClinicalRecordPage() {
     finally { setCosigning(false); }
   };
 
+  const handleExportPDF = async () => {
+    if (!id || !record) return;
+    setExportingPDF(true);
+    try {
+      const blob = await clinicalRecordsApi.exportPDF(id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `nota-${record.session_date}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setErr('Error al descargar PDF.');
+    } finally {
+      setExportingPDF(false);
+    }
+  };
+
   if (isLoading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><Spinner size={28} color="var(--teal)" /></div>;
   if (isError || !record) return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--red)', padding: 24 }}>
@@ -137,11 +156,18 @@ export function ClinicalRecordPage() {
               {record.approved_at && <InfoLine label="Aprobado" value={new Date(record.approved_at).toLocaleDateString('es-CO')} />}
             </div>
           </div>
-          {isDraft && !editing && (
-            <button onClick={startEditing} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-              <Edit3 size={14} /> Editar
-            </button>
-          )}
+          <div style={{ display: 'flex', gap: 8 }}>
+            {isDraft && !editing && (
+              <button onClick={startEditing} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                <Edit3 size={14} /> Editar
+              </button>
+            )}
+            {!isDraft && (
+              <button onClick={handleExportPDF} disabled={exportingPDF} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px', background: '#f0fdfa', color: 'var(--teal)', border: '1px solid var(--teal)', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: exportingPDF ? 0.6 : 1 }}>
+                <Download size={14} /> {exportingPDF ? 'Generando…' : 'Descargar PDF'}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Co-sign badge */}

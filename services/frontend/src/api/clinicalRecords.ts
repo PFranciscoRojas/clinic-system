@@ -88,16 +88,26 @@ export interface UpdateRecordInput {
 }
 
 export const clinicalRecordsApi = {
-  list:    (patientId: string) => api.get<{ items: RecordMeta[] }>(`/patients/${patientId}/records`),
-  get:     (id: string)        => api.get<ClinicalRecord>(`/clinical-records/${id}`),
-  create:  (patientId: string, body: CreateRecordInput) =>
+  list:      (patientId: string) => api.get<{ items: RecordMeta[] }>(`/patients/${patientId}/records`),
+  get:       (id: string)        => api.get<ClinicalRecord>(`/clinical-records/${id}`),
+  create:    (patientId: string, body: CreateRecordInput) =>
     api.post<{ id: string }>(`/patients/${patientId}/records`, body),
-  update:  (id: string, body: UpdateRecordInput) =>
+  update:    (id: string, body: UpdateRecordInput) =>
     api.patch<void>(`/clinical-records/${id}`, body),
-  approve: (id: string) =>
+  approve:   (id: string) =>
     api.post<void>(`/clinical-records/${id}/approve`, {}),
-  cosign:  (id: string) =>
+  cosign:    (id: string) =>
     api.post<void>(`/clinical-records/${id}/cosign`, {}),
+  exportPDF: async (id: string): Promise<Blob> => {
+    const res = await fetch(`/api/v1/clinical-records/${id}/export`, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` },
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to export PDF: ${res.statusText}`);
+    }
+    return res.blob();
+  },
 };
 
 export interface ConsentTemplate {
