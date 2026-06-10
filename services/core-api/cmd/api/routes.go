@@ -20,6 +20,7 @@ import (
 	"sghcp/core-api/internal/notify"
 	patientshandler "sghcp/core-api/internal/patients/handler"
 	"sghcp/core-api/internal/shared/middleware"
+	tphandler "sghcp/core-api/internal/treatmentplans/handler"
 )
 
 // buildRouter constructs the chi router with all middleware and route groups.
@@ -95,6 +96,10 @@ func (a *app) buildRouter() http.Handler {
 		r.Mount("/api/v1/icd10", diag.CatalogRoutes())
 		r.Mount("/api/v1/patients/{patient_id}/diagnoses", diag.PatientRoutes())
 		r.Mount("/api/v1/diagnoses", diag.Routes())
+
+		tpH := tphandler.New(a.pool, a.km)
+		r.Mount("/api/v1/patients/{patient_id}/treatment-plans", tpH.PatientRoutes())
+		r.Mount("/api/v1/treatment-plans", tpH.Routes())
 
 		aiDrafts := aidraftshandler.New(a.pool, a.km, a.rdb, a.cfg.AudioDir)
 		r.Mount("/api/v1/ai-drafts", aiDrafts.Routes())

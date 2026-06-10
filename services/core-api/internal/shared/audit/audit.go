@@ -2,6 +2,8 @@ package audit
 
 import (
 	"context"
+	"log/slog"
+	"net"
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -35,19 +37,28 @@ func (w *Writer) Record(r *http.Request, action, resourceType, resourceID string
 	orgID := claims.OrganizationID
 	userID := claims.UserID
 	emailHash := hash.Normalize(claims.Email)
-	ip := r.RemoteAddr
 	userAgent := r.UserAgent()
+
+	// Without a reverse proxy, RemoteAddr is "ip:port" and the ::inet cast
+	// rejects it — strip the port so audits never silently vanish.
+	ip := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(ip); err == nil {
+		ip = host
+	}
 
 	go func() {
 		var resID *string
 		if resourceID != "" {
 			resID = &resourceID
 		}
-		w.pool.Exec(context.Background(), `
+		_, err := w.pool.Exec(context.Background(), `
 			INSERT INTO audit_log
 				(organization_id, user_id, user_email_hash, action, resource_type,
 				 resource_id, ip_address, user_agent, success)
 			VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, $7::inet, $8, true)
 		`, orgID, userID, emailHash, action, resourceType, resID, ip, userAgent)
+		if err != nil {
+			slog.Error("audit write failed", "action", action, "resource_type", resourceType, "err", err)
+		}
 	}()
 }
