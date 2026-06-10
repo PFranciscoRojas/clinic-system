@@ -32,12 +32,16 @@ shell-api:
 shell-db:
 	docker compose exec postgres psql -U $${DB_USER} -d $${DB_NAME}
 
-# ── Migraciones (golang-migrate dentro del contenedor core-api) ───────────────
+# ── Migraciones (imagen migrate/migrate; credenciales desde .env) ─────────────
 migrate-up:
-	docker compose exec core-api /core-api migrate up
+	@set -a; . ./.env; set +a; \
+	docker run --rm -v $(CURDIR)/services/core-api/migrations:/migrations --network host migrate/migrate \
+		-path=/migrations/ -database "postgres://$$DB_USER:$$DB_PASSWORD@localhost:5432/$$DB_NAME?sslmode=disable" up
 
 migrate-down:
-	docker compose exec core-api /core-api migrate down 1
+	@set -a; . ./.env; set +a; \
+	docker run --rm -v $(CURDIR)/services/core-api/migrations:/migrations --network host migrate/migrate \
+		-path=/migrations/ -database "postgres://$$DB_USER:$$DB_PASSWORD@localhost:5432/$$DB_NAME?sslmode=disable" down 1
 
 migrate-create:
 	@read -p "Nombre de la migración: " name; \

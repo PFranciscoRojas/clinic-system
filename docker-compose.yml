@@ -52,6 +52,8 @@ services:
       dockerfile: Dockerfile
     container_name: sghcp_ai_service
     restart: unless-stopped
+    # Opt-in until ANTHROPIC_API_KEY exists in prod: docker compose --profile ai up -d
+    profiles: ["ai"]
     expose:
       - "8000"
     env_file:
