@@ -57,6 +57,16 @@ func (n *ResendNotifier) BookingRejected(ctx context.Context, b BookingDetails) 
 	}
 }
 
+func (n *ResendNotifier) ConsentSignLink(ctx context.Context, toEmail string, d ConsentLinkDetails) {
+	html, err := renderConsentSignLink(d)
+	if err != nil {
+		return
+	}
+	if err := n.send(ctx, toEmail, "Documento de consentimiento para tu firma · Marcela Chapués", html); err != nil {
+		slog.Default().Warn("notify: consent sign-link email failed", "err", err)
+	}
+}
+
 func (n *ResendNotifier) send(ctx context.Context, to, subject, htmlBody string) error {
 	payload, err := json.Marshal(map[string]any{
 		"from":    n.from,
