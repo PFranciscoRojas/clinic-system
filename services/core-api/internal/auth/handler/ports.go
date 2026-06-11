@@ -18,6 +18,9 @@ type svcPort interface {
 	Register(ctx context.Context, inviteCode, email, password, displayName string) (*token.Pair, error)
 	ResetPassword(ctx context.Context, callerOrgID, targetEmail, newPassword string) error
 	UpdateProfile(ctx context.Context, userID, displayName string) (*token.Pair, error)
+	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
+	CompleteOnboarding(ctx context.Context, userID string) error
+	OnboardingCompleted(ctx context.Context, userID string) (bool, error)
 }
 
 // compile-time guard: *authsvc.Service must satisfy svcPort.

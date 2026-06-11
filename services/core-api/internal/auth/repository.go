@@ -21,7 +21,10 @@ type Repository interface {
 	CreateUser(ctx context.Context, orgID, email, passwordHash, displayName string) (string, error)
 	AssignRole(ctx context.Context, orgID, userID, roleID, assignedByUserID string) error
 	UpdatePassword(ctx context.Context, orgID, targetEmail, passwordHash string) error
+	UpdatePasswordByID(ctx context.Context, userID, passwordHash string) error
 	UpdateDisplayName(ctx context.Context, userID, displayName string) error
+	SetOnboardingCompleted(ctx context.Context, userID string) error
+	OnboardingCompleted(ctx context.Context, userID string) (bool, error)
 }
 
 // InvitePayload is serialised to/from Redis for the 48-hour invite window.

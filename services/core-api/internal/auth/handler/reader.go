@@ -14,12 +14,20 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
+	// Server-side flag — localStorage alone made onboarding reappear on
+	// every new browser/device.
+	onboarded, err := h.svc.OnboardingCompleted(r.Context(), claims.UserID)
+	if err != nil {
+		onboarded = true // fail open: never re-show onboarding by accident
+	}
+
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{
-		"user_id":      claims.UserID,
-		"org_id":       claims.OrganizationID,
-		"email":        claims.Email,
-		"display_name": claims.DisplayName,
-		"roles":        claims.Roles,
-		"permissions":  claims.Permissions,
+		"user_id":              claims.UserID,
+		"org_id":               claims.OrganizationID,
+		"email":                claims.Email,
+		"display_name":         claims.DisplayName,
+		"roles":                claims.Roles,
+		"permissions":          claims.Permissions,
+		"onboarding_completed": onboarded,
 	})
 }
