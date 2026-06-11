@@ -9,6 +9,7 @@ import {
   MapPin,
 } from 'lucide-react';
 import { patientsApi, type Patient } from '@/api/patients';
+import { calcAge } from '@/lib/age';
 import { Spinner } from '@/components/ui/Spinner';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -20,14 +21,6 @@ function useDebounce(value: string, delay: number) {
     return () => clearTimeout(t);
   }, [value, delay]);
   return debounced;
-}
-
-function calcAge(birthIso: string): number {
-  const b = new Date(birthIso + 'T12:00:00');
-  const t = new Date();
-  let age = t.getFullYear() - b.getFullYear();
-  if (t < new Date(t.getFullYear(), b.getMonth(), b.getDate())) age--;
-  return age;
 }
 
 const AVATAR_COLORS = [
@@ -91,9 +84,9 @@ function StatusBadge({ active, size = 'sm' }: { active: boolean; size?: 'sm' | '
 
 // ── PatientCard (grid) ────────────────────────────────────────────────────────
 
-function PatientCard({ patient, onClick }: { patient: Patient; onClick: () => void }) {
+function PatientCard({ patient, onClick, onOpenProfile }: { patient: Patient; onClick: () => void; onOpenProfile: () => void }) {
   const color = avatarColor(patient.paternal_last_name);
-  const age   = patient.birth_date ? calcAge(patient.birth_date) : null;
+  const age   = calcAge(patient.birth_date);
   const name  = fullName(patient);
   const ini   = abbr(patient);
 
@@ -185,7 +178,7 @@ function PatientCard({ patient, onClick }: { patient: Patient; onClick: () => vo
 
         {/* Action */}
         <button
-          onClick={e => { e.stopPropagation(); onClick(); }}
+          onClick={e => { e.stopPropagation(); onOpenProfile(); }}
           style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 8, border: '1.5px solid var(--s200)', borderRadius: 9, background: '#fff', fontSize: 13, color: 'var(--s600)', fontWeight: 500, transition: 'all .12s', cursor: 'pointer' }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = color; e.currentTarget.style.color = color; }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--s200)'; e.currentTarget.style.color = 'var(--s600)'; }}
@@ -215,7 +208,7 @@ function TableHeader() {
 
 function PatientTableRow({ patient, isLast, onClick }: { patient: Patient; isLast: boolean; onClick: () => void }) {
   const color = avatarColor(patient.paternal_last_name);
-  const age   = patient.birth_date ? calcAge(patient.birth_date) : null;
+  const age   = calcAge(patient.birth_date);
   const name  = fullName(patient);
   const ini   = abbr(patient);
 
@@ -285,7 +278,7 @@ function PatientTableRow({ patient, isLast, onClick }: { patient: Patient; isLas
 function QuickViewPanel({ patient, onClose }: { patient: Patient; onClose: () => void }) {
   const navigate = useNavigate();
   const color    = avatarColor(patient.paternal_last_name);
-  const age      = patient.birth_date ? calcAge(patient.birth_date) : null;
+  const age      = calcAge(patient.birth_date);
   const name     = fullName(patient);
   const ini      = abbr(patient);
 
@@ -630,7 +623,7 @@ export function PatientsPage() {
         ) : viewMode === 'grid' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
             {shown.map(p => (
-              <PatientCard key={p.id} patient={p} onClick={() => setSelected(p)} />
+              <PatientCard key={p.id} patient={p} onClick={() => setSelected(p)} onOpenProfile={() => navigate(`/patients/${p.id}`)} />
             ))}
           </div>
         ) : (

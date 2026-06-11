@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import {
   ArrowLeft, User, Phone, Mail, MapPin, AlertCircle,
   CheckCircle2, CreditCard, HeartPulse, Info,
 } from 'lucide-react';
 import { patientsApi, type CreatePatientBody } from '@/api/patients';
+import { appointmentsApi } from '@/api/appointments';
+import { validateBirthDate } from '@/lib/age';
 import { Spinner } from '@/components/ui/Spinner';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -146,6 +148,10 @@ function SectionHeader({ icon: Icon, title }: { icon: React.ElementType; title: 
 
 export function NewPatientPage() {
   const navigate = useNavigate();
+  // Set when registering the patient for a guest reservation — after creating,
+  // the patient is linked to that appointment and we return to it.
+  const [searchParams] = useSearchParams();
+  const returnAppointmentId = searchParams.get('appointment_id');
 
   const [docTypeCode, setDocTypeCode] = useState('');
   const [docNumber,   setDocNumber]   = useState('');
@@ -166,7 +172,7 @@ export function NewPatientPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // ── Derived live validations ───────────────────────────────────────────────
-  const ageError   = validateAge(birthDate, docTypeCode);
+  const ageError   = (birthDate ? validateBirthDate(birthDate) : null) ?? validateAge(birthDate, docTypeCode);
   const phoneError = validatePhone(phone);
   const emailError = validateEmail(email);
   const docNumErr  = validateDocNumber(docNumber, docTypeCode);
@@ -180,7 +186,12 @@ export function NewPatientPage() {
 
   const { mutate: create, isPending, isSuccess } = useMutation({
     mutationFn: (body: CreatePatientBody) => patientsApi.create(body),
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
+      if (returnAppointmentId) {
+        try { await appointmentsApi.assignPatient(returnAppointmentId, data.id); } catch { /* patient created; link manually */ }
+        setTimeout(() => navigate(`/appointments/${returnAppointmentId}`), 1500);
+        return;
+      }
       setTimeout(() => navigate(`/patients/${data.id}`), 1500);
     },
   });

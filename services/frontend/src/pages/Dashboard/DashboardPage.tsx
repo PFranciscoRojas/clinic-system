@@ -140,6 +140,7 @@ function usePatient(id: string) {
   return useQuery<Patient>({
     queryKey: ['patient', id],
     queryFn: () => patientsApi.get(id),
+    enabled: !!id, // guest reservations have no patient yet
     staleTime: 5 * 60_000,
   });
 }
@@ -155,8 +156,8 @@ function AppointmentRow({
 
   const meta   = statusMeta(appt);
   const inProg = isInProgress(appt);
-  const name   = patient ? patientFullName(patient) : `Paciente #${appt.patient_id.slice(-4)}`;
-  const abbr   = patient ? initials(patientFullName(patient)) : '??';
+  const name   = patient ? patientFullName(patient) : appt.guest_name || `Paciente #${appt.patient_id.slice(-4)}`;
+  const abbr   = patient ? initials(patientFullName(patient)) : appt.guest_name ? initials(appt.guest_name) : '??';
   const start  = fmtTime(appt.scheduled_at);
   const end    = endTime(appt);
 
@@ -277,12 +278,14 @@ function AppointmentRow({
           {appt.notes && (
             <span><b style={{ color: 'var(--s800)' }}>Notas:</b> {appt.notes}</span>
           )}
-          <button
-            onClick={() => navigate(`/patients/${appt.patient_id}`)}
-            style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--teal)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
-          >
-            Ver historia clínica →
-          </button>
+          {appt.patient_id && (
+            <button
+              onClick={() => navigate(`/patients/${appt.patient_id}`)}
+              style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--teal)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+            >
+              Ver historia clínica →
+            </button>
+          )}
         </div>
       )}
     </>
@@ -340,7 +343,7 @@ function InboxItem({ icon: Icon, iconColor, iconBg, title, subtitle, time, actio
 
 function AppointmentInboxItem({ appt, onOpen }: { appt: Appointment; onOpen: () => void }) {
   const { data: patient } = usePatient(appt.patient_id);
-  const name = patient ? patientFullName(patient) : `Paciente #${appt.patient_id.slice(-4)}`;
+  const name = patient ? patientFullName(patient) : appt.guest_name || `Paciente #${appt.patient_id.slice(-4)}`;
 
   return (
     <InboxItem

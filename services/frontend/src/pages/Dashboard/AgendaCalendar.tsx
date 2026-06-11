@@ -127,6 +127,7 @@ function usePatient(id: string) {
   return useQuery<Patient>({
     queryKey: ['patient', id],
     queryFn:  () => patientsApi.get(id),
+    enabled:  !!id, // guest reservations have no patient yet
     staleTime: 5 * 60_000,
   });
 }
@@ -176,8 +177,8 @@ function AppBlock({ appt, onClick }: { appt: Appointment; onClick: (a: Appointme
   const txtClr = (done || cancel) ? 'var(--s400)' : mc.color;
   const nmClr  = (done || cancel) ? 'var(--s500)' : 'var(--s800)';
 
-  const name = patient ? pName(patient) : '···';
-  const abbr = patient ? initials(pName(patient)) : '?';
+  const name = patient ? pName(patient) : appt.guest_name || '···';
+  const abbr = patient ? initials(pName(patient)) : appt.guest_name ? initials(appt.guest_name) : '?';
   const t0   = fmtHHMM(appt.scheduled_at);
   const t1   = endHHMM(appt);
 
@@ -260,7 +261,7 @@ function DetailPanel({ appt, panelRef, onClose }: { appt: Appointment; panelRef:
   const inProg = isInProgress(appt);
   const done   = appt.status === 'COMPLETED';
 
-  const name = patient ? pName(patient) : `Paciente #${appt.patient_id.slice(-4)}`;
+  const name = patient ? pName(patient) : appt.guest_name || `Paciente #${appt.patient_id.slice(-4)}`;
   const abbr = patient ? initials(pName(patient)) : '?';
   const t0   = fmtHHMM(appt.scheduled_at);
   const t1   = endHHMM(appt);
@@ -314,37 +315,23 @@ function DetailPanel({ appt, panelRef, onClose }: { appt: Appointment; panelRef:
         </div>
       </div>
 
-      {/* Actions */}
+      {/* Actions — the appointment page is the hub (start, cancel, record) */}
       <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {inProg && (
-          <button
-            onClick={() => navigate(`/patients/${appt.patient_id}`)}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 10, border: 'none', borderRadius: 9, cursor: 'pointer', background: `linear-gradient(135deg, ${mc.color}, ${mc.border})`, color: '#fff', fontWeight: 700, fontSize: 13, boxShadow: `0 3px 12px ${mc.color}44` }}
-          >
-            {appt.modality === 'VIRTUAL' ? <Video size={14} /> : <Mic size={14} />}
-            Iniciar consulta
-          </button>
-        )}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <button
+          onClick={() => navigate(`/appointments/${appt.id}`)}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 10, border: 'none', borderRadius: 9, cursor: 'pointer', background: `linear-gradient(135deg, ${mc.color}, ${mc.border})`, color: '#fff', fontWeight: 700, fontSize: 13, boxShadow: `0 3px 12px ${mc.color}44` }}
+        >
+          {appt.modality === 'VIRTUAL' ? <Video size={14} /> : <Mic size={14} />}
+          Abrir cita
+        </button>
+        {appt.patient_id && (
           <button
             onClick={() => navigate(`/patients/${appt.patient_id}`)}
             style={{ padding: 8, border: '1.5px solid var(--s200)', borderRadius: 9, background: '#fff', cursor: 'pointer', fontSize: 12.5, color: 'var(--s600)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'all .12s' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = mc.color; e.currentTarget.style.color = mc.color; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--s200)'; e.currentTarget.style.color = 'var(--s600)'; }}
           >
-            <User size={13} /> Ver perfil
-          </button>
-          <button
-            style={{ padding: 8, border: '1.5px solid var(--s200)', borderRadius: 9, background: '#fff', cursor: 'pointer', fontSize: 12.5, color: 'var(--s600)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'all .12s' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#f59e0b'; e.currentTarget.style.color = '#f59e0b'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--s200)'; e.currentTarget.style.color = 'var(--s600)'; }}
-          >
-            Reagendar
-          </button>
-        </div>
-        {appt.status !== 'CANCELLED' && (
-          <button style={{ padding: 8, border: '1.5px solid #fecaca', borderRadius: 9, background: '#fff7f7', cursor: 'pointer', fontSize: 12.5, color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-            <X size={13} /> Cancelar cita
+            <User size={13} /> Ver perfil del paciente
           </button>
         )}
       </div>
@@ -434,7 +421,7 @@ function ProximaItem({ appt }: { appt: Appointment }) {
   const { data: patient } = usePatient(appt.patient_id);
   const mc     = MC[appt.modality] ?? MC.IN_PERSON;
   const inProg = isInProgress(appt);
-  const name   = patient ? pName(patient) : '···';
+  const name   = patient ? pName(patient) : appt.guest_name || '···';
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--s200)', marginBottom: 5, background: inProg ? mc.bg : '#fff' }}>

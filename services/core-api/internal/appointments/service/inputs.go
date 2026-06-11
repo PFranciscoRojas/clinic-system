@@ -5,6 +5,7 @@ import "time"
 type CreateInput struct {
 	OrganizationID string
 	PatientID      string
+	GuestName      string
 	StaffID        string
 	ScheduledAt    time.Time
 	DurationMin    int

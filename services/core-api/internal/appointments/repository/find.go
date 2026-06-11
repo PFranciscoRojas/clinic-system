@@ -12,7 +12,7 @@ import (
 
 func (r *Repository) FindByID(ctx context.Context, orgID, appointmentID string) (*appointments.Appointment, error) {
 	row := r.db.QueryRow(ctx, `
-		SELECT id::text, organization_id::text, patient_id::text, staff_id::text,
+		SELECT id::text, organization_id::text, patient_id::text, guest_name, staff_id::text,
 		       scheduled_at, duration_min, modality::text, status::text,
 		       notes_enc, rescheduled_to::text, cancelled_by::text, cancel_reason,
 		       created_at, updated_at
@@ -29,7 +29,7 @@ func (r *Repository) List(ctx context.Context, orgID string, f appointments.List
 	}
 
 	q := `
-		SELECT id::text, organization_id::text, patient_id::text, staff_id::text,
+		SELECT id::text, organization_id::text, patient_id::text, guest_name, staff_id::text,
 		       scheduled_at, duration_min, modality::text, status::text,
 		       notes_enc, rescheduled_to::text, cancelled_by::text, cancel_reason,
 		       created_at, updated_at
@@ -82,9 +82,9 @@ func scanAppointment(row interface {
 	Scan(...any) error
 }) (*appointments.Appointment, error) {
 	var a appointments.Appointment
-	var rescheduledTo, cancelledBy, cancelReason *string
+	var patientID, guestName, rescheduledTo, cancelledBy, cancelReason *string
 	err := row.Scan(
-		&a.ID, &a.OrganizationID, &a.PatientID, &a.StaffID,
+		&a.ID, &a.OrganizationID, &patientID, &guestName, &a.StaffID,
 		&a.ScheduledAt, &a.DurationMin, &a.Modality, &a.Status,
 		&a.NotesEnc, &rescheduledTo, &cancelledBy, &cancelReason,
 		&a.CreatedAt, &a.UpdatedAt,
@@ -94,6 +94,12 @@ func scanAppointment(row interface {
 	}
 	if err != nil {
 		return nil, fmt.Errorf("scan appointment: %w", err)
+	}
+	if patientID != nil {
+		a.PatientID = *patientID
+	}
+	if guestName != nil {
+		a.GuestName = *guestName
 	}
 	if rescheduledTo != nil {
 		a.RescheduledTo = *rescheduledTo

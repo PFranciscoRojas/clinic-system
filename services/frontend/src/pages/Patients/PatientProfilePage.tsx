@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { EditPatientModal } from '@/components/patients/EditPatientModal';
 import { patientsApi } from '@/api/patients';
+import { calcAge } from '@/lib/age';
 import { appointmentsApi, type Appointment } from '@/api/appointments';
 import { clinicalRecordsApi, consentsApi, type RecordMeta, type Consent, type ConsentType } from '@/api/clinicalRecords';
 import { diagnosesApi } from '@/api/diagnoses';
@@ -26,14 +27,6 @@ type Tab = 'historial' | 'diagnosticos' | 'plan' | 'consentimientos';
 type AppointmentStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function calcAge(iso: string): number {
-  const b = new Date(iso + 'T12:00:00');
-  const t = new Date();
-  let age = t.getFullYear() - b.getFullYear();
-  if (t < new Date(t.getFullYear(), b.getMonth(), b.getDate())) age--;
-  return age;
-}
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -599,7 +592,7 @@ export function PatientProfilePage() {
                 {/* Info row 1 */}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
                   {patient.birth_date && (
-                    <InfoChip icon={<Cake size={12} />} text={`${calcAge(patient.birth_date)} años · ${fmtBirthDate(patient.birth_date)}`} />
+                    <InfoChip icon={<Cake size={12} />} text={`${calcAge(patient.birth_date) !== null ? `${calcAge(patient.birth_date)} años · ` : ''}${fmtBirthDate(patient.birth_date)}`} />
                   )}
                   <InfoChip icon={<CreditCard size={12} />} text={`${patient.document_type_code} ${patient.document_number}`} />
                   {patient.email && <InfoChip icon={<Mail size={12} />} text={patient.email} />}

@@ -31,6 +31,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	id, err := h.svc.Create(r.Context(), apptssvc.CreateInput{
 		OrganizationID: claims.OrganizationID,
 		PatientID:      body.PatientID,
+		GuestName:      body.GuestName,
 		StaffID:        body.StaffID,
 		ScheduledAt:    scheduledAt,
 		DurationMin:    body.DurationMin,
@@ -60,6 +61,24 @@ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
 		RequestedBy:    claims.UserID,
 		Reason:         body.Reason,
 	}); err != nil {
+		writeErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// PATCH /api/v1/appointments/{id}/patient — link a registered patient to a guest reservation
+func (h *Handler) assignPatient(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	appointmentID := chi.URLParam(r, "id")
+
+	var body apptsdto.AssignPatientRequest
+	if err := httputil.DecodeJSON(r, &body); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	if err := h.svc.AssignPatient(r.Context(), claims.OrganizationID, appointmentID, body.PatientID); err != nil {
 		writeErr(w, err)
 		return
 	}

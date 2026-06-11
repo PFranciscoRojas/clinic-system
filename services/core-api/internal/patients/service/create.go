@@ -12,6 +12,9 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (string, error) {
 	if in.OrganizationID == "" || in.FirstName == "" || in.PaternalLastName == "" {
 		return "", patients.ErrInvalidInput
 	}
+	if err := validateBirthDate(in.BirthDate); err != nil {
+		return "", err
+	}
 
 	dek, dekID, err := s.newDEK(ctx)
 	if err != nil {

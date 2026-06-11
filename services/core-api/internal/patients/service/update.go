@@ -12,6 +12,9 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) error {
 	if in.FirstName == "" || in.PaternalLastName == "" {
 		return patients.ErrInvalidInput
 	}
+	if err := validateBirthDate(in.BirthDate); err != nil {
+		return err
+	}
 
 	raw, err := s.repo.FindByID(ctx, in.OrganizationID, in.PatientID)
 	if err != nil {

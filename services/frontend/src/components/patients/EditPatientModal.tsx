@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Pencil, Lock, X, AlertCircle } from 'lucide-react';
 import { patientsApi, type Patient } from '@/api/patients';
+import { validateBirthDate } from '@/lib/age';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -47,11 +48,12 @@ export function EditPatientModal({ patient, onClose, onSaved, requiredContext }:
   const [gender,   setGender]   = useState(patient.gender ?? '');
   const [apiError, setApiError] = useState('');
 
-  // Age validation for adult-only document types
+  // Plausibility first (a half-typed year gives ages like 2025), then adult-only doc check
   const adultOnlyDoc = DOC_TYPES.find(d => d.code === docType)?.adultOnly ?? false;
-  const ageError = (adultOnlyDoc && birthDate)
+  const plausibilityError = birthDate ? (validateBirthDate(birthDate) ?? '') : '';
+  const ageError = plausibilityError || ((adultOnlyDoc && birthDate)
     ? (calcAge(birthDate) < 18 ? `${docType} requiere ser mayor de 18 años (edad calculada: ${calcAge(birthDate)})` : '')
-    : '';
+    : '');
 
   const isValid = !!firstName && !!paternalLn && !ageError;
 
