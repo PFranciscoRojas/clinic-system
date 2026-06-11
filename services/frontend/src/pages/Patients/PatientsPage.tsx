@@ -499,8 +499,6 @@ export function PatientsPage() {
         <KpiCard icon={UserCheck}   color="#10b981"      label="Activos"           value={isLoading ? '—' : actives}     />
         <KpiCard icon={UserX}       color="#f59e0b"      label="Inactivos"         value={isLoading ? '—' : inactive}    />
         <KpiCard icon={Phone}       color="#6366f1"      label="Con contacto"      value={isLoading ? '—' : withContact} />
-        <KpiCard icon={Heart}       color="#ef4444"      label="PHQ-9 alto (≥15)"  value="—"                             />
-        <KpiCard icon={AlertCircle} color="#f97316"      label="Con pendientes"    value="—"                             />
       </div>
 
       {/* ── Filters toolbar ─────────────────────────────────────────────────── */}
