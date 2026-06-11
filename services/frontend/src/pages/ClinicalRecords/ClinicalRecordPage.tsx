@@ -3,9 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, FileText, CheckCircle2, AlertTriangle,
-  Edit3, Save, ChevronDown, ChevronUp, Shield, Download,
+  Edit3, Save, ChevronDown, ChevronUp, Shield, Download, Plus, X, PenLine,
 } from 'lucide-react';
-import { clinicalRecordsApi, type ClinicalRecord, type MentalExamEntry } from '@/api/clinicalRecords';
+import { clinicalRecordsApi, type ClinicalRecord, type MentalExamEntry, type Addendum } from '@/api/clinicalRecords';
 import { useAuth } from '@/context/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
@@ -272,6 +272,8 @@ export function ClinicalRecordPage() {
           {record.approved_at && <span style={{ fontSize: 12, color: '#059669', marginLeft: 'auto' }}>{new Date(record.approved_at).toLocaleDateString('es-CO')}</span>}
         </div>
       )}
+
+      {!isDraft && <AddendaSection recordId={id!} />}
     </div>
   );
 }
@@ -333,5 +335,77 @@ function InfoLine({ label, value }: { label: string; value: string }) {
     <span style={{ fontSize: 12, color: 'var(--s400)' }}>
       <span style={{ fontWeight: 600 }}>{label}:</span> {value}
     </span>
+  );
+}
+
+// Addenda: signed, immutable supplementary notes on an approved record
+// (the original entry is never edited — Res. 1995/1999).
+function AddendaSection({ recordId }: { recordId: string }) {
+  const queryClient = useQueryClient();
+  const [adding, setAdding] = useState(false);
+  const [content, setContent] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  const { data } = useQuery({
+    queryKey: ['addenda', recordId],
+    queryFn: () => clinicalRecordsApi.listAddenda(recordId),
+  });
+  const addenda: Addendum[] = data?.items ?? [];
+
+  const handleSave = async () => {
+    if (!content.trim()) return;
+    setSaving(true); setErr('');
+    try {
+      await clinicalRecordsApi.addAddendum(recordId, content.trim());
+      setContent(''); setAdding(false);
+      queryClient.invalidateQueries({ queryKey: ['addenda', recordId] });
+    } catch { setErr('Error al guardar la adenda.'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ marginTop: 20, background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: addenda.length || adding ? '1px solid var(--s100)' : 'none' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 14, color: 'var(--s800)' }}>
+          <PenLine size={15} color="var(--teal)" /> Adendas
+          {addenda.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'var(--s100)', color: 'var(--s600)' }}>{addenda.length}</span>}
+        </span>
+        <button
+          onClick={() => { setAdding(a => !a); setErr(''); }}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', background: adding ? 'var(--s100)' : 'var(--teal)', color: adding ? 'var(--s700)' : '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+        >
+          {adding ? <X size={12} /> : <Plus size={12} />}
+          {adding ? 'Cancelar' : 'Agregar adenda'}
+        </button>
+      </div>
+
+      {adding && (
+        <div style={{ padding: '14px 20px', borderBottom: addenda.length ? '1px solid var(--s100)' : 'none', background: 'var(--s50)' }}>
+          <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--s500)' }}>
+            La adenda complementa o corrige el registro aprobado sin modificar el original. Queda firmada con tu nombre, fecha y hora, es permanente y se imprime en el PDF.
+          </p>
+          <textarea
+            autoFocus value={content} onChange={e => setContent(e.target.value)} rows={4}
+            placeholder="Texto de la adenda…"
+            style={{ width: '100%', padding: '10px 12px', borderRadius: 9, border: '1.5px solid var(--s200)', fontSize: 13, color: 'var(--s700)', resize: 'vertical', boxSizing: 'border-box', background: '#fff', lineHeight: 1.6 }}
+          />
+          <button onClick={handleSave} disabled={saving || !content.trim()}
+            style={{ marginTop: 8, padding: '9px 16px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: saving || !content.trim() ? 0.6 : 1 }}>
+            {saving ? 'Guardando…' : 'Firmar y agregar adenda'}
+          </button>
+          {err && <p style={{ margin: '8px 0 0', fontSize: 12.5, color: 'var(--red)' }}>{err}</p>}
+        </div>
+      )}
+
+      {addenda.map((a, idx) => (
+        <div key={a.id} style={{ padding: '12px 20px', borderBottom: idx < addenda.length - 1 ? '1px solid var(--s100)' : 'none' }}>
+          <p style={{ margin: '0 0 4px', fontSize: 11.5, color: 'var(--s400)', fontWeight: 600 }}>
+            {new Date(a.created_at).toLocaleString('es-CO')} — {a.author_name}
+          </p>
+          <p style={{ margin: 0, fontSize: 13.5, color: 'var(--s700)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{a.content}</p>
+        </div>
+      ))}
+    </div>
   );
 }

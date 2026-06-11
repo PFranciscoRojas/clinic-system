@@ -10,6 +10,7 @@ var (
 	ErrAlreadyApproved = errors.New("record is already approved")
 	ErrCosignRequired = errors.New("supervisor cosign is required before approval")
 	ErrInternCannotApprove = errors.New("interns cannot approve clinical records")
+	ErrNotApproved    = errors.New("addenda can only be added to approved records")
 
 	// Template v2 business rules
 	ErrRiskRequired      = errors.New("risk_level is required and must be valid")

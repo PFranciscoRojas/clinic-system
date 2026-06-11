@@ -10,6 +10,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- Addenda on approved clinical records: signed, immutable supplementary notes (author + timestamp, sealed with the record's DEK) — the original entry is never edited (Res. 1995/1999); addenda print in the exported PDF (migration 000013)
 - Professional profile API (BC-2): own-profile GET/PUT and specialties catalog; onboarding and Settings forms now persist names, tarjeta profesional and specialty to the backend instead of localStorage, so signed PDFs print the real license number
 
 ### Removed

@@ -13,4 +13,6 @@ type Repository interface {
 	Update(ctx context.Context, p UpdateParams) error
 	Approve(ctx context.Context, orgID, recordID, approvedBy string) error
 	Cosign(ctx context.Context, orgID, recordID, supervisorID string) error
+	CreateAddendum(ctx context.Context, orgID, recordID, createdBy string, contentEnc []byte) (string, error)
+	ListAddenda(ctx context.Context, orgID, recordID string) ([]*RawAddendum, error)
 }

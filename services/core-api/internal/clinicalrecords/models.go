@@ -160,3 +160,24 @@ type ListFilter struct {
 	Limit          int
 	Offset         int
 }
+
+// Addendum is a signed, immutable supplementary note on an APPROVED record
+// (Res. 1995/1999: the original entry is never edited). Decrypted form.
+type Addendum struct {
+	ID         string
+	RecordID   string
+	CreatedBy  string
+	AuthorName string // display_name resolved at read time
+	Content    string
+	CreatedAt  time.Time
+}
+
+// RawAddendum is the database representation — content still encrypted.
+type RawAddendum struct {
+	ID         string
+	RecordID   string
+	CreatedBy  string
+	AuthorName string
+	ContentEnc []byte
+	CreatedAt  time.Time
+}

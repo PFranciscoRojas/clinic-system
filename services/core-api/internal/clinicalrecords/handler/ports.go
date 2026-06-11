@@ -16,6 +16,8 @@ type svcPort interface {
 	Update(ctx context.Context, in crrsvc.UpdateInput) error
 	Approve(ctx context.Context, orgID, recordID string, callerRoles []string) error
 	Cosign(ctx context.Context, orgID, recordID, supervisorID string) error
+	AddAddendum(ctx context.Context, orgID, recordID, createdBy, content string) (string, error)
+	ListAddenda(ctx context.Context, orgID, recordID string) ([]*clinicalrecords.Addendum, error)
 }
 
 var _ svcPort = (*crrsvc.Service)(nil)
