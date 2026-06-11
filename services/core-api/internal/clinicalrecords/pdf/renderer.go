@@ -59,6 +59,7 @@ type RenderInput struct {
 	SupervisorName string // set when the record was cosigned
 	RecordType     string // Spanish label (e.g., "Evolución")
 	Diagnoses      []DiagnosisLine
+	Addenda        []*clinicalrecords.Addendum
 	ContentHash    string // SHA-256 integrity fingerprint stored at approval
 }
 
@@ -271,6 +272,22 @@ func Render(w io.Writer, in RenderInput) error {
 			b.WriteString(line + "\n")
 		}
 		doc.MultiCell(0, 5, tr(strings.TrimSpace(b.String())), "1", "L", false)
+	}
+
+	// ── Addenda (Res. 1995/1999: corrections are appended, never edited) ──
+	if len(in.Addenda) > 0 {
+		doc.Ln(1)
+		nextSection("Adendas")
+		for _, a := range in.Addenda {
+			doc.SetFont("Helvetica", "B", 8.5)
+			doc.SetTextColor(100, 100, 100)
+			doc.CellFormat(0, 5, tr(fmt.Sprintf("Adenda del %s — %s",
+				a.CreatedAt.Format("2006-01-02 15:04"), a.AuthorName)), "", 1, "L", false, 0, "")
+			doc.SetTextColor(0, 0, 0)
+			doc.SetFont("Helvetica", "", 9.5)
+			doc.MultiCell(0, 5, tr(a.Content), "1", "L", false)
+			doc.Ln(2)
+		}
 	}
 
 	// ── 6. Electronic signature (Ley 527/1999) ────────────────────────────

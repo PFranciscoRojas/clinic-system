@@ -87,6 +87,15 @@ export interface UpdateRecordInput {
   discharge_reason?: DischargeReason;
 }
 
+export interface Addendum {
+  id: string;
+  record_id: string;
+  created_by: string;
+  author_name: string;
+  content: string;
+  created_at: string;
+}
+
 export const clinicalRecordsApi = {
   list:      (patientId: string) => api.get<{ items: RecordMeta[] }>(`/patients/${patientId}/records`),
   get:       (id: string)        => api.get<ClinicalRecord>(`/clinical-records/${id}`),
@@ -98,6 +107,9 @@ export const clinicalRecordsApi = {
     api.post<void>(`/clinical-records/${id}/approve`, {}),
   cosign:    (id: string) =>
     api.post<void>(`/clinical-records/${id}/cosign`, {}),
+  listAddenda: (id: string) => api.get<{ items: Addendum[] }>(`/clinical-records/${id}/addenda`),
+  addAddendum: (id: string, content: string) =>
+    api.post<{ id: string }>(`/clinical-records/${id}/addenda`, { content }),
   exportPDF: async (id: string): Promise<Blob> => {
     const res = await fetch(`/api/v1/clinical-records/${id}/export`, {
       method: 'GET',

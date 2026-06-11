@@ -20,6 +20,8 @@ var recordErrors = httputil.ErrorMapper(func(err error) (int, string) {
 		return http.StatusConflict, "record is not in draft status"
 	case errors.Is(err, clinicalrecords.ErrAlreadyApproved):
 		return http.StatusConflict, "record is already approved"
+	case errors.Is(err, clinicalrecords.ErrNotApproved):
+		return http.StatusConflict, "addenda can only be added to approved records"
 	case errors.Is(err, clinicalrecords.ErrCosignRequired):
 		return http.StatusConflict, "supervisor cosign required before approval"
 	case errors.Is(err, clinicalrecords.ErrInternCannotApprove):

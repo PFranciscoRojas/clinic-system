@@ -19,6 +19,8 @@ func (h *Handler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.With(middleware.RequirePermission("clinical_records:read")).Get("/{id}", h.get)
 	r.With(middleware.RequirePermission("clinical_records:read")).Get("/{id}/export", h.exportPDF)
+	r.With(middleware.RequirePermission("clinical_records:read")).Get("/{id}/addenda", h.listAddenda)
+	r.With(middleware.RequirePermission("clinical_records:update")).Post("/{id}/addenda", h.addAddendum)
 	r.With(middleware.RequirePermission("clinical_records:update")).Patch("/{id}", h.update)
 	r.With(middleware.RequirePermission("clinical_records:approve")).Post("/{id}/approve", h.approve)
 	r.With(middleware.RequirePermission("clinical_records:cosign")).Post("/{id}/cosign", h.cosign)

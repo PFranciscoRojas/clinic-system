@@ -118,6 +118,9 @@ func (h *Handler) exportPDF(w http.ResponseWriter, r *http.Request) {
 		recordTypeLabel = "Registro clínico"
 	}
 
+	// Addenda are part of the legal document.
+	addenda, _ := h.svc.ListAddenda(ctx, claims.OrganizationID, recordID)
+
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition",
 		fmt.Sprintf(`attachment; filename="historia-clinica-%s-%s.pdf"`,
@@ -132,6 +135,7 @@ func (h *Handler) exportPDF(w http.ResponseWriter, r *http.Request) {
 		SupervisorName: supervisorName,
 		RecordType:     recordTypeLabel,
 		Diagnoses:      diagLines,
+		Addenda:        addenda,
 		ContentHash:    contentHash,
 	})
 	if err != nil {
