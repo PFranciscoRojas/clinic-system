@@ -12,9 +12,19 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ### Added
 - Addenda on approved clinical records: signed, immutable supplementary notes (author + timestamp, sealed with the record's DEK) — the original entry is never edited (Res. 1995/1999); addenda print in the exported PDF (migration 000013)
 - Professional profile API (BC-2): own-profile GET/PUT and specialties catalog; onboarding and Settings forms now persist names, tarjeta profesional and specialty to the backend instead of localStorage, so signed PDFs print the real license number
+- Self-service password change (`POST /auth/change-password`) with a "Cambiar contraseña" card in Settings → Seguridad
+- Global header search now works: searches patients by last name or document number with a results dropdown
+- Dashboard clinical inbox shows real data: pending web booking requests and today's appointments past their slot but not completed
+- "Pacientes activos" dashboard tile connected to the patients API
+
+### Fixed
+- Onboarding wizard no longer reappears for existing users on a new browser: completion is persisted server-side (`users.onboarding_completed_at`, migration 000014) and returned by `GET /auth/me`
 
 ### Removed
 - "Cédula / RUT" field from the onboarding wizard (never persisted, Chilean placeholder; the clinical document legally requires name + tarjeta profesional)
+- All fabricated UI data: fake notification bell ("3 urgentes"), hardcoded inbox items, "Borradores IA" and "Facturación del mes" tiles, "+3 este mes" badge, "PHQ-9 alto" and "Con pendientes" patient KPIs
+- Mock Settings sections: "Plan y facturación" (fictitious SaaS plan), "Integraciones" (fake connect buttons), mock note templates, fictitious active-sessions device list, dead 2FA toggles, raw permission-code list in the profile
+- Billing and Evaluations hidden from navigation until their backends exist (code kept as design reference)
 
 ## [0.5.0] — 2026-06-10 · psychology-native clinical history, consents, treatment plans & PDF export
 
