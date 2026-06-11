@@ -589,7 +589,7 @@ export function DashboardPage() {
                 <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--s400)' }}>
                   <CalendarDays size={44} color="var(--s200)" style={{ marginBottom: 12 }} />
                   <p style={{ margin: 0, fontSize: 14 }}>Sin citas para este filtro</p>
-                  <Link to="/appointments/new" style={{ display: 'inline-block', marginTop: 12, fontSize: 13, color: 'var(--teal)', fontWeight: 600 }}>
+                  <Link to={`/appointments/new?date=${selectedDate}`} style={{ display: 'inline-block', marginTop: 12, fontSize: 13, color: 'var(--teal)', fontWeight: 600 }}>
                     + Agendar nueva cita
                   </Link>
                 </div>

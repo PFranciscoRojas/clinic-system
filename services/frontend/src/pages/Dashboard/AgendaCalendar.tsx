@@ -640,7 +640,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
 
           {/* Nueva cita */}
           <button
-            onClick={() => navigate('/appointments/new')}
+            onClick={() => navigate(`/appointments/new?date=${selected}`)}
             style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 16px', fontSize: 13.5, fontWeight: 700, boxShadow: '0 2px 8px rgba(20,184,166,.35)', cursor: 'pointer', whiteSpace: 'nowrap' }}
             onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.08)'; }}
             onMouseLeave={e => { e.currentTarget.style.filter = ''; }}
