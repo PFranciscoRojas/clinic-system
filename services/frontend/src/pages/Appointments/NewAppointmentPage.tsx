@@ -13,6 +13,7 @@ import { appointmentsApi, Appointment } from '../../api/appointments';
 import { patientsApi, Patient } from '../../api/patients';
 import { Spinner } from '../../components/ui/Spinner';
 import { useAuth } from '../../context/AuthContext';
+import { loadSchedule, isWorkingDay, dayLabelOf, type ScheduleConfig } from '../../lib/schedule';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,25 +34,28 @@ const SESSION_TYPES: SessionType[] = [
   { id: 'discharge', label: 'Sesión de alta', icon: Award,     duration: 50, color: '#0d9488' },
 ];
 
-const SLOT_START = 8 * 60;
-const SLOT_END   = 20 * 60;
-const SLOT_STEP  = 30;
+const SLOT_STEP = 30;
 
-function generateSlots(): string[] {
+function toMinutes(t: string) {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+// Slots come from the professional's configured working hours,
+// excluding the midday break.
+function generateSlots(cfg: ScheduleConfig): string[] {
+  const start = toMinutes(cfg.startHour);
+  const end   = toMinutes(cfg.endHour);
+  const brkS  = cfg.breakStart ? toMinutes(cfg.breakStart) : -1;
+  const brkE  = cfg.breakEnd   ? toMinutes(cfg.breakEnd)   : -1;
   const slots: string[] = [];
-  for (let m = SLOT_START; m < SLOT_END; m += SLOT_STEP) {
+  for (let m = start; m < end; m += SLOT_STEP) {
+    if (brkS >= 0 && brkE > brkS && m >= brkS && m < brkE) continue;
     const h = String(Math.floor(m / 60)).padStart(2, '0');
     const min = String(m % 60).padStart(2, '0');
     slots.push(`${h}:${min}`);
   }
   return slots;
-}
-
-const ALL_SLOTS = generateSlots();
-
-function toMinutes(t: string) {
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
 }
 
 function formatDateLabel(d: string) {
@@ -204,6 +208,7 @@ function MiniCalendar({ selected, onSelect, busyDates = new Set() }: MiniCalenda
 // ─── TimeSlots ────────────────────────────────────────────────────────────────
 
 interface TimeSlotsProps {
+  slots: string[];
   selected: string;
   onSelect: (t: string) => void;
   duration: number;
@@ -211,10 +216,10 @@ interface TimeSlotsProps {
   pastSlots: Set<string>;
 }
 
-function TimeSlots({ selected, onSelect, duration, blocked, pastSlots }: TimeSlotsProps) {
+function TimeSlots({ slots, selected, onSelect, duration, blocked, pastSlots }: TimeSlotsProps) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-      {ALL_SLOTS.map(slot => {
+      {slots.map(slot => {
         const slotMin   = toMinutes(slot);
         const isPast    = pastSlots.has(slot);
         const isBlocked = blocked.has(slot);
@@ -743,8 +748,18 @@ export function NewAppointmentPage() {
   const returnPatientId = searchParams.get('patient_id');
   const { user } = useAuth();
 
+  // Working hours configured in onboarding / Settings → Horario y agenda
+  const schedule = useMemo(() => loadSchedule(), []);
+  const slots    = useMemo(() => generateSlots(schedule), [schedule]);
+
+  // Date preselected in the calendar view (?date=YYYY-MM-DD), if valid and not past
+  const initialDate = (() => {
+    const d = searchParams.get('date');
+    return d && /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= todayISO() ? d : todayISO();
+  })();
+
   const [patient,     setPatient]     = useState<Patient | null>(null);
-  const [date,        setDate]        = useState<string>(todayISO());
+  const [date,        setDate]        = useState<string>(initialDate);
   const [time,        setTime]        = useState<string>('');
   const [sessionType, setSessionType] = useState<SessionType | null>(SESSION_TYPES[1]);
   const [duration,    setDuration]    = useState<number>(50);
@@ -793,31 +808,32 @@ export function NewAppointmentPage() {
     if (date !== todayISO()) return new Set<string>();
     const now = new Date();
     const cutoffMin = now.getHours() * 60 + now.getMinutes() + 30;
-    return new Set(ALL_SLOTS.filter(s => toMinutes(s) <= cutoffMin));
-  }, [date]);
+    return new Set(slots.filter(s => toMinutes(s) <= cutoffMin));
+  }, [date, slots]);
 
   // Clear selected time if it becomes past when switching to today
   useEffect(() => {
     if (time && pastSlots.has(time)) setTime('');
   }, [pastSlots, time]);
 
-  // 2. Blocked slots from staff's existing appointments
+  // 2. Blocked slots from staff's existing appointments (± configured buffer)
   const blockedSlots = useMemo<Set<string>>(() => {
     const s = new Set<string>();
+    const bufferMs = (schedule.buffer ?? 0) * 60_000;
     for (const appt of dayAppointments) {
       if (appt.status === 'CANCELLED' || appt.status === 'NO_SHOW') continue;
-      const start = new Date(appt.scheduled_at);
-      const end   = new Date(start.getTime() + appt.duration_min * 60_000);
-      for (const slot of ALL_SLOTS) {
+      const start = new Date(new Date(appt.scheduled_at).getTime() - bufferMs);
+      const end   = new Date(new Date(appt.scheduled_at).getTime() + appt.duration_min * 60_000 + bufferMs);
+      for (const slot of slots) {
         const [h, m] = slot.split(':').map(Number);
-        const slotStart = new Date(start);
+        const slotStart = new Date(appt.scheduled_at);
         slotStart.setHours(h, m, 0, 0);
         const slotEnd = new Date(slotStart.getTime() + SLOT_STEP * 60_000);
         if (slotStart < end && slotEnd > start) s.add(slot);
       }
     }
     return s;
-  }, [dayAppointments]);
+  }, [dayAppointments, slots, schedule.buffer]);
 
   // 3. Busy dates (dot on calendar)
   const busyDates = useMemo<Set<string>>(() => {
@@ -835,12 +851,15 @@ export function NewAppointmentPage() {
   // 5. Patient inactive
   const patientInactive = !!patient && !patient.is_active;
 
-  // 6. Staff workload: ≥8 active appointments → warning; ≥12 → hard block
+  // 6. Staff workload: ≥ configured max/day → warning; ≥12 → hard block
   const activeApptCount = dayAppointments.filter(
     a => a.status !== 'CANCELLED' && a.status !== 'NO_SHOW'
   ).length;
-  const workloadWarning = activeApptCount >= 8;
+  const workloadWarning = activeApptCount >= (schedule.maxPerDay ?? 8);
   const workloadBlock   = activeApptCount >= 12;
+
+  // 7. Selected date outside configured working days (warning only — exceptions allowed)
+  const nonWorkingDay = !!date && !isWorkingDay(date, schedule);
 
   // Aggregate: can the form be submitted?
   const blockingErrors: string[] = [];
@@ -964,7 +983,17 @@ export function NewAppointmentPage() {
 
         {/* Time slots */}
         <Section icon={Clock} title="Hora de inicio">
-          {date && pastSlots.size === ALL_SLOTS.length && (
+          <div style={{ fontSize: 12, color: 'var(--s400)', marginBottom: 8 }}>
+            Horario de atención: {formatTime(schedule.startHour)} – {formatTime(schedule.endHour)}
+            {schedule.breakStart && schedule.breakEnd ? ` · pausa ${formatTime(schedule.breakStart)} – ${formatTime(schedule.breakEnd)}` : ''}
+          </div>
+          {nonWorkingDay && (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginBottom: 8, background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#92400e' }}>
+              <TriangleAlert size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+              El {dayLabelOf(date)} no está entre tus días de atención configurados. Puedes agendar igual como excepción.
+            </div>
+          )}
+          {date && pastSlots.size === slots.length && (
             <div style={{ fontSize: 12, color: 'var(--s400)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
               <AlertCircle size={12} />
               Todos los horarios del día de hoy ya pasaron.
@@ -973,6 +1002,7 @@ export function NewAppointmentPage() {
           {date ? (
             <>
               <TimeSlots
+                slots={slots}
                 selected={time}
                 onSelect={setTime}
                 duration={duration}

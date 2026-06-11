@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   UserRound, Clock, Bell, Sparkles, ShieldCheck,
   FileText, Settings, CalendarDays, Send, AlertCircle,
@@ -14,6 +14,7 @@ import { authApi } from '@/api/auth';
 import { consentTemplatesApi, type ConsentType } from '@/api/clinicalRecords';
 import { profilesApi, splitName, type Specialty } from '@/api/profiles';
 import { ACCENT_COLORS, saveAccentColor } from '@/lib/theme';
+import { loadSchedule, saveSchedule } from '@/lib/schedule';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -459,27 +460,32 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
 const DAYS_ES = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const HOURS   = Array.from({ length: 25 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
 
-function ScheduleSection({ setDirty }: { setDirty: (v: boolean) => void }) {
-  const mark = <T,>(fn: (v: T) => void) => (v: T) => { fn(v); setDirty(true); };
+function ScheduleSection() {
+  const init = useMemo(() => loadSchedule(), []);
+  const [activeDays,  setActiveDays]  = useState<string[]>(init.activeDays);
+  const [startHour,   setStartHour]   = useState(init.startHour);
+  const [endHour,     setEndHour]     = useState(init.endHour);
+  const [sessionDur,  setSessionDur]  = useState(init.sessionLen);
+  const [breakStart,  setBreakStart]  = useState(init.breakStart ?? '13:00');
+  const [breakEnd,    setBreakEnd]    = useState(init.breakEnd ?? '14:00');
+  const [buffer,      setBuffer]      = useState(init.buffer ?? 10);
+  const [maxPerDay,   setMaxPerDay]   = useState(init.maxPerDay ?? 8);
 
-  const savedSched = (() => { try { return JSON.parse(localStorage.getItem('sghcp_schedule') ?? '{}'); } catch { return {}; } })();
-  const [activeDays,  setActiveDays]  = useState<string[]>(savedSched.activeDays ?? ['Lun', 'Mar', 'Mié', 'Jue', 'Vie']);
-  const [startHour,   setStartHour]   = useState(savedSched.startHour ?? '08:00');
-  const [endHour,     setEndHour]     = useState(savedSched.endHour ?? '19:00');
-  const [sessionDur,  setSessionDur]  = useState(savedSched.sessionLen ?? 50);
-  const [breakStart,  setBreakStart]  = useState('13:00');
-  const [breakEnd,    setBreakEnd]    = useState('14:00');
-  const [buffer,      setBuffer]      = useState(10);
-  const [maxPerDay,   setMaxPerDay]   = useState(8);
-  const [autoConfirm, setAutoConfirm] = useState(true);
+  // Persist immediately — these settings drive the slot grid in "Nueva cita".
+  useEffect(() => {
+    saveSchedule({ activeDays, startHour, endHour, sessionLen: sessionDur, breakStart, breakEnd, buffer, maxPerDay });
+  }, [activeDays, startHour, endHour, sessionDur, breakStart, breakEnd, buffer, maxPerDay]);
 
   const toggleDay = (d: string) => {
     setActiveDays(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d]);
-    setDirty(true);
   };
 
   return (
     <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14, fontSize: 12.5, color: 'var(--s500)' }}>
+        <CheckCircle size={13} color="#10b981" />
+        Los cambios se guardan automáticamente y definen los horarios disponibles al agendar citas.
+      </div>
       <SectionCard title="Días de atención" icon={CalendarDays}>
         <div style={{ padding: '14px 0', borderBottom: '1px solid var(--s100)' }}>
           <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
@@ -501,31 +507,31 @@ function ScheduleSection({ setDirty }: { setDirty: (v: boolean) => void }) {
 
       <SectionCard title="Horario de consulta" icon={Clock}>
         <FieldRow label="Hora de inicio">
-          <FSelect value={startHour} onChange={mark(setStartHour)}>
+          <FSelect value={startHour} onChange={setStartHour}>
             {HOURS.map(h => <option key={h}>{h}</option>)}
           </FSelect>
         </FieldRow>
         <FieldRow label="Hora de fin">
-          <FSelect value={endHour} onChange={mark(setEndHour)}>
+          <FSelect value={endHour} onChange={setEndHour}>
             {HOURS.map(h => <option key={h}>{h}</option>)}
           </FSelect>
         </FieldRow>
         <FieldRow label="Duración por defecto de sesión" sub="Se aplica al crear nueva cita">
           <div style={{ display: 'flex', gap: 7 }}>
             {[30, 45, 50, 60, 90].map(d => (
-              <ChipBtn key={d} active={sessionDur === d} onClick={() => { setSessionDur(d); setDirty(true); }}>
+              <ChipBtn key={d} active={sessionDur === d} onClick={() => setSessionDur(d)}>
                 {d}m
               </ChipBtn>
             ))}
           </div>
         </FieldRow>
-        <FieldRow label="Pausa del mediodía">
+        <FieldRow label="Pausa del mediodía" sub="No se ofrecen horarios dentro de la pausa">
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <FSelect value={breakStart} onChange={mark(setBreakStart)}>
+            <FSelect value={breakStart} onChange={setBreakStart}>
               {HOURS.map(h => <option key={h}>{h}</option>)}
             </FSelect>
             <span style={{ color: 'var(--s400)', fontSize: 13, flexShrink: 0 }}>a</span>
-            <FSelect value={breakEnd} onChange={mark(setBreakEnd)}>
+            <FSelect value={breakEnd} onChange={setBreakEnd}>
               {HOURS.map(h => <option key={h}>{h}</option>)}
             </FSelect>
           </div>
@@ -533,28 +539,22 @@ function ScheduleSection({ setDirty }: { setDirty: (v: boolean) => void }) {
         <FieldRow label="Buffer entre citas" sub="Tiempo libre mínimo entre sesiones">
           <div style={{ display: 'flex', gap: 7 }}>
             {[0, 5, 10, 15, 20].map(b => (
-              <ChipBtn key={b} active={buffer === b} onClick={() => { setBuffer(b); setDirty(true); }}>
+              <ChipBtn key={b} active={buffer === b} onClick={() => setBuffer(b)}>
                 {b}m
               </ChipBtn>
             ))}
           </div>
         </FieldRow>
-        <FieldRow label="Máximo de citas por día">
+        <FieldRow label="Máximo de citas por día" sub="Al superarlo, el agendador muestra una alerta de carga">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <input
               type="range" min={1} max={15} value={maxPerDay}
-              onChange={e => { setMaxPerDay(+e.target.value); setDirty(true); }}
+              onChange={e => setMaxPerDay(+e.target.value)}
               style={{ flex: 1, accentColor: 'var(--teal)' } as React.CSSProperties}
             />
             <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 15, fontWeight: 700, color: 'var(--teal)', minWidth: 24, textAlign: 'center' }}>{maxPerDay}</span>
           </div>
         </FieldRow>
-        <Toggle
-          value={autoConfirm}
-          onChange={v => { setAutoConfirm(v); setDirty(true); }}
-          label="Confirmar citas automáticamente"
-          sub="Las nuevas citas quedan en estado 'Confirmada' sin acción manual"
-        />
       </SectionCard>
     </>
   );
@@ -1197,7 +1197,7 @@ export function SettingsPage() {
         <div style={{ flex: 1, overflow: 'auto' }}>
           <div style={{ padding: '24px 28px', maxWidth: 780 }}>
             {section === 'profile'       && <ProfileSection       setDirty={markDirty} />}
-            {section === 'schedule'      && <ScheduleSection      setDirty={markDirty} />}
+            {section === 'schedule'      && <ScheduleSection />}
             {section === 'notifications' && <NotificationsSection setDirty={markDirty} />}
             {section === 'ai'            && <AISection            setDirty={markDirty} />}
             {section === 'security'      && <SecuritySection      setDirty={markDirty} />}

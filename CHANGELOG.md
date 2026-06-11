@@ -19,6 +19,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 - Onboarding wizard no longer reappears for existing users on a new browser: completion is persisted server-side (`users.onboarding_completed_at`, migration 000014) and returned by `GET /auth/me`
+- "Nueva cita" from the calendar keeps the selected date instead of jumping back to today
+- New-appointment slots now respect the configured working hours, midday break and buffer instead of offering 08:00–20:00 every day; days outside the configured schedule show a warning
+- Settings → Horario y agenda actually persists changes (it previously only pretended to save)
 
 ### Removed
 - "Cédula / RUT" field from the onboarding wizard (never persisted, Chilean placeholder; the clinical document legally requires name + tarjeta profesional)
