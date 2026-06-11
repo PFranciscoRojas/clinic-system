@@ -1,17 +1,20 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import {
-  CalendarDays, Users, Receipt, Settings,
-  Brain, Bell, Search, Plus, ChevronDown, Lock, LogOut,
+  CalendarDays, Users, Settings,
+  Brain, Search, Plus, ChevronDown, Lock, LogOut,
   UserCircle, Calendar, X, Globe,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { patientsApi, type Patient } from '@/api/patients';
 
+// Facturación hidden until the real billing backend exists (mock-only today);
+// Evaluaciones postponed by decision 2026-06-09 — both tracked in the backlog.
 const NAV = [
   { to: '/',                  label: 'Agenda',          Icon: CalendarDays,  perm: 'appointments:read', badge: null },
   { to: '/patients',          label: 'Pacientes',        Icon: Users,         perm: 'patients:read',     badge: null },
   { to: '/booking-requests',  label: 'Solicitudes web',  Icon: Globe,         perm: null,                badge: null },
-  { to: '/billing',           label: 'Facturación',      Icon: Receipt,       perm: null,                badge: null },
   { to: '/settings',          label: 'Configuración',    Icon: Settings,      perm: null,                badge: null },
 ];
 
@@ -22,23 +25,44 @@ export function AppShell({ children }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
   const [profileOpen, setProfileOpen] = useState(false);
-  const [notifOpen,   setNotifOpen]   = useState(false);
   const [locked,      setLocked]      = useState(false);
   const [search,      setSearch]      = useState('');
+  const [debouncedQ,  setDebouncedQ]  = useState('');
   const [searchFocus, setSearchFocus] = useState(false);
+  const [searchOpen,  setSearchOpen]  = useState(false);
   const profileRef  = useRef<HTMLDivElement>(null);
-  const notifRef    = useRef<HTMLDivElement>(null);
+  const searchRef   = useRef<HTMLDivElement>(null);
   const idleTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const IDLE_MS     = 5 * 60 * 1000; // 5 minutes
 
   useEffect(() => {
     function handle(e: MouseEvent) {
       if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false);
-      if (notifRef.current   && !notifRef.current.contains(e.target as Node))   setNotifOpen(false);
+      if (searchRef.current  && !searchRef.current.contains(e.target as Node))  setSearchOpen(false);
     }
     document.addEventListener('mousedown', handle);
     return () => document.removeEventListener('mousedown', handle);
   }, []);
+
+  // Global patient search — the encrypted-PII backend matches by exact
+  // paternal last name or exact document number (hash search, no LIKE).
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const { data: searchResults = [], isFetching: searching } = useQuery({
+    queryKey: ['global-patient-search', debouncedQ],
+    queryFn: () => /^\d{4,}$/.test(debouncedQ)
+      ? patientsApi.search({ document: debouncedQ, limit: 8 })
+      : patientsApi.search({ last_name: debouncedQ, limit: 8 }),
+    enabled: debouncedQ.length >= 2,
+  });
+
+  const goToPatient = (p: Patient) => {
+    setSearch(''); setSearchOpen(false);
+    navigate(`/patients/${p.id}`);
+  };
 
   // Auto-lock after IDLE_MS of inactivity — only when PIN is set.
   useEffect(() => {
@@ -172,27 +196,56 @@ export function AppShell({ children }: Props) {
             position: 'sticky', top: 0, zIndex: 20,
           }}>
             {/* Search */}
-            <div style={{
-              flex: 1, maxWidth: 400,
-              display: 'flex', alignItems: 'center', gap: 8,
-              background: searchFocus ? '#fff' : 'var(--s50)',
-              border: `1.5px solid ${searchFocus ? 'var(--teal)' : 'var(--s200)'}`,
-              borderRadius: 10, padding: '8px 14px',
-              transition: 'all .15s',
-              boxShadow: searchFocus ? '0 0 0 3px rgba(20,184,166,.12)' : 'none',
-            }}>
-              <Search size={15} color={searchFocus ? 'var(--teal)' : 'var(--s400)'} />
-              <input value={search} onChange={e => setSearch(e.target.value)}
-                onFocus={() => setSearchFocus(true)} onBlur={() => setSearchFocus(false)}
-                placeholder="Buscar paciente, cita…"
-                style={{ border: 'none', background: 'transparent', fontSize: 13.5, color: 'var(--s700)', width: '100%' }}
-              />
-              {search && (
-                <button onClick={() => setSearch('')} style={{ border: 'none', background: 'none', padding: 0, display: 'flex', color: 'var(--s400)' }}>
-                  <X size={13} />
-                </button>
+            <div ref={searchRef} style={{ flex: 1, maxWidth: 400, position: 'relative' }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                background: searchFocus ? '#fff' : 'var(--s50)',
+                border: `1.5px solid ${searchFocus ? 'var(--teal)' : 'var(--s200)'}`,
+                borderRadius: 10, padding: '8px 14px',
+                transition: 'all .15s',
+                boxShadow: searchFocus ? '0 0 0 3px rgba(20,184,166,.12)' : 'none',
+              }}>
+                <Search size={15} color={searchFocus ? 'var(--teal)' : 'var(--s400)'} />
+                <input value={search}
+                  onChange={e => { setSearch(e.target.value); setSearchOpen(true); }}
+                  onFocus={() => { setSearchFocus(true); if (search) setSearchOpen(true); }}
+                  onBlur={() => setSearchFocus(false)}
+                  onKeyDown={e => { if (e.key === 'Escape') { setSearch(''); setSearchOpen(false); } }}
+                  placeholder="Buscar paciente por apellido o documento…"
+                  style={{ border: 'none', background: 'transparent', fontSize: 13.5, color: 'var(--s700)', width: '100%' }}
+                />
+                {search && (
+                  <button onClick={() => { setSearch(''); setSearchOpen(false); }} style={{ border: 'none', background: 'none', padding: 0, display: 'flex', color: 'var(--s400)' }}>
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+              {searchOpen && debouncedQ.length >= 2 && (
+                <div className="anim-fade-in" style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, background: '#fff', borderRadius: 12, border: '1px solid var(--s200)', boxShadow: 'var(--shadow-lg)', overflow: 'hidden', zIndex: 100 }}>
+                  {searching ? (
+                    <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--s400)' }}>Buscando…</div>
+                  ) : searchResults.length === 0 ? (
+                    <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--s400)' }}>
+                      Sin resultados — la búsqueda es por apellido paterno o documento exactos
+                    </div>
+                  ) : (
+                    searchResults.map(p => (
+                      <button key={p.id} onMouseDown={() => goToPatient(p)}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: 'none', border: 'none', borderBottom: '1px solid var(--s50)', cursor: 'pointer', textAlign: 'left' }}>
+                        <UserCircle size={18} color="var(--teal)" />
+                        <div>
+                          <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--s800)' }}>
+                            {[p.first_name, p.middle_name, p.paternal_last_name, p.maternal_last_name].filter(Boolean).join(' ')}
+                          </p>
+                          <p style={{ margin: 0, fontSize: 11.5, color: 'var(--s400)' }}>
+                            {p.document_type_code} {p.document_number}
+                          </p>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
               )}
-              <kbd style={{ fontSize: 10, color: 'var(--s400)', background: 'var(--s100)', border: '1px solid var(--s200)', borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>⌘K</kbd>
             </div>
 
             <div style={{ flex: 1 }} />
@@ -212,29 +265,9 @@ export function AppShell({ children }: Props) {
               Nueva Cita
             </Link>
 
-            {/* Notifications */}
-            <div ref={notifRef} style={{ position: 'relative' }}>
-              <button onClick={() => { setNotifOpen(v => !v); setProfileOpen(false); }} style={{
-                width: 38, height: 38, borderRadius: '50%',
-                background: notifOpen ? 'var(--teal-l)' : 'var(--s50)',
-                border: `1.5px solid ${notifOpen ? 'var(--teal)' : 'var(--s200)'}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', position: 'relative', transition: 'all .15s',
-              }}>
-                <Bell size={16} color={notifOpen ? 'var(--teal)' : 'var(--s500)'} />
-                <span style={{ position: 'absolute', top: 6, right: 6, width: 7, height: 7, borderRadius: '50%', background: 'var(--red)', border: '2px solid #fff', animation: 'pulse 2s infinite' }} />
-              </button>
-              {notifOpen && (
-                <div className="anim-fade-in" style={{ position: 'absolute', top: 'calc(100% + 10px)', right: 0, width: 300, background: '#fff', borderRadius: 14, border: '1px solid var(--s200)', boxShadow: 'var(--shadow-lg)', overflow: 'hidden', zIndex: 100 }}>
-                  <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--s100)', fontWeight: 600, fontSize: 13.5, color: 'var(--s800)' }}>Notificaciones</div>
-                  <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--s500)', textAlign: 'center' }}>Sin notificaciones nuevas</div>
-                </div>
-              )}
-            </div>
-
             {/* Profile */}
             <div ref={profileRef} style={{ position: 'relative' }}>
-              <button onClick={() => { setProfileOpen(v => !v); setNotifOpen(false); }} style={{
+              <button onClick={() => setProfileOpen(v => !v)} style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 background: profileOpen ? 'var(--s100)' : 'var(--s50)',
                 border: '1.5px solid var(--s200)', borderRadius: 10,

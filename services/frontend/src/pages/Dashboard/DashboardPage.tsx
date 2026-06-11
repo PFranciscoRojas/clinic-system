@@ -3,13 +3,13 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   ChevronLeft, ChevronRight, Video, MapPin,
-  Brain, FileText, Bell, BellOff, Users, Receipt,
-  UserPlus, ClipboardList, CalendarDays, Sparkles,
-  X, ChevronDown, AlertTriangle, LayoutList, CalendarRange,
+  Brain, Users, UserPlus, CalendarDays, Sparkles,
+  ChevronDown, AlertTriangle, LayoutList, CalendarRange,
 } from 'lucide-react';
 
 import { appointmentsApi, type Appointment } from '@/api/appointments';
 import { patientsApi, type Patient } from '@/api/patients';
+import { bookingRequestsApi } from '@/api/bookingRequests';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
 import { AgendaCalendar } from './AgendaCalendar';
@@ -58,6 +58,16 @@ function shiftDate(iso: string, days: number) {
   const d = new Date(iso + 'T12:00:00');
   d.setDate(d.getDate() + days);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function fmtRelative(iso: string) {
+  const diffMin = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (diffMin < 1)  return 'Ahora';
+  if (diffMin < 60) return `Hace ${diffMin} min`;
+  const h = Math.floor(diffMin / 60);
+  if (h < 24) return `Hace ${h} h`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? 'Ayer' : `Hace ${d} días`;
 }
 
 function fmtTime(isoOrHHMM: string) {
@@ -291,13 +301,10 @@ interface InboxItemProps {
   action?: string;
   actionColor?: string;
   urgent?: boolean;
-  onDismiss?: () => void;
+  onAction?: () => void;
 }
 
-function InboxItem({ icon: Icon, iconColor, iconBg, title, subtitle, time, action, actionColor = 'var(--teal)', urgent, onDismiss }: InboxItemProps) {
-  const [dismissed, setDismissed] = useState(false);
-  if (dismissed) return null;
-
+function InboxItem({ icon: Icon, iconColor, iconBg, title, subtitle, time, action, actionColor = 'var(--teal)', urgent, onAction }: InboxItemProps) {
   return (
     <div style={{ padding: '12px 0', borderBottom: '1px solid var(--s100)' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
@@ -318,21 +325,35 @@ function InboxItem({ icon: Icon, iconColor, iconBg, title, subtitle, time, actio
           <div style={{ fontSize: 10, color: 'var(--s400)', marginTop: 2 }}>{time}</div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
-          {action && (
-            <button style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: actionColor, border: 'none', borderRadius: 6, padding: '3px 10px', cursor: 'pointer' }}>
-              {action}
-            </button>
-          )}
+        {action && (
           <button
-            onClick={() => { onDismiss?.(); setDismissed(true); }}
-            style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--s300)', padding: 0, display: 'flex' }}
+            onClick={onAction}
+            style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: actionColor, border: 'none', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', flexShrink: 0 }}
           >
-            <X size={12} />
+            {action}
           </button>
-        </div>
+        )}
       </div>
     </div>
+  );
+}
+
+function AppointmentInboxItem({ appt, onOpen }: { appt: Appointment; onOpen: () => void }) {
+  const { data: patient } = usePatient(appt.patient_id);
+  const name = patient ? patientFullName(patient) : `Paciente #${appt.patient_id.slice(-4)}`;
+
+  return (
+    <InboxItem
+      icon={AlertTriangle}
+      iconColor="#f59e0b"
+      iconBg="#fef3c7"
+      title="Cita sin completar"
+      subtitle={`${name} · ${fmtTime(appt.scheduled_at)}`}
+      time="Hoy"
+      action="Abrir"
+      actionColor="#f59e0b"
+      onAction={onOpen}
+    />
   );
 }
 
@@ -360,6 +381,38 @@ export function DashboardPage() {
     refetchInterval: 60_000,
   });
 
+  // ── Today query (inbox + stat tile) — same key as the day query when
+  // selectedDate is today, so react-query deduplicates them ────────────────
+  const today = todayISO();
+  const { data: todayAppointments = [] } = useQuery({
+    queryKey: ['appointments-day', today, user?.user_id],
+    queryFn: () => appointmentsApi.list({
+      staff_id:  user?.user_id,
+      date_from: localISO(today, '00:00'),
+      date_to:   localISO(today, '23:59'),
+      limit: 50,
+    }),
+    enabled: !!user,
+    refetchInterval: 60_000,
+  });
+
+  // ── Inbox: pending web booking requests ──────────────────────────────────
+  const { data: pendingBookings = [] } = useQuery({
+    queryKey: ['booking-requests', 'PENDING'],
+    queryFn: () => bookingRequestsApi.list('PENDING'),
+    enabled: !!user,
+    refetchInterval: 60_000,
+  });
+
+  // ── Active patients stat ──────────────────────────────────────────────────
+  const { data: allPatients, isLoading: patientsLoading } = useQuery({
+    queryKey: ['patients-kpi'],
+    queryFn: () => patientsApi.list({ limit: 500 }),
+    enabled: !!user,
+    staleTime: 5 * 60_000,
+  });
+  const activePatients = (allPatients ?? []).filter(p => p.is_active).length;
+
   // Sort by scheduled_at
   const sorted = useMemo(() =>
     [...appointments].sort((a, b) =>
@@ -370,9 +423,19 @@ export function DashboardPage() {
   const filtered = useMemo(() => filterAppts(sorted, filter), [sorted, filter]);
 
   // Stats
-  const completedCount = sorted.filter(a => a.status === 'COMPLETED').length;
-  const inProgressAppt = sorted.find(a => isInProgress(a));
-  const isToday        = selectedDate === todayISO();
+  const todayActive     = todayAppointments.filter(a => a.status !== 'CANCELLED').length;
+  const completedToday  = todayAppointments.filter(a => a.status === 'COMPLETED').length;
+  const inProgressAppt  = sorted.find(a => isInProgress(a));
+  const isToday         = selectedDate === today;
+
+  // Inbox: today's appointments already past their slot but still SCHEDULED
+  const unfinishedToday = useMemo(() =>
+    todayAppointments
+      .filter(a => a.status === 'SCHEDULED' && isPast(a))
+      .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()),
+    [todayAppointments]
+  );
+  const inboxCount = pendingBookings.length + unfinishedToday.length;
 
   // EN CURSO marker index
   const nowMs = Date.now();
@@ -467,18 +530,23 @@ export function DashboardPage() {
             </div>
 
             {/* Stats cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 28 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, marginBottom: 28 }}>
               <StatCard
                 icon={CalendarDays}
                 iconColor="#0ea5e9"
-                badge={isToday && completedCount > 0 ? `${completedCount} completadas` : undefined}
+                badge={completedToday > 0 ? `${completedToday} completadas` : undefined}
                 badgeColor="#0ea5e9"
-                value={sorted.filter(a => a.status !== 'CANCELLED').length}
+                value={todayActive}
                 label="Citas de hoy"
               />
-              <StatCard icon={Users} iconColor="#8b5cf6" badge="+3 este mes" badgeColor="#8b5cf6" value="—" label="Pacientes activos" />
-              <StatCard icon={Sparkles} iconColor="#f59e0b" badge="Pendientes de revisión" badgeColor="#f59e0b" value="—" label="Borradores IA" />
-              <StatCard icon={Receipt} iconColor="#10b981" badge="— cobrado" badgeColor="#10b981" value="—" label="Facturación del mes" />
+              <StatCard
+                icon={Users}
+                iconColor="#8b5cf6"
+                badge={patientsLoading ? undefined : `${(allPatients ?? []).length} registrados`}
+                badgeColor="#8b5cf6"
+                value={patientsLoading ? '—' : activePatients}
+                label="Pacientes activos"
+              />
             </div>
 
             {/* Agenda del día */}
@@ -556,23 +624,43 @@ export function DashboardPage() {
                   <Brain size={15} color="var(--teal)" />
                   <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>Inbox Clínico</span>
                 </div>
-                <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: '#ef4444', padding: '1px 7px', borderRadius: 20 }}>
-                  3 urgentes
-                </span>
+                {inboxCount > 0 && (
+                  <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: '#ef4444', padding: '1px 7px', borderRadius: 20 }}>
+                    {inboxCount} pendiente{inboxCount !== 1 ? 's' : ''}
+                  </span>
+                )}
               </div>
 
-              <div>
-                <InboxItem icon={Sparkles} iconColor="#f59e0b" iconBg="#fef3c7" title="Borrador IA listo" subtitle="Ana Ríos · Sesión #1" time="Hace 1h" action="Revisar" actionColor="#f59e0b" urgent />
-                <InboxItem icon={Sparkles} iconColor="#f59e0b" iconBg="#fef3c7" title="Borrador IA listo" subtitle="Carlos Mendoza · Sesión #8" time="Hace 3h" action="Revisar" actionColor="#f59e0b" urgent />
-                <InboxItem icon={FileText} iconColor="var(--teal)" iconBg="var(--teal-l)" title="Consentimiento pendiente" subtitle="Rodrigo Parra — subir firmado" time="Ayer" action="Subir" actionColor="var(--teal)" />
-                <InboxItem icon={FileText} iconColor="var(--teal)" iconBg="var(--teal-l)" title="Consentimiento pendiente" subtitle="Isabella Cruz — subir firmado" time="Hace 2d" action="Subir" actionColor="var(--teal)" />
-                <InboxItem icon={AlertTriangle} iconColor="#ef4444" iconBg="#fee2e2" title="Pago vencido" subtitle="Factura #092 · Miguel Torres" time="Vence hoy" action="Cobrar" actionColor="#ef4444" urgent />
-                <InboxItem icon={Bell} iconColor="var(--s500)" iconBg="var(--s100)" title="Recordatorio enviado" subtitle="Sofía Campos — cita 15:30" time="Hace 30min" />
-              </div>
-
-              <button style={{ marginTop: 8, fontSize: 12, color: 'var(--teal)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}>
-                Ver todo el historial →
-              </button>
+              {inboxCount === 0 ? (
+                <div style={{ textAlign: 'center', padding: '28px 0', color: 'var(--s400)' }}>
+                  <p style={{ margin: 0, fontSize: 13 }}>Sin pendientes 🎉</p>
+                </div>
+              ) : (
+                <div>
+                  {pendingBookings.map(b => (
+                    <InboxItem
+                      key={b.id}
+                      icon={UserPlus}
+                      iconColor="#0ea5e9"
+                      iconBg="#e0f2fe"
+                      title="Solicitud de cita web"
+                      subtitle={`${b.first_name} ${b.last_name} · ${b.modality === 'VIRTUAL' ? 'Virtual' : 'Presencial'}`}
+                      time={fmtRelative(b.created_at)}
+                      action="Revisar"
+                      actionColor="#0ea5e9"
+                      urgent
+                      onAction={() => navigate('/booking-requests')}
+                    />
+                  ))}
+                  {unfinishedToday.map(a => (
+                    <AppointmentInboxItem
+                      key={a.id}
+                      appt={a}
+                      onOpen={() => navigate(`/appointments/${a.id}`)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Acciones rápidas */}
@@ -583,10 +671,8 @@ export function DashboardPage() {
               </div>
 
               {[
-                { icon: UserPlus,      label: 'Nuevo paciente',     to: '/patients/new' },
-                { icon: ClipboardList, label: 'Nueva evaluación',   to: '/evaluations'  },
-                { icon: Receipt,       label: 'Generar factura',     to: '/billing'      },
-                { icon: BellOff,       label: 'Enviar recordatorio', to: '/'             },
+                { icon: UserPlus,     label: 'Nuevo paciente', to: '/patients/new'     },
+                { icon: CalendarDays, label: 'Nueva cita',     to: '/appointments/new' },
               ].map(({ icon: Icon, label, to }) => (
                 <button
                   key={label}

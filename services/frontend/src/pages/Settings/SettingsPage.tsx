@@ -1,22 +1,23 @@
 import { useState, useEffect } from 'react';
 import {
-  UserRound, Clock, Bell, Sparkles, ShieldCheck, CreditCard,
-  FileText, Plug, Settings, CalendarDays, Send, AlertCircle,
-  PenLine, Lock, Monitor, Smartphone, Tablet, Key, CheckCircle,
-  Upload, Palette, Star, Users, Trash2, Save, HardDrive,
-  Video, MessageCircle, Shield, LogOut, Plus,
+  UserRound, Clock, Bell, Sparkles, ShieldCheck,
+  FileText, Settings, CalendarDays, Send, AlertCircle,
+  PenLine, Lock, Key, CheckCircle,
+  Upload, Palette, Users, Trash2, Save,
+  Shield, LogOut, Plus,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
+import { authApi } from '@/api/auth';
 import { consentTemplatesApi, type ConsentType } from '@/api/clinicalRecords';
 import { profilesApi, splitName, type Specialty } from '@/api/profiles';
 import { ACCENT_COLORS, saveAccentColor } from '@/lib/theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type SectionId = 'profile' | 'schedule' | 'notifications' | 'ai' | 'security' | 'billing' | 'templates' | 'integrations' | 'users';
+type SectionId = 'profile' | 'schedule' | 'notifications' | 'ai' | 'security' | 'templates' | 'users';
 
 const SECTIONS: { id: SectionId; icon: React.ElementType; label: string; color?: string }[] = [
   { id: 'profile',       icon: UserRound,  label: 'Perfil profesional' },
@@ -24,9 +25,7 @@ const SECTIONS: { id: SectionId; icon: React.ElementType; label: string; color?:
   { id: 'notifications', icon: Bell,        label: 'Notificaciones'     },
   { id: 'ai',            icon: Sparkles,    label: 'Asistente IA',       color: '#f59e0b' },
   { id: 'security',      icon: ShieldCheck, label: 'Seguridad',          color: '#ef4444' },
-  { id: 'billing',       icon: CreditCard,  label: 'Plan y facturación', color: '#10b981' },
   { id: 'templates',     icon: FileText,    label: 'Plantillas clínicas',color: '#8b5cf6' },
-  { id: 'integrations',  icon: Plug,        label: 'Integraciones',      color: '#6366f1' },
   { id: 'users',         icon: Users,       label: 'Usuarios',            color: '#0ea5e9' },
 ];
 
@@ -429,23 +428,13 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
             <span style={{ fontSize: 13, color: 'var(--s500)' }}>Organización</span>
             <span style={{ fontSize: 12, color: 'var(--s600)', fontFamily: "'DM Mono', monospace" }}>{user?.org_id ?? '—'}</span>
           </div>
-          <div style={{ padding: '10px 0', borderBottom: '1px solid var(--s100)' }}>
+          <div style={{ padding: '10px 0' }}>
             <div style={{ fontSize: 13, color: 'var(--s500)', marginBottom: 8 }}>Roles activos</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {user?.roles.map(role => {
                 const cfg = ROLE_COLORS[role] ?? { color: 'var(--s600)', bg: 'var(--s100)' };
                 return <Badge key={role} label={role.replace('_', ' ')} color={cfg.color} bg={cfg.bg} />;
               })}
-            </div>
-          </div>
-          <div style={{ padding: '10px 0' }}>
-            <div style={{ fontSize: 13, color: 'var(--s500)', marginBottom: 8 }}>Permisos</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-              {(user?.permissions ?? []).sort().map(p => (
-                <span key={p} style={{ fontSize: 10.5, fontWeight: 500, padding: '2px 8px', background: 'var(--s100)', color: 'var(--s600)', borderRadius: 5, fontFamily: "'DM Mono', monospace" }}>
-                  {p}
-                </span>
-              ))}
             </div>
           </div>
         </div>
@@ -733,24 +722,41 @@ function AISection({ setDirty }: { setDirty: (v: boolean) => void }) {
 
 // ── Security section ──────────────────────────────────────────────────────────
 
-const ACTIVE_SESSIONS = [
-  { device: 'MacBook Pro — Chrome',   icon: Monitor,    location: 'Bogotá, CO', time: 'Ahora',    current: true  },
-  { device: 'iPhone 14 — Safari',     icon: Smartphone, location: 'Bogotá, CO', time: 'Hace 2h',  current: false },
-  { device: 'iPad — Safari',          icon: Tablet,     location: 'Bogotá, CO', time: 'Hace 3d',  current: false },
-];
-
 function SecuritySection({ setDirty }: { setDirty: (v: boolean) => void }) {
   const { user } = useAuth();
   const tog = (fn: (v: boolean) => void) => (v: boolean) => { fn(v); setDirty(true); };
 
   const [autoLock,    setAutoLock]    = useState(true);
   const [lockMin,     setLockMin]     = useState(5);
-  const [twoFactor,   setTwoFactor]   = useState(false);
-  const [sessionLog,  setSessionLog]  = useState(true);
   const [pin,         setPin]         = useState('');
   const [pin2,        setPin2]        = useState('');
   const [pinErr,      setPinErr]      = useState('');
   const [pinSaved,    setPinSaved]    = useState(false);
+
+  const [curPwd,    setCurPwd]    = useState('');
+  const [newPwd,    setNewPwd]    = useState('');
+  const [newPwd2,   setNewPwd2]   = useState('');
+  const [pwdErr,    setPwdErr]    = useState('');
+  const [pwdSaved,  setPwdSaved]  = useState(false);
+  const [pwdSaving, setPwdSaving] = useState(false);
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwdErr(''); setPwdSaved(false);
+    if (newPwd.length < 8)   { setPwdErr('La nueva contraseña debe tener al menos 8 caracteres.'); return; }
+    if (newPwd !== newPwd2)  { setPwdErr('Las contraseñas nuevas no coinciden.'); return; }
+    setPwdSaving(true);
+    try {
+      await authApi.changePassword(curPwd, newPwd);
+      setPwdSaved(true);
+      setCurPwd(''); setNewPwd(''); setNewPwd2('');
+      setTimeout(() => setPwdSaved(false), 4000);
+    } catch {
+      setPwdErr('No se pudo cambiar la contraseña. Verifica la contraseña actual.');
+    } finally {
+      setPwdSaving(false);
+    }
+  };
 
   const handlePinSave = () => {
     if (pin.length !== 4 || pin !== pin2) { setPinErr('Los PINs no coinciden o son muy cortos'); return; }
@@ -818,112 +824,42 @@ function SecuritySection({ setDirty }: { setDirty: (v: boolean) => void }) {
         </div>
       </SectionCard>
 
-      <SectionCard title="Acceso y autenticación" icon={ShieldCheck} color="#ef4444">
-        <Toggle value={twoFactor}  onChange={tog(setTwoFactor)}  label="Autenticación de dos factores (2FA)" sub="Requiere código OTP al iniciar sesión desde un dispositivo nuevo" />
-        <Toggle value={sessionLog} onChange={tog(setSessionLog)} label="Registro de sesiones activas"        sub="Muestra qué dispositivos tienen sesión abierta" />
-      </SectionCard>
-
-      <SectionCard title="Sesiones activas" icon={Monitor} color="#ef4444">
-        {ACTIVE_SESSIONS.map((s, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 0', borderBottom: i < ACTIVE_SESSIONS.length - 1 ? '1px solid var(--s100)' : 'none' }}>
-            <div style={{ width: 36, height: 36, borderRadius: 9, background: s.current ? 'var(--teal-l)' : 'var(--s100)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <s.icon size={16} color={s.current ? 'var(--teal)' : 'var(--s400)'} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--s800)', display: 'flex', alignItems: 'center', gap: 7 }}>
-                {s.device}
-                {s.current && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--teal)', background: 'var(--teal-l)', borderRadius: 5, padding: '1px 7px' }}>Actual</span>}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 1 }}>{s.location} · {s.time}</div>
-            </div>
-            {!s.current && (
-              <button
-                style={{ fontSize: 12, color: '#ef4444', border: '1.5px solid #fecaca', background: '#fff', borderRadius: 7, padding: '5px 11px', fontWeight: 600, transition: 'background .12s', cursor: 'pointer' }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#fef2f2')}
-                onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
-              >
-                Cerrar sesión
-              </button>
-            )}
-          </div>
-        ))}
-      </SectionCard>
-    </>
-  );
-}
-
-// ── Plan section ──────────────────────────────────────────────────────────────
-
-function BillingSection() {
-  const FEATURES = [
-    { icon: Users,       label: 'Pacientes ilimitados' },
-    { icon: Sparkles,    label: 'IA incluida'          },
-    { icon: ShieldCheck, label: 'Firma digital legal'  },
-  ];
-  const USAGE = [
-    { label: 'Pacientes activos',         used: 42,  max: null, unit: '',   color: 'var(--teal)'  },
-    { label: 'Almacenamiento',            used: 2.3, max: 50,   unit: 'GB', color: '#6366f1'      },
-    { label: 'Firmas digitales este mes', used: 18,  max: null, unit: '',   color: '#f59e0b'      },
-  ];
-
-  return (
-    <SectionCard title="Plan actual" icon={CreditCard} color="#10b981">
-      <div style={{ padding: '14px 0' }}>
-        {/* Plan card */}
-        <div style={{ padding: '18px 20px', background: 'linear-gradient(135deg,#f0fdfa,#ecfdf5)', borderRadius: 14, border: '1.5px solid #6ee7b7', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-              <Star size={22} color="#10b981" />
+      <SectionCard title="Cambiar contraseña" icon={Key} color="#ef4444">
+        <form onSubmit={handlePasswordChange} style={{ padding: '14px 0' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <div style={{ fontSize: 12, color: 'var(--s500)', marginBottom: 6, fontWeight: 500 }}>Contraseña actual</div>
+              <input value={curPwd} onChange={e => setCurPwd(e.target.value)} type="password" required
+                autoComplete="current-password"
+                style={{ width: '100%', maxWidth: 340, padding: '9px 12px', borderRadius: 9, border: '1.5px solid var(--s200)', fontSize: 13, boxSizing: 'border-box' }} />
             </div>
             <div>
-              <div style={{ fontWeight: 800, fontSize: 17, color: 'var(--s800)' }}>Plan Profesional</div>
-              <div style={{ fontSize: 12.5, color: 'var(--s500)', marginTop: 2 }}>Renovación: abr 2027 · Anual</div>
+              <div style={{ fontSize: 12, color: 'var(--s500)', marginBottom: 6, fontWeight: 500 }}>Nueva contraseña</div>
+              <input value={newPwd} onChange={e => setNewPwd(e.target.value)} type="password" required minLength={8}
+                autoComplete="new-password" placeholder="Mínimo 8 caracteres"
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 9, border: '1.5px solid var(--s200)', fontSize: 13, boxSizing: 'border-box' }} />
             </div>
-            <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-              <div style={{ fontWeight: 800, fontSize: 22, color: '#10b981', letterSpacing: '-0.5px' }}>$129.900</div>
-              <div style={{ fontSize: 11.5, color: 'var(--s400)' }}>COP/mes</div>
-            </div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
-            {FEATURES.map(f => (
-              <div key={f.label} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'var(--teal-d)', fontWeight: 500 }}>
-                <f.icon size={13} color="#10b981" />{f.label}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Usage */}
-        {USAGE.map(u => (
-          <div key={u.label} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--s100)' }}>
-            <span style={{ fontSize: 13.5, color: 'var(--s600)', flex: 1 }}>{u.label}</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {u.max && (
-                <div style={{ width: 80, height: 5, borderRadius: 99, background: 'var(--s100)', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${(u.used / u.max) * 100}%`, background: u.color, borderRadius: 99 }} />
-                </div>
-              )}
-              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 700, color: 'var(--s800)' }}>
-                {u.used}{u.unit}{u.max ? ` / ${u.max}${u.unit}` : ''}
-              </span>
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--s500)', marginBottom: 6, fontWeight: 500 }}>Confirmar nueva contraseña</div>
+              <input value={newPwd2} onChange={e => setNewPwd2(e.target.value)} type="password" required minLength={8}
+                autoComplete="new-password"
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 9, border: '1.5px solid var(--s200)', fontSize: 13, boxSizing: 'border-box' }} />
             </div>
           </div>
-        ))}
-
-        <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
-          <button
-            style={{ flex: 1, padding: 10, borderRadius: 10, border: '1.5px solid #6ee7b7', background: '#fff', color: '#065f46', fontSize: 13.5, fontWeight: 600, transition: 'background .12s', cursor: 'pointer' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#f0fdf4')}
-            onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
-          >
-            Ver historial de facturación
+          {pwdErr && <div style={{ fontSize: 12.5, color: 'var(--red)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}><AlertCircle size={13} />{pwdErr}</div>}
+          {pwdSaved && <div style={{ fontSize: 12.5, color: '#10b981', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}><CheckCircle size={13} />Contraseña actualizada correctamente.</div>}
+          <button type="submit" disabled={pwdSaving} style={{
+            display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none',
+            background: pwdSaving ? 'var(--s200)' : '#ef4444', color: pwdSaving ? 'var(--s400)' : '#fff',
+            fontSize: 13, fontWeight: 700, cursor: pwdSaving ? 'not-allowed' : 'pointer',
+          }}>
+            {pwdSaving
+              ? <><span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: 99, animation: 'spin .7s linear infinite', display: 'inline-block' }} />Cambiando…</>
+              : <><Key size={14} />Cambiar contraseña</>}
           </button>
-          <button style={{ flex: 1, padding: 10, borderRadius: 10, border: 'none', background: '#10b981', color: '#fff', fontSize: 13.5, fontWeight: 700, boxShadow: '0 2px 8px rgba(16,185,129,.3)', cursor: 'pointer' }}>
-            Cambiar plan
-          </button>
-        </div>
-      </div>
-    </SectionCard>
+        </form>
+      </SectionCard>
+    </>
   );
 }
 
@@ -1038,145 +974,6 @@ function ConsentTemplatesSection() {
           );
         })
       )}
-    </SectionCard>
-  );
-}
-
-// ── Templates section ─────────────────────────────────────────────────────────
-
-interface Template { id: number; name: string; type: string; default: boolean; content: string; }
-
-function TemplatesSection({ setDirty }: { setDirty: (v: boolean) => void }) {
-  const [templates, setTemplates] = useState<Template[]>([
-    { id: 2, name: 'Sesión inicial',    type: 'Anamnesis', default: true,  content: 'Motivo de consulta:\nAntecedentes:\nHistoria familiar:\nObservaciones:' },
-    { id: 3, name: 'Alta terapéutica', type: 'Cierre',    default: false, content: 'Resumen del proceso:\nLogros alcanzados:\nRecomendaciones:\nSeguimiento:' },
-  ]);
-  const [editing, setEditing] = useState<number | null>(null);
-  const [contents, setContents] = useState<Record<number, string>>({});
-
-  const handleContentChange = (id: number, val: string) => {
-    setContents(p => ({ ...p, [id]: val }));
-    setDirty(true);
-  };
-
-  const handleDelete = (id: number) => {
-    setTemplates(p => p.filter(t => t.id !== id));
-    setDirty(true);
-  };
-
-  return (
-    <SectionCard title="Plantillas de notas clínicas" icon={FileText} color="#8b5cf6">
-      <div style={{ padding: '14px 0' }}>
-        {templates.map(t => (
-          <div key={t.id}>
-            <div
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 10, border: '1px solid var(--s200)', marginBottom: 8, background: '#fff', transition: 'all .12s' }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--s50)')}
-              onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
-            >
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: '#f5f3ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <FileText size={15} color="#8b5cf6" />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--s800)' }}>{t.name}</span>
-                  <span style={{ fontSize: 11, color: '#8b5cf6', background: '#f5f3ff', borderRadius: 5, padding: '1px 7px' }}>{t.type}</span>
-                  {t.default && <span style={{ fontSize: 11, color: '#10b981', background: '#ecfdf5', borderRadius: 5, padding: '1px 7px' }}>Por defecto</span>}
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button
-                  onClick={() => setEditing(editing === t.id ? null : t.id)}
-                  style={{ border: '1.5px solid var(--s200)', background: '#fff', borderRadius: 7, padding: '5px 11px', fontSize: 12, color: 'var(--s600)', transition: 'all .12s', cursor: 'pointer' }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.color = '#8b5cf6'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--s200)'; e.currentTarget.style.color = 'var(--s600)'; }}
-                >
-                  {editing === t.id ? 'Cerrar' : 'Editar'}
-                </button>
-                {!t.default && (
-                  <button
-                    onClick={() => handleDelete(t.id)}
-                    style={{ border: '1.5px solid #fecaca', background: '#fff', borderRadius: 7, padding: '5px 8px', color: '#ef4444', display: 'flex', cursor: 'pointer' }}
-                  >
-                    <Trash2 size={13} color="#ef4444" />
-                  </button>
-                )}
-              </div>
-            </div>
-            {editing === t.id && (
-              <div style={{ padding: '12px 14px', background: 'var(--s50)', borderRadius: 10, border: '1px solid var(--s200)', marginBottom: 8 }}>
-                <textarea
-                  rows={5}
-                  value={contents[t.id] ?? t.content}
-                  onChange={e => handleContentChange(t.id, e.target.value)}
-                  style={{ width: '100%', border: '1.5px solid var(--s200)', borderRadius: 9, padding: '10px 13px', fontSize: 13, lineHeight: 1.7, color: 'var(--s800)', fontFamily: "'DM Mono', monospace", resize: 'vertical' }}
-                  onFocus={e => (e.target.style.borderColor = '#8b5cf6')}
-                  onBlur={e => (e.target.style.borderColor = 'var(--s200)')}
-                />
-              </div>
-            )}
-          </div>
-        ))}
-        <button
-          style={{ display: 'flex', alignItems: 'center', gap: 7, border: '1.5px dashed var(--s300)', background: 'transparent', borderRadius: 10, padding: '10px 16px', fontSize: 13, color: 'var(--s500)', width: '100%', justifyContent: 'center', transition: 'all .12s', cursor: 'pointer' }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.color = '#8b5cf6'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--s300)'; e.currentTarget.style.color = 'var(--s500)'; }}
-        >
-          <Plus size={15} />Nueva plantilla
-        </button>
-      </div>
-    </SectionCard>
-  );
-}
-
-// ── Integrations section ──────────────────────────────────────────────────────
-
-const INTEGRATIONS = [
-  { name: 'Google Calendar',   icon: CalendarDays,   color: '#4285F4', connected: false, desc: 'Sincroniza citas automáticamente con tu calendario de Google.' },
-  { name: 'Zoom',              icon: Video,          color: '#2D8CFF', connected: false, desc: 'Genera links de videollamada automáticos al agendar citas virtuales.' },
-  { name: 'WhatsApp Business', icon: MessageCircle,  color: '#25D366', connected: false, desc: 'Envía recordatorios y confirmaciones directamente por WhatsApp.' },
-  { name: 'Stripe',            icon: CreditCard,     color: '#635BFF', connected: false, desc: 'Recibe pagos en línea y gestiona suscripciones de pacientes.' },
-  { name: 'Minsalud / RIPS',   icon: Shield,         color: '#ef4444', connected: false, desc: 'Genera reportes RIPS y valida cobertura de seguros.' },
-  { name: 'Google Drive',      icon: HardDrive,      color: '#0F9D58', connected: false, desc: 'Sube automáticamente los registros firmados a tu Drive.' },
-];
-
-function IntegrationsSection() {
-  const [connected, setConnected] = useState<Record<string, boolean>>({});
-
-  return (
-    <SectionCard title="Integraciones y servicios externos" icon={Plug} color="#6366f1">
-      <div style={{ padding: '8px 0' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          {INTEGRATIONS.map(integ => {
-            const isConn = connected[integ.name] ?? integ.connected;
-            return (
-              <div
-                key={integ.name}
-                style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${isConn ? integ.color + '44' : 'var(--s200)'}`, background: isConn ? integ.color + '06' : '#fff', display: 'flex', flexDirection: 'column', gap: 10 }}
-              >
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 9, background: integ.color + '1a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <integ.icon size={17} color={integ.color} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--s800)' }}>{integ.name}</div>
-                    <div style={{ fontSize: 11.5, color: 'var(--s400)', marginTop: 2, lineHeight: 1.5 }}>{integ.desc}</div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setConnected(p => ({ ...p, [integ.name]: !isConn }))}
-                  style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, padding: '6px 13px', borderRadius: 8, border: `1.5px solid ${isConn ? integ.color : 'var(--s200)'}`, background: isConn ? integ.color + '12' : '#fff', color: isConn ? integ.color : 'var(--s600)', fontSize: 12.5, fontWeight: 600, transition: 'all .12s', cursor: 'pointer' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = isConn ? integ.color + '22' : integ.color + '08'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = isConn ? integ.color + '12' : '#fff'; }}
-                >
-                  {isConn ? <CheckCircle size={12} color={integ.color} /> : <Plug size={12} color="var(--s400)" />}
-                  {isConn ? 'Conectado' : 'Conectar'}
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </SectionCard>
   );
 }
@@ -1404,9 +1201,7 @@ export function SettingsPage() {
             {section === 'notifications' && <NotificationsSection setDirty={markDirty} />}
             {section === 'ai'            && <AISection            setDirty={markDirty} />}
             {section === 'security'      && <SecuritySection      setDirty={markDirty} />}
-            {section === 'billing'       && <BillingSection />}
-            {section === 'templates'     && <><ConsentTemplatesSection /><TemplatesSection setDirty={markDirty} /></>}
-            {section === 'integrations'  && <IntegrationsSection />}
+            {section === 'templates'     && <ConsentTemplatesSection />}
             {section === 'users'         && <UsersSection />}
           </div>
           <SaveBar dirty={dirty} saving={saving} saved={saved} onSave={handleSave} />

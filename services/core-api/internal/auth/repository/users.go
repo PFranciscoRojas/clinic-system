@@ -197,3 +197,44 @@ func (r *Repository) UpdatePassword(ctx context.Context, orgID, targetEmail, pas
 	}
 	return nil
 }
+
+// UpdatePasswordByID sets a new password hash for the given user.
+func (r *Repository) UpdatePasswordByID(ctx context.Context, userID, passwordHash string) error {
+	tag, err := r.db.Exec(ctx,
+		`UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1`,
+		userID, passwordHash,
+	)
+	if err != nil {
+		return fmt.Errorf("update password by id: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return auth.ErrUserNotFound
+	}
+	return nil
+}
+
+// SetOnboardingCompleted stamps the server-side onboarding flag.
+func (r *Repository) SetOnboardingCompleted(ctx context.Context, userID string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE users SET onboarding_completed_at = NOW(), updated_at = NOW()
+		 WHERE id = $1 AND onboarding_completed_at IS NULL`,
+		userID,
+	)
+	if err != nil {
+		return fmt.Errorf("set onboarding completed: %w", err)
+	}
+	return nil
+}
+
+// OnboardingCompleted reports whether the user finished onboarding.
+func (r *Repository) OnboardingCompleted(ctx context.Context, userID string) (bool, error) {
+	var done bool
+	err := r.db.QueryRow(ctx,
+		`SELECT onboarding_completed_at IS NOT NULL FROM users WHERE id = $1`,
+		userID,
+	).Scan(&done)
+	if err != nil {
+		return false, fmt.Errorf("get onboarding flag: %w", err)
+	}
+	return done, nil
+}
