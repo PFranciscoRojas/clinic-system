@@ -6,7 +6,8 @@ export type AppointmentStatus   = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'C
 export interface Appointment {
   id: string;
   organization_id: string;
-  patient_id: string;
+  patient_id: string;           // '' when the slot was reserved with just a name
+  guest_name?: string | null;   // set on guest reservations, cleared on assignment
   staff_id: string;
   scheduled_at: string;
   duration_min: number;
@@ -21,7 +22,8 @@ export interface Appointment {
 }
 
 export interface CreateAppointmentBody {
-  patient_id: string;
+  patient_id?: string;
+  guest_name?: string;
   staff_id: string;
   scheduled_at: string;
   duration_min?: number;
@@ -53,6 +55,9 @@ export const appointmentsApi = {
 
   updateStatus: (id: string, status: AppointmentStatus) =>
     api.patch<void>(`/appointments/${id}/status`, { status }),
+
+  assignPatient: (id: string, patientId: string) =>
+    api.patch<void>(`/appointments/${id}/patient`, { patient_id: patientId }),
 
   cancel: (id: string, reason: string) =>
     api.delete<void>(`/appointments/${id}`, { reason }),

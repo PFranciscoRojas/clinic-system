@@ -8,6 +8,7 @@ type AppointmentResponse struct {
 	ID             string `json:"id"`
 	OrganizationID string `json:"organization_id"`
 	PatientID      string `json:"patient_id"`
+	GuestName      string `json:"guest_name,omitempty"`
 	StaffID        string `json:"staff_id"`
 	ScheduledAt    string `json:"scheduled_at"`
 	DurationMin    int    `json:"duration_min"`
@@ -24,6 +25,7 @@ func ToResponse(a *appointments.Appointment) AppointmentResponse {
 		ID:             a.ID,
 		OrganizationID: a.OrganizationID,
 		PatientID:      a.PatientID,
+		GuestName:      a.GuestName,
 		StaffID:        a.StaffID,
 		ScheduledAt:    a.ScheduledAt.Format("2006-01-02T15:04:05Z07:00"),
 		DurationMin:    a.DurationMin,

@@ -8,4 +8,5 @@ type Repository interface {
 	List(ctx context.Context, orgID string, f ListFilter) ([]*Appointment, error)
 	Cancel(ctx context.Context, p CancelParams) error
 	UpdateStatus(ctx context.Context, orgID, appointmentID, status string) error
+	AssignPatient(ctx context.Context, orgID, appointmentID, patientID string) error
 }

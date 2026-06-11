@@ -13,6 +13,7 @@ type svcPort interface {
 	List(ctx context.Context, in apptssvc.ListInput) ([]*appointments.Appointment, error)
 	Cancel(ctx context.Context, in apptssvc.CancelInput) error
 	UpdateStatus(ctx context.Context, orgID, appointmentID, status string) error
+	AssignPatient(ctx context.Context, orgID, appointmentID, patientID string) error
 }
 
 var _ svcPort = (*apptssvc.Service)(nil)

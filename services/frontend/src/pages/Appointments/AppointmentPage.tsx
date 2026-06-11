@@ -4,11 +4,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Calendar, Clock, MapPin, Video, User,
   Play, CheckCircle2, AlertTriangle, Brain, FileText,
-  Mic, Upload, X,
+  Mic, Upload, X, Phone, CreditCard, Cake, UserPlus,
 } from 'lucide-react';
 import { appointmentsApi, type AppointmentStatus } from '@/api/appointments';
 import { patientsApi, type Patient } from '@/api/patients';
 import { EditPatientModal } from '@/components/patients/EditPatientModal';
+import { PatientSearchBox } from '@/components/patients/PatientSearchBox';
+import { calcAge } from '@/lib/age';
 import { clinicalRecordsApi, consentsApi, type RecordMeta } from '@/api/clinicalRecords';
 import { ConsentViewModal } from '@/components/consents/ConsentViewModal';
 import { RecordForm } from '@/components/clinical/RecordForm';
@@ -274,14 +276,19 @@ export function AppointmentPage() {
   const isActive = appt.status === 'SCHEDULED' || appt.status === 'IN_PROGRESS';
   const isInProgress = appt.status === 'IN_PROGRESS';
   const isScheduled = appt.status === 'SCHEDULED';
+  const isGuest = !appt.patient_id;
 
   const patientName = patient
     ? [patient.first_name, patient.middle_name, patient.paternal_last_name, patient.maternal_last_name].filter(Boolean).join(' ')
-    : appt.patient_id.slice(0, 8);
+    : appt.guest_name || appt.patient_id.slice(0, 8);
 
   const patientInitials = patient
     ? ((patient.first_name?.[0] ?? '') + (patient.paternal_last_name?.[0] ?? '')).toUpperCase()
-    : '?';
+    : (appt.guest_name?.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?');
+
+  const patientAge = calcAge(patient?.birth_date);
+  // Hard gates before a clinical session can start (Res. 1995/1999 + consent law)
+  const canStartSession = !!patient && !!treatmentConsent;
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -304,6 +311,7 @@ export function AppointmentPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
               <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: 'var(--s800)' }}>{patientName}</h1>
               <Badge label={statusCfg.label} color={statusCfg.color} bg={statusCfg.bg} />
+              {isGuest && <Badge label="Reserva — sin paciente" color="#92400e" bg="#fef3c7" />}
             </div>
 
             {/* Appointment info chips */}
@@ -316,8 +324,12 @@ export function AppointmentPage() {
                 color={isVirtual ? '#6366f1' : undefined}
               />
               {user && <InfoChip icon={<User size={13} />} text={user.display_name ?? user.email ?? 'Terapeuta'} />}
+              {/* Patient key data — what Marcela needs at hand during the session */}
+              {patient && patientAge !== null && <InfoChip icon={<Cake size={13} />} text={`${patientAge} años`} />}
+              {patient?.document_number && <InfoChip icon={<CreditCard size={13} />} text={`${patient.document_type_code ?? ''} ${patient.document_number}`.trim()} />}
+              {patient?.phone && <InfoChip icon={<Phone size={13} />} text={patient.phone} />}
               {/* Consent coverage — derived from the active TREATMENT consent */}
-              {treatmentConsent ? (
+              {isGuest ? null : treatmentConsent ? (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 7, background: '#d1fae5', color: '#065f46' }}>
                   <CheckCircle2 size={13} /> Consentimiento firmado el {treatmentConsent.signed_at}
                   <button
@@ -339,12 +351,14 @@ export function AppointmentPage() {
           </div>
 
           {/* Patient profile link */}
-          <button
-            onClick={() => navigate(`/patients/${appt.patient_id}`)}
-            style={{ padding: '8px 14px', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}
-          >
-            <User size={13} /> Ver perfil
-          </button>
+          {!isGuest && (
+            <button
+              onClick={() => navigate(`/patients/${appt.patient_id}`)}
+              style={{ padding: '8px 14px', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <User size={13} /> Ver perfil
+            </button>
+          )}
         </div>
 
         {statusErr && (
@@ -354,22 +368,61 @@ export function AppointmentPage() {
           </div>
         )}
 
+        {/* ── Guest reservation: associate the patient before anything else ──── */}
+        {isActive && isGuest && (
+          <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--s100)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <UserPlus size={15} color="#92400e" />
+              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>Asociar paciente</span>
+            </div>
+            <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--s500)', lineHeight: 1.6 }}>
+              Esta cita se reservó a nombre de <b>{appt.guest_name}</b> sin paciente registrado.
+              Busca el paciente o regístralo para poder iniciar la sesión.
+            </p>
+            <div style={{ maxWidth: 420 }}>
+              <PatientSearchBox
+                selected={null}
+                onSelect={async p => {
+                  if (!p) return;
+                  setStatusErr('');
+                  try {
+                    await appointmentsApi.assignPatient(id!, p.id);
+                    await queryClient.invalidateQueries({ queryKey: ['appointment', id] });
+                  } catch {
+                    setStatusErr('No se pudo asociar el paciente. Intenta de nuevo.');
+                  }
+                }}
+                onNewPatient={() => navigate(`/patients/new?appointment_id=${id}`)}
+              />
+            </div>
+          </div>
+        )}
+
         {/* ── Status action bar ──────────────────────────────────────────────── */}
         {isActive && (
-          <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--s100)', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--s100)', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             {isScheduled && (
               <button
                 onClick={() => {
+                  if (!canStartSession) return;
                   const missing = !patient?.document_number || !patient?.birth_date;
                   if (missing) { setCompleteDataOpen(true); }
                   else { handleStatusChange('IN_PROGRESS'); }
                 }}
-                disabled={statusLoading}
-                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 20px', background: '#059669', color: '#fff', border: 'none', borderRadius: 9, cursor: statusLoading ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 700, opacity: statusLoading ? 0.7 : 1 }}
+                disabled={statusLoading || !canStartSession}
+                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 20px', background: canStartSession ? '#059669' : 'var(--s200)', color: canStartSession ? '#fff' : 'var(--s400)', border: 'none', borderRadius: 9, cursor: statusLoading || !canStartSession ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 700, opacity: statusLoading ? 0.7 : 1 }}
               >
                 {statusLoading ? <Spinner size={15} color="#fff" /> : <Play size={15} />}
                 Iniciar sesión
               </button>
+            )}
+            {isScheduled && !canStartSession && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: '#92400e' }}>
+                <AlertTriangle size={13} />
+                {isGuest
+                  ? 'Asocia el paciente para poder iniciar la sesión.'
+                  : 'El paciente debe firmar el consentimiento de tratamiento antes de iniciar.'}
+              </span>
             )}
             {isInProgress && (
               <button

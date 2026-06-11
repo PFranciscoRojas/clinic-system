@@ -25,6 +25,24 @@ func (r *Repository) UpdateStatus(ctx context.Context, orgID, appointmentID, sta
 	return nil
 }
 
+// AssignPatient links a registered patient to a guest reservation.
+// Only open appointments can be re-assigned; guest_name is cleared.
+func (r *Repository) AssignPatient(ctx context.Context, orgID, appointmentID, patientID string) error {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE appointments
+		SET patient_id = $3, guest_name = NULL, updated_at = NOW()
+		WHERE id = $1 AND organization_id = $2
+		  AND status NOT IN ('CANCELLED', 'COMPLETED', 'NO_SHOW')
+	`, appointmentID, orgID, patientID)
+	if err != nil {
+		return fmt.Errorf("assign patient to appointment: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return appointments.ErrAlreadyDone
+	}
+	return nil
+}
+
 func (r *Repository) Cancel(ctx context.Context, p appointments.CancelParams) error {
 	tag, err := r.db.Exec(ctx, `
 		UPDATE appointments

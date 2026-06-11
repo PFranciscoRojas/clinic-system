@@ -5,7 +5,8 @@ import "time"
 type Appointment struct {
 	ID             string
 	OrganizationID string
-	PatientID      string
+	PatientID      string // empty when the slot was reserved with just a guest name
+	GuestName      string
 	StaffID        string
 	ScheduledAt    time.Time
 	DurationMin    int
@@ -22,6 +23,7 @@ type Appointment struct {
 type CreateParams struct {
 	OrganizationID string
 	PatientID      string
+	GuestName      string
 	StaffID        string
 	ScheduledAt    time.Time
 	DurationMin    int

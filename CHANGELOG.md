@@ -10,6 +10,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- Appointments can be booked without a registered patient: reserve the slot with just a name (`guest_name`, migration 000015) and associate or register the patient at the first consultation (`PATCH /appointments/{id}/patient`); guest reservations show a "Reserva" badge across agenda, calendar and the appointment page
+- Appointment page shows the patient's key data at hand (age, document, phone) and blocks "Iniciar sesión" until the patient is associated and the treatment consent is signed
+- Registering a patient from a guest reservation links it to the appointment automatically and returns to it
 - Addenda on approved clinical records: signed, immutable supplementary notes (author + timestamp, sealed with the record's DEK) — the original entry is never edited (Res. 1995/1999); addenda print in the exported PDF (migration 000013)
 - Professional profile API (BC-2): own-profile GET/PUT and specialties catalog; onboarding and Settings forms now persist names, tarjeta profesional and specialty to the backend instead of localStorage, so signed PDFs print the real license number
 - Self-service password change (`POST /auth/change-password`) with a "Cambiar contraseña" card in Settings → Seguridad
@@ -19,6 +22,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 - Onboarding wizard no longer reappears for existing users on a new browser: completion is persisted server-side (`users.onboarding_completed_at`, migration 000014) and returned by `GET /auth/me`
+- Implausible birth dates (e.g. a half-typed year showing "2025 años") are rejected in every form that captures fecha de nacimiento, validated server-side, and guarded at display time
+- "Ver perfil" on the patients list opens the full profile directly; the quick-view summary stays on row/card click
+- Calendar detail panel: dead "Reagendar"/"Cancelar cita" buttons removed; "Abrir cita" goes to the appointment page (the real hub for start/cancel/record)
 - "Nueva cita" from the calendar keeps the selected date instead of jumping back to today
 - New-appointment slots now respect the configured working hours, midday break and buffer instead of offering 08:00–20:00 every day; days outside the configured schedule show a warning
 - Settings → Horario y agenda actually persists changes (it previously only pretended to save)

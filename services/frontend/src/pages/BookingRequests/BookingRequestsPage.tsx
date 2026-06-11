@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Calendar, Mail, Phone, MapPin, Video, Check, X, Clock, ChevronDown, ChevronUp, UserPlus } from 'lucide-react';
 import { bookingRequestsApi, type BookingRequest, type BookingStatus } from '@/api/bookingRequests';
 import { Spinner } from '@/components/ui/Spinner';
+import { validateBirthDate } from '@/lib/age';
 
 const STATUS_CFG: Record<BookingStatus, { label: string; color: string; bg: string }> = {
   PENDING:   { label: 'Pendiente',  color: '#92400e', bg: '#fef3c7' },
@@ -42,9 +43,12 @@ function ConfirmModal({ req, onClose, onConfirmed }: ConfirmModalProps) {
   const [gender, setGender]     = useState('');
   const [error, setError]       = useState('');
 
+  const birthError = birthDate ? validateBirthDate(birthDate) : null;
+
   const qc = useQueryClient();
   const confirm = useMutation({
     mutationFn: () => {
+      if (birthError) throw new Error(birthError);
       // Always create patient on confirm; optional fields only sent when filled
       const patient: Record<string, string> = {};
       if (docType)   patient.document_type_code = docType;
@@ -114,7 +118,8 @@ function ConfirmModal({ req, onClose, onConfirmed }: ConfirmModalProps) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
             <div>
               <label style={labelStyle}>Fecha de nacimiento <span style={{ fontWeight: 400, color: 'var(--s400)' }}>(opcional)</span></label>
-              <input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} style={inputStyle} />
+              <input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} style={{ ...inputStyle, borderColor: birthError ? 'var(--red)' : undefined }} />
+              {birthError && <p style={{ margin: '4px 0 0', fontSize: 11.5, color: 'var(--red)' }}>{birthError}</p>}
             </div>
             <div>
               <label style={labelStyle}>Género</label>

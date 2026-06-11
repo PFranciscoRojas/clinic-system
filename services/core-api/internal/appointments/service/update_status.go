@@ -15,3 +15,10 @@ func (s *Service) UpdateStatus(ctx context.Context, orgID, appointmentID, status
 	}
 	return s.repo.UpdateStatus(ctx, orgID, appointmentID, status)
 }
+
+func (s *Service) AssignPatient(ctx context.Context, orgID, appointmentID, patientID string) error {
+	if orgID == "" || appointmentID == "" || patientID == "" {
+		return appointments.ErrInvalidInput
+	}
+	return s.repo.AssignPatient(ctx, orgID, appointmentID, patientID)
+}

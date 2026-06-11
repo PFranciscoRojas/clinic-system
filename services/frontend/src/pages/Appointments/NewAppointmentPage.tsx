@@ -1,10 +1,10 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   ChevronLeft, ChevronRight, Clock, MapPin, Video, Repeat,
   CalendarCheck, CalendarPlus, CheckCircle2, Bell, BellOff,
-  Search, X, UserPlus, RefreshCw, ClipboardList,
+  UserPlus, RefreshCw, ClipboardList,
   TriangleAlert, Award, Minus, ArrowLeft, User,
   AlertCircle,
 } from 'lucide-react';
@@ -12,6 +12,7 @@ import {
 import { appointmentsApi, Appointment } from '../../api/appointments';
 import { patientsApi, Patient } from '../../api/patients';
 import { Spinner } from '../../components/ui/Spinner';
+import { PatientSearchBox } from '../../components/patients/PatientSearchBox';
 import { useAuth } from '../../context/AuthContext';
 import { loadSchedule, isWorkingDay, dayLabelOf, type ScheduleConfig } from '../../lib/schedule';
 
@@ -73,6 +74,11 @@ function formatTime(t: string) {
 
 function initials(p: Patient) {
   return `${p.first_name[0] ?? ''}${p.paternal_last_name[0] ?? ''}`.toUpperCase();
+}
+
+function initialsFromName(name: string) {
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '?';
 }
 
 function patientFullName(p: Patient) {
@@ -257,140 +263,11 @@ function TimeSlots({ slots, selected, onSelect, duration, blocked, pastSlots }: 
   );
 }
 
-// ─── PatientSearch ────────────────────────────────────────────────────────────
-
-interface PatientSearchProps {
-  selected: Patient | null;
-  onSelect: (p: Patient | null) => void;
-  onNewPatient: () => void;
-}
-
-function PatientSearch({ selected, onSelect, onNewPatient }: PatientSearchProps) {
-  const [query, setQuery] = useState('');
-  const [open, setOpen]   = useState(false);
-  const ref               = useRef<HTMLDivElement>(null);
-
-  const { data: results = [], isFetching } = useQuery({
-    queryKey: ['patients-search', query],
-    queryFn: () => query.length >= 2
-      ? patientsApi.search({ last_name: query, limit: 8 })
-      : patientsApi.list({ limit: 8 }),
-    enabled: open,
-  });
-
-  useEffect(() => {
-    function onClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
-  }, []);
-
-  if (selected) {
-    return (
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '10px 14px', borderRadius: 10,
-        border: '2px solid var(--teal)', background: 'var(--teal-l)',
-      }}>
-        <div style={avatarStyle}>{initials(selected)}</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--s800)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {patientFullName(selected)}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--s500)' }}>
-            {selected.document_type_code} {selected.document_number}
-          </div>
-        </div>
-        <button onClick={() => onSelect(null)} style={{ ...iconBtnStyle, color: 'var(--s500)' }}>
-          <X size={15} />
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: '10px 14px', borderRadius: 10,
-        border: '1.5px solid var(--s200)', background: '#fff',
-        boxShadow: open ? '0 0 0 3px rgba(13,148,136,0.15)' : 'none',
-        transition: 'box-shadow 0.15s',
-      }}>
-        <Search size={15} color="var(--s400)" />
-        <input
-          value={query}
-          onChange={e => { setQuery(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-          placeholder="Buscar paciente por apellido…"
-          style={{ border: 'none', outline: 'none', flex: 1, fontSize: 14, color: 'var(--s800)', background: 'transparent' }}
-        />
-        {isFetching && <Spinner size={14} color="var(--teal)" />}
-      </div>
-
-      {open && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-          background: '#fff', borderRadius: 10, border: '1px solid var(--s200)',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.1)', zIndex: 50, overflow: 'hidden',
-        }}>
-          {results.length === 0 && !isFetching && (
-            <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--s500)' }}>
-              Sin resultados
-            </div>
-          )}
-          {results.map(p => (
-            <div
-              key={p.id}
-              onMouseDown={() => { onSelect(p); setOpen(false); setQuery(''); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '10px 14px', cursor: 'pointer', transition: 'background 0.1s',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--s50)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-            >
-              <div style={avatarStyle}>{initials(p)}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--s800)' }}>
-                  {patientFullName(p)}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--s500)' }}>
-                  {p.document_type_code} {p.document_number}
-                </div>
-              </div>
-              {p.is_active
-                ? <span style={{ ...badgeStyle, background: '#dcfce7', color: '#15803d' }}>Activo</span>
-                : <span style={{ ...badgeStyle, background: '#fee2e2', color: '#b91c1c' }}>Inactivo</span>
-              }
-            </div>
-          ))}
-          <div
-            onMouseDown={onNewPatient}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '10px 14px', cursor: 'pointer',
-              borderTop: '1px solid var(--s100)',
-              fontSize: 13, color: 'var(--teal)', fontWeight: 600,
-              transition: 'background 0.1s',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'var(--teal-l)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-          >
-            <UserPlus size={14} />
-            Registrar nuevo paciente
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── ConfirmModal ─────────────────────────────────────────────────────────────
 
 interface ModalData {
-  patient: Patient;
+  patient: Patient | null;
+  guestName: string;
   date: string;
   time: string;
   sessionType: SessionType;
@@ -410,7 +287,7 @@ interface ConfirmModalProps {
 }
 
 function ConfirmModal({ data, onClose, onConfirm, isPending, isSuccess }: ConfirmModalProps) {
-  const { patient, date, time, sessionType, duration, modality, recurrence, reminder } = data;
+  const { patient, guestName, date, time, sessionType, duration, modality, recurrence, reminder } = data;
   const SIcon = sessionType.icon;
 
   const recurrenceLabel: Record<Recurrence, string> = {
@@ -452,14 +329,16 @@ function ConfirmModal({ data, onClose, onConfirm, isPending, isSuccess }: Confir
               padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 14,
             }}>
               <div style={{ ...avatarStyle, width: 44, height: 44, fontSize: 16, border: '2px solid rgba(255,255,255,0.4)' }}>
-                {initials(patient)}
+                {patient ? initials(patient) : initialsFromName(guestName)}
               </div>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>
-                  {patientFullName(patient)}
+                  {patient ? patientFullName(patient) : guestName}
                 </div>
                 <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>
-                  {patient.document_type_code} {patient.document_number}
+                  {patient
+                    ? `${patient.document_type_code} ${patient.document_number}`
+                    : 'Reserva — el paciente se registra en la primera consulta'}
                 </div>
               </div>
             </div>
@@ -520,6 +399,7 @@ function ConfirmModal({ data, onClose, onConfirm, isPending, isSuccess }: Confir
 
 interface SummaryPanelProps {
   patient: Patient | null;
+  guestName: string;
   date: string;
   time: string;
   sessionType: SessionType | null;
@@ -531,14 +411,15 @@ interface SummaryPanelProps {
   onSubmit: () => void;
 }
 
-function SummaryPanel({ patient, date, time, sessionType, duration, modality, recurrence, reminder, blockingErrors, onSubmit }: SummaryPanelProps) {
+function SummaryPanel({ patient, guestName, date, time, sessionType, duration, modality, recurrence, reminder, blockingErrors, onSubmit }: SummaryPanelProps) {
   const SIcon = sessionType?.icon ?? CalendarCheck;
+  const hasGuest = guestName.trim().length >= 3;
 
   const checks = [
-    { label: 'Paciente seleccionado', done: !!patient },
-    { label: 'Fecha elegida',         done: !!date },
-    { label: 'Hora elegida',          done: !!time },
-    { label: 'Tipo de sesión',        done: !!sessionType },
+    { label: 'Paciente o nombre de reserva', done: !!patient || hasGuest },
+    { label: 'Fecha elegida',                done: !!date },
+    { label: 'Hora elegida',                 done: !!time },
+    { label: 'Tipo de sesión',               done: !!sessionType },
   ];
   const completed = checks.filter(c => c.done).length;
   const progress  = (completed / checks.length) * 100;
@@ -568,6 +449,16 @@ function SummaryPanel({ patient, date, time, sessionType, duration, modality, re
                   {patientFullName(patient)}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--s500)' }}>{patient.document_type_code} {patient.document_number}</div>
+              </div>
+            </div>
+          ) : hasGuest ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid rgba(13,148,136,0.15)' }}>
+              <div style={{ ...avatarStyle, width: 38, height: 38, fontSize: 13, background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>{initialsFromName(guestName)}</div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--s800)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {guestName.trim()}
+                </div>
+                <div style={{ fontSize: 11, color: '#92400e' }}>Reserva — paciente por registrar</div>
               </div>
             </div>
           ) : (
@@ -714,17 +605,6 @@ const navBtnStyle: React.CSSProperties = {
   transition: 'background 0.15s',
 };
 
-const iconBtnStyle: React.CSSProperties = {
-  width: 28, height: 28, borderRadius: 7, border: 'none',
-  background: 'transparent', cursor: 'pointer',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-};
-
-const badgeStyle: React.CSSProperties = {
-  fontSize: 10, fontWeight: 700, padding: '2px 7px',
-  borderRadius: 20, flexShrink: 0,
-};
-
 const primaryBtn: React.CSSProperties = {
   padding: '11px 20px', borderRadius: 10, border: 'none', cursor: 'pointer',
   background: 'linear-gradient(135deg, var(--teal), var(--teal-d))',
@@ -759,6 +639,7 @@ export function NewAppointmentPage() {
   })();
 
   const [patient,     setPatient]     = useState<Patient | null>(null);
+  const [guestName,   setGuestName]   = useState<string>('');
   const [date,        setDate]        = useState<string>(initialDate);
   const [time,        setTime]        = useState<string>('');
   const [sessionType, setSessionType] = useState<SessionType | null>(SESSION_TYPES[1]);
@@ -867,11 +748,14 @@ export function NewAppointmentPage() {
   if (hasDoubleBooking) blockingErrors.push('El paciente ya tiene una cita este día.');
   if (workloadBlock)    blockingErrors.push('Límite de 12 citas diarias alcanzado.');
 
+  const hasGuest = guestName.trim().length >= 3;
+
   const mutation = useMutation({
     mutationFn: () => {
-      if (!patient || !time || !sessionType) throw new Error('Faltan datos');
+      if ((!patient && !hasGuest) || !time || !sessionType) throw new Error('Faltan datos');
       return appointmentsApi.create({
-        patient_id:   patient.id,
+        patient_id:   patient?.id,
+        guest_name:   patient ? undefined : guestName.trim(),
         staff_id:     user!.user_id,
         scheduled_at: localISO(date, time),   // timezone-aware: no UTC shift
         duration_min: duration,
@@ -892,13 +776,13 @@ export function NewAppointmentPage() {
   }
 
   function handleSubmit() {
-    if (!patient || !time || !sessionType) return;
+    if ((!patient && !hasGuest) || !time || !sessionType) return;
     if (blockingErrors.length > 0) return;
     setShowModal(true);
   }
 
-  const modalData: ModalData | null = patient && time && sessionType
-    ? { patient, date, time, sessionType, duration, modality, recurrence, reminder, notes }
+  const modalData: ModalData | null = (patient || hasGuest) && time && sessionType
+    ? { patient, guestName: guestName.trim(), date, time, sessionType, duration, modality, recurrence, reminder, notes }
     : null;
 
   return (
@@ -931,11 +815,34 @@ export function NewAppointmentPage() {
         </Section>
 
         <Section icon={User} title="Paciente">
-          <PatientSearch
+          <PatientSearchBox
             selected={patient}
-            onSelect={setPatient}
+            onSelect={p => { setPatient(p); if (p) setGuestName(''); }}
             onNewPatient={() => navigate('/patients/new')}
           />
+          {!patient && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <div style={{ flex: 1, height: 1, background: 'var(--s200)' }} />
+                <span style={{ fontSize: 11, color: 'var(--s400)', fontWeight: 600 }}>o reservar sin registrar</span>
+                <div style={{ flex: 1, height: 1, background: 'var(--s200)' }} />
+              </div>
+              <input
+                value={guestName}
+                onChange={e => setGuestName(e.target.value)}
+                placeholder="Nombre de quien reserva…"
+                style={{
+                  width: '100%', padding: '10px 14px', borderRadius: 10,
+                  border: `1.5px solid ${hasGuest ? '#f59e0b' : 'var(--s200)'}`,
+                  background: hasGuest ? '#fffbeb' : '#fff',
+                  fontSize: 14, color: 'var(--s800)', outline: 'none', boxSizing: 'border-box',
+                }}
+              />
+              <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--s400)', lineHeight: 1.5 }}>
+                El paciente se registra y se asocia a la cita en la primera consulta.
+              </p>
+            </div>
+          )}
           {patientInactive && (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginTop: 8, background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, padding: '8px 12px', fontSize: 11, color: '#991b1b' }}>
               <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
@@ -1166,6 +1073,7 @@ export function NewAppointmentPage() {
       }}>
         <SummaryPanel
           patient={patient}
+          guestName={guestName}
           date={date}
           time={time}
           sessionType={sessionType}
