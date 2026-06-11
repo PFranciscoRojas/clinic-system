@@ -14,6 +14,7 @@ export interface Me {
   display_name?: string | null;
   roles: string[];
   permissions?: string[];
+  onboarding_completed?: boolean;
 }
 
 export const authApi = {
@@ -34,6 +35,10 @@ export const authApi = {
   resetPassword: (target_email: string, new_password: string) =>
     api.post<void>('/auth/reset-password', { target_email, new_password }),
 
+  changePassword: (current_password: string, new_password: string) =>
+    api.post<void>('/auth/change-password', { current_password, new_password }),
+  onboardingComplete: () =>
+    api.post<void>('/auth/onboarding-complete', {}),
   updateProfile: (display_name: string) =>
     api.patch<TokenPair>('/auth/profile', { display_name }),
 };

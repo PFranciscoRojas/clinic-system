@@ -260,7 +260,9 @@ export function LoginPage() {
     setErrors({}); setLoginErr(''); setLoading(true);
     try {
       const me = await login(org.trim().toLowerCase(), email.trim(), password);
-      if (!localStorage.getItem(`sghcp_onboarding_done_${me.user_id}`)) {
+      // Server-side flag is the source of truth; localStorage is only a cache.
+      const onboarded = me.onboarding_completed ?? !!localStorage.getItem(`sghcp_onboarding_done_${me.user_id}`);
+      if (!onboarded) {
         setScreen('onboard');
       } else {
         navigate('/');
@@ -287,6 +289,7 @@ export function LoginPage() {
     localStorage.setItem('sghcp_ai_prefs', JSON.stringify({ aiEnabled, soapStyle, reminders }));
     localStorage.setItem(`sghcp_pin_${user.user_id}`, pin);
     localStorage.setItem(`sghcp_onboarding_done_${user.user_id}`, 'true');
+    try { await authApi.onboardingComplete(); } catch { /* non-blocking — backfill covers old users */ }
     // Sync the onboarding name to the backend so display_name is always up-to-date.
     if (name.trim() && name.trim() !== user.display_name) {
       try { await updateProfile(name.trim()); } catch { /* non-blocking */ }
