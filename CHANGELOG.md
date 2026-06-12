@@ -40,6 +40,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Valueless counters removed: patients KPI strip (total/active/inactive/"con contacto"), the "Pacientes activos" dashboard tile, and the always-empty "Sesiones / Próxima cita" block on patient cards
 
 ### Fixed
+- AI draft review works end-to-end: `GET /ai-drafts/{id}` no longer 500s on healthy drafts (NULL error_message scan), the response now includes the decrypted SOAP sections the review page renders, and Claude's JSON output is parsed robustly (markdown fences no longer collapse everything into "subjective")
 - AI service can now actually be built and deployed: the Docker image declared a nonexistent build backend and shipped without its installed dependencies; it also crashed on boot (invalid uvicorn log flag, redis password with special characters breaking the connection URL, and redis-py 8.x's 5s read timeout aborting the worker's blocking reads)
 - Half-typed birth dates (e.g. only the year) are now rejected on save instead of silently storing no date
 - Header patient search no longer gets autofilled with the login email by the browser
