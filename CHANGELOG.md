@@ -22,6 +22,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Global header search now works: searches patients by last name or document number with a results dropdown
 - Dashboard clinical inbox shows real data: pending web booking requests and today's appointments past their slot but not completed
 
+### Added
+- Session timer while the appointment is in progress: elapsed/remaining time next to "Finalizar sesión", amber warning at 10 minutes left, red when over time
+- Grace window for the session note: after "Finalizar sesión" the record form stays available until the note is written (next patient can be attended first); the note stores the real session date and the dashboard inbox lists "Nota de sesión pendiente" reminders
+
 ### Changed
 - Clinical records can only be created inside a started session: the record form and audio upload require the appointment to be IN_PROGRESS, and the standalone "Nuevo registro" page was removed — every note hangs from a real session
 - Treatment consent can be signed directly from the appointment page (modal) instead of navigating away to the patient profile

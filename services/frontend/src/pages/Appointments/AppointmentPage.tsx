@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -170,6 +170,45 @@ function AudioSection({ appointmentId, patientId, draftId, onDraftCreated }: Aud
   );
 }
 
+// ─── Session timer ────────────────────────────────────────────────────────────
+
+const WARN_MINUTES = 10;
+
+function SessionTimer({ scheduledAt, durationMin }: { scheduledAt: string; durationMin: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const start      = new Date(scheduledAt).getTime();
+  const end        = start + durationMin * 60_000;
+  const elapsedMin = Math.max(0, Math.floor((now - start) / 60_000));
+  const remainMin  = Math.ceil((end - now) / 60_000);
+  const over       = remainMin <= 0;
+  const warn       = !over && remainMin <= WARN_MINUTES;
+
+  const bg     = over ? '#fee2e2' : warn ? '#fef3c7' : '#f0fdfa';
+  const border = over ? '#fca5a5' : warn ? '#fcd34d' : '#5eead4';
+  const color  = over ? '#991b1b' : warn ? '#92400e' : '#0f766e';
+
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 7,
+      padding: '8px 14px', borderRadius: 9, fontSize: 13, fontWeight: 700,
+      background: bg, border: `1.5px solid ${border}`, color,
+      animation: warn || over ? 'pulse 2s infinite' : undefined,
+    }}>
+      <Clock size={14} />
+      {over
+        ? `Tiempo cumplido (+${Math.abs(remainMin)} min)`
+        : warn
+        ? `Quedan ${remainMin} min`
+        : `En sesión · ${elapsedMin} min · quedan ${remainMin}`}
+    </span>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function AppointmentPage() {
@@ -289,6 +328,14 @@ export function AppointmentPage() {
   const isActive = appt.status === 'SCHEDULED' || appt.status === 'IN_PROGRESS';
   const isInProgress = appt.status === 'IN_PROGRESS';
   const isScheduled = appt.status === 'SCHEDULED';
+  // Grace window: the note can be written during the session or right after
+  // finishing it (next patient may be waiting) — no "extemporáneo" flag here.
+  const canWriteNote = isInProgress || (appt.status === 'COMPLETED' && linkedRecords.length === 0);
+  // The note carries the real session date, not the writing date.
+  const apptDate = (() => {
+    const d = new Date(appt.scheduled_at);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
   const isGuest = !appt.patient_id;
 
   const patientName = patient
@@ -465,6 +512,7 @@ export function AppointmentPage() {
                   : 'El paciente debe firmar el consentimiento de tratamiento antes de iniciar.'}
               </span>
             )}
+            {isInProgress && <SessionTimer scheduledAt={appt.scheduled_at} durationMin={appt.duration_min} />}
             {isInProgress && (
               <button
                 onClick={() => handleStatusChange('COMPLETED')}
@@ -523,7 +571,7 @@ export function AppointmentPage() {
               </div>
               <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--s800)' }}>Historia clínica</span>
             </div>
-            {linkedRecords.length > 0 && !showRecordForm && isInProgress && (
+            {linkedRecords.length > 0 && !showRecordForm && canWriteNote && (
               <button
                 onClick={() => setShowRecordForm(true)}
                 style={{ fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, border: '1px solid var(--teal)', background: '#f0fdfa', color: 'var(--teal)', cursor: 'pointer' }}
@@ -562,12 +610,14 @@ export function AppointmentPage() {
                 <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s600)' }}>Nuevo registro clínico</span>
                 <button onClick={() => setShowRecordForm(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)' }}><X size={16} /></button>
               </div>
-              <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} onSaved={handleRecordSaved} />
+              <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} onSaved={handleRecordSaved} />
             </div>
-          ) : isInProgress ? (
+          ) : canWriteNote ? (
             <div style={{ textAlign: 'center', padding: '24px 0' }}>
               <FileText size={36} color="var(--s200)" style={{ marginBottom: 12 }} />
-              <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--s500)' }}>Sin registro para esta sesión</p>
+              <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--s500)' }}>
+                {isInProgress ? 'Sin registro para esta sesión' : 'La sesión terminó sin nota — regístrala ahora con la fecha real de la sesión.'}
+              </p>
               <button
                 onClick={() => setShowRecordForm(true)}
                 style={{ padding: '10px 20px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 7 }}
@@ -601,7 +651,7 @@ export function AppointmentPage() {
             </div>
           </div>
 
-          {isInProgress ? (
+          {canWriteNote ? (
             <AudioSection
               appointmentId={id!}
               patientId={appt.patient_id}

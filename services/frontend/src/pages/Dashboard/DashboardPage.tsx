@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import {
   ChevronLeft, ChevronRight, Video, MapPin,
   Brain, UserPlus, CalendarDays, Sparkles,
@@ -10,6 +10,7 @@ import {
 import { appointmentsApi, type Appointment } from '@/api/appointments';
 import { patientsApi, type Patient } from '@/api/patients';
 import { bookingRequestsApi } from '@/api/bookingRequests';
+import { clinicalRecordsApi } from '@/api/clinicalRecords';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
 import { useIsCompact } from '@/lib/useMediaQuery';
@@ -342,20 +343,25 @@ function InboxItem({ icon: Icon, iconColor, iconBg, title, subtitle, time, actio
   );
 }
 
-function AppointmentInboxItem({ appt, onOpen }: { appt: Appointment; onOpen: () => void }) {
+function AppointmentInboxItem({ appt, onOpen, variant = 'unfinished' }: {
+  appt: Appointment;
+  onOpen: () => void;
+  variant?: 'unfinished' | 'pending-note';
+}) {
   const { data: patient } = usePatient(appt.patient_id);
   const name = patient ? patientFullName(patient) : appt.guest_name || `Paciente #${appt.patient_id.slice(-4)}`;
+  const isNote = variant === 'pending-note';
 
   return (
     <InboxItem
-      icon={AlertTriangle}
-      iconColor="#f59e0b"
-      iconBg="#fef3c7"
-      title="Cita sin completar"
+      icon={isNote ? Brain : AlertTriangle}
+      iconColor={isNote ? 'var(--teal)' : '#f59e0b'}
+      iconBg={isNote ? 'var(--teal-l)' : '#fef3c7'}
+      title={isNote ? 'Nota de sesión pendiente' : 'Cita sin completar'}
       subtitle={`${name} · ${fmtTime(appt.scheduled_at)}`}
       time="Hoy"
-      action="Abrir"
-      actionColor="#f59e0b"
+      action={isNote ? 'Registrar' : 'Abrir'}
+      actionColor={isNote ? 'var(--teal)' : '#f59e0b'}
       onAction={onOpen}
     />
   );
@@ -441,7 +447,24 @@ export function DashboardPage() {
       .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()),
     [todayAppointments]
   );
-  const inboxCount = pendingBookings.length + unfinishedToday.length;
+  // Completed sessions still waiting for their clinical note (grace window):
+  // surfaced here so finishing on time and attending the next patient is safe.
+  const completedApptsToday = useMemo(
+    () => todayAppointments.filter(a => a.status === 'COMPLETED' && a.patient_id),
+    [todayAppointments]
+  );
+  const recordQueries = useQueries({
+    queries: [...new Set(completedApptsToday.map(a => a.patient_id))].map(pid => ({
+      queryKey: ['clinical-records', 'patient', pid],
+      queryFn: () => clinicalRecordsApi.list(pid),
+      staleTime: 60_000,
+    })),
+  });
+  const recordsReady = recordQueries.every(q => q.isSuccess);
+  const notedApptIds = new Set(recordQueries.flatMap(q => q.data?.items?.map(r => r.appointment_id) ?? []));
+  const pendingNotes = recordsReady ? completedApptsToday.filter(a => !notedApptIds.has(a.id)) : [];
+
+  const inboxCount = pendingBookings.length + unfinishedToday.length + pendingNotes.length;
 
   // EN CURSO marker index
   const nowMs = Date.now();
@@ -644,6 +667,14 @@ export function DashboardPage() {
                     <AppointmentInboxItem
                       key={a.id}
                       appt={a}
+                      onOpen={() => navigate(`/appointments/${a.id}`)}
+                    />
+                  ))}
+                  {pendingNotes.map(a => (
+                    <AppointmentInboxItem
+                      key={`note-${a.id}`}
+                      appt={a}
+                      variant="pending-note"
                       onOpen={() => navigate(`/appointments/${a.id}`)}
                     />
                   ))}
