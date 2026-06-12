@@ -10,6 +10,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- Responsive layout for phones and tablets: the sidebar becomes a hamburger drawer, agenda/inbox and the new-appointment columns stack vertically, Settings nav turns into a scrollable tab bar, patients always show as cards on phones, wide clinical tables scroll horizontally, and the month calendar compacts
 - Appointments can be booked without a registered patient: reserve the slot with just a name (`guest_name`, migration 000015) and associate or register the patient at the first consultation (`PATCH /appointments/{id}/patient`); guest reservations show a "Reserva" badge across agenda, calendar and the appointment page
 - Appointment page shows the patient's key data at hand (age, document, phone) and blocks "Iniciar sesión" until the patient is associated and the treatment consent is signed
 - Registering a patient from a guest reservation links it to the appointment automatically and returns to it

@@ -11,6 +11,7 @@ import { patientsApi, type Patient } from '@/api/patients';
 import { EditPatientModal } from '@/components/patients/EditPatientModal';
 import { PatientSearchBox } from '@/components/patients/PatientSearchBox';
 import { calcAge } from '@/lib/age';
+import { useIsCompact } from '@/lib/useMediaQuery';
 import { clinicalRecordsApi, consentsApi, type RecordMeta } from '@/api/clinicalRecords';
 import { ConsentViewModal } from '@/components/consents/ConsentViewModal';
 import { RecordForm } from '@/components/clinical/RecordForm';
@@ -172,6 +173,7 @@ function AudioSection({ appointmentId, patientId, draftId, onDraftCreated }: Aud
 
 export function AppointmentPage() {
   const { id } = useParams<{ id: string }>();
+  const compactLayout = useIsCompact();
   const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -291,7 +293,7 @@ export function AppointmentPage() {
   const canStartSession = !!patient && !!treatmentConsent;
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: compactLayout ? '16px 12px' : '24px 24px 40px' }}>
       {/* Back */}
       <button onClick={() => navigate(-1)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s500)', fontSize: 14, marginBottom: 24, padding: 0 }}>
         <ArrowLeft size={16} /> Volver
@@ -471,7 +473,7 @@ export function AppointmentPage() {
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: compactLayout ? '1fr' : '1fr 1fr', gap: 20 }}>
 
         {/* ── Historia clínica ─────────────────────────────────────────────── */}
         <div className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>

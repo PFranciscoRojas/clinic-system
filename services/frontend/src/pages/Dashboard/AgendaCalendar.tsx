@@ -9,6 +9,7 @@ import { appointmentsApi, type Appointment } from '@/api/appointments';
 import { patientsApi, type Patient } from '@/api/patients';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
+import { useIsCompact, useIsMobile } from '@/lib/useMediaQuery';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -296,7 +297,7 @@ function DetailPanel({ appt, panelRef, onClose }: { appt: Appointment; panelRef:
 
   return (
     <div ref={panelRef} className="anim-scale-in" style={{
-      position: 'absolute', top: 12, right: 12, width: 280, zIndex: 50,
+      position: 'absolute', top: 12, right: 12, width: 280, maxWidth: 'calc(100vw - 24px)', zIndex: 50,
       background: '#fff', borderRadius: 16,
       border: '1px solid var(--s200)',
       boxShadow: '0 8px 32px rgba(0,0,0,0.14)',
@@ -534,19 +535,20 @@ function MonthApptChip({ appt, onClick }: { appt: Appointment; onClick: (a: Appo
 
 const MONTH_DOW = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
-function MonthGrid({ days, byDay, selected, today, onDayClick, onApptClick }: {
+function MonthGrid({ days, byDay, selected, today, onDayClick, onApptClick, compact }: {
   days: string[];
   byDay: Record<string, Appointment[]>;
   selected: string;
   today: string;
   onDayClick: (d: string) => void;
   onApptClick: (a: Appointment) => void;
+  compact?: boolean;
 }) {
   const currentMonth = new Date(selected + 'T12:00:00').getMonth();
-  const MAX_CHIPS = 3;
+  const MAX_CHIPS = compact ? 2 : 3;
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minWidth: 660 }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minWidth: compact ? 0 : 660 }}>
       {/* Weekday header */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid var(--s200)', flexShrink: 0 }}>
         {MONTH_DOW.map(d => (
@@ -572,7 +574,7 @@ function MonthGrid({ days, byDay, selected, today, onDayClick, onApptClick }: {
               onClick={() => onDayClick(day)}
               style={{
                 borderRight: '1px solid var(--s100)', borderBottom: '1px solid var(--s100)',
-                padding: '4px 5px', cursor: 'pointer', minHeight: 84, overflow: 'hidden',
+                padding: compact ? '2px 3px' : '4px 5px', cursor: 'pointer', minHeight: compact ? 64 : 84, overflow: 'hidden',
                 background: isT ? 'rgba(20,184,166,.05)' : inMonth ? '#fff' : 'var(--s50)',
                 transition: 'background .12s',
               }}
@@ -613,6 +615,8 @@ export type CalView = 'month' | 'week' | 'day';
 export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
   const { user }     = useAuth();
   const navigate     = useNavigate();
+  const compact      = useIsCompact();
+  const isMobile     = useIsMobile();
   const [selected, setSelected]       = useState(initialDate ?? todayISO());
   const [calView, setCalView]         = useState<CalView>(() => {
     const saved = localStorage.getItem('sghcp_cal_view');
@@ -679,7 +683,8 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden', background: '#fff' }}>
 
-      {/* ── Left panel ──────────────────────────────────────────────────────── */}
+      {/* ── Left panel (hidden on tablet/phone — the toolbar covers navigation) */}
+      {!compact && (
       <div style={{ width: 260, flexShrink: 0, borderRight: '1px solid var(--s200)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
         <MiniCalendar
           selected={selected}
@@ -689,12 +694,13 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
         />
         <DaySummary appts={appts} selected={selected} />
       </div>
+      )}
 
       {/* ── Main area ───────────────────────────────────────────────────────── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
 
         {/* Toolbar */}
-        <div style={{ height: 56, flexShrink: 0, background: '#fff', borderBottom: '1px solid var(--s200)', display: 'flex', alignItems: 'center', gap: 10, padding: '0 18px' }}>
+        <div style={{ minHeight: 56, flexShrink: 0, background: '#fff', borderBottom: '1px solid var(--s200)', display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, padding: isMobile ? '8px 10px' : '0 18px', flexWrap: 'wrap' }}>
 
           {/* Nav */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -702,7 +708,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
               onClick={() => setSelected(d => calView === 'month' ? shiftMonth(d, -1) : shiftDate(d, -step))}
               style={{ border: '1.5px solid var(--s200)', background: '#fff', borderRadius: 8, padding: '5px 8px', cursor: 'pointer', display: 'flex' }}
             ><ChevronLeft size={14} /></button>
-            <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)', whiteSpace: 'nowrap', padding: '0 4px', minWidth: 200, textAlign: 'center', textTransform: 'capitalize' }}>
+            <span style={{ fontWeight: 700, fontSize: isMobile ? 12.5 : 14, color: 'var(--s800)', whiteSpace: 'nowrap', padding: '0 4px', minWidth: isMobile ? 0 : 200, textAlign: 'center', textTransform: 'capitalize' }}>
               {calView === 'month'
                 ? monthLabel(selected)
                 : calView === 'week'
@@ -767,7 +773,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
             onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.08)'; }}
             onMouseLeave={e => { e.currentTarget.style.filter = ''; }}
           >
-            <Plus size={15} color="white" /> Nueva cita
+            <Plus size={15} color="white" /> {isMobile ? 'Cita' : 'Nueva cita'}
           </button>
         </div>
 
@@ -787,6 +793,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
               byDay={byDay}
               selected={selected}
               today={today}
+              compact={isMobile}
               onDayClick={d => { setSelected(d); changeView('day'); }}
               onApptClick={setSelAppt}
             />

@@ -10,6 +10,7 @@ import {
 import { EditPatientModal } from '@/components/patients/EditPatientModal';
 import { patientsApi } from '@/api/patients';
 import { calcAge } from '@/lib/age';
+import { useIsMobile } from '@/lib/useMediaQuery';
 import { appointmentsApi, type Appointment } from '@/api/appointments';
 import { clinicalRecordsApi, consentsApi, type RecordMeta, type Consent, type ConsentType } from '@/api/clinicalRecords';
 import { diagnosesApi } from '@/api/diagnoses';
@@ -97,7 +98,7 @@ function HistorialTab({
     <div className="anim-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
     {/* ── Registros clínicos ─────────────────────────────────────────────── */}
-    <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+    <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflowX: 'auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--s100)' }}>
         <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)', display: 'flex', alignItems: 'center', gap: 10 }}>
           Registros clínicos
@@ -134,7 +135,7 @@ function HistorialTab({
         </div>
       ) : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 110px 90px 90px', gap: 8, padding: '8px 20px', background: 'var(--s50)', borderBottom: '1px solid var(--s200)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 110px 90px 90px', minWidth: 580, gap: 8, padding: '8px 20px', background: 'var(--s50)', borderBottom: '1px solid var(--s200)' }}>
             {['Fecha', 'Tipo', 'Riesgo', 'Estado', 'Co-firma', 'Acción'].map(h => (
               <span key={h} style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</span>
             ))}
@@ -142,7 +143,7 @@ function HistorialTab({
           {records.map((rec, idx) => {
             const cfg = CR_STATUS_CONFIG[rec.status] ?? CR_STATUS_CONFIG.DRAFT;
             return (
-              <div key={rec.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 110px 90px 90px', gap: 8, alignItems: 'center', padding: '12px 20px', borderBottom: idx < records.length - 1 ? '1px solid var(--s100)' : 'none' }}>
+              <div key={rec.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 110px 90px 90px', minWidth: 580, gap: 8, alignItems: 'center', padding: '12px 20px', borderBottom: idx < records.length - 1 ? '1px solid var(--s100)' : 'none' }}>
                 <span style={{ fontSize: 13, color: 'var(--s700)' }}>{fmtDate(rec.session_date)}</span>
                 <span style={{ fontSize: 13, color: 'var(--s600)' }}>{RECORD_TYPE_LABEL[rec.record_type] ?? rec.record_type}</span>
                 {(() => {
@@ -171,7 +172,7 @@ function HistorialTab({
     </div>
 
     {/* ── Citas ──────────────────────────────────────────────────────────── */}
-    <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+    <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflowX: 'auto' }}>
       <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--s100)' }}>
         <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)' }}>Citas agendadas</span>
       </div>
@@ -186,7 +187,7 @@ function HistorialTab({
       ) : (
     <>
       {/* Table header */}
-      <div style={{ display: 'grid', gridTemplateColumns: '48px 1fr 1fr 1fr 80px 100px 120px', gap: 8, padding: '10px 20px', background: 'var(--s50)', borderBottom: '1px solid var(--s200)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '48px 1fr 1fr 1fr 80px 100px 120px', minWidth: 640, gap: 8, padding: '10px 20px', background: 'var(--s50)', borderBottom: '1px solid var(--s200)' }}>
         {['Ses#', 'Fecha', 'Tipo', 'Modalidad', 'Duración', 'Estado', 'Acciones'].map(h => (
           <span key={h} style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</span>
         ))}
@@ -203,6 +204,7 @@ function HistorialTab({
             style={{
               display: 'grid',
               gridTemplateColumns: '48px 1fr 1fr 1fr 80px 100px 120px',
+              minWidth: 640,
               gap: 8,
               alignItems: 'center',
               padding: '12px 20px',
@@ -345,7 +347,7 @@ function ConsentimientosTab({ patientId }: { patientId: string }) {
   );
 
   return (
-    <div className="anim-fade-in" style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+    <div className="anim-fade-in" style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflowX: 'auto' }}>
       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--s100)' }}>
         <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--s800)' }}>Documentos de consentimiento</span>
         <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--s400)' }}>
@@ -448,6 +450,7 @@ function ConsentimientosTab({ patientId }: { patientId: string }) {
 export function PatientProfilePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>('historial');
   const [editOpen, setEditOpen] = useState(false);
@@ -552,7 +555,7 @@ export function PatientProfilePage() {
         <span style={{ fontSize: 13, color: 'var(--s500)' }}>Historia clínica #{patient.id.slice(0, 8).toUpperCase()}</span>
       </div>
 
-      <div style={{ padding: '24px 28px' }}>
+      <div style={{ padding: isMobile ? '16px 12px' : '24px 28px' }}>
 
         {/* ── Header card ─────────────────────────────────────────────────── */}
         <div style={{ background: '#fff', borderRadius: 14, border: '1px solid var(--s200)', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', padding: '20px 24px', marginBottom: 20 }}>

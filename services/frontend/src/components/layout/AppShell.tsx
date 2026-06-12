@@ -3,11 +3,12 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   CalendarDays, Users, Settings,
-  Brain, Search, Plus, ChevronDown, Lock, LogOut,
+  Brain, Search, Plus, ChevronDown, Lock, LogOut, Menu,
   UserCircle, Calendar, X, Globe,
   PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useIsMobile } from '@/lib/useMediaQuery';
 import { patientsApi, type Patient } from '@/api/patients';
 
 // Facturación hidden until the real billing backend exists (mock-only today);
@@ -28,6 +29,10 @@ export function AppShell({ children }: Props) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [locked,      setLocked]      = useState(false);
   const [collapsed,   setCollapsed]   = useState(() => localStorage.getItem('sghcp_sidebar_collapsed') === '1');
+  const isMobile = useIsMobile();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // On phones the sidebar is an overlay drawer — always full width when open.
+  const showCollapsed = !isMobile && collapsed;
   const [search,      setSearch]      = useState('');
   const [debouncedQ,  setDebouncedQ]  = useState('');
   const [searchFocus, setSearchFocus] = useState(false);
@@ -127,27 +132,38 @@ export function AppShell({ children }: Props) {
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
 
         {/* ── Sidebar ─────────────────────────────────────────── */}
+        {isMobile && mobileNavOpen && (
+          <div
+            onClick={() => setMobileNavOpen(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)', zIndex: 99 }}
+          />
+        )}
         <aside style={{
-          width: collapsed ? 64 : 'var(--sidebar-w)', minHeight: '100vh', flexShrink: 0,
+          width: showCollapsed ? 64 : 'var(--sidebar-w)', minHeight: '100vh', flexShrink: 0,
           background: 'var(--teal-d)',
           display: 'flex', flexDirection: 'column',
           boxShadow: '2px 0 16px rgba(0,0,0,.10)',
-          position: 'relative', zIndex: 10,
-          transition: 'width .2s ease',
+          ...(isMobile
+            ? {
+                position: 'fixed' as const, left: 0, top: 0, bottom: 0, zIndex: 100,
+                transform: mobileNavOpen ? 'translateX(0)' : 'translateX(-100%)',
+                transition: 'transform .25s ease',
+              }
+            : { position: 'relative' as const, zIndex: 10, transition: 'width .2s ease' }),
         }}>
           {/* Logo + collapse toggle */}
-          <div style={{ padding: collapsed ? '24px 0' : '24px 20px', borderBottom: '1px solid rgba(255,255,255,.10)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: collapsed ? 'center' : 'flex-start' }}>
+          <div style={{ padding: showCollapsed ? '24px 0' : '24px 20px', borderBottom: '1px solid rgba(255,255,255,.10)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: showCollapsed ? 'center' : 'flex-start' }}>
               <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <Brain size={18} color="white" />
               </div>
-              {!collapsed && (
+              {!showCollapsed && (
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 14, color: '#fff', letterSpacing: '-0.2px' }}>SGHCP</div>
                   <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.55)', marginTop: 1 }}>Salud Mental Pro</div>
                 </div>
               )}
-              {!collapsed && (
+              {!showCollapsed && !isMobile && (
                 <button
                   onClick={toggleSidebar}
                   title="Contraer menú"
@@ -159,7 +175,7 @@ export function AppShell({ children }: Props) {
                 </button>
               )}
             </div>
-            {collapsed && (
+            {showCollapsed && (
               <button
                 onClick={toggleSidebar}
                 title="Expandir menú"
@@ -173,8 +189,8 @@ export function AppShell({ children }: Props) {
           </div>
 
           {/* Nav */}
-          <nav style={{ padding: collapsed ? '16px 8px' : '16px 12px', flex: 1 }}>
-            {!collapsed && (
+          <nav style={{ padding: showCollapsed ? '16px 8px' : '16px 12px', flex: 1 }}>
+            {!showCollapsed && (
               <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,.40)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 8, paddingLeft: 4 }}>
                 Principal
               </div>
@@ -182,10 +198,10 @@ export function AppShell({ children }: Props) {
             {NAV.map(({ to, label, Icon, badge }) => {
               const active = to === '/' ? location.pathname === '/' : location.pathname.startsWith(to);
               return (
-                <Link key={to} to={to} title={collapsed ? label : undefined} style={{
+                <Link key={to} to={to} title={showCollapsed ? label : undefined} onClick={() => setMobileNavOpen(false)} style={{
                   display: 'flex', alignItems: 'center', gap: 10,
-                  justifyContent: collapsed ? 'center' : 'flex-start',
-                  padding: collapsed ? '12px 0' : '10px 12px', borderRadius: 8, marginBottom: 2,
+                  justifyContent: showCollapsed ? 'center' : 'flex-start',
+                  padding: showCollapsed ? '12px 0' : '10px 12px', borderRadius: 8, marginBottom: 2,
                   background: active ? 'rgba(255,255,255,.18)' : 'transparent',
                   color: active ? '#fff' : 'rgba(255,255,255,.65)',
                   fontSize: 13.5, fontWeight: active ? 600 : 400,
@@ -194,9 +210,9 @@ export function AppShell({ children }: Props) {
                 onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,.09)'; }}
                 onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                 >
-                  <Icon size={collapsed ? 18 : 16} color={active ? '#fff' : 'rgba(255,255,255,.65)'} />
-                  {!collapsed && <span style={{ flex: 1 }}>{label}</span>}
-                  {!collapsed && badge !== null && (
+                  <Icon size={showCollapsed ? 18 : 16} color={active ? '#fff' : 'rgba(255,255,255,.65)'} />
+                  {!showCollapsed && <span style={{ flex: 1 }}>{label}</span>}
+                  {!showCollapsed && badge !== null && (
                     <span style={{ background: '#f59e0b', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 9999, padding: '1px 6px', minWidth: 18, textAlign: 'center' }}>
                       {badge}
                     </span>
@@ -207,12 +223,12 @@ export function AppShell({ children }: Props) {
           </nav>
 
           {/* User mini card */}
-          <div style={{ padding: collapsed ? '12px 0' : '12px 16px', borderTop: '1px solid rgba(255,255,255,.10)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: collapsed ? 'center' : 'flex-start' }} title={collapsed ? displayName : undefined}>
+          <div style={{ padding: showCollapsed ? '12px 0' : '12px 16px', borderTop: '1px solid rgba(255,255,255,.10)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: showCollapsed ? 'center' : 'flex-start' }} title={showCollapsed ? displayName : undefined}>
               <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,.20)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
                 {initials}
               </div>
-              {!collapsed && (
+              {!showCollapsed && (
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 12.5, fontWeight: 500, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {displayName}
@@ -231,9 +247,18 @@ export function AppShell({ children }: Props) {
             height: 'var(--topbar-h)', background: '#fff',
             borderBottom: '1px solid var(--s200)',
             display: 'flex', alignItems: 'center',
-            padding: '0 24px', gap: 12,
+            padding: isMobile ? '0 12px' : '0 24px', gap: isMobile ? 8 : 12,
             position: 'sticky', top: 0, zIndex: 20,
           }}>
+            {isMobile && (
+              <button
+                onClick={() => setMobileNavOpen(true)}
+                aria-label="Abrir menú"
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--s600)', display: 'flex', padding: 6 }}
+              >
+                <Menu size={20} />
+              </button>
+            )}
             {/* Search */}
             <div ref={searchRef} style={{ flex: 1, maxWidth: 400, position: 'relative' }}>
               <div style={{
@@ -306,7 +331,7 @@ export function AppShell({ children }: Props) {
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.filter = ''; (e.currentTarget as HTMLElement).style.transform = ''; }}
             >
               <Plus size={16} color="white" />
-              Nueva Cita
+              {!isMobile && 'Nueva Cita'}
             </Link>
 
             {/* Profile */}
@@ -320,7 +345,7 @@ export function AppShell({ children }: Props) {
                 <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg, var(--teal), var(--teal-d))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff' }}>
                   {initials}
                 </div>
-                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--s700)' }}>{displayName}</span>
+                {!isMobile && <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--s700)' }}>{displayName}</span>}
                 <ChevronDown size={13} color="var(--s400)" style={{ transform: profileOpen ? 'rotate(180deg)' : '', transition: 'transform .2s' }} />
               </button>
               {profileOpen && (
