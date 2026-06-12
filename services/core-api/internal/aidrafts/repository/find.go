@@ -12,7 +12,7 @@ import (
 
 func (r *Repository) FindByID(ctx context.Context, orgID, draftID string) (*aidrafts.AIDraft, error) {
 	var d aidrafts.AIDraft
-	var clinicalRecordID, resolvedBy *string
+	var clinicalRecordID, resolvedBy, errorMessage *string
 	err := r.db.QueryRow(ctx, `
 		SELECT id, organization_id, clinical_record_id, patient_id,
 		       requested_by, dek_id, audio_path_enc, transcription_enc,
@@ -25,7 +25,7 @@ func (r *Repository) FindByID(ctx context.Context, orgID, draftID string) (*aidr
 		&d.ID, &d.OrganizationID, &clinicalRecordID, &d.PatientID,
 		&d.RequestedBy, &d.DEKID, &d.AudioPathEnc, &d.TranscriptionEnc,
 		&d.DraftContentEnc, &d.AIModelVersion, &d.WhisperModel,
-		&d.Status, &d.ErrorMessage, &d.ProcessedAt, &d.ResolvedAt, &resolvedBy,
+		&d.Status, &errorMessage, &d.ProcessedAt, &d.ResolvedAt, &resolvedBy,
 		&d.CreatedAt, &d.DeleteAfter,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -39,6 +39,9 @@ func (r *Repository) FindByID(ctx context.Context, orgID, draftID string) (*aidr
 	}
 	if resolvedBy != nil {
 		d.ResolvedBy = *resolvedBy
+	}
+	if errorMessage != nil {
+		d.ErrorMessage = *errorMessage
 	}
 	return &d, nil
 }
