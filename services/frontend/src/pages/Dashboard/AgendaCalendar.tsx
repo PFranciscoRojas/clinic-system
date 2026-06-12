@@ -66,6 +66,27 @@ function getWeekDays(iso: string): string[] {
   });
 }
 
+function pad2(n: number) { return String(n).padStart(2, '0'); }
+
+// 42-cell grid (6 weeks) starting on the Monday of the week containing the 1st.
+function monthGridDays(iso: string): string[] {
+  const d = new Date(iso + 'T12:00:00');
+  const firstISO = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-01`;
+  const start = getWeekDays(firstISO)[0];
+  return Array.from({ length: 42 }, (_, i) => shiftDate(start, i));
+}
+
+function shiftMonth(iso: string, delta: number): string {
+  const d  = new Date(iso + 'T12:00:00');
+  const nd = new Date(d.getFullYear(), d.getMonth() + delta, 1);
+  return `${nd.getFullYear()}-${pad2(nd.getMonth() + 1)}-01`;
+}
+
+function monthLabel(iso: string): string {
+  const d = new Date(iso + 'T12:00:00');
+  return `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 function weekLabel(days: string[]): string {
   const s = new Date(days[0] + 'T12:00:00');
   const e = new Date(days[6] + 'T12:00:00');
@@ -480,29 +501,140 @@ function DaySummary({ appts, selected }: { appts: Appointment[]; selected: strin
   );
 }
 
+// ── Month view ────────────────────────────────────────────────────────────────
+
+function MonthApptChip({ appt, onClick }: { appt: Appointment; onClick: (a: Appointment) => void }) {
+  const { data: patient } = usePatient(appt.patient_id);
+  const mc   = MC[appt.modality] ?? MC.IN_PERSON;
+  const done = appt.status === 'COMPLETED';
+  const cancelled = appt.status === 'CANCELLED';
+  const name = patient ? pName(patient) : appt.guest_name || '···';
+
+  return (
+    <button
+      onClick={e => { e.stopPropagation(); onClick(appt); }}
+      title={`${fmtHHMM(appt.scheduled_at)} · ${name}`}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 4, width: '100%',
+        border: 'none', borderRadius: 5, padding: '2px 6px', marginBottom: 2,
+        background: cancelled ? 'var(--s100)' : mc.bg, cursor: 'pointer', textAlign: 'left',
+        opacity: done || cancelled ? 0.6 : 1,
+      }}
+    >
+      <span style={{ width: 5, height: 5, borderRadius: '50%', background: cancelled ? 'var(--s400)' : mc.color, flexShrink: 0 }} />
+      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, fontWeight: 700, color: 'var(--s600)', flexShrink: 0 }}>
+        {fmtHHMM(appt.scheduled_at)}
+      </span>
+      <span style={{ fontSize: 10.5, color: 'var(--s700)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: done || cancelled ? 'line-through' : 'none' }}>
+        {name}
+      </span>
+    </button>
+  );
+}
+
+const MONTH_DOW = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+function MonthGrid({ days, byDay, selected, today, onDayClick, onApptClick }: {
+  days: string[];
+  byDay: Record<string, Appointment[]>;
+  selected: string;
+  today: string;
+  onDayClick: (d: string) => void;
+  onApptClick: (a: Appointment) => void;
+}) {
+  const currentMonth = new Date(selected + 'T12:00:00').getMonth();
+  const MAX_CHIPS = 3;
+
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minWidth: 660 }}>
+      {/* Weekday header */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid var(--s200)', flexShrink: 0 }}>
+        {MONTH_DOW.map(d => (
+          <div key={d} style={{ padding: '8px 0', textAlign: 'center', fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* 6-week grid */}
+      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gridTemplateRows: 'repeat(6, 1fr)', overflow: 'auto' }}>
+        {days.map(day => {
+          const d        = new Date(day + 'T12:00:00');
+          const inMonth  = d.getMonth() === currentMonth;
+          const isT      = day === today;
+          const dayAppts = (byDay[day] ?? []).slice().sort((a, b) =>
+            new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
+          const extra    = dayAppts.length - MAX_CHIPS;
+
+          return (
+            <div
+              key={day}
+              onClick={() => onDayClick(day)}
+              style={{
+                borderRight: '1px solid var(--s100)', borderBottom: '1px solid var(--s100)',
+                padding: '4px 5px', cursor: 'pointer', minHeight: 84, overflow: 'hidden',
+                background: isT ? 'rgba(20,184,166,.05)' : inMonth ? '#fff' : 'var(--s50)',
+                transition: 'background .12s',
+              }}
+              onMouseEnter={e => { if (!isT) e.currentTarget.style.background = 'var(--teal-l)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = isT ? 'rgba(20,184,166,.05)' : inMonth ? '#fff' : 'var(--s50)'; }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 3 }}>
+                <span style={{
+                  width: 22, height: 22, borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 12, fontWeight: isT ? 800 : 600,
+                  background: isT ? 'var(--teal)' : 'transparent',
+                  color: isT ? '#fff' : inMonth ? 'var(--s700)' : 'var(--s300)',
+                }}>
+                  {d.getDate()}
+                </span>
+              </div>
+              {dayAppts.slice(0, MAX_CHIPS).map(a => (
+                <MonthApptChip key={a.id} appt={a} onClick={onApptClick} />
+              ))}
+              {extra > 0 && (
+                <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--teal-d)', paddingLeft: 6 }}>
+                  +{extra} más
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── AgendaCalendar (main export) ──────────────────────────────────────────────
 
-export type CalView = 'week' | 'day';
+export type CalView = 'month' | 'week' | 'day';
 
 export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
   const { user }     = useAuth();
   const navigate     = useNavigate();
   const [selected, setSelected]       = useState(initialDate ?? todayISO());
-  const [calView, setCalView]         = useState<CalView>('week');
+  const [calView, setCalView]         = useState<CalView>(() => {
+    const saved = localStorage.getItem('sghcp_cal_view');
+    return saved === 'month' || saved === 'week' || saved === 'day' ? saved : 'week';
+  });
+  const changeView = (v: CalView) => { setCalView(v); localStorage.setItem('sghcp_cal_view', v); };
   const [selAppt, setSelAppt]         = useState<Appointment | null>(null);
   const gridRef   = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
 
-  const today    = todayISO();
-  const weekDays = useMemo(() => getWeekDays(selected), [selected]);
+  const today     = todayISO();
+  const weekDays  = useMemo(() => getWeekDays(selected), [selected]);
+  const monthDays = useMemo(() => monthGridDays(selected), [selected]);
+  const rangeDays = calView === 'month' ? monthDays : weekDays;
 
-  // ── Query: full week ─────────────────────────────────────────────────────
+  // ── Query: visible range (week or month grid) ────────────────────────────
   const { data: appts = [], isLoading } = useQuery({
-    queryKey: ['cal-week', weekDays[0], user?.user_id],
+    queryKey: ['cal-range', rangeDays[0], rangeDays[rangeDays.length - 1], user?.user_id],
     queryFn:  () => appointmentsApi.list({
       staff_id:  user?.user_id,
-      date_from: localISO(weekDays[0], '00:00'),
-      date_to:   localISO(weekDays[6], '23:59'),
+      date_from: localISO(rangeDays[0], '00:00'),
+      date_to:   localISO(rangeDays[rangeDays.length - 1], '23:59'),
       limit:     100,
     }),
     enabled:        !!user,
@@ -512,13 +644,13 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
   // Group by local date
   const byDay = useMemo(() => {
     const map: Record<string, Appointment[]> = {};
-    for (const d of weekDays) map[d] = [];
+    for (const d of rangeDays) map[d] = [];
     for (const a of appts) {
       const ld = localDateOf(a.scheduled_at);
       if (map[ld]) map[ld].push(a);
     }
     return map;
-  }, [appts, weekDays]);
+  }, [appts, rangeDays]);
 
   const apptDates = useMemo(() => new Set(appts.map(a => localDateOf(a.scheduled_at))), [appts]);
   const viewDays  = calView === 'week' ? weekDays : [selected];
@@ -541,7 +673,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
     return () => document.removeEventListener('mousedown', handle);
   }, [selAppt]);
 
-  const step = calView === 'week' ? 7 : 1;
+  const step = calView === 'week' ? 7 : 1; // month handled separately
   const hasInProgress = appts.some(a => isInProgress(a));
 
   return (
@@ -553,7 +685,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
           selected={selected}
           weekDays={weekDays}
           apptDates={apptDates}
-          onSelect={d => { setSelected(d); setCalView('day'); }}
+          onSelect={d => { setSelected(d); changeView('day'); }}
         />
         <DaySummary appts={appts} selected={selected} />
       </div>
@@ -567,17 +699,19 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
           {/* Nav */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <button
-              onClick={() => setSelected(d => shiftDate(d, -step))}
+              onClick={() => setSelected(d => calView === 'month' ? shiftMonth(d, -1) : shiftDate(d, -step))}
               style={{ border: '1.5px solid var(--s200)', background: '#fff', borderRadius: 8, padding: '5px 8px', cursor: 'pointer', display: 'flex' }}
             ><ChevronLeft size={14} /></button>
             <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)', whiteSpace: 'nowrap', padding: '0 4px', minWidth: 200, textAlign: 'center', textTransform: 'capitalize' }}>
-              {calView === 'week'
+              {calView === 'month'
+                ? monthLabel(selected)
+                : calView === 'week'
                 ? weekLabel(weekDays)
                 : new Date(selected + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
               }
             </span>
             <button
-              onClick={() => setSelected(d => shiftDate(d, step))}
+              onClick={() => setSelected(d => calView === 'month' ? shiftMonth(d, 1) : shiftDate(d, step))}
               style={{ border: '1.5px solid var(--s200)', background: '#fff', borderRadius: 8, padding: '5px 8px', cursor: 'pointer', display: 'flex' }}
             ><ChevronRight size={14} /></button>
           </div>
@@ -603,12 +737,13 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
           {/* View toggle */}
           <div style={{ display: 'flex', background: 'var(--s100)', borderRadius: 9, padding: 3, gap: 2 }}>
             {([
-              { key: 'week' as CalView, icon: LayoutGrid, label: 'Semana' },
-              { key: 'day'  as CalView, icon: List,        label: 'Día'    },
+              { key: 'month' as CalView, icon: CalendarDays, label: 'Mes'    },
+              { key: 'week'  as CalView, icon: LayoutGrid,   label: 'Semana' },
+              { key: 'day'   as CalView, icon: List,          label: 'Día'    },
             ] as const).map(({ key, icon: Icon, label }) => (
               <button
                 key={key}
-                onClick={() => setCalView(key)}
+                onClick={() => changeView(key)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 5,
                   padding: '6px 12px', border: 'none', cursor: 'pointer', borderRadius: 7,
@@ -645,7 +780,20 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
             </div>
           )}
 
-          {/* Scrollable content */}
+          {/* Month grid */}
+          {calView === 'month' && (
+            <MonthGrid
+              days={monthDays}
+              byDay={byDay}
+              selected={selected}
+              today={today}
+              onDayClick={d => { setSelected(d); changeView('day'); }}
+              onApptClick={setSelAppt}
+            />
+          )}
+
+          {/* Scrollable content (week / day) */}
+          {calView !== 'month' && (
           <div ref={gridRef} style={{ height: '100%', overflow: 'auto' }}>
             <div style={{ display: 'flex', minWidth: calView === 'week' ? 660 : 360 }}>
 
@@ -702,6 +850,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
               </div>
             </div>
           </div>
+          )}
 
           {/* Detail panel */}
           {selAppt && (

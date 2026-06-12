@@ -13,14 +13,20 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Appointments can be booked without a registered patient: reserve the slot with just a name (`guest_name`, migration 000015) and associate or register the patient at the first consultation (`PATCH /appointments/{id}/patient`); guest reservations show a "Reserva" badge across agenda, calendar and the appointment page
 - Appointment page shows the patient's key data at hand (age, document, phone) and blocks "Iniciar sesión" until the patient is associated and the treatment consent is signed
 - Registering a patient from a guest reservation links it to the appointment automatically and returns to it
+- Month view in the calendar (alongside week and day): 6-week grid with appointment chips, click a day to drill into it; the last selected view, agenda/calendar tab and patients view (cards/list) persist across sessions
+- Collapsible sidebar: collapse to icons with tooltips, state remembered
 - Addenda on approved clinical records: signed, immutable supplementary notes (author + timestamp, sealed with the record's DEK) — the original entry is never edited (Res. 1995/1999); addenda print in the exported PDF (migration 000013)
 - Professional profile API (BC-2): own-profile GET/PUT and specialties catalog; onboarding and Settings forms now persist names, tarjeta profesional and specialty to the backend instead of localStorage, so signed PDFs print the real license number
 - Self-service password change (`POST /auth/change-password`) with a "Cambiar contraseña" card in Settings → Seguridad
 - Global header search now works: searches patients by last name or document number with a results dropdown
 - Dashboard clinical inbox shows real data: pending web booking requests and today's appointments past their slot but not completed
-- "Pacientes activos" dashboard tile connected to the patients API
+
+### Changed
+- Patients list: row click opens the full profile directly; the eye icon keeps the quick-view summary
+- Valueless counters removed: patients KPI strip (total/active/inactive/"con contacto"), the "Pacientes activos" dashboard tile, and the always-empty "Sesiones / Próxima cita" block on patient cards
 
 ### Fixed
+- Header patient search no longer gets autofilled with the login email by the browser
 - Onboarding wizard no longer reappears for existing users on a new browser: completion is persisted server-side (`users.onboarding_completed_at`, migration 000014) and returned by `GET /auth/me`
 - Implausible birth dates (e.g. a half-typed year showing "2025 años") are rejected in every form that captures fecha de nacimiento, validated server-side, and guarded at display time
 - "Ver perfil" on the patients list opens the full profile directly; the quick-view summary stays on row/card click

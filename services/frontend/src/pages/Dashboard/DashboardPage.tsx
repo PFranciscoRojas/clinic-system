@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   ChevronLeft, ChevronRight, Video, MapPin,
-  Brain, Users, UserPlus, CalendarDays, Sparkles,
+  Brain, UserPlus, CalendarDays, Sparkles,
   ChevronDown, AlertTriangle, LayoutList, CalendarRange,
 } from 'lucide-react';
 
@@ -365,7 +365,10 @@ function AppointmentInboxItem({ appt, onOpen }: { appt: Appointment; onOpen: () 
 export function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [mainTab, setMainTab]           = useState<'agenda' | 'calendario'>('agenda');
+  const [mainTab, setMainTab]           = useState<'agenda' | 'calendario'>(
+    () => (localStorage.getItem('sghcp_agenda_tab') as 'agenda' | 'calendario') || 'agenda'
+  );
+  const changeTab = (t: 'agenda' | 'calendario') => { setMainTab(t); localStorage.setItem('sghcp_agenda_tab', t); };
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [filter, setFilter]             = useState<FilterTab>('all');
 
@@ -406,15 +409,6 @@ export function DashboardPage() {
     enabled: !!user,
     refetchInterval: 60_000,
   });
-
-  // ── Active patients stat ──────────────────────────────────────────────────
-  const { data: allPatients, isLoading: patientsLoading } = useQuery({
-    queryKey: ['patients-kpi'],
-    queryFn: () => patientsApi.list({ limit: 500 }),
-    enabled: !!user,
-    staleTime: 5 * 60_000,
-  });
-  const activePatients = (allPatients ?? []).filter(p => p.is_active).length;
 
   // Sort by scheduled_at
   const sorted = useMemo(() =>
@@ -468,7 +462,7 @@ export function DashboardPage() {
         ]).map(({ key, icon: Icon, label }) => (
           <button
             key={key}
-            onClick={() => setMainTab(key)}
+            onClick={() => changeTab(key)}
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '5px 14px', border: 'none', cursor: 'pointer',
@@ -533,7 +527,7 @@ export function DashboardPage() {
             </div>
 
             {/* Stats cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, marginBottom: 28 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 300px)', gap: 14, marginBottom: 28 }}>
               <StatCard
                 icon={CalendarDays}
                 iconColor="#0ea5e9"
@@ -541,14 +535,6 @@ export function DashboardPage() {
                 badgeColor="#0ea5e9"
                 value={todayActive}
                 label="Citas de hoy"
-              />
-              <StatCard
-                icon={Users}
-                iconColor="#8b5cf6"
-                badge={patientsLoading ? undefined : `${(allPatients ?? []).length} registrados`}
-                badgeColor="#8b5cf6"
-                value={patientsLoading ? '—' : activePatients}
-                label="Pacientes activos"
               />
             </div>
 

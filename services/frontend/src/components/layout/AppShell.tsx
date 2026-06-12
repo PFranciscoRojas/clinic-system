@@ -5,6 +5,7 @@ import {
   CalendarDays, Users, Settings,
   Brain, Search, Plus, ChevronDown, Lock, LogOut,
   UserCircle, Calendar, X, Globe,
+  PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { patientsApi, type Patient } from '@/api/patients';
@@ -26,6 +27,7 @@ export function AppShell({ children }: Props) {
   const location = useLocation();
   const [profileOpen, setProfileOpen] = useState(false);
   const [locked,      setLocked]      = useState(false);
+  const [collapsed,   setCollapsed]   = useState(() => localStorage.getItem('sghcp_sidebar_collapsed') === '1');
   const [search,      setSearch]      = useState('');
   const [debouncedQ,  setDebouncedQ]  = useState('');
   const [searchFocus, setSearchFocus] = useState(false);
@@ -112,6 +114,13 @@ export function AppShell({ children }: Props) {
     navigate('/login');
   };
 
+  const toggleSidebar = () => {
+    setCollapsed(v => {
+      localStorage.setItem('sghcp_sidebar_collapsed', v ? '0' : '1');
+      return !v;
+    });
+  };
+
   return (
     <>
       {locked && <LockScreen userId={user?.user_id} onUnlock={() => setLocked(false)} />}
@@ -119,36 +128,64 @@ export function AppShell({ children }: Props) {
 
         {/* ── Sidebar ─────────────────────────────────────────── */}
         <aside style={{
-          width: 'var(--sidebar-w)', minHeight: '100vh', flexShrink: 0,
+          width: collapsed ? 64 : 'var(--sidebar-w)', minHeight: '100vh', flexShrink: 0,
           background: 'var(--teal-d)',
           display: 'flex', flexDirection: 'column',
           boxShadow: '2px 0 16px rgba(0,0,0,.10)',
           position: 'relative', zIndex: 10,
+          transition: 'width .2s ease',
         }}>
-          {/* Logo */}
-          <div style={{ padding: '24px 20px', borderBottom: '1px solid rgba(255,255,255,.10)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {/* Logo + collapse toggle */}
+          <div style={{ padding: collapsed ? '24px 0' : '24px 20px', borderBottom: '1px solid rgba(255,255,255,.10)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: collapsed ? 'center' : 'flex-start' }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <Brain size={18} color="white" />
               </div>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: '#fff', letterSpacing: '-0.2px' }}>SGHCP</div>
-                <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.55)', marginTop: 1 }}>Salud Mental Pro</div>
-              </div>
+              {!collapsed && (
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: '#fff', letterSpacing: '-0.2px' }}>SGHCP</div>
+                  <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.55)', marginTop: 1 }}>Salud Mental Pro</div>
+                </div>
+              )}
+              {!collapsed && (
+                <button
+                  onClick={toggleSidebar}
+                  title="Contraer menú"
+                  style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'rgba(255,255,255,.55)', display: 'flex', padding: 4, borderRadius: 6 }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,.55)')}
+                >
+                  <PanelLeftClose size={16} />
+                </button>
+              )}
             </div>
+            {collapsed && (
+              <button
+                onClick={toggleSidebar}
+                title="Expandir menú"
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'rgba(255,255,255,.55)', display: 'flex', padding: 4, borderRadius: 6, margin: '12px auto 0' }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
+                onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,.55)')}
+              >
+                <PanelLeftOpen size={16} />
+              </button>
+            )}
           </div>
 
           {/* Nav */}
-          <nav style={{ padding: '16px 12px', flex: 1 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,.40)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 8, paddingLeft: 4 }}>
-              Principal
-            </div>
+          <nav style={{ padding: collapsed ? '16px 8px' : '16px 12px', flex: 1 }}>
+            {!collapsed && (
+              <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,.40)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 8, paddingLeft: 4 }}>
+                Principal
+              </div>
+            )}
             {NAV.map(({ to, label, Icon, badge }) => {
               const active = to === '/' ? location.pathname === '/' : location.pathname.startsWith(to);
               return (
-                <Link key={to} to={to} style={{
+                <Link key={to} to={to} title={collapsed ? label : undefined} style={{
                   display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '10px 12px', borderRadius: 8, marginBottom: 2,
+                  justifyContent: collapsed ? 'center' : 'flex-start',
+                  padding: collapsed ? '12px 0' : '10px 12px', borderRadius: 8, marginBottom: 2,
                   background: active ? 'rgba(255,255,255,.18)' : 'transparent',
                   color: active ? '#fff' : 'rgba(255,255,255,.65)',
                   fontSize: 13.5, fontWeight: active ? 600 : 400,
@@ -157,9 +194,9 @@ export function AppShell({ children }: Props) {
                 onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,.09)'; }}
                 onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                 >
-                  <Icon size={16} color={active ? '#fff' : 'rgba(255,255,255,.65)'} />
-                  <span style={{ flex: 1 }}>{label}</span>
-                  {badge !== null && (
+                  <Icon size={collapsed ? 18 : 16} color={active ? '#fff' : 'rgba(255,255,255,.65)'} />
+                  {!collapsed && <span style={{ flex: 1 }}>{label}</span>}
+                  {!collapsed && badge !== null && (
                     <span style={{ background: '#f59e0b', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 9999, padding: '1px 6px', minWidth: 18, textAlign: 'center' }}>
                       {badge}
                     </span>
@@ -170,17 +207,19 @@ export function AppShell({ children }: Props) {
           </nav>
 
           {/* User mini card */}
-          <div style={{ padding: '12px 16px', borderTop: '1px solid rgba(255,255,255,.10)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ padding: collapsed ? '12px 0' : '12px 16px', borderTop: '1px solid rgba(255,255,255,.10)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: collapsed ? 'center' : 'flex-start' }} title={collapsed ? displayName : undefined}>
               <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,.20)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
                 {initials}
               </div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 500, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {displayName}
+              {!collapsed && (
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 500, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {displayName}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.50)' }}>{subtitleLabel}</div>
                 </div>
-                <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.50)' }}>{subtitleLabel}</div>
-              </div>
+              )}
             </div>
           </div>
         </aside>
@@ -207,6 +246,11 @@ export function AppShell({ children }: Props) {
               }}>
                 <Search size={15} color={searchFocus ? 'var(--teal)' : 'var(--s400)'} />
                 <input value={search}
+                  // type=search + non-credential name + autoComplete=off: the browser
+                  // used to autofill this with the login email after signing in
+                  type="search"
+                  name="sghcp-patient-lookup"
+                  autoComplete="off"
                   onChange={e => { setSearch(e.target.value); setSearchOpen(true); }}
                   onFocus={() => { setSearchFocus(true); if (search) setSearchOpen(true); }}
                   onBlur={() => setSearchFocus(false)}
