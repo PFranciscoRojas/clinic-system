@@ -47,18 +47,27 @@ async def generate_soap_draft(anonymized_transcription: str) -> str:
             {
                 "role": "user",
                 "content": f"Transcripción de sesión:\n\n{anonymized_transcription}",
-            }
+            },
+            # Prefilling the assistant turn with "{" forces raw JSON output
+            # (no markdown fences, no preamble)
+            {"role": "assistant", "content": "{"},
         ],
     )
 
-    raw = message.content[0].text.strip()
+    raw = "{" + message.content[0].text.strip()
 
-    # Validate it's parseable JSON before storing
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
-        logger.warning("claude returned non-JSON; wrapping as subjective")
-        parsed = {"subjective": raw, "objective": None, "assessment": None, "plan": None}
+        # Last resort: pull the outermost JSON object out of whatever came back
+        start, end = raw.find("{"), raw.rfind("}")
+        try:
+            parsed = json.loads(raw[start : end + 1]) if 0 <= start < end else None
+        except json.JSONDecodeError:
+            parsed = None
+        if not isinstance(parsed, dict):
+            logger.warning("claude returned non-JSON; wrapping as subjective")
+            parsed = {"subjective": raw, "objective": None, "assessment": None, "plan": None}
 
     logger.info("soap draft generated", extra={"input_tokens": message.usage.input_tokens})
     return json.dumps(parsed, ensure_ascii=False)
