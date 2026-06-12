@@ -48,18 +48,16 @@ async def generate_soap_draft(anonymized_transcription: str) -> str:
                 "role": "user",
                 "content": f"Transcripción de sesión:\n\n{anonymized_transcription}",
             },
-            # Prefilling the assistant turn with "{" forces raw JSON output
-            # (no markdown fences, no preamble)
-            {"role": "assistant", "content": "{"},
         ],
     )
 
-    raw = "{" + message.content[0].text.strip()
+    raw = message.content[0].text.strip()
 
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
-        # Last resort: pull the outermost JSON object out of whatever came back
+        # Claude 4.x rejects assistant prefill, so fences/preamble can slip in:
+        # pull the outermost JSON object out of whatever came back
         start, end = raw.find("{"), raw.rfind("}")
         try:
             parsed = json.loads(raw[start : end + 1]) if 0 <= start < end else None
