@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import {
   ChevronLeft, ChevronRight, Video, MapPin,
   Brain, UserPlus, CalendarDays, Sparkles,
@@ -10,6 +10,7 @@ import {
 import { appointmentsApi, type Appointment } from '@/api/appointments';
 import { patientsApi, type Patient } from '@/api/patients';
 import { bookingRequestsApi } from '@/api/bookingRequests';
+import { clinicalRecordsApi } from '@/api/clinicalRecords';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
 import { useIsCompact } from '@/lib/useMediaQuery';
@@ -342,20 +343,25 @@ function InboxItem({ icon: Icon, iconColor, iconBg, title, subtitle, time, actio
   );
 }
 
-function AppointmentInboxItem({ appt, onOpen }: { appt: Appointment; onOpen: () => void }) {
+function AppointmentInboxItem({ appt, onOpen, variant = 'unfinished' }: {
+  appt: Appointment;
+  onOpen: () => void;
+  variant?: 'unfinished' | 'pending-note';
+}) {
   const { data: patient } = usePatient(appt.patient_id);
   const name = patient ? patientFullName(patient) : appt.guest_name || `Paciente #${appt.patient_id.slice(-4)}`;
+  const isNote = variant === 'pending-note';
 
   return (
     <InboxItem
-      icon={AlertTriangle}
-      iconColor="#f59e0b"
-      iconBg="#fef3c7"
-      title="Cita sin completar"
+      icon={isNote ? Brain : AlertTriangle}
+      iconColor={isNote ? 'var(--teal)' : '#f59e0b'}
+      iconBg={isNote ? 'var(--teal-l)' : '#fef3c7'}
+      title={isNote ? 'Nota de sesión pendiente' : 'Cita sin completar'}
       subtitle={`${name} · ${fmtTime(appt.scheduled_at)}`}
       time="Hoy"
-      action="Abrir"
-      actionColor="#f59e0b"
+      action={isNote ? 'Registrar' : 'Abrir'}
+      actionColor={isNote ? 'var(--teal)' : '#f59e0b'}
       onAction={onOpen}
     />
   );
@@ -370,7 +376,15 @@ export function DashboardPage() {
     () => (localStorage.getItem('sghcp_agenda_tab') as 'agenda' | 'calendario') || 'agenda'
   );
   const changeTab = (t: 'agenda' | 'calendario') => { setMainTab(t); localStorage.setItem('sghcp_agenda_tab', t); };
-  const [selectedDate, setSelectedDate] = useState(todayISO());
+  // Survives navigating into an appointment and back (per-tab, resets on close).
+  const [selectedDate, setSelectedDateRaw] = useState(() => sessionStorage.getItem('sghcp_agenda_date') || todayISO());
+  const setSelectedDate = (v: string | ((prev: string) => string)) => {
+    setSelectedDateRaw(prev => {
+      const next = typeof v === 'function' ? v(prev) : v;
+      sessionStorage.setItem('sghcp_agenda_date', next);
+      return next;
+    });
+  };
   const [filter, setFilter]             = useState<FilterTab>('all');
 
   const compact = useIsCompact();
@@ -422,7 +436,6 @@ export function DashboardPage() {
   const filtered = useMemo(() => filterAppts(sorted, filter), [sorted, filter]);
 
   // Stats
-  const todayActive     = todayAppointments.filter(a => a.status !== 'CANCELLED').length;
   const completedToday  = todayAppointments.filter(a => a.status === 'COMPLETED').length;
   const inProgressAppt  = sorted.find(a => isInProgress(a));
   const isToday         = selectedDate === today;
@@ -434,7 +447,24 @@ export function DashboardPage() {
       .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()),
     [todayAppointments]
   );
-  const inboxCount = pendingBookings.length + unfinishedToday.length;
+  // Completed sessions still waiting for their clinical note (grace window):
+  // surfaced here so finishing on time and attending the next patient is safe.
+  const completedApptsToday = useMemo(
+    () => todayAppointments.filter(a => a.status === 'COMPLETED' && a.patient_id),
+    [todayAppointments]
+  );
+  const recordQueries = useQueries({
+    queries: [...new Set(completedApptsToday.map(a => a.patient_id))].map(pid => ({
+      queryKey: ['clinical-records', 'patient', pid],
+      queryFn: () => clinicalRecordsApi.list(pid),
+      staleTime: 60_000,
+    })),
+  });
+  const recordsReady = recordQueries.every(q => q.isSuccess);
+  const notedApptIds = new Set(recordQueries.flatMap(q => q.data?.items?.map(r => r.appointment_id) ?? []));
+  const pendingNotes = recordsReady ? completedApptsToday.filter(a => !notedApptIds.has(a.id)) : [];
+
+  const inboxCount = pendingBookings.length + unfinishedToday.length + pendingNotes.length;
 
   // EN CURSO marker index
   const nowMs = Date.now();
@@ -503,6 +533,7 @@ export function DashboardPage() {
                 </h1>
                 <p style={{ fontSize: 13, color: 'var(--s500)', margin: 0, textTransform: 'capitalize' }}>
                   {fmtShortDate(selectedDate)} · {sorted.filter(a => a.status !== 'CANCELLED').length} citas agendadas
+                  {isToday && completedToday > 0 ? ` · ${completedToday} completada${completedToday !== 1 ? 's' : ''}` : ''}
                 </p>
               </div>
 
@@ -526,18 +557,6 @@ export function DashboardPage() {
                   <ChevronRight size={16} />
                 </button>
               </div>
-            </div>
-
-            {/* Stats cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 300px)', gap: 14, marginBottom: 28 }}>
-              <StatCard
-                icon={CalendarDays}
-                iconColor="#0ea5e9"
-                badge={completedToday > 0 ? `${completedToday} completadas` : undefined}
-                badgeColor="#0ea5e9"
-                value={todayActive}
-                label="Citas de hoy"
-              />
             </div>
 
             {/* Agenda del día */}
@@ -651,6 +670,14 @@ export function DashboardPage() {
                       onOpen={() => navigate(`/appointments/${a.id}`)}
                     />
                   ))}
+                  {pendingNotes.map(a => (
+                    <AppointmentInboxItem
+                      key={`note-${a.id}`}
+                      appt={a}
+                      variant="pending-note"
+                      onOpen={() => navigate(`/appointments/${a.id}`)}
+                    />
+                  ))}
                 </div>
               )}
             </div>
@@ -703,34 +730,3 @@ const navBtn: React.CSSProperties = {
   cursor: 'pointer', color: 'var(--s600)',
 };
 
-// ─── StatCard ─────────────────────────────────────────────────────────────────
-
-function StatCard({ icon: Icon, iconColor, badge, badgeColor, value, label }: {
-  icon: React.ElementType;
-  iconColor: string;
-  badge?: string;
-  badgeColor?: string;
-  value: string | number;
-  label: string;
-}) {
-  return (
-    <div style={{
-      background: '#fff', borderRadius: 14, padding: '18px 20px',
-      border: '1px solid var(--s200)',
-      boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <div style={{ width: 34, height: 34, borderRadius: 9, background: iconColor + '18', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Icon size={17} color={iconColor} />
-        </div>
-        {badge && (
-          <span style={{ fontSize: 10, fontWeight: 600, color: badgeColor, background: (badgeColor ?? '#000') + '15', padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {badge}
-          </span>
-        )}
-      </div>
-      <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--s800)', lineHeight: 1 }}>{value}</div>
-      <div style={{ fontSize: 12, color: 'var(--s500)', marginTop: 4 }}>{label}</div>
-    </div>
-  );
-}

@@ -617,7 +617,14 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
   const navigate     = useNavigate();
   const compact      = useIsCompact();
   const isMobile     = useIsMobile();
-  const [selected, setSelected]       = useState(initialDate ?? todayISO());
+  const [selected, setSelectedRaw]    = useState(() => sessionStorage.getItem('sghcp_cal_date') || initialDate || todayISO());
+  const setSelected = (v: string | ((prev: string) => string)) => {
+    setSelectedRaw(prev => {
+      const next = typeof v === 'function' ? v(prev) : v;
+      sessionStorage.setItem('sghcp_cal_date', next);
+      return next;
+    });
+  };
   const [calView, setCalView]         = useState<CalView>(() => {
     const saved = localStorage.getItem('sghcp_cal_view');
     return saved === 'month' || saved === 'week' || saved === 'day' ? saved : 'week';

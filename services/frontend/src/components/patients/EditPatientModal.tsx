@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Pencil, Lock, X, AlertCircle } from 'lucide-react';
 import { patientsApi, type Patient } from '@/api/patients';
@@ -47,6 +47,8 @@ export function EditPatientModal({ patient, onClose, onSaved, requiredContext }:
   const [birthDate, setBirthDate] = useState(patient.birth_date ?? '');
   const [gender,   setGender]   = useState(patient.gender ?? '');
   const [apiError, setApiError] = useState('');
+  const [birthIncomplete, setBirthIncomplete] = useState(false);
+  const birthRef = useRef<HTMLInputElement>(null);
 
   // Plausibility first (a half-typed year gives ages like 2025), then adult-only doc check
   const adultOnlyDoc = DOC_TYPES.find(d => d.code === docType)?.adultOnly ?? false;
@@ -187,7 +189,8 @@ export function EditPatientModal({ patient, onClose, onSaved, requiredContext }:
               </div>
               <div>
                 {iLabel('Fecha de nacimiento')}
-                <input style={{ ...iStyle, borderColor: (adultOnlyDoc && birthDate && ageError) ? 'var(--red)' : 'var(--s200)' }} type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} />
+                <input ref={birthRef} style={{ ...iStyle, borderColor: ((adultOnlyDoc && birthDate && ageError) || birthIncomplete) ? 'var(--red)' : 'var(--s200)' }} type="date" value={birthDate} onChange={e => { setBirthDate(e.target.value); setBirthIncomplete(false); }} />
+                {birthIncomplete && <p style={{ margin: '4px 0 0', fontSize: 11.5, color: 'var(--red)' }}>Fecha incompleta — ingresa día, mes y año.</p>}
               </div>
               <div>
                 {iLabel('Género')}
@@ -215,7 +218,7 @@ export function EditPatientModal({ patient, onClose, onSaved, requiredContext }:
               Cancelar
             </button>
             <button
-              onClick={() => { setApiError(''); mutation.mutate(); }}
+              onClick={() => { setApiError(''); if (birthRef.current?.validity.badInput) { setBirthIncomplete(true); return; } mutation.mutate(); }}
               disabled={mutation.isPending || !isValid}
               style={{ padding: '9px 18px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: mutation.isPending ? 'wait' : 'pointer', opacity: mutation.isPending || !isValid ? 0.7 : 1 }}
             >

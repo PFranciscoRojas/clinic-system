@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Search, Plus, Users,
-  AlertCircle, X, CreditCard, Filter,
+  AlertCircle, X, CreditCard,
   LayoutGrid, List, Eye, CalendarPlus,
   Mail, Phone, Heart, UserPlus, ClipboardList,
   MapPin,
@@ -394,7 +394,6 @@ function EmptyState({ query, filter, onNew }: { query: string; filter: StatusFil
 
 type ViewMode    = 'grid' | 'table';
 type StatusFilter = 'all' | 'active' | 'inactive';
-type SearchMode  = 'last_name' | 'document';
 
 const LIMIT = 50;
 
@@ -409,30 +408,21 @@ export function PatientsPage() {
   const changeView = (v: ViewMode) => { setViewMode(v); localStorage.setItem('sghcp_patients_view', v); };
   const [selected,      setSelected]      = useState<Patient | null>(null);
   const [q,             setQ]             = useState('');
-  const [searchMode,    setSearchMode]    = useState<SearchMode>('last_name');
   const [statusFilter,  setStatusFilter]  = useState<StatusFilter>('all');
-  const [showModeMenu,  setShowModeMenu]  = useState(false);
   const [page,          setPage]          = useState(0);
 
-  const modeRef = useRef<HTMLDivElement>(null);
   const dq      = useDebounce(q, 380);
   const isSearching = dq.trim().length >= 2;
-
-  useEffect(() => {
-    function h(e: MouseEvent) {
-      if (modeRef.current && !modeRef.current.contains(e.target as Node)) setShowModeMenu(false);
-    }
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
+  // Same smart rule as the header search: digits = document, text = last name.
+  const isDocQuery = /^\d{4,}$/.test(dq.trim());
 
   const { data, isLoading, isError, isFetching } = useQuery({
-    queryKey: ['patients', searchMode, dq, page],
+    queryKey: ['patients', isDocQuery ? 'doc' : 'name', dq, page],
     queryFn:  () =>
       isSearching
         ? patientsApi.search({
-            last_name: searchMode === 'last_name' ? dq.trim() : undefined,
-            document:  searchMode === 'document'  ? dq.trim() : undefined,
+            last_name: isDocQuery ? undefined : dq.trim(),
+            document:  isDocQuery ? dq.trim() : undefined,
             limit: LIMIT, offset: page * LIMIT,
           })
         : patientsApi.list({ limit: LIMIT, offset: page * LIMIT }),
@@ -452,7 +442,6 @@ export function PatientsPage() {
   const inactive = all.filter(p => !p.is_active).length;
 
   const handleQ = (v: string) => { setQ(v); setPage(0); };
-  const modeLabel = searchMode === 'last_name' ? 'Apellido paterno' : 'Nº documento';
 
   // The fixed-column table doesn't fit a phone — always show cards there.
   const effectiveView: ViewMode = isMobile ? 'grid' : viewMode;
@@ -476,7 +465,7 @@ export function PatientsPage() {
           <input
             value={q}
             onChange={e => handleQ(e.target.value)}
-            placeholder={`Buscar por ${modeLabel.toLowerCase()}…`}
+            placeholder="Buscar por apellido o documento…"
             style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 13.5, color: 'var(--s700)', outline: 'none' }}
           />
           {q && (
@@ -484,35 +473,6 @@ export function PatientsPage() {
               <X size={13} />
             </button>
           )}
-
-          {/* Mode selector */}
-          <div ref={modeRef} style={{ position: 'relative' }}>
-            <button
-              onClick={() => setShowModeMenu(v => !v)}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 7, border: `1.5px solid ${showModeMenu ? 'var(--teal)' : 'var(--s200)'}`, background: showModeMenu ? 'var(--teal-l)' : '#fff', color: showModeMenu ? 'var(--teal)' : 'var(--s500)', fontSize: 11.5, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all .12s' }}
-            >
-              <Filter size={11} />{modeLabel}
-            </button>
-            {showModeMenu && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: '#fff', border: '1px solid var(--s200)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,.10)', overflow: 'hidden', zIndex: 50, minWidth: 175 }}>
-                {([
-                  { id: 'last_name' as SearchMode, label: 'Apellido paterno' },
-                  { id: 'document'  as SearchMode, label: 'Nº de documento'  },
-                ] as const).map(opt => (
-                  <button
-                    key={opt.id}
-                    onClick={() => { setSearchMode(opt.id); setShowModeMenu(false); setQ(''); }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '10px 14px', border: 'none', background: 'transparent', textAlign: 'left', fontSize: 13, cursor: 'pointer', color: searchMode === opt.id ? 'var(--teal)' : 'var(--s700)', fontWeight: searchMode === opt.id ? 600 : 400, transition: 'background .1s' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--s50)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    {opt.label}
-                    {searchMode === opt.id && <span style={{ marginLeft: 'auto', color: 'var(--teal)', fontSize: 12 }}>✓</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Status filter pills */}

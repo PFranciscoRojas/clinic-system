@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import {
@@ -148,6 +148,7 @@ function SectionHeader({ icon: Icon, title }: { icon: React.ElementType; title: 
 
 export function NewPatientPage() {
   const navigate = useNavigate();
+  const birthWrapRef = useRef<HTMLDivElement>(null);
   // Set when registering the patient for a guest reservation — after creating,
   // the patient is linked to that appointment and we return to it.
   const [searchParams] = useSearchParams();
@@ -205,7 +206,11 @@ export function NewPatientPage() {
     else if (docNumErr)        newErrors.docNumber = docNumErr;
     if (!firstName.trim())     newErrors.firstName = 'El primer nombre es requerido.';
     if (!pLastName.trim())     newErrors.pLastName = 'El apellido paterno es requerido.';
-    if (ageError)              newErrors.birthDate = ageError;
+    // A half-typed date (e.g. only the year) leaves value="" but badInput=true —
+    // without this check it would save silently with no birth date.
+    const birthInput = birthWrapRef.current?.querySelector('input');
+    if (birthInput?.validity.badInput) newErrors.birthDate = 'Fecha incompleta — ingresa día, mes y año.';
+    else if (ageError)         newErrors.birthDate = ageError;
     if (phoneError)            newErrors.phone     = phoneError;
     if (emailError)            newErrors.email     = emailError;
 
@@ -343,7 +348,7 @@ export function NewPatientPage() {
             />
 
             {/* Birth date + age preview */}
-            <div>
+            <div ref={birthWrapRef}>
               <Field
                 label="Fecha de nacimiento"
                 value={birthDate}

@@ -22,11 +22,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Global header search now works: searches patients by last name or document number with a results dropdown
 - Dashboard clinical inbox shows real data: pending web booking requests and today's appointments past their slot but not completed
 
+### Added
+- Session timer while the appointment is in progress: elapsed/remaining time next to "Finalizar sesión", amber warning at 10 minutes left, red when over time
+- Grace window for the session note: after "Finalizar sesión" the record form stays available until the note is written (next patient can be attended first); the note stores the real session date and the dashboard inbox lists "Nota de sesión pendiente" reminders
+
 ### Changed
+- Clinical records can only be created inside a started session: the record form and audio upload require the appointment to be IN_PROGRESS, and the standalone "Nuevo registro" page was removed — every note hangs from a real session
+- Treatment consent can be signed directly from the appointment page (modal) instead of navigating away to the patient profile
+- Associating a patient to a guest reservation now asks for confirmation before linking
+- New clinical record defaults to the right type: INITIAL when the patient has no open process, EVOLUTION otherwise
+- Agenda and calendar remember the day being viewed when navigating into an appointment and back
+- Patients page search reduced to one smart field (digits = document, text = last name) — the mode dropdown duplicated the header search
+- "Citas de hoy" tile replaced by a subtle counter in the agenda greeting line
+- Diagnoses are no longer a dedicated tab: the CIE-10 panel lives inside the Historial tab (the data and PDF output stay)
 - Patients list: row click opens the full profile directly; the eye icon keeps the quick-view summary
 - Valueless counters removed: patients KPI strip (total/active/inactive/"con contacto"), the "Pacientes activos" dashboard tile, and the always-empty "Sesiones / Próxima cita" block on patient cards
 
 ### Fixed
+- Half-typed birth dates (e.g. only the year) are now rejected on save instead of silently storing no date
 - Header patient search no longer gets autofilled with the login email by the browser
 - Onboarding wizard no longer reappears for existing users on a new browser: completion is persisted server-side (`users.onboarding_completed_at`, migration 000014) and returned by `GET /auth/me`
 - Implausible birth dates (e.g. a half-typed year showing "2025 años") are rejected in every form that captures fecha de nacimiento, validated server-side, and guarded at display time

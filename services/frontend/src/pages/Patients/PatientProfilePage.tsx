@@ -23,7 +23,7 @@ import { riskMeta } from '@/components/clinical/constants';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Tab = 'historial' | 'diagnosticos' | 'plan' | 'consentimientos';
+type Tab = 'historial' | 'plan' | 'consentimientos';
 
 type AppointmentStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
 
@@ -113,17 +113,17 @@ function HistorialTab({
           })()}
         </span>
         {(() => {
-          // An in-progress/scheduled appointment keeps the note linked to it;
-          // otherwise the standalone form covers walk-ins and late notes.
+          // The clinical note lives inside a session: jump to the open/next
+          // appointment, or schedule one — no standalone records.
           const target =
             appointments.find(a => a.status === 'IN_PROGRESS') ??
             appointments.filter(a => a.status === 'SCHEDULED').sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))[0];
           return (
             <button
-              onClick={() => navigate(target ? `/appointments/${target.id}` : `/patients/${patientId}/records/new`)}
+              onClick={() => navigate(target ? `/appointments/${target.id}` : `/appointments/new?patient_id=${patientId}`)}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
             >
-              <FileText size={12} /> Nuevo registro
+              {target ? <><FileText size={12} /> Ir a la cita</> : <><Calendar size={12} /> Agendar cita</>}
             </button>
           );
         })()}
@@ -250,6 +250,9 @@ function HistorialTab({
     </>
     )}
     </div>
+
+    {/* Diagnóstico CIE-10 — parte obligatoria de la HC; compacto, sin tab propio */}
+    <DiagnosesPanel patientId={patientId} />
     </div>
   );
 }
@@ -532,7 +535,6 @@ export function PatientProfilePage() {
   // Tab definitions
   const TABS: { id: Tab; label: string; Icon: React.ElementType }[] = [
     { id: 'historial',       label: 'Historial de consultas', Icon: Clock      },
-    { id: 'diagnosticos',    label: 'Diagnósticos',           Icon: Stethoscope },
     { id: 'plan',            label: 'Plan terapéutico',        Icon: Target     },
     { id: 'consentimientos', label: 'Consentimientos',         Icon: FileCheck  },
   ];
@@ -625,12 +627,6 @@ export function PatientProfilePage() {
                 <Pencil size={13} /> Editar datos
               </button>
               <button
-                onClick={() => navigate(`/patients/${patient.id}/records/new`)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: 'var(--teal)', border: '1px solid var(--s200)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-              >
-                <FileText size={13} /> Nuevo registro
-              </button>
-              <button
                 onClick={() => navigate(`/appointments/new?patient_id=${patient.id}`)}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
               >
@@ -683,7 +679,6 @@ export function PatientProfilePage() {
 
         {/* ── Tab Content ───────────────────────────────────────────────────── */}
         {tab === 'historial'       && <HistorialTab appointments={appointments} records={records} navigate={navigate} patientId={id!} />}
-        {tab === 'diagnosticos'    && <DiagnosesPanel patientId={id!} />}
         {tab === 'plan'            && <TreatmentPlanPanel patientId={id!} />}
         {tab === 'consentimientos' && <ConsentimientosTab patientId={id!} />}
       </div>

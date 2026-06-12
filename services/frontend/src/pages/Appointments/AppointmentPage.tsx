@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -14,6 +14,7 @@ import { calcAge } from '@/lib/age';
 import { useIsCompact } from '@/lib/useMediaQuery';
 import { clinicalRecordsApi, consentsApi, type RecordMeta } from '@/api/clinicalRecords';
 import { ConsentViewModal } from '@/components/consents/ConsentViewModal';
+import { ConsentSignModal } from '@/components/consents/ConsentSignModal';
 import { RecordForm } from '@/components/clinical/RecordForm';
 import { aiDraftsApi } from '@/api/aiDrafts';
 import { useAuth } from '@/context/AuthContext';
@@ -169,6 +170,45 @@ function AudioSection({ appointmentId, patientId, draftId, onDraftCreated }: Aud
   );
 }
 
+// ─── Session timer ────────────────────────────────────────────────────────────
+
+const WARN_MINUTES = 10;
+
+function SessionTimer({ scheduledAt, durationMin }: { scheduledAt: string; durationMin: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const start      = new Date(scheduledAt).getTime();
+  const end        = start + durationMin * 60_000;
+  const elapsedMin = Math.max(0, Math.floor((now - start) / 60_000));
+  const remainMin  = Math.ceil((end - now) / 60_000);
+  const over       = remainMin <= 0;
+  const warn       = !over && remainMin <= WARN_MINUTES;
+
+  const bg     = over ? '#fee2e2' : warn ? '#fef3c7' : '#f0fdfa';
+  const border = over ? '#fca5a5' : warn ? '#fcd34d' : '#5eead4';
+  const color  = over ? '#991b1b' : warn ? '#92400e' : '#0f766e';
+
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 7,
+      padding: '8px 14px', borderRadius: 9, fontSize: 13, fontWeight: 700,
+      background: bg, border: `1.5px solid ${border}`, color,
+      animation: warn || over ? 'pulse 2s infinite' : undefined,
+    }}>
+      <Clock size={14} />
+      {over
+        ? `Tiempo cumplido (+${Math.abs(remainMin)} min)`
+        : warn
+        ? `Quedan ${remainMin} min`
+        : `En sesión · ${elapsedMin} min · quedan ${remainMin}`}
+    </span>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function AppointmentPage() {
@@ -186,6 +226,9 @@ export function AppointmentPage() {
   const [showRecordForm, setShowRecordForm] = useState(false);
   // When true, the edit modal is open and closing it after saving starts the session
   const [completeDataOpen, setCompleteDataOpen] = useState(false);
+  const [signConsentOpen, setSignConsentOpen] = useState(false);
+  const [pendingAssign, setPendingAssign] = useState<Patient | null>(null);
+  const [assigning, setAssigning] = useState(false);
 
   // draft_id stored per appointment in localStorage
   const draftKey = `sghcp_draft_${id}`;
@@ -218,6 +261,13 @@ export function AppointmentPage() {
   const treatmentConsent = (consentsData?.items ?? [])
     .find(c => c.consent_type === 'TREATMENT' && !c.revoked_at);
   const [viewConsentId, setViewConsentId] = useState<string | null>(null);
+
+  // Open process = an INITIAL more recent than the last DISCHARGE.
+  const allRecords = recordsData?.items ?? [];
+  const lastInitial   = allRecords.filter(r => r.record_type === 'INITIAL').map(r => r.session_date).sort().pop();
+  const lastDischarge = allRecords.filter(r => r.record_type === 'DISCHARGE').map(r => r.session_date).sort().pop();
+  const hasOpenProcess = !!lastInitial && (!lastDischarge || lastInitial > lastDischarge);
+  const defaultRecordType = hasOpenProcess ? 'EVOLUTION' as const : 'INITIAL' as const;
 
   // Records linked to this appointment
   const linkedRecords: RecordMeta[] = (recordsData?.items ?? []).filter(r => r.appointment_id === id);
@@ -278,6 +328,14 @@ export function AppointmentPage() {
   const isActive = appt.status === 'SCHEDULED' || appt.status === 'IN_PROGRESS';
   const isInProgress = appt.status === 'IN_PROGRESS';
   const isScheduled = appt.status === 'SCHEDULED';
+  // Grace window: the note can be written during the session or right after
+  // finishing it (next patient may be waiting) — no "extemporáneo" flag here.
+  const canWriteNote = isInProgress || (appt.status === 'COMPLETED' && linkedRecords.length === 0);
+  // The note carries the real session date, not the writing date.
+  const apptDate = (() => {
+    const d = new Date(appt.scheduled_at);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
   const isGuest = !appt.patient_id;
 
   const patientName = patient
@@ -343,10 +401,10 @@ export function AppointmentPage() {
                 </span>
               ) : (
                 <button
-                  onClick={() => navigate(`/patients/${appt.patient_id}`)}
+                  onClick={() => setSignConsentOpen(true)}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 7, background: '#fef3c7', color: '#92400e', border: 'none', cursor: 'pointer' }}
                 >
-                  <AlertTriangle size={13} /> Sin consentimiento — firmar
+                  <AlertTriangle size={13} /> Sin consentimiento — firmar aquí
                 </button>
               )}
             </div>
@@ -382,20 +440,48 @@ export function AppointmentPage() {
               Busca el paciente o regístralo para poder iniciar la sesión.
             </p>
             <div style={{ maxWidth: 420 }}>
-              <PatientSearchBox
-                selected={null}
-                onSelect={async p => {
-                  if (!p) return;
-                  setStatusErr('');
-                  try {
-                    await appointmentsApi.assignPatient(id!, p.id);
-                    await queryClient.invalidateQueries({ queryKey: ['appointment', id] });
-                  } catch {
-                    setStatusErr('No se pudo asociar el paciente. Intenta de nuevo.');
-                  }
-                }}
-                onNewPatient={() => navigate(`/patients/new?appointment_id=${id}`)}
-              />
+              {pendingAssign ? (
+                <div style={{ border: '1.5px solid #fcd34d', background: '#fffbeb', borderRadius: 10, padding: '12px 14px' }}>
+                  <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--s700)', lineHeight: 1.5 }}>
+                    ¿Asociar esta cita a <b>{[pendingAssign.first_name, pendingAssign.paternal_last_name].filter(Boolean).join(' ')}</b>
+                    {pendingAssign.document_number ? ` (${pendingAssign.document_type_code} ${pendingAssign.document_number})` : ''}?
+                    La reserva a nombre de “{appt.guest_name}” quedará a su nombre.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      disabled={assigning}
+                      onClick={async () => {
+                        setAssigning(true); setStatusErr('');
+                        try {
+                          await appointmentsApi.assignPatient(id!, pendingAssign.id);
+                          await queryClient.invalidateQueries({ queryKey: ['appointment', id] });
+                          setPendingAssign(null);
+                        } catch {
+                          setStatusErr('No se pudo asociar el paciente. Intenta de nuevo.');
+                        } finally {
+                          setAssigning(false);
+                        }
+                      }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, cursor: assigning ? 'wait' : 'pointer', fontSize: 13, fontWeight: 700 }}
+                    >
+                      {assigning ? <Spinner size={13} color="#fff" /> : <CheckCircle2 size={13} />} Confirmar asociación
+                    </button>
+                    <button
+                      disabled={assigning}
+                      onClick={() => setPendingAssign(null)}
+                      style={{ padding: '8px 14px', background: '#fff', color: 'var(--s600)', border: '1.5px solid var(--s200)', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <PatientSearchBox
+                  selected={null}
+                  onSelect={p => { if (p) setPendingAssign(p); }}
+                  onNewPatient={() => navigate(`/patients/new?appointment_id=${id}`)}
+                />
+              )}
             </div>
           </div>
         )}
@@ -426,6 +512,7 @@ export function AppointmentPage() {
                   : 'El paciente debe firmar el consentimiento de tratamiento antes de iniciar.'}
               </span>
             )}
+            {isInProgress && <SessionTimer scheduledAt={appt.scheduled_at} durationMin={appt.duration_min} />}
             {isInProgress && (
               <button
                 onClick={() => handleStatusChange('COMPLETED')}
@@ -484,7 +571,7 @@ export function AppointmentPage() {
               </div>
               <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--s800)' }}>Historia clínica</span>
             </div>
-            {linkedRecords.length > 0 && !showRecordForm && isActive && (
+            {linkedRecords.length > 0 && !showRecordForm && canWriteNote && (
               <button
                 onClick={() => setShowRecordForm(true)}
                 style={{ fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, border: '1px solid var(--teal)', background: '#f0fdfa', color: 'var(--teal)', cursor: 'pointer' }}
@@ -523,18 +610,27 @@ export function AppointmentPage() {
                 <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s600)' }}>Nuevo registro clínico</span>
                 <button onClick={() => setShowRecordForm(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)' }}><X size={16} /></button>
               </div>
-              <RecordForm patientId={appt.patient_id} appointmentId={id!} onSaved={handleRecordSaved} />
+              <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} onSaved={handleRecordSaved} />
             </div>
-          ) : isActive ? (
+          ) : canWriteNote ? (
             <div style={{ textAlign: 'center', padding: '24px 0' }}>
               <FileText size={36} color="var(--s200)" style={{ marginBottom: 12 }} />
-              <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--s500)' }}>Sin registro para esta sesión</p>
+              <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--s500)' }}>
+                {isInProgress ? 'Sin registro para esta sesión' : 'La sesión terminó sin nota — regístrala ahora con la fecha real de la sesión.'}
+              </p>
               <button
                 onClick={() => setShowRecordForm(true)}
                 style={{ padding: '10px 20px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 7 }}
               >
                 <FileText size={14} /> Crear registro clínico
               </button>
+            </div>
+          ) : isScheduled ? (
+            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+              <FileText size={36} color="var(--s200)" style={{ marginBottom: 12 }} />
+              <p style={{ margin: 0, fontSize: 13, color: 'var(--s500)' }}>
+                La nota clínica se registra durante la sesión — primero pulsa <b>Iniciar sesión</b>.
+              </p>
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '24px 0' }}>
@@ -555,7 +651,7 @@ export function AppointmentPage() {
             </div>
           </div>
 
-          {isActive ? (
+          {canWriteNote ? (
             <AudioSection
               appointmentId={id!}
               patientId={appt.patient_id}
@@ -572,6 +668,17 @@ export function AppointmentPage() {
       </div>
 
       {viewConsentId && <ConsentViewModal consentId={viewConsentId} onClose={() => setViewConsentId(null)} />}
+      {signConsentOpen && appt.patient_id && (
+        <ConsentSignModal
+          patientId={appt.patient_id}
+          consentType="TREATMENT"
+          onClose={() => setSignConsentOpen(false)}
+          onSigned={() => {
+            setSignConsentOpen(false);
+            queryClient.invalidateQueries({ queryKey: ['consents', appt.patient_id] });
+          }}
+        />
+      )}
 
       {completeDataOpen && patient && (
         <EditPatientModal

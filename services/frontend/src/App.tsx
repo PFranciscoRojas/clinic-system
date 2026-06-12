@@ -13,7 +13,6 @@ import { NewAppointmentPage } from '@/pages/Appointments/NewAppointmentPage';
 import { AppointmentPage } from '@/pages/Appointments/AppointmentPage';
 import { AIDraftPage } from '@/pages/AIDrafts/AIDraftPage';
 import { ClinicalRecordPage } from '@/pages/ClinicalRecords/ClinicalRecordPage';
-import { NewClinicalRecordPage } from '@/pages/ClinicalRecords/NewClinicalRecordPage';
 import { BookingPage } from '@/pages/Booking/BookingPage';
 import { ConsentSignPage } from '@/pages/Public/ConsentSignPage';
 import { BookingRequestsPage } from '@/pages/BookingRequests/BookingRequestsPage';
@@ -70,7 +69,6 @@ export function App() {
                 <Route path="patients" element={<PatientsPage />} />
                 <Route path="patients/new" element={<NewPatientPage />} />
                 <Route path="patients/:id" element={<PatientProfilePage />} />
-                <Route path="patients/:id/records/new" element={<NewClinicalRecordPage />} />
                 <Route path="appointments/new" element={<NewAppointmentPage />} />
                 <Route path="appointments/:id" element={<AppointmentPage />} />
                 <Route path="ai-drafts/:id" element={<AIDraftPage />} />
