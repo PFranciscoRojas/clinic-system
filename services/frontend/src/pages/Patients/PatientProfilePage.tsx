@@ -8,6 +8,7 @@ import {
   Pencil, Target,
 } from 'lucide-react';
 import { EditPatientModal } from '@/components/patients/EditPatientModal';
+import { LateSessionModal } from '@/components/appointments/LateSessionModal';
 import { patientsApi } from '@/api/patients';
 import { calcAge } from '@/lib/age';
 import { useIsMobile } from '@/lib/useMediaQuery';
@@ -457,6 +458,7 @@ export function PatientProfilePage() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>('historial');
   const [editOpen, setEditOpen] = useState(false);
+  const [lateOpen, setLateOpen] = useState(false);
 
   // Patient query
   const { data: patient, isLoading: patLoading, isError } = useQuery({
@@ -627,6 +629,13 @@ export function PatientProfilePage() {
                 <Pencil size={13} /> Editar datos
               </button>
               <button
+                onClick={() => setLateOpen(true)}
+                title="Registrar una sesión que ocurrió pero no se registró a tiempo"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: '#92400e', border: '1px solid #fcd34d', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+              >
+                <Clock size={13} /> Sesión pasada
+              </button>
+              <button
                 onClick={() => navigate(`/appointments/new?patient_id=${patient.id}`)}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
               >
@@ -690,6 +699,7 @@ export function PatientProfilePage() {
           onSaved={() => queryClient.invalidateQueries({ queryKey: ['patient', id] })}
         />
       )}
+      {lateOpen && <LateSessionModal patientId={id!} onClose={() => setLateOpen(false)} />}
     </div>
   );
 }
