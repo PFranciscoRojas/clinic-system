@@ -17,7 +17,9 @@ logger = logging.getLogger(__name__)
 STREAM_NAME = "ai_jobs"
 CONSUMER_GROUP = "ai-service"
 CONSUMER_NAME = "ai-worker-1"
-BLOCK_MS = 5_000
+# Must stay under 5s: redis-py 8.x enforces an internal 5s read timeout
+# even with socket_timeout=None, so BLOCK >= 5000 raises TimeoutError
+BLOCK_MS = 4_000
 BATCH_SIZE = 5
 
 

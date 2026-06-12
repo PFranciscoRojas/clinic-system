@@ -21,8 +21,6 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Self-service password change (`POST /auth/change-password`) with a "Cambiar contraseña" card in Settings → Seguridad
 - Global header search now works: searches patients by last name or document number with a results dropdown
 - Dashboard clinical inbox shows real data: pending web booking requests and today's appointments past their slot but not completed
-
-### Added
 - Unified consent signing: the patient checks what they authorize (treatment and data processing required; recording and information-sharing optional), reads each document and signs once — each authorization still becomes an independent, separately revocable consent record
 - "Sesión pasada" on the patient profile registers an extemporaneous entry: appointment created at its real past date, mandatory justification stored in the encrypted record and disclosed in the history and the exported PDF ("Carácter del registro: Extemporáneo", Res. 1995/1999)
 - Working schedule persisted server-side (`professional_profiles.working_hours` + GET/PUT /me/professional-profile/schedule) — follows the professional across devices; localStorage stays as offline cache
@@ -42,6 +40,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Valueless counters removed: patients KPI strip (total/active/inactive/"con contacto"), the "Pacientes activos" dashboard tile, and the always-empty "Sesiones / Próxima cita" block on patient cards
 
 ### Fixed
+- AI service can now actually be built and deployed: the Docker image declared a nonexistent build backend and shipped without its installed dependencies; it also crashed on boot (invalid uvicorn log flag, redis password with special characters breaking the connection URL, and redis-py 8.x's 5s read timeout aborting the worker's blocking reads)
 - Half-typed birth dates (e.g. only the year) are now rejected on save instead of silently storing no date
 - Header patient search no longer gets autofilled with the login email by the browser
 - Onboarding wizard no longer reappears for existing users on a new browser: completion is persisted server-side (`users.onboarding_completed_at`, migration 000014) and returned by `GET /auth/me`
