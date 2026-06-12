@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Search, Plus, Users, UserCheck, UserX,
+  Search, Plus, Users,
   AlertCircle, X, CreditCard, Filter,
   LayoutGrid, List, Eye, CalendarPlus,
   Mail, Phone, Heart, UserPlus, ClipboardList,
@@ -40,28 +40,6 @@ function fullName(p: Patient): string {
 
 function abbr(p: Patient): string {
   return [p.first_name?.[0], p.paternal_last_name?.[0]].filter(Boolean).join('').toUpperCase() || '?';
-}
-
-// ── KPI Card ──────────────────────────────────────────────────────────────────
-
-function KpiCard({ icon: Icon, color, label, value }: {
-  icon: React.ElementType; color: string; label: string; value: number | string;
-}) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 10,
-      padding: '10px 16px', background: 'var(--s50)',
-      borderRadius: 10, border: '1px solid var(--s200)', flexShrink: 0, minWidth: 155,
-    }}>
-      <div style={{ width: 34, height: 34, borderRadius: 9, background: color + '1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Icon size={16} color={color} />
-      </div>
-      <div>
-        <div style={{ fontSize: 20, fontWeight: 800, color, lineHeight: 1, letterSpacing: '-0.5px' }}>{value}</div>
-        <div style={{ fontSize: 11, color: 'var(--s500)', marginTop: 2 }}>{label}</div>
-      </div>
-    </div>
-  );
 }
 
 // ── StatusBadge ───────────────────────────────────────────────────────────────
@@ -164,18 +142,6 @@ function PatientCard({ patient, onClick, onOpenProfile }: { patient: Patient; on
           )}
         </div>
 
-        {/* Stats placeholder */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '10px 12px', background: 'var(--s50)', borderRadius: 9, marginBottom: 12 }}>
-          <div>
-            <div style={{ fontSize: 10, color: 'var(--s400)', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '.04em' }}>Sesiones</div>
-            <div style={{ fontSize: 16, fontWeight: 800, color, letterSpacing: '-0.5px' }}>—</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 10, color: 'var(--s400)', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '.04em' }}>Próxima cita</div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--s500)', marginTop: 2 }}>—</div>
-          </div>
-        </div>
-
         {/* Action */}
         <button
           onClick={e => { e.stopPropagation(); onOpenProfile(); }}
@@ -206,7 +172,7 @@ function TableHeader() {
   );
 }
 
-function PatientTableRow({ patient, isLast, onClick }: { patient: Patient; isLast: boolean; onClick: () => void }) {
+function PatientTableRow({ patient, isLast, onQuickView, onOpenProfile }: { patient: Patient; isLast: boolean; onQuickView: () => void; onOpenProfile: () => void }) {
   const color = avatarColor(patient.paternal_last_name);
   const age   = calcAge(patient.birth_date);
   const name  = fullName(patient);
@@ -215,7 +181,7 @@ function PatientTableRow({ patient, isLast, onClick }: { patient: Patient; isLas
   return (
     <div
       style={{ display: 'grid', gridTemplateColumns: TABLE_COLS, padding: '12px 20px', borderBottom: isLast ? 'none' : '1px solid var(--s100)', alignItems: 'center', gap: 12, cursor: 'pointer', transition: 'background .1s' }}
-      onClick={onClick}
+      onClick={onOpenProfile}
       onMouseEnter={e => (e.currentTarget.style.background = 'var(--s50)')}
       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
     >
@@ -260,7 +226,7 @@ function PatientTableRow({ patient, isLast, onClick }: { patient: Patient; isLas
       {/* Actions */}
       <div style={{ display: 'flex', gap: 5 }}>
         <button
-          onClick={e => { e.stopPropagation(); onClick(); }}
+          onClick={e => { e.stopPropagation(); onQuickView(); }}
           title="Vista rápida"
           style={{ border: '1.5px solid var(--s200)', background: '#fff', borderRadius: 7, padding: '5px 8px', display: 'flex', transition: 'all .12s', cursor: 'pointer' }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--teal)'; }}
@@ -434,7 +400,10 @@ const LIMIT = 50;
 export function PatientsPage() {
   const navigate = useNavigate();
 
-  const [viewMode,      setViewMode]      = useState<ViewMode>('grid');
+  const [viewMode,      setViewMode]      = useState<ViewMode>(
+    () => (localStorage.getItem('sghcp_patients_view') as ViewMode) || 'grid'
+  );
+  const changeView = (v: ViewMode) => { setViewMode(v); localStorage.setItem('sghcp_patients_view', v); };
   const [selected,      setSelected]      = useState<Patient | null>(null);
   const [q,             setQ]             = useState('');
   const [searchMode,    setSearchMode]    = useState<SearchMode>('last_name');
@@ -475,24 +444,15 @@ export function PatientsPage() {
     return all;
   }, [all, statusFilter]);
 
-  const total       = all.length;
-  const actives     = all.filter(p => p.is_active).length;
-  const inactive    = all.filter(p => !p.is_active).length;
-  const withContact = all.filter(p => p.email || p.phone).length;
+  const total    = all.length;
+  const actives  = all.filter(p => p.is_active).length;
+  const inactive = all.filter(p => !p.is_active).length;
 
   const handleQ = (v: string) => { setQ(v); setPage(0); };
   const modeLabel = searchMode === 'last_name' ? 'Apellido paterno' : 'Nº documento';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - var(--topbar-h))', overflow: 'hidden' }}>
-
-      {/* ── KPI strip ───────────────────────────────────────────────────────── */}
-      <div style={{ background: '#fff', borderBottom: '1px solid var(--s200)', padding: '10px 24px', display: 'flex', gap: 10, flexShrink: 0, overflowX: 'auto' }}>
-        <KpiCard icon={Users}       color="var(--s700)"  label="Total pacientes"   value={isLoading ? '—' : total}       />
-        <KpiCard icon={UserCheck}   color="#10b981"      label="Activos"           value={isLoading ? '—' : actives}     />
-        <KpiCard icon={UserX}       color="#f59e0b"      label="Inactivos"         value={isLoading ? '—' : inactive}    />
-        <KpiCard icon={Phone}       color="#6366f1"      label="Con contacto"      value={isLoading ? '—' : withContact} />
-      </div>
 
       {/* ── Filters toolbar ─────────────────────────────────────────────────── */}
       <div style={{ background: '#fff', borderBottom: '1px solid var(--s200)', padding: '10px 24px', display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
@@ -582,7 +542,7 @@ export function PatientsPage() {
           ] as const).map(({ id, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => setViewMode(id)}
+              onClick={() => changeView(id)}
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 28, borderRadius: 7, border: 'none', background: viewMode === id ? '#fff' : 'transparent', boxShadow: viewMode === id ? '0 1px 4px rgba(0,0,0,.08)' : 'none', transition: 'all .15s', cursor: 'pointer' }}
             >
               <Icon size={14} color={viewMode === id ? 'var(--teal)' : 'var(--s400)'} />
@@ -634,7 +594,8 @@ export function PatientsPage() {
                 key={p.id}
                 patient={p}
                 isLast={idx === shown.length - 1}
-                onClick={() => setSelected(p)}
+                onQuickView={() => setSelected(p)}
+                onOpenProfile={() => navigate(`/patients/${p.id}`)}
               />
             ))}
           </div>
