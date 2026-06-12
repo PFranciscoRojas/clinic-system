@@ -23,6 +23,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Dashboard clinical inbox shows real data: pending web booking requests and today's appointments past their slot but not completed
 
 ### Added
+- Unified consent signing: the patient checks what they authorize (treatment and data processing required; recording and information-sharing optional), reads each document and signs once — each authorization still becomes an independent, separately revocable consent record
+- "Sesión pasada" on the patient profile registers an extemporaneous entry: appointment created at its real past date, mandatory justification stored in the encrypted record and disclosed in the history and the exported PDF ("Carácter del registro: Extemporáneo", Res. 1995/1999)
+- Working schedule persisted server-side (`professional_profiles.working_hours` + GET/PUT /me/professional-profile/schedule) — follows the professional across devices; localStorage stays as offline cache
 - Session timer while the appointment is in progress: elapsed/remaining time next to "Finalizar sesión", amber warning at 10 minutes left, red when over time
 - Grace window for the session note: after "Finalizar sesión" the record form stays available until the note is written (next patient can be attended first); the note stores the real session date and the dashboard inbox lists "Nota de sesión pendiente" reminders
 

@@ -14,7 +14,7 @@ import { calcAge } from '@/lib/age';
 import { useIsCompact } from '@/lib/useMediaQuery';
 import { clinicalRecordsApi, consentsApi, type RecordMeta } from '@/api/clinicalRecords';
 import { ConsentViewModal } from '@/components/consents/ConsentViewModal';
-import { ConsentSignModal } from '@/components/consents/ConsentSignModal';
+import { UnifiedConsentSignModal } from '@/components/consents/UnifiedConsentSignModal';
 import { RecordForm } from '@/components/clinical/RecordForm';
 import { aiDraftsApi } from '@/api/aiDrafts';
 import { useAuth } from '@/context/AuthContext';
@@ -680,12 +680,11 @@ export function AppointmentPage() {
 
       {viewConsentId && <ConsentViewModal consentId={viewConsentId} onClose={() => setViewConsentId(null)} />}
       {signConsentOpen && appt.patient_id && (
-        <ConsentSignModal
+        <UnifiedConsentSignModal
           patientId={appt.patient_id}
-          consentType="TREATMENT"
+          alreadySigned={(consentsData?.items ?? []).filter(c => !c.revoked_at).map(c => c.consent_type)}
           onClose={() => setSignConsentOpen(false)}
           onSigned={() => {
-            setSignConsentOpen(false);
             queryClient.invalidateQueries({ queryKey: ['consents', appt.patient_id] });
           }}
         />

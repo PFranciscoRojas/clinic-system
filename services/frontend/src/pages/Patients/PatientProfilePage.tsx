@@ -17,6 +17,7 @@ import { clinicalRecordsApi, consentsApi, type RecordMeta, type Consent, type Co
 import { diagnosesApi } from '@/api/diagnoses';
 import { Spinner } from '@/components/ui/Spinner';
 import { ConsentSignModal } from '@/components/consents/ConsentSignModal';
+import { UnifiedConsentSignModal } from '@/components/consents/UnifiedConsentSignModal';
 import { ConsentViewModal } from '@/components/consents/ConsentViewModal';
 import { DiagnosesPanel } from '@/components/clinical/DiagnosesPanel';
 import { TreatmentPlanPanel } from '@/components/clinical/TreatmentPlanPanel';
@@ -273,6 +274,7 @@ const METHOD_SHORT: Record<string, string> = {
 function ConsentimientosTab({ patientId }: { patientId: string }) {
   const queryClient = useQueryClient();
   const [signType, setSignType] = useState<ConsentType | null>(null);
+  const [unifiedOpen, setUnifiedOpen] = useState(false);
   const [viewId, setViewId] = useState<string | null>(null);
   const [revokeId, setRevokeId] = useState<string | null>(null);
   const [revokeReason, setRevokeReason] = useState('');
@@ -352,11 +354,19 @@ function ConsentimientosTab({ patientId }: { patientId: string }) {
 
   return (
     <div className="anim-fade-in" style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflowX: 'auto' }}>
-      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--s100)' }}>
-        <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--s800)' }}>Documentos de consentimiento</span>
-        <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--s400)' }}>
-          Firma en consultorio, envío por link al email del paciente, o carga del documento firmado físicamente.
-        </p>
+      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--s100)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--s800)' }}>Documentos de consentimiento</span>
+          <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--s400)' }}>
+            Firma en consultorio, envío por link al email del paciente, o carga del documento firmado físicamente.
+          </p>
+        </div>
+        <button
+          onClick={() => setUnifiedOpen(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: 'var(--teal)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}
+        >
+          <FileText size={14} /> Firmar consentimientos
+        </button>
       </div>
 
       <input
@@ -438,6 +448,14 @@ function ConsentimientosTab({ patientId }: { patientId: string }) {
         })
       )}
 
+      {unifiedOpen && (
+        <UnifiedConsentSignModal
+          patientId={patientId}
+          alreadySigned={consents.filter(c => !c.revoked_at).map(c => c.consent_type)}
+          onClose={() => setUnifiedOpen(false)}
+          onSigned={invalidate}
+        />
+      )}
       {signType && (
         <ConsentSignModal
           patientId={patientId}
