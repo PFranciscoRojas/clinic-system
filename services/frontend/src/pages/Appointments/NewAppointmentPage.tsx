@@ -15,6 +15,7 @@ import { Spinner } from '../../components/ui/Spinner';
 import { PatientSearchBox } from '../../components/patients/PatientSearchBox';
 import { useAuth } from '../../context/AuthContext';
 import { loadSchedule, isWorkingDay, dayLabelOf, type ScheduleConfig } from '../../lib/schedule';
+import { useIsCompact } from '../../lib/useMediaQuery';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -624,6 +625,7 @@ const secondaryBtn: React.CSSProperties = {
 
 export function NewAppointmentPage() {
   const navigate = useNavigate();
+  const compact = useIsCompact();
   const [searchParams] = useSearchParams();
   const returnPatientId = searchParams.get('patient_id');
   const { user } = useAuth();
@@ -788,14 +790,14 @@ export function NewAppointmentPage() {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: '300px 1fr 272px',
-      height: 'calc(100vh - var(--topbar-h))',
-      overflow: 'hidden',
+      gridTemplateColumns: compact ? '1fr' : '300px 1fr 272px',
+      ...(compact ? { minHeight: 'calc(100vh - var(--topbar-h))' } : { height: 'calc(100vh - var(--topbar-h))', overflow: 'hidden' }),
     }}>
       {/* ── Column 1: Calendar + Patient ──────────────────────────────── */}
       <div style={{
-        background: '#fff', borderRight: '1px solid var(--s200)',
-        padding: '24px 20px', overflowY: 'auto',
+        background: '#fff', borderRight: compact ? 'none' : '1px solid var(--s200)',
+        borderBottom: compact ? '1px solid var(--s200)' : 'none',
+        padding: compact ? '16px 14px' : '24px 20px', overflowY: compact ? 'visible' : 'auto',
         display: 'flex', flexDirection: 'column',
       }}>
         <button
@@ -853,7 +855,7 @@ export function NewAppointmentPage() {
       </div>
 
       {/* ── Column 2: Main form ────────────────────────────────────────── */}
-      <div style={{ background: 'var(--s50)', padding: '24px 28px', overflowY: 'auto' }}>
+      <div style={{ background: 'var(--s50)', padding: compact ? '20px 14px' : '24px 28px', overflowY: compact ? 'visible' : 'auto' }}>
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--s800)', margin: 0 }}>
             Nueva cita
@@ -1068,8 +1070,9 @@ export function NewAppointmentPage() {
 
       {/* ── Column 3: Summary ─────────────────────────────────────────── */}
       <div style={{
-        background: '#fff', borderLeft: '1px solid var(--s200)',
-        padding: '24px 18px', overflowY: 'auto',
+        background: '#fff', borderLeft: compact ? 'none' : '1px solid var(--s200)',
+        borderTop: compact ? '1px solid var(--s200)' : 'none',
+        padding: compact ? '20px 14px' : '24px 18px', overflowY: compact ? 'visible' : 'auto',
       }}>
         <SummaryPanel
           patient={patient}

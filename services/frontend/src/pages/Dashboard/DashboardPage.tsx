@@ -12,6 +12,7 @@ import { patientsApi, type Patient } from '@/api/patients';
 import { bookingRequestsApi } from '@/api/bookingRequests';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
+import { useIsCompact } from '@/lib/useMediaQuery';
 import { AgendaCalendar } from './AgendaCalendar';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -372,6 +373,7 @@ export function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [filter, setFilter]             = useState<FilterTab>('all');
 
+  const compact = useIsCompact();
   const displayName = user?.display_name || user?.email?.split('@')[0] || user?.email || '';
 
   // ── Day query ─────────────────────────────────────────────────────────────
@@ -446,7 +448,7 @@ export function DashboardPage() {
   }, [filtered, nowMs, isToday]);
 
   return (
-    <div style={{ height: 'calc(100vh - var(--topbar-h))', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', ...(compact ? { minHeight: 'calc(100vh - var(--topbar-h))' } : { height: 'calc(100vh - var(--topbar-h))', overflow: 'hidden' }) }}>
 
       {/* ── Sub-tab bar ─────────────────────────────────────────────────────── */}
       <div style={{
@@ -489,12 +491,12 @@ export function DashboardPage() {
 
       {/* ── Agenda tab ──────────────────────────────────────────────────────── */}
       {mainTab === 'agenda' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', flex: 1, overflow: 'hidden' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: compact ? '1fr' : '1fr 260px', flex: 1, overflow: compact ? 'visible' : 'hidden' }}>
           {/* Left column */}
-          <div style={{ overflowY: 'auto', padding: '28px 32px' }}>
+          <div style={{ overflowY: compact ? 'visible' : 'auto', padding: compact ? '20px 16px' : '28px 32px' }}>
 
             {/* Greeting + date nav */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
               <div>
                 <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--s800)', margin: '0 0 4px' }}>
                   {greeting(displayName)}
@@ -540,7 +542,7 @@ export function DashboardPage() {
 
             {/* Agenda del día */}
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <CalendarDays size={16} color="var(--teal)" />
                   <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--s800)', margin: 0 }}>Agenda del día</h2>
@@ -551,7 +553,7 @@ export function DashboardPage() {
                   )}
                 </div>
 
-                <div style={{ display: 'flex', gap: 4 }}>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                   {FILTER_TABS.map(tab => (
                     <button
                       key={tab.key}
@@ -602,9 +604,10 @@ export function DashboardPage() {
 
           {/* Right column: Inbox + Acciones rápidas */}
           <div style={{
-            borderLeft: '1px solid var(--s200)',
-            overflowY: 'auto',
-            padding: '28px 18px',
+            borderLeft: compact ? 'none' : '1px solid var(--s200)',
+            borderTop: compact ? '1px solid var(--s200)' : 'none',
+            overflowY: compact ? 'visible' : 'auto',
+            padding: compact ? '20px 16px' : '28px 18px',
             display: 'flex', flexDirection: 'column', gap: 24,
           }}>
             <div>

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { patientsApi, type Patient } from '@/api/patients';
 import { calcAge } from '@/lib/age';
+import { useIsMobile, useIsCompact } from '@/lib/useMediaQuery';
 import { Spinner } from '@/components/ui/Spinner';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -266,7 +267,7 @@ function QuickViewPanel({ patient, onClose }: { patient: Patient; onClose: () =>
     >
       <div
         className="anim-scale-in"
-        style={{ width: 380, background: '#fff', boxShadow: '-8px 0 40px rgba(0,0,0,0.14)', overflow: 'auto', display: 'flex', flexDirection: 'column' }}
+        style={{ width: 380, maxWidth: '92vw', background: '#fff', boxShadow: '-8px 0 40px rgba(0,0,0,0.14)', overflow: 'auto', display: 'flex', flexDirection: 'column' }}
       >
         {/* Header */}
         <div style={{ padding: '20px 22px', borderBottom: '1px solid var(--s200)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
@@ -399,6 +400,8 @@ const LIMIT = 50;
 
 export function PatientsPage() {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
+  const compact  = useIsCompact();
 
   const [viewMode,      setViewMode]      = useState<ViewMode>(
     () => (localStorage.getItem('sghcp_patients_view') as ViewMode) || 'grid'
@@ -451,8 +454,11 @@ export function PatientsPage() {
   const handleQ = (v: string) => { setQ(v); setPage(0); };
   const modeLabel = searchMode === 'last_name' ? 'Apellido paterno' : 'Nº documento';
 
+  // The fixed-column table doesn't fit a phone — always show cards there.
+  const effectiveView: ViewMode = isMobile ? 'grid' : viewMode;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - var(--topbar-h))', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', ...(compact ? { minHeight: 'calc(100vh - var(--topbar-h))' } : { height: 'calc(100vh - var(--topbar-h))', overflow: 'hidden' }) }}>
 
       {/* ── Filters toolbar ─────────────────────────────────────────────────── */}
       <div style={{ background: '#fff', borderBottom: '1px solid var(--s200)', padding: '10px 24px', display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
@@ -580,7 +586,7 @@ export function PatientsPage() {
             filter={statusFilter}
             onNew={() => navigate('/patients/new')}
           />
-        ) : viewMode === 'grid' ? (
+        ) : effectiveView === 'grid' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
             {shown.map(p => (
               <PatientCard key={p.id} patient={p} onClick={() => setSelected(p)} onOpenProfile={() => navigate(`/patients/${p.id}`)} />

@@ -15,6 +15,7 @@ import { consentTemplatesApi, type ConsentType } from '@/api/clinicalRecords';
 import { profilesApi, splitName, type Specialty } from '@/api/profiles';
 import { ACCENT_COLORS, saveAccentColor } from '@/lib/theme';
 import { loadSchedule, saveSchedule } from '@/lib/schedule';
+import { useIsCompact } from '@/lib/useMediaQuery';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1141,11 +1142,31 @@ export function SettingsPage() {
 
   const markDirty = (v: boolean) => setDirty(v);
   const activeSection = SECTIONS.find(s => s.id === section)!;
+  const compact = useIsCompact();
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - var(--topbar-h))', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: compact ? 'column' : 'row', ...(compact ? { minHeight: 'calc(100vh - var(--topbar-h))' } : { height: 'calc(100vh - var(--topbar-h))', overflow: 'hidden' }) }}>
 
-      {/* ── Settings nav ────────────────────────────────────────────────────── */}
+      {/* ── Settings nav: side column on desktop, scrollable tab bar on small screens */}
+      {compact ? (
+        <div style={{ background: '#fff', borderBottom: '1px solid var(--s200)', overflowX: 'auto', flexShrink: 0 }}>
+          <nav style={{ display: 'flex', gap: 4, padding: '8px 10px', minWidth: 'max-content' }}>
+            {SECTIONS.map(item => {
+              const on = section === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setSection(item.id)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, border: 'none', background: on ? 'var(--teal-l)' : 'transparent', color: on ? 'var(--teal-d)' : 'var(--s600)', fontSize: 12.5, fontWeight: on ? 700 : 400, whiteSpace: 'nowrap', cursor: 'pointer' }}
+                >
+                  <item.icon size={14} color={on ? 'var(--teal)' : 'var(--s400)'} />
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      ) : (
       <div style={{ width: 220, flexShrink: 0, background: '#fff', borderRight: '1px solid var(--s200)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--s100)' }}>
           <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--s800)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1174,9 +1195,10 @@ export function SettingsPage() {
           <div style={{ fontSize: 11, color: 'var(--s300)', marginTop: 2 }}>Ley 1581/2012 · Res. 1995/1999</div>
         </div>
       </div>
+      )}
 
       {/* ── Content area ─────────────────────────────────────────────────────── */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: compact ? 'visible' : 'hidden', minWidth: 0 }}>
         {/* Section topbar */}
         <div style={{ height: 52, flexShrink: 0, background: '#fff', borderBottom: '1px solid var(--s200)', display: 'flex', alignItems: 'center', padding: '0 28px', gap: 10 }}>
           <activeSection.icon size={16} color={activeSection.color ?? 'var(--teal)'} />
@@ -1194,8 +1216,8 @@ export function SettingsPage() {
         </div>
 
         {/* Scrollable sections */}
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          <div style={{ padding: '24px 28px', maxWidth: 780 }}>
+        <div style={{ flex: 1, overflow: compact ? 'visible' : 'auto' }}>
+          <div style={{ padding: compact ? '18px 14px' : '24px 28px', maxWidth: 780 }}>
             {section === 'profile'       && <ProfileSection       setDirty={markDirty} />}
             {section === 'schedule'      && <ScheduleSection />}
             {section === 'notifications' && <NotificationsSection setDirty={markDirty} />}
