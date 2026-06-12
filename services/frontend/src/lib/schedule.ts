@@ -43,6 +43,31 @@ export function saveSchedule(cfg: ScheduleConfig) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
 }
 
+// ── Server sync ───────────────────────────────────────────────────────────────
+// The schedule lives in professional_profiles.working_hours so it follows the
+// professional across devices; localStorage is the offline cache.
+
+export async function fetchScheduleFromServer(): Promise<ScheduleConfig | null> {
+  const { profilesApi } = await import('@/api/profiles');
+  try {
+    const { schedule } = await profilesApi.getSchedule();
+    if (schedule && typeof schedule === 'object') {
+      const merged = { ...DEFAULT_SCHEDULE, ...(schedule as Partial<ScheduleConfig>) };
+      saveSchedule(merged); // refresh the cache
+      return merged;
+    }
+  } catch { /* no profile yet or offline — cache/defaults apply */ }
+  return null;
+}
+
+export async function persistSchedule(cfg: ScheduleConfig): Promise<void> {
+  saveSchedule(cfg);
+  try {
+    const { profilesApi } = await import('@/api/profiles');
+    await profilesApi.saveSchedule(cfg);
+  } catch { /* offline or no profile — cached locally, syncs on next save */ }
+}
+
 export function dayLabelOf(isoDate: string): string {
   return DAY_LABELS[new Date(isoDate + 'T12:00:00').getDay()];
 }

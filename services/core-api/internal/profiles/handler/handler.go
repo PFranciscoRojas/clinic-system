@@ -142,6 +142,70 @@ func (h *Handler) upsertOwn(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
+// GET /api/v1/me/professional-profile/schedule
+// Working hours drive the slot grid in the scheduler; stored server-side so
+// the configuration follows the professional across devices.
+func (h *Handler) getSchedule(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+
+	var raw []byte
+	err := h.db.QueryRow(r.Context(), `
+		SELECT COALESCE(pp.working_hours, 'null'::jsonb)
+		FROM professional_profiles pp
+		JOIN users u ON u.id = pp.user_id
+		WHERE pp.user_id = $1 AND u.organization_id = $2
+	`, claims.UserID, claims.OrganizationID).Scan(&raw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		httputil.WriteError(w, http.StatusNotFound, "professional profile not found")
+		return
+	}
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "could not load schedule")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`{"schedule":` + string(raw) + `}`))
+}
+
+// PUT /api/v1/me/professional-profile/schedule
+func (h *Handler) putSchedule(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+
+	var body struct {
+		Schedule json.RawMessage `json:"schedule"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.Schedule) == 0 {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	// Must be a JSON object (the frontend's ScheduleConfig shape).
+	var probe map[string]any
+	if err := json.Unmarshal(body.Schedule, &probe); err != nil {
+		httputil.WriteError(w, http.StatusUnprocessableEntity, "schedule must be a JSON object")
+		return
+	}
+
+	tag, err := h.db.Exec(r.Context(), `
+		UPDATE professional_profiles pp
+		SET working_hours = $3, updated_at = NOW()
+		FROM users u
+		WHERE pp.user_id = $1 AND u.id = pp.user_id AND u.organization_id = $2
+	`, claims.UserID, claims.OrganizationID, body.Schedule)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "could not save schedule")
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		httputil.WriteError(w, http.StatusNotFound, "professional profile not found — complete it first")
+		return
+	}
+
+	h.audit.Record(r, "SCHEDULE_UPDATE", "professional_profile", claims.UserID)
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
 func toResponse(p *profiles.Profile) map[string]any {
 	return map[string]any{
 		"user_id":            p.UserID,

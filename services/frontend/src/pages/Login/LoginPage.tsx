@@ -286,6 +286,7 @@ export function LoginPage() {
     setPinErr(''); setSaving(true);
     localStorage.setItem('sghcp_profile', JSON.stringify({ name, regNum, phone }));
     localStorage.setItem('sghcp_schedule', JSON.stringify({ activeDays, startHour, endHour, sessionLen }));
+    // Server copy saved after the professional profile below (needs the row to exist).
     localStorage.setItem('sghcp_ai_prefs', JSON.stringify({ aiEnabled, soapStyle, reminders }));
     localStorage.setItem(`sghcp_pin_${user.user_id}`, pin);
     localStorage.setItem(`sghcp_onboarding_done_${user.user_id}`, 'true');
@@ -310,6 +311,10 @@ export function LoginPage() {
           phone: phone.trim(),
         });
       } catch { /* non-blocking — editable later in Settings */ }
+      try {
+        const { profilesApi: papi } = await import('@/api/profiles');
+        await papi.saveSchedule({ activeDays, startHour, endHour, sessionLen });
+      } catch { /* cached locally; syncs from Settings later */ }
     }
     setSaving(false);
     setDone(true);
