@@ -9,16 +9,17 @@ import { RECORD_TYPE_LABELS } from './constants';
 
 interface RecordFormProps {
   patientId: string;
-  /** Optional — walk-ins and retroactive notes have no appointment. */
   appointmentId?: string;
+  /** Inferred from the patient's history: INITIAL when no open process, else EVOLUTION. */
+  defaultType?: RecordType;
   onSaved: () => void;
 }
 
 const V2_TYPES = ['INITIAL', 'EVOLUTION', 'DISCHARGE'] as const;
 
-export function RecordForm({ patientId, appointmentId, onSaved }: RecordFormProps) {
+export function RecordForm({ patientId, appointmentId, defaultType, onSaved }: RecordFormProps) {
   const storageKey = appointmentId ? `clinical-draft-${appointmentId}` : `clinical-draft-patient-${patientId}`;
-  const [recordType, setRecordType] = useState<RecordType>('EVOLUTION');
+  const [recordType, setRecordType] = useState<RecordType>(defaultType ?? 'EVOLUTION');
   const [draft, setDraft] = useState<ClinicalDraft>(emptyDraft);
   const [sessionDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [saving, setSaving] = useState(false);

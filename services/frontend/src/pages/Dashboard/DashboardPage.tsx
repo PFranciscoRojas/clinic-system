@@ -370,7 +370,15 @@ export function DashboardPage() {
     () => (localStorage.getItem('sghcp_agenda_tab') as 'agenda' | 'calendario') || 'agenda'
   );
   const changeTab = (t: 'agenda' | 'calendario') => { setMainTab(t); localStorage.setItem('sghcp_agenda_tab', t); };
-  const [selectedDate, setSelectedDate] = useState(todayISO());
+  // Survives navigating into an appointment and back (per-tab, resets on close).
+  const [selectedDate, setSelectedDateRaw] = useState(() => sessionStorage.getItem('sghcp_agenda_date') || todayISO());
+  const setSelectedDate = (v: string | ((prev: string) => string)) => {
+    setSelectedDateRaw(prev => {
+      const next = typeof v === 'function' ? v(prev) : v;
+      sessionStorage.setItem('sghcp_agenda_date', next);
+      return next;
+    });
+  };
   const [filter, setFilter]             = useState<FilterTab>('all');
 
   const compact = useIsCompact();
@@ -422,7 +430,6 @@ export function DashboardPage() {
   const filtered = useMemo(() => filterAppts(sorted, filter), [sorted, filter]);
 
   // Stats
-  const todayActive     = todayAppointments.filter(a => a.status !== 'CANCELLED').length;
   const completedToday  = todayAppointments.filter(a => a.status === 'COMPLETED').length;
   const inProgressAppt  = sorted.find(a => isInProgress(a));
   const isToday         = selectedDate === today;
@@ -503,6 +510,7 @@ export function DashboardPage() {
                 </h1>
                 <p style={{ fontSize: 13, color: 'var(--s500)', margin: 0, textTransform: 'capitalize' }}>
                   {fmtShortDate(selectedDate)} · {sorted.filter(a => a.status !== 'CANCELLED').length} citas agendadas
+                  {isToday && completedToday > 0 ? ` · ${completedToday} completada${completedToday !== 1 ? 's' : ''}` : ''}
                 </p>
               </div>
 
@@ -526,18 +534,6 @@ export function DashboardPage() {
                   <ChevronRight size={16} />
                 </button>
               </div>
-            </div>
-
-            {/* Stats cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 300px)', gap: 14, marginBottom: 28 }}>
-              <StatCard
-                icon={CalendarDays}
-                iconColor="#0ea5e9"
-                badge={completedToday > 0 ? `${completedToday} completadas` : undefined}
-                badgeColor="#0ea5e9"
-                value={todayActive}
-                label="Citas de hoy"
-              />
             </div>
 
             {/* Agenda del día */}
@@ -703,34 +699,3 @@ const navBtn: React.CSSProperties = {
   cursor: 'pointer', color: 'var(--s600)',
 };
 
-// ─── StatCard ─────────────────────────────────────────────────────────────────
-
-function StatCard({ icon: Icon, iconColor, badge, badgeColor, value, label }: {
-  icon: React.ElementType;
-  iconColor: string;
-  badge?: string;
-  badgeColor?: string;
-  value: string | number;
-  label: string;
-}) {
-  return (
-    <div style={{
-      background: '#fff', borderRadius: 14, padding: '18px 20px',
-      border: '1px solid var(--s200)',
-      boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <div style={{ width: 34, height: 34, borderRadius: 9, background: iconColor + '18', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Icon size={17} color={iconColor} />
-        </div>
-        {badge && (
-          <span style={{ fontSize: 10, fontWeight: 600, color: badgeColor, background: (badgeColor ?? '#000') + '15', padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {badge}
-          </span>
-        )}
-      </div>
-      <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--s800)', lineHeight: 1 }}>{value}</div>
-      <div style={{ fontSize: 12, color: 'var(--s500)', marginTop: 4 }}>{label}</div>
-    </div>
-  );
-}
