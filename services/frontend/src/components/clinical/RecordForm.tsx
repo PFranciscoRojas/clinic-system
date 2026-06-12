@@ -14,12 +14,14 @@ interface RecordFormProps {
   defaultType?: RecordType;
   /** Real session date (the appointment's), not the writing date. */
   sessionDate?: string;
+  /** Mandatory justification when registering a past session (extemporaneous entry). */
+  lateEntryReason?: string;
   onSaved: () => void;
 }
 
 const V2_TYPES = ['INITIAL', 'EVOLUTION', 'DISCHARGE'] as const;
 
-export function RecordForm({ patientId, appointmentId, defaultType, sessionDate: sessionDateProp, onSaved }: RecordFormProps) {
+export function RecordForm({ patientId, appointmentId, defaultType, sessionDate: sessionDateProp, lateEntryReason, onSaved }: RecordFormProps) {
   const storageKey = appointmentId ? `clinical-draft-${appointmentId}` : `clinical-draft-patient-${patientId}`;
   const [recordType, setRecordType] = useState<RecordType>(defaultType ?? 'EVOLUTION');
   const [draft, setDraft] = useState<ClinicalDraft>(emptyDraft);
@@ -71,11 +73,13 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
     if (validation) { setErr(validation); return; }
     setSaving(true); setErr('');
     try {
+      const payload = draftToPayload(recordType, draft);
+      if (lateEntryReason?.trim()) payload.sections.late_entry_reason = lateEntryReason.trim();
       await clinicalRecordsApi.create(patientId, {
         ...(appointmentId ? { appointment_id: appointmentId } : {}),
         record_type: recordType,
         session_date: sessionDate,
-        ...draftToPayload(recordType, draft),
+        ...payload,
       });
       localStorage.removeItem(storageKey);
       onSaved();

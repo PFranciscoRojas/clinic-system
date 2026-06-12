@@ -14,7 +14,7 @@ import { patientsApi, Patient } from '../../api/patients';
 import { Spinner } from '../../components/ui/Spinner';
 import { PatientSearchBox } from '../../components/patients/PatientSearchBox';
 import { useAuth } from '../../context/AuthContext';
-import { loadSchedule, isWorkingDay, dayLabelOf, type ScheduleConfig } from '../../lib/schedule';
+import { loadSchedule, fetchScheduleFromServer, isWorkingDay, dayLabelOf, type ScheduleConfig } from '../../lib/schedule';
 import { useIsCompact } from '../../lib/useMediaQuery';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -630,8 +630,15 @@ export function NewAppointmentPage() {
   const returnPatientId = searchParams.get('patient_id');
   const { user } = useAuth();
 
-  // Working hours configured in onboarding / Settings → Horario y agenda
-  const schedule = useMemo(() => loadSchedule(), []);
+  // Working hours configured in onboarding / Settings → Horario y agenda.
+  // Server copy wins (follows the professional across devices); cache covers offline.
+  const { data: serverSchedule } = useQuery({
+    queryKey: ['my-schedule'],
+    queryFn: fetchScheduleFromServer,
+    staleTime: 5 * 60_000,
+  });
+  const cached   = useMemo(() => loadSchedule(), []);
+  const schedule = serverSchedule ?? cached;
   const slots    = useMemo(() => generateSlots(schedule), [schedule]);
 
   // Date preselected in the calendar view (?date=YYYY-MM-DD), if valid and not past

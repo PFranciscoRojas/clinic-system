@@ -237,6 +237,12 @@ func Render(w io.Writer, in RenderInput) error {
 		{"Fecha de la sesión", in.Record.SessionDate.Format("2006-01-02")},
 		{"Registro creado", in.Record.CreatedAt.Format("2006-01-02 15:04")},
 	}
+	// Res. 1995/1999: entries should be simultaneous with care — a gap beyond
+	// the same-day grace window is disclosed as an extemporaneous entry.
+	lateEntry := in.Record.CreatedAt.Sub(in.Record.SessionDate) > 24*time.Hour
+	if lateEntry {
+		care = append(care, [2]string{"Carácter del registro", "Extemporáneo (diligenciado con posterioridad)"})
+	}
 	if in.Record.ApprovedAt != nil {
 		care = append(care, [2]string{"Aprobado", in.Record.ApprovedAt.Format("2006-01-02 15:04")})
 	}
@@ -248,6 +254,12 @@ func Render(w io.Writer, in RenderInput) error {
 		care = append(care, [2]string{"Nivel de riesgo", label})
 	}
 	fieldGrid(doc, tr, care)
+	if reason, ok := in.Record.Sections["late_entry_reason"].(string); ok && reason != "" {
+		doc.SetFont("Helvetica", "I", 8.5)
+		doc.SetTextColor(120, 80, 10)
+		doc.MultiCell(0, 4.2, tr("Justificación del registro extemporáneo: "+reason), "", "L", false)
+		doc.SetTextColor(0, 0, 0)
+	}
 	doc.Ln(2)
 
 	// ── 4. Clinical content ───────────────────────────────────────────────

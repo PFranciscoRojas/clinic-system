@@ -14,7 +14,7 @@ import { calcAge } from '@/lib/age';
 import { useIsCompact } from '@/lib/useMediaQuery';
 import { clinicalRecordsApi, consentsApi, type RecordMeta } from '@/api/clinicalRecords';
 import { ConsentViewModal } from '@/components/consents/ConsentViewModal';
-import { ConsentSignModal } from '@/components/consents/ConsentSignModal';
+import { UnifiedConsentSignModal } from '@/components/consents/UnifiedConsentSignModal';
 import { RecordForm } from '@/components/clinical/RecordForm';
 import { aiDraftsApi } from '@/api/aiDrafts';
 import { useAuth } from '@/context/AuthContext';
@@ -230,6 +230,10 @@ export function AppointmentPage() {
   const [pendingAssign, setPendingAssign] = useState<Patient | null>(null);
   const [assigning, setAssigning] = useState(false);
 
+  // Justification set by "Registrar sesión pasada" — consumed by the record form.
+  const lateReasonKey = `sghcp_late_reason_${id}`;
+  const [lateReason] = useState(() => sessionStorage.getItem(lateReasonKey) ?? '');
+
   // draft_id stored per appointment in localStorage
   const draftKey = `sghcp_draft_${id}`;
   const [draftId, setDraftId] = useState(() => localStorage.getItem(draftKey) ?? '');
@@ -310,6 +314,7 @@ export function AppointmentPage() {
       try { await appointmentsApi.updateStatus(id!, 'COMPLETED'); } catch { /* note saved; status stays */ }
       queryClient.invalidateQueries({ queryKey: ['appointment', id] });
     }
+    sessionStorage.removeItem(lateReasonKey);
     await refetchRecords();
     queryClient.invalidateQueries({ queryKey: ['clinical-records', 'patient', appt?.patient_id] });
     setShowRecordForm(false);
@@ -610,7 +615,13 @@ export function AppointmentPage() {
                 <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s600)' }}>Nuevo registro clínico</span>
                 <button onClick={() => setShowRecordForm(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)' }}><X size={16} /></button>
               </div>
-              <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} onSaved={handleRecordSaved} />
+              {lateReason && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 9, padding: '10px 14px', marginBottom: 12, fontSize: 12.5, color: '#92400e' }}>
+                  <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <span><b>Registro extemporáneo</b> — motivo: {lateReason}. Quedará declarado en la historia y en el PDF.</span>
+                </div>
+              )}
+              <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} onSaved={handleRecordSaved} />
             </div>
           ) : canWriteNote ? (
             <div style={{ textAlign: 'center', padding: '24px 0' }}>
@@ -669,12 +680,11 @@ export function AppointmentPage() {
 
       {viewConsentId && <ConsentViewModal consentId={viewConsentId} onClose={() => setViewConsentId(null)} />}
       {signConsentOpen && appt.patient_id && (
-        <ConsentSignModal
+        <UnifiedConsentSignModal
           patientId={appt.patient_id}
-          consentType="TREATMENT"
+          alreadySigned={(consentsData?.items ?? []).filter(c => !c.revoked_at).map(c => c.consent_type)}
           onClose={() => setSignConsentOpen(false)}
           onSigned={() => {
-            setSignConsentOpen(false);
             queryClient.invalidateQueries({ queryKey: ['consents', appt.patient_id] });
           }}
         />

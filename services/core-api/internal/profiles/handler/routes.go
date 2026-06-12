@@ -19,5 +19,7 @@ func (h *Handler) Routes() chi.Router {
 	r.Put("/", h.upsertOwn)
 	r.Put("/signature", h.putSignature)
 	r.Delete("/signature", h.deleteSignature)
+	r.Get("/schedule", h.getSchedule)
+	r.Put("/schedule", h.putSchedule)
 	return r
 }

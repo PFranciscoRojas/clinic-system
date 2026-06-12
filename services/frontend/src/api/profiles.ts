@@ -37,6 +37,10 @@ export const profilesApi = {
     api.put<{ status: string }>('/me/professional-profile/signature', { signature_png: signaturePng }),
   deleteSignature: () =>
     api.delete<{ status: string }>('/me/professional-profile/signature'),
+  getSchedule: () =>
+    api.get<{ schedule: unknown }>('/me/professional-profile/schedule'),
+  saveSchedule: (schedule: unknown) =>
+    api.put<{ status: string }>('/me/professional-profile/schedule', { schedule }),
 };
 
 // splitName breaks a free-text name into (first, rest) on the first space —

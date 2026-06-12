@@ -14,7 +14,7 @@ import { authApi } from '@/api/auth';
 import { consentTemplatesApi, type ConsentType } from '@/api/clinicalRecords';
 import { profilesApi, splitName, type Specialty } from '@/api/profiles';
 import { ACCENT_COLORS, saveAccentColor } from '@/lib/theme';
-import { loadSchedule, saveSchedule } from '@/lib/schedule';
+import { loadSchedule, persistSchedule, fetchScheduleFromServer } from '@/lib/schedule';
 import { useIsCompact } from '@/lib/useMediaQuery';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -471,11 +471,33 @@ function ScheduleSection() {
   const [breakEnd,    setBreakEnd]    = useState(init.breakEnd ?? '14:00');
   const [buffer,      setBuffer]      = useState(init.buffer ?? 10);
   const [maxPerDay,   setMaxPerDay]   = useState(init.maxPerDay ?? 8);
+  const [hydrated,    setHydrated]    = useState(false);
 
-  // Persist immediately — these settings drive the slot grid in "Nueva cita".
+  // Server is the source of truth — hydrate once, then persist every change
+  // (localStorage cache + PUT to the profile, so it follows her across devices).
   useEffect(() => {
-    saveSchedule({ activeDays, startHour, endHour, sessionLen: sessionDur, breakStart, breakEnd, buffer, maxPerDay });
-  }, [activeDays, startHour, endHour, sessionDur, breakStart, breakEnd, buffer, maxPerDay]);
+    fetchScheduleFromServer().then(cfg => {
+      if (cfg) {
+        setActiveDays(cfg.activeDays);
+        setStartHour(cfg.startHour);
+        setEndHour(cfg.endHour);
+        setSessionDur(cfg.sessionLen);
+        setBreakStart(cfg.breakStart ?? '13:00');
+        setBreakEnd(cfg.breakEnd ?? '14:00');
+        setBuffer(cfg.buffer ?? 10);
+        setMaxPerDay(cfg.maxPerDay ?? 8);
+      }
+      setHydrated(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return; // don't overwrite the server copy with stale cache on mount
+    const t = setTimeout(() => {
+      persistSchedule({ activeDays, startHour, endHour, sessionLen: sessionDur, breakStart, breakEnd, buffer, maxPerDay });
+    }, 600);
+    return () => clearTimeout(t);
+  }, [hydrated, activeDays, startHour, endHour, sessionDur, breakStart, breakEnd, buffer, maxPerDay]);
 
   const toggleDay = (d: string) => {
     setActiveDays(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d]);
@@ -485,7 +507,7 @@ function ScheduleSection() {
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14, fontSize: 12.5, color: 'var(--s500)' }}>
         <CheckCircle size={13} color="#10b981" />
-        Los cambios se guardan automáticamente y definen los horarios disponibles al agendar citas.
+        Los cambios se guardan automáticamente en tu perfil y definen los horarios disponibles al agendar citas en cualquier dispositivo.
       </div>
       <SectionCard title="Días de atención" icon={CalendarDays}>
         <div style={{ padding: '14px 0', borderBottom: '1px solid var(--s100)' }}>
