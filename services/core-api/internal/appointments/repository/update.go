@@ -12,7 +12,7 @@ import (
 func (r *Repository) UpdateStatus(ctx context.Context, orgID, appointmentID, status string) error {
 	tag, err := r.db.Exec(ctx, `
 		UPDATE appointments
-		SET status = $3,
+		SET status = $3::appointment_status,
 		    started_at = CASE WHEN $3 = 'IN_PROGRESS' AND started_at IS NULL THEN NOW() ELSE started_at END,
 		    updated_at = NOW()
 		WHERE id = $1 AND organization_id = $2

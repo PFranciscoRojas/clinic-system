@@ -691,7 +691,6 @@ export function NewAppointmentPage() {
   });
 
   // ── Derived validations ────────────────────────────────────────────────────────
-  const isCrisisSession = sessionType?.id === 'crisis';
 
   // 1. Past slots: today → block slots ≤ now + 30 min buffer
   const pastSlots = useMemo<Set<string>>(() => {
@@ -732,11 +731,12 @@ export function NewAppointmentPage() {
     return s;
   }, [dayAppointments, date]);
 
-  // 4. Same patient already has an appointment this day (double-booking)
+  // 4. Same patient already has an appointment this day — informational
+  // only: repeating a patient in the same day is a legitimate decision.
   const doubleBookingAppt = patientDayAppts.find(
-    a => a.status !== 'CANCELLED' && a.status !== 'NO_SHOW'
+    a => a.status === 'SCHEDULED' || a.status === 'IN_PROGRESS'
   );
-  const hasDoubleBooking = !!doubleBookingAppt && !isCrisisSession;
+  const hasDoubleBooking = !!doubleBookingAppt;
 
   // 5. Patient inactive
   const patientInactive = !!patient && !patient.is_active;
@@ -754,7 +754,6 @@ export function NewAppointmentPage() {
   // Aggregate: can the form be submitted?
   const blockingErrors: string[] = [];
   if (patientInactive)  blockingErrors.push('El paciente está inactivo.');
-  if (hasDoubleBooking) blockingErrors.push('El paciente ya tiene una cita este día.');
   if (workloadBlock)    blockingErrors.push('Límite de 12 citas diarias alcanzado.');
 
   const hasGuest = guestName.trim().length >= 3;
@@ -886,13 +885,12 @@ export function NewAppointmentPage() {
           </div>
         )}
 
-        {/* Double-booking warning */}
+        {/* Same-day repeat — informational, not blocking */}
         {hasDoubleBooking && (
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 9, padding: '10px 14px', marginBottom: 20, fontSize: 12, color: '#991b1b' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 9, padding: '10px 14px', marginBottom: 20, fontSize: 12, color: '#92400e' }}>
             <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
             <span>
-              <b>{patient ? `${patient.first_name} ${patient.paternal_last_name}` : 'Este paciente'}</b> ya tiene una cita agendada para este día.
-              Para agendar igual, selecciona el tipo <b>Atención en crisis</b>.
+              <b>{patient ? `${patient.first_name} ${patient.paternal_last_name}` : 'Este paciente'}</b> ya tiene una cita activa este día — puedes agendar otra si así lo decides.
             </span>
           </div>
         )}
