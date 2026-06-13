@@ -4,17 +4,13 @@ import { History, X, AlertCircle } from 'lucide-react';
 
 import { appointmentsApi } from '@/api/appointments';
 import { Spinner } from '@/components/ui/Spinner';
+import { BirthDateField } from '@/components/patients/BirthDateField';
 import { useAuth } from '@/context/AuthContext';
 
 // Registers a session that happened but was never recorded (extemporaneous
 // entry, Res. 1995/1999): creates the appointment at its real past date,
 // marks it COMPLETED and opens it so the note is written with a mandatory
 // justification that is disclosed in the record and the exported PDF.
-
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 function tzOffset(): string {
   const off = new Date().getTimezoneOffset();
@@ -32,7 +28,9 @@ export function LateSessionModal({ patientId, onClose }: Props) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [date,     setDate]     = useState('');
-  const [time,     setTime]     = useState('');
+  // Hour/minute are optional — the date is what matters legally. Default noon.
+  const [hour,     setHour]     = useState('12');
+  const [minute,   setMinute]   = useState('00');
   const [duration, setDuration] = useState(50);
   const [modality, setModality] = useState<'IN_PERSON' | 'VIRTUAL'>('IN_PERSON');
   const [reason,   setReason]   = useState('');
@@ -42,8 +40,8 @@ export function LateSessionModal({ patientId, onClose }: Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr('');
-    if (!date || !time) { setErr('Indica la fecha y hora reales de la sesión.'); return; }
-    const scheduledAt = `${date}T${time}:00${tzOffset()}`;
+    if (!date) { setErr('Indica la fecha real de la sesión.'); return; }
+    const scheduledAt = `${date}T${hour.padStart(2, '0')}:${minute.padStart(2, '0')}:00${tzOffset()}`;
     if (new Date(scheduledAt).getTime() >= Date.now()) {
       setErr('La sesión debe ser en el pasado — para citas futuras usa "Nueva cita".');
       return;
@@ -96,14 +94,21 @@ export function LateSessionModal({ patientId, onClose }: Props) {
             (Res. 1995/1999 — los registros deben ser simultáneos a la atención).
           </p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-            <div>
-              <label style={labelStyle}>Fecha real de la sesión</label>
-              <input type="date" value={date} max={todayISO()} onChange={e => setDate(e.target.value)} style={inputStyle} required />
-            </div>
-            <div>
-              <label style={labelStyle}>Hora</label>
-              <input type="time" value={time} onChange={e => setTime(e.target.value)} style={inputStyle} required />
+          <div style={{ marginBottom: 12 }}>
+            <label style={labelStyle}>Fecha real de la sesión</label>
+            <BirthDateField value={date} onChange={setDate} />
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <label style={labelStyle}>Hora aproximada <span style={{ color: 'var(--s400)', fontWeight: 400 }}>(opcional)</span></label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, maxWidth: 220 }}>
+              <select value={hour} onChange={e => setHour(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
+                {Array.from({ length: 24 }, (_, h) => <option key={h} value={String(h)}>{String(h).padStart(2, '0')}</option>)}
+              </select>
+              <span style={{ fontWeight: 700, color: 'var(--s400)' }}>:</span>
+              <select value={minute} onChange={e => setMinute(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
+                {['00', '15', '30', '45'].map(mm => <option key={mm} value={mm}>{mm}</option>)}
+              </select>
             </div>
           </div>
 
