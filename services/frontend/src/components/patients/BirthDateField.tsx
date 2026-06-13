@@ -1,9 +1,12 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 // Three explicit selects (Año / Mes / Día) instead of a native <input type="date">,
-// whose placeholder order depends on the browser locale and was confusing
-// (it suggested mm/dd/yyyy while validation expected another order). Here the
-// order is fixed and unambiguous, and partial dates are impossible.
+// whose placeholder order depended on the browser locale and was confusing.
+//
+// The selects keep their own partial state so a year/month can be picked
+// before the others — the ISO value is only emitted to the parent once all
+// three are set (empty otherwise). Partial dates are therefore impossible
+// to save, but selecting one field at a time works naturally.
 
 interface Props {
   /** ISO value "YYYY-MM-DD" or "". */
@@ -17,18 +20,31 @@ const MONTHS = [
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
 ];
 
-function parse(value: string): { y: string; m: string; d: string } {
-  const [y = '', m = '', d = ''] = value.split('-');
-  return { y, m, d };
-}
-
 function daysInMonth(y: number, m: number): number {
   if (!y || !m) return 31;
   return new Date(y, m, 0).getDate();
 }
 
 export function BirthDateField({ value, onChange, error }: Props) {
-  const { y, m, d } = parse(value);
+  // Local partial state — the source of truth for the three selects.
+  const [y, setY] = useState('');
+  const [m, setM] = useState('');
+  const [d, setD] = useState('');
+
+  // Sync from the parent value (e.g. editing an existing patient). Only runs
+  // when the incoming ISO actually differs from what the selects represent,
+  // so it never fights the user mid-selection.
+  useEffect(() => {
+    const iso = y && m && d ? `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}` : '';
+    if (value !== iso) {
+      const [py = '', pm = '', pd = ''] = (value || '').split('-');
+      setY(py);
+      setM(pm ? String(Number(pm)) : '');
+      setD(pd ? String(Number(pd)) : '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
   const currentYear = new Date().getFullYear();
   const years = useMemo(
     () => Array.from({ length: currentYear - 1900 + 1 }, (_, i) => currentYear - i),
@@ -37,12 +53,15 @@ export function BirthDateField({ value, onChange, error }: Props) {
   const maxDay = daysInMonth(Number(y), Number(m));
   const days = Array.from({ length: maxDay }, (_, i) => i + 1);
 
-  const emit = (ny: string, nm: string, nd: string) => {
-    if (!ny || !nm || !nd) { onChange(''); return; }
-    // Clamp the day if the new month/year is shorter (e.g. 31 → Feb)
-    const dim = daysInMonth(Number(ny), Number(nm));
-    const day = Math.min(Number(nd), dim);
-    onChange(`${ny}-${nm.padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+  const commit = (ny: string, nm: string, nd: string) => {
+    setY(ny); setM(nm); setD(nd);
+    if (ny && nm && nd) {
+      const dim = daysInMonth(Number(ny), Number(nm));
+      const day = Math.min(Number(nd), dim);
+      onChange(`${ny}-${nm.padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+    } else {
+      onChange('');
+    }
   };
 
   const selStyle: React.CSSProperties = {
@@ -51,21 +70,19 @@ export function BirthDateField({ value, onChange, error }: Props) {
   };
 
   return (
-    <div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1.4fr 0.9fr', gap: 8 }}>
-        <select aria-label="Año" value={y} onChange={e => emit(e.target.value, m, d || '1')} style={selStyle}>
-          <option value="">Año</option>
-          {years.map(yr => <option key={yr} value={String(yr)}>{yr}</option>)}
-        </select>
-        <select aria-label="Mes" value={m ? String(Number(m)) : ''} onChange={e => emit(y, e.target.value, d || '1')} style={selStyle}>
-          <option value="">Mes</option>
-          {MONTHS.map((name, i) => <option key={name} value={String(i + 1)}>{name}</option>)}
-        </select>
-        <select aria-label="Día" value={d ? String(Number(d)) : ''} onChange={e => emit(y, m, e.target.value)} style={selStyle} disabled={!y || !m}>
-          <option value="">Día</option>
-          {days.map(dd => <option key={dd} value={String(dd)}>{dd}</option>)}
-        </select>
-      </div>
+    <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1.4fr 0.9fr', gap: 8 }}>
+      <select aria-label="Año" value={y} onChange={e => commit(e.target.value, m, d)} style={selStyle}>
+        <option value="">Año</option>
+        {years.map(yr => <option key={yr} value={String(yr)}>{yr}</option>)}
+      </select>
+      <select aria-label="Mes" value={m} onChange={e => commit(y, e.target.value, d)} style={selStyle}>
+        <option value="">Mes</option>
+        {MONTHS.map((name, i) => <option key={name} value={String(i + 1)}>{name}</option>)}
+      </select>
+      <select aria-label="Día" value={d} onChange={e => commit(y, m, e.target.value)} style={selStyle}>
+        <option value="">Día</option>
+        {days.map(dd => <option key={dd} value={String(dd)}>{dd}</option>)}
+      </select>
     </div>
   );
 }
