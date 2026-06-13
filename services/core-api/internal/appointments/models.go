@@ -16,6 +16,7 @@ type Appointment struct {
 	RescheduledTo  string
 	CancelledBy    string
 	CancelReason   string
+	StartedAt      *time.Time
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }

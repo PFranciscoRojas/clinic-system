@@ -15,7 +15,7 @@ func (r *Repository) FindByID(ctx context.Context, orgID, appointmentID string) 
 		SELECT id::text, organization_id::text, patient_id::text, guest_name, staff_id::text,
 		       scheduled_at, duration_min, modality::text, status::text,
 		       notes_enc, rescheduled_to::text, cancelled_by::text, cancel_reason,
-		       created_at, updated_at
+		       started_at, created_at, updated_at
 		FROM appointments
 		WHERE id = $1 AND organization_id = $2
 	`, appointmentID, orgID)
@@ -32,7 +32,7 @@ func (r *Repository) List(ctx context.Context, orgID string, f appointments.List
 		SELECT id::text, organization_id::text, patient_id::text, guest_name, staff_id::text,
 		       scheduled_at, duration_min, modality::text, status::text,
 		       notes_enc, rescheduled_to::text, cancelled_by::text, cancel_reason,
-		       created_at, updated_at
+		       started_at, created_at, updated_at
 		FROM appointments
 		WHERE organization_id = $1`
 	args := []any{orgID}
@@ -87,7 +87,7 @@ func scanAppointment(row interface {
 		&a.ID, &a.OrganizationID, &patientID, &guestName, &a.StaffID,
 		&a.ScheduledAt, &a.DurationMin, &a.Modality, &a.Status,
 		&a.NotesEnc, &rescheduledTo, &cancelledBy, &cancelReason,
-		&a.CreatedAt, &a.UpdatedAt,
+		&a.StartedAt, &a.CreatedAt, &a.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, appointments.ErrNotFound

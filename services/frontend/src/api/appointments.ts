@@ -18,6 +18,7 @@ export interface Appointment {
   rescheduled_to?: string | null;
   cancelled_by?: string | null;
   cancel_reason?: string | null;
+  started_at?: string | null;   // set when the professional starts the session
   created_at: string;
 }
 
@@ -62,10 +63,11 @@ export const appointmentsApi = {
   cancel: (id: string, reason: string) =>
     api.delete<void>(`/appointments/${id}`, { reason }),
 
-  uploadAudio: (appointmentId: string, patientId: string, file: File) => {
+  uploadAudio: (appointmentId: string, patientId: string, file: File, recordType?: string) => {
     const form = new FormData();
     form.append('audio', file);
     form.append('patient_id', patientId);
+    if (recordType) form.append('record_type', recordType);
     return api.upload<{ draft_id: string }>(`/appointments/${appointmentId}/audio`, form);
   },
 };

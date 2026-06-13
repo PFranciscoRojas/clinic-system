@@ -10,6 +10,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- Session recording in the browser: recording starts automatically with "Iniciar sesión" when the patient's RECORDING consent is active (manual "Grabar" button too), stops at "Finalizar sesión" and uploads straight into the AI pipeline
+- AI drafts now follow the clinical record structure instead of generic SOAP: the session's record type (initial/evolution/discharge) travels with the audio job, Claude fills the same sections the professional would write by hand, and approving creates the record linked to the appointment with the real session date
 - Responsive layout for phones and tablets: the sidebar becomes a hamburger drawer, agenda/inbox and the new-appointment columns stack vertically, Settings nav turns into a scrollable tab bar, patients always show as cards on phones, wide clinical tables scroll horizontally, and the month calendar compacts
 - Appointments can be booked without a registered patient: reserve the slot with just a name (`guest_name`, migration 000015) and associate or register the patient at the first consultation (`PATCH /appointments/{id}/patient`); guest reservations show a "Reserva" badge across agenda, calendar and the appointment page
 - Appointment page shows the patient's key data at hand (age, document, phone) and blocks "Iniciar sesión" until the patient is associated and the treatment consent is signed
@@ -28,6 +30,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Grace window for the session note: after "Finalizar sesión" the record form stays available until the note is written (next patient can be attended first); the note stores the real session date and the dashboard inbox lists "Nota de sesión pendiente" reminders
 
 ### Changed
+- Sessions can only be started on the day of the appointment — future appointments show their data but "Iniciar sesión" stays disabled
+- The session timer counts down the configured duration from the moment "Iniciar sesión" is pressed (`appointments.started_at`, migration 000016), not from the scheduled slot
+- An appointment can no longer be cancelled once the session started (UI and API): it ends as completed or no-show
+- The appointment header shows every active consent (treatment, data, recording, information sharing), each one viewable — not just the treatment consent
+- Unified consent signing shows one continuous document with the selected sections (one reading, one signature) instead of four collapsible documents
 - Clinical records can only be created inside a started session: the record form and audio upload require the appointment to be IN_PROGRESS, and the standalone "Nuevo registro" page was removed — every note hangs from a real session
 - Treatment consent can be signed directly from the appointment page (modal) instead of navigating away to the patient profile
 - Associating a patient to a guest reservation now asks for confirmation before linking
