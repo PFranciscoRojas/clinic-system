@@ -16,12 +16,14 @@ interface RecordFormProps {
   sessionDate?: string;
   /** Mandatory justification when registering a past session (extemporaneous entry). */
   lateEntryReason?: string;
+  /** When the treatment consent is already signed, the reminder is suppressed. */
+  treatmentConsentSigned?: boolean;
   onSaved: () => void;
 }
 
 const V2_TYPES = ['INITIAL', 'EVOLUTION', 'DISCHARGE'] as const;
 
-export function RecordForm({ patientId, appointmentId, defaultType, sessionDate: sessionDateProp, lateEntryReason, onSaved }: RecordFormProps) {
+export function RecordForm({ patientId, appointmentId, defaultType, sessionDate: sessionDateProp, lateEntryReason, treatmentConsentSigned, onSaved }: RecordFormProps) {
   const storageKey = appointmentId ? `clinical-draft-${appointmentId}` : `clinical-draft-patient-${patientId}`;
   const [recordType, setRecordType] = useState<RecordType>(defaultType ?? 'EVOLUTION');
   const [draft, setDraft] = useState<ClinicalDraft>(emptyDraft);
@@ -131,7 +133,7 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
         </p>
       )}
 
-      {recordType === 'INITIAL' && (
+      {recordType === 'INITIAL' && !treatmentConsentSigned && (
         <p style={{ margin: '0 0 12px', fontSize: 12.5, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px' }}>
           Recuerda registrar el <strong>consentimiento informado</strong> del paciente (pestaña Consentimientos del perfil) — es obligatorio antes de iniciar tratamiento.
         </p>
