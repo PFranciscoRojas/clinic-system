@@ -9,40 +9,73 @@ logger = logging.getLogger(__name__)
 
 _client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
+# Section schemas mirror the clinical record form (frontend
+# components/clinical/constants.ts) so the approved draft maps 1:1
+# into the record the professional would have written by hand.
+_SECTION_SCHEMAS: dict[str, dict[str, str]] = {
+    "INITIAL": {
+        "consultation_reason": "Motivo de consulta, en palabras del paciente.",
+        "current_problem": "Problema actual: inicio, evolución, intentos previos de solución, tratamientos anteriores.",
+        "personal_history": "Antecedentes personales: médicos, psicológicos o psiquiátricos previos, medicación actual.",
+        "family_history": "Antecedentes familiares de salud mental.",
+        "psychosocial_context": "Contexto psicosocial: familia, trabajo o estudio, red de apoyo.",
+        "diagnostic_impression": "Impresión diagnóstica con justificación clínica.",
+        "initial_plan": "Plan inicial: enfoque terapéutico, frecuencia propuesta, objetivos preliminares.",
+    },
+    "EVOLUTION": {
+        "session_development": "Desarrollo de la sesión: qué trajo el paciente, qué se trabajó.",
+        "interventions": "Intervenciones aplicadas: técnicas usadas (reestructuración cognitiva, exposición, psicoeducación, etc.).",
+        "patient_response": "Análisis y respuesta del paciente: cómo respondió, avance respecto a objetivos.",
+        "plan_tasks": "Plan y tareas: qué sigue, tareas asignadas para la casa.",
+    },
+    "DISCHARGE": {
+        "discharge_summary": "Resumen del proceso terapéutico completo.",
+        "final_state": "Estado final del paciente, contrastado contra el motivo de consulta inicial.",
+        "goals_achieved": "Objetivos logrados respecto al plan inicial.",
+        "recommendations": "Recomendaciones e indicaciones al paciente.",
+        "referral": "Remisión a otro profesional, si aplica.",
+    },
+}
+
 _SYSTEM_PROMPT = """Eres un asistente clínico especializado en psicología. Tu única tarea es
-estructurar la transcripción de una sesión clínica en formato SOAP.
+estructurar la transcripción de una sesión clínica en las secciones del registro clínico.
 
 REGLAS ESTRICTAS:
 1. No inventes información que no esté en la transcripción.
-2. Si algo no es claro o no se mencionó, usa null en ese campo.
+2. Si una sección no tiene contenido en la transcripción, usa null en ese campo.
 3. Nunca incluyas nombres, documentos o datos de contacto — el texto ya fue anonimizado.
-4. Usa terminología psicológica precisa y lenguaje formal clínico.
-5. Responde ÚNICAMENTE con el objeto JSON, sin texto adicional.
+4. Usa terminología psicológica precisa y lenguaje formal clínico, en tercera persona.
+5. Responde ÚNICAMENTE con el objeto JSON, sin texto adicional ni marcas de formato.
 
-Formato de respuesta:
-{
-  "subjective": "Relato del paciente: motivo de consulta, síntomas referidos, estado emocional.",
-  "objective": "Observaciones del clínico: comportamiento, afecto, cognición, presentación.",
-  "assessment": "Impresión diagnóstica o clínica basada en la sesión.",
-  "plan": "Plan terapéutico acordado, tareas, próximos pasos."
-}"""
+Formato de respuesta — un objeto JSON con exactamente estas claves:
+{schema}"""
 
 
-async def generate_soap_draft(anonymized_transcription: str) -> str:
-    """Send anonymized transcription to Claude and return a SOAP draft as JSON string.
+def _schema_for(record_type: str) -> tuple[str, dict[str, str]]:
+    rt = record_type if record_type in _SECTION_SCHEMAS else "EVOLUTION"
+    return rt, _SECTION_SCHEMAS[rt]
+
+
+async def generate_soap_draft(anonymized_transcription: str, record_type: str = "EVOLUTION") -> str:
+    """Send anonymized transcription to Claude and return the draft as a JSON string.
 
     The input has already been processed by anonymize() — no PII should reach here.
-    Returns a JSON string matching the SOAP schema.
+    Returns '{"record_type": ..., "sections": {...}}' matching the clinical
+    record structure for the session's record type.
     """
-    if not anonymized_transcription.strip():
-        return json.dumps({"subjective": None, "objective": None, "assessment": None, "plan": None})
+    rt, schema = _schema_for(record_type)
 
-    logger.info("generating soap draft", extra={"chars": len(anonymized_transcription)})
+    if not anonymized_transcription.strip():
+        return json.dumps({"record_type": rt, "sections": {}}, ensure_ascii=False)
+
+    logger.info("generating clinical draft", extra={"chars": len(anonymized_transcription), "record_type": rt})
+
+    schema_json = json.dumps({k: f"string | null — {v}" for k, v in schema.items()}, ensure_ascii=False, indent=2)
 
     message = await _client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=2048,
-        system=_SYSTEM_PROMPT,
+        max_tokens=3072,
+        system=_SYSTEM_PROMPT.format(schema=schema_json),
         messages=[
             {
                 "role": "user",
@@ -64,8 +97,11 @@ async def generate_soap_draft(anonymized_transcription: str) -> str:
         except json.JSONDecodeError:
             parsed = None
         if not isinstance(parsed, dict):
-            logger.warning("claude returned non-JSON; wrapping as subjective")
-            parsed = {"subjective": raw, "objective": None, "assessment": None, "plan": None}
+            logger.warning("claude returned non-JSON; storing raw text in the first section")
+            parsed = {next(iter(schema)): raw}
 
-    logger.info("soap draft generated", extra={"input_tokens": message.usage.input_tokens})
-    return json.dumps(parsed, ensure_ascii=False)
+    # Keep only known sections with actual content
+    sections = {k: v for k, v in parsed.items() if k in schema and isinstance(v, str) and v.strip()}
+
+    logger.info("clinical draft generated", extra={"input_tokens": message.usage.input_tokens, "sections": len(sections)})
+    return json.dumps({"record_type": rt, "sections": sections}, ensure_ascii=False)

@@ -49,6 +49,12 @@ func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Shapes the AI draft to the clinical record being written in this session
+	recordType := r.FormValue("record_type")
+	if recordType != "INITIAL" && recordType != "DISCHARGE" {
+		recordType = "EVOLUTION"
+	}
+
 	filename := fmt.Sprintf("%s%s", appointmentID, ext)
 
 	draftID, err := h.svc.UploadAudio(r.Context(), aidraftssvc.UploadAudioInput{
@@ -56,6 +62,7 @@ func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 		AppointmentID:  appointmentID,
 		PatientID:      patientID,
 		RequestedBy:    claims.UserID,
+		RecordType:     recordType,
 		Filename:       filename,
 		Audio:          file,
 		AudioSize:      header.Size,

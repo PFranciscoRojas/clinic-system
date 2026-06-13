@@ -16,11 +16,16 @@ type AppointmentResponse struct {
 	Status         string `json:"status"`
 	RescheduledTo  string `json:"rescheduled_to,omitempty"`
 	CancelReason   string `json:"cancel_reason,omitempty"`
+	StartedAt      string `json:"started_at,omitempty"`
 	CreatedAt      string `json:"created_at"`
 	UpdatedAt      string `json:"updated_at"`
 }
 
 func ToResponse(a *appointments.Appointment) AppointmentResponse {
+	startedAt := ""
+	if a.StartedAt != nil {
+		startedAt = a.StartedAt.Format("2006-01-02T15:04:05Z07:00")
+	}
 	return AppointmentResponse{
 		ID:             a.ID,
 		OrganizationID: a.OrganizationID,
@@ -33,6 +38,7 @@ func ToResponse(a *appointments.Appointment) AppointmentResponse {
 		Status:         a.Status,
 		RescheduledTo:  a.RescheduledTo,
 		CancelReason:   a.CancelReason,
+		StartedAt:      startedAt,
 		CreatedAt:      a.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:      a.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}

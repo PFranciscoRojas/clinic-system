@@ -40,6 +40,11 @@ const RECORD_TYPE_LABEL: Record<string, string> = {
   DISCHARGE: 'Alta', INTERCONSULTATION: 'Interconsulta',
 };
 
+const CONSENT_SHORT: Record<string, string> = {
+  TREATMENT: 'Tratamiento', DATA_PROCESSING: 'Datos',
+  RECORDING: 'Grabación', INFORMATION_SHARING: 'Compartir info',
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtDateTime(iso: string) {
@@ -56,10 +61,12 @@ interface AudioSectionProps {
   appointmentId: string;
   patientId: string;
   draftId: string;
+  recordType: string;
+  sessionDate: string;
   onDraftCreated: (draftId: string) => void;
 }
 
-function AudioSection({ appointmentId, patientId, draftId, onDraftCreated }: AudioSectionProps) {
+function AudioSection({ appointmentId, patientId, draftId, recordType, sessionDate, onDraftCreated }: AudioSectionProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState('');
@@ -77,7 +84,7 @@ function AudioSection({ appointmentId, patientId, draftId, onDraftCreated }: Aud
   const handleFile = async (file: File) => {
     setUploading(true); setUploadErr('');
     try {
-      const res = await appointmentsApi.uploadAudio(appointmentId, patientId, file);
+      const res = await appointmentsApi.uploadAudio(appointmentId, patientId, file, recordType);
       onDraftCreated(res.draft_id);
     } catch {
       setUploadErr('Error al subir el audio. Verifica el formato (mp3, wav, m4a).');
@@ -112,7 +119,7 @@ function AudioSection({ appointmentId, patientId, draftId, onDraftCreated }: Aud
           </div>
         </div>
         {(draft.status === 'DRAFT_READY' || draft.status === 'APPROVED') && (
-          <a href={`/ai-drafts/${draftId}`} style={{ padding: '7px 14px', background: '#f59e0b', color: '#fff', borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <a href={`/ai-drafts/${draftId}?appointment_id=${appointmentId}&session_date=${sessionDate}&record_type=${recordType}`} style={{ padding: '7px 14px', background: '#f59e0b', color: '#fff', borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
             <Brain size={13} /> Revisar borrador
           </a>
         )}
@@ -174,23 +181,31 @@ function AudioSection({ appointmentId, patientId, draftId, onDraftCreated }: Aud
 
 const WARN_MINUTES = 10;
 
-function SessionTimer({ scheduledAt, durationMin }: { scheduledAt: string; durationMin: number }) {
+// Counts DOWN the session duration from the moment "Iniciar sesión" was
+// pressed (started_at) — not from the scheduled slot.
+function SessionTimer({ startedAt, durationMin }: { startedAt: string; durationMin: number }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 15_000);
+    const t = setInterval(() => setNow(Date.now()), 10_000);
     return () => clearInterval(t);
   }, []);
 
-  const start      = new Date(scheduledAt).getTime();
-  const end        = start + durationMin * 60_000;
-  const elapsedMin = Math.max(0, Math.floor((now - start) / 60_000));
-  const remainMin  = Math.ceil((end - now) / 60_000);
-  const over       = remainMin <= 0;
-  const warn       = !over && remainMin <= WARN_MINUTES;
+  const start     = new Date(startedAt).getTime();
+  const end       = start + durationMin * 60_000;
+  const remainMin = Math.ceil((end - now) / 60_000);
+  const over      = remainMin <= 0;
+  const warn      = !over && remainMin <= WARN_MINUTES;
 
   const bg     = over ? '#fee2e2' : warn ? '#fef3c7' : '#f0fdfa';
   const border = over ? '#fca5a5' : warn ? '#fcd34d' : '#5eead4';
   const color  = over ? '#991b1b' : warn ? '#92400e' : '#0f766e';
+
+  const mmss = (() => {
+    const totalSec = Math.max(0, Math.floor((end - now) / 1000));
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  })();
 
   return (
     <span style={{
@@ -203,8 +218,29 @@ function SessionTimer({ scheduledAt, durationMin }: { scheduledAt: string; durat
       {over
         ? `Tiempo cumplido (+${Math.abs(remainMin)} min)`
         : warn
-        ? `Quedan ${remainMin} min`
-        : `En sesión · ${elapsedMin} min · quedan ${remainMin}`}
+        ? `Quedan ${mmss} min`
+        : `En sesión · quedan ${mmss}`}
+    </span>
+  );
+}
+
+// Pulsing indicator while the session audio is being recorded.
+function RecChip({ startMs }: { startMs: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const sec = Math.max(0, Math.floor((now - startMs) / 1000));
+  const mmss = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px',
+      borderRadius: 9, fontSize: 13, fontWeight: 700, background: '#fee2e2',
+      border: '1.5px solid #fca5a5', color: '#991b1b',
+    }}>
+      <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#dc2626', animation: 'pulse 1.5s infinite' }} />
+      Grabando · {mmss}
     </span>
   );
 }
@@ -244,6 +280,56 @@ export function AppointmentPage() {
     enabled: !!id,
   });
 
+  // ── Session recorder ──────────────────────────────────────────────────────
+  // Recording starts automatically with the session (RECORDING consent
+  // required), stops at "Finalizar sesión" and uploads to the AI pipeline.
+  const mediaRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const [recording, setRecording] = useState(false);
+  const [recStart, setRecStart] = useState(0);
+  const [recNote, setRecNote] = useState('');
+
+  const startRecording = async () => {
+    if (mediaRef.current) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      chunksRef.current = [];
+      rec.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      rec.start(1000);
+      mediaRef.current = rec;
+      setRecording(true);
+      setRecStart(Date.now());
+      setRecNote('');
+    } catch {
+      setRecNote('Sin acceso al micrófono — la sesión no se está grabando. Puedes subir un audio manualmente.');
+    }
+  };
+
+  const stopRecording = (): Promise<File | null> => new Promise(resolve => {
+    const rec = mediaRef.current;
+    if (!rec) { resolve(null); return; }
+    rec.onstop = () => {
+      rec.stream.getTracks().forEach(t => t.stop());
+      mediaRef.current = null;
+      setRecording(false);
+      const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' });
+      chunksRef.current = [];
+      resolve(blob.size > 0 ? new File([blob], `session-${id}.webm`, { type: blob.type || 'audio/webm' }) : null);
+    };
+    rec.stop();
+  });
+
+  // Releases the mic if the user navigates away mid-recording
+  useEffect(() => () => {
+    const rec = mediaRef.current;
+    if (rec) {
+      rec.stream.getTracks().forEach(t => t.stop());
+      mediaRef.current = null;
+    }
+  }, []);
+
   const { data: patient } = useQuery({
     queryKey: ['patient', appt?.patient_id],
     queryFn: () => patientsApi.get(appt!.patient_id),
@@ -262,8 +348,8 @@ export function AppointmentPage() {
     queryFn: () => consentsApi.list(appt!.patient_id),
     enabled: !!appt?.patient_id,
   });
-  const treatmentConsent = (consentsData?.items ?? [])
-    .find(c => c.consent_type === 'TREATMENT' && !c.revoked_at);
+  const activeConsents = (consentsData?.items ?? []).filter(c => !c.revoked_at);
+  const treatmentConsent = activeConsents.find(c => c.consent_type === 'TREATMENT');
   const [viewConsentId, setViewConsentId] = useState<string | null>(null);
 
   // Open process = an INITIAL more recent than the last DISCHARGE.
@@ -286,6 +372,26 @@ export function AppointmentPage() {
       setStatusErr('No se pudo cambiar el estado de la cita. Intenta de nuevo.');
     } finally {
       setStatusLoading(false);
+    }
+  };
+
+  const recordingConsent = activeConsents.some(c => c.consent_type === 'RECORDING');
+
+  const handleStartSession = async () => {
+    await handleStatusChange('IN_PROGRESS');
+    if (recordingConsent) await startRecording();
+  };
+
+  const handleFinishSession = async () => {
+    const audio = await stopRecording();
+    await handleStatusChange('COMPLETED');
+    if (audio && appt?.patient_id) {
+      try {
+        const res = await appointmentsApi.uploadAudio(id!, appt.patient_id, audio, defaultRecordType);
+        handleDraftCreated(res.draft_id);
+      } catch {
+        setRecNote('La grabación terminó pero no se pudo subir — usa "Subir grabación" en Borrador IA.');
+      }
     }
   };
 
@@ -352,8 +458,15 @@ export function AppointmentPage() {
     : (appt.guest_name?.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?');
 
   const patientAge = calcAge(patient?.birth_date);
+  // A session can only start on the day of the appointment — future
+  // appointments show their data but the encounter hasn't happened yet.
+  const todayISO = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
+  const isFutureDay = apptDate > todayISO;
   // Hard gates before a clinical session can start (Res. 1995/1999 + consent law)
-  const canStartSession = !!patient && !!treatmentConsent;
+  const canStartSession = !!patient && !!treatmentConsent && !isFutureDay;
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: compactLayout ? '16px 12px' : '24px 24px 40px' }}>
@@ -393,16 +506,20 @@ export function AppointmentPage() {
               {patient && patientAge !== null && <InfoChip icon={<Cake size={13} />} text={`${patientAge} años`} />}
               {patient?.document_number && <InfoChip icon={<CreditCard size={13} />} text={`${patient.document_type_code ?? ''} ${patient.document_number}`.trim()} />}
               {patient?.phone && <InfoChip icon={<Phone size={13} />} text={patient.phone} />}
-              {/* Consent coverage — derived from the active TREATMENT consent */}
-              {isGuest ? null : treatmentConsent ? (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 7, background: '#d1fae5', color: '#065f46' }}>
-                  <CheckCircle2 size={13} /> Consentimiento firmado el {treatmentConsent.signed_at}
-                  <button
-                    onClick={() => setViewConsentId(treatmentConsent.id)}
-                    style={{ marginLeft: 2, border: 'none', background: 'none', color: '#065f46', cursor: 'pointer', fontSize: 12, fontWeight: 700, textDecoration: 'underline', padding: 0 }}
-                  >
-                    Ver
-                  </button>
+              {/* Consent coverage — every active consent, each one viewable */}
+              {isGuest ? null : activeConsents.length > 0 ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 7, background: '#d1fae5', color: '#065f46' }}>
+                  <CheckCircle2 size={13} /> Consentimientos:
+                  {activeConsents.map(c => (
+                    <button
+                      key={c.id}
+                      onClick={() => setViewConsentId(c.id)}
+                      title={`Firmado el ${c.signed_at} — ver documento`}
+                      style={{ border: 'none', background: 'none', color: '#065f46', cursor: 'pointer', fontSize: 12, fontWeight: 700, textDecoration: 'underline', padding: 0 }}
+                    >
+                      {CONSENT_SHORT[c.consent_type] ?? c.consent_type}
+                    </button>
+                  ))}
                 </span>
               ) : (
                 <button
@@ -500,7 +617,7 @@ export function AppointmentPage() {
                   if (!canStartSession) return;
                   const missing = !patient?.document_number || !patient?.birth_date;
                   if (missing) { setCompleteDataOpen(true); }
-                  else { handleStatusChange('IN_PROGRESS'); }
+                  else { handleStartSession(); }
                 }}
                 disabled={statusLoading || !canStartSession}
                 style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 20px', background: canStartSession ? '#059669' : 'var(--s200)', color: canStartSession ? '#fff' : 'var(--s400)', border: 'none', borderRadius: 9, cursor: statusLoading || !canStartSession ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 700, opacity: statusLoading ? 0.7 : 1 }}
@@ -512,15 +629,26 @@ export function AppointmentPage() {
             {isScheduled && !canStartSession && (
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: '#92400e' }}>
                 <AlertTriangle size={13} />
-                {isGuest
+                {isFutureDay
+                  ? `La sesión se puede iniciar el día de la cita (${date}).`
+                  : isGuest
                   ? 'Asocia el paciente para poder iniciar la sesión.'
                   : 'El paciente debe firmar el consentimiento de tratamiento antes de iniciar.'}
               </span>
             )}
-            {isInProgress && <SessionTimer scheduledAt={appt.scheduled_at} durationMin={appt.duration_min} />}
+            {isInProgress && <SessionTimer startedAt={appt.started_at ?? appt.scheduled_at} durationMin={appt.duration_min} />}
+            {isInProgress && recording && <RecChip startMs={recStart} />}
+            {isInProgress && recordingConsent && !recording && (
+              <button
+                onClick={startRecording}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+              >
+                <Mic size={13} /> Grabar
+              </button>
+            )}
             {isInProgress && (
               <button
-                onClick={() => handleStatusChange('COMPLETED')}
+                onClick={handleFinishSession}
                 disabled={statusLoading}
                 style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 20px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 9, cursor: statusLoading ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 700, opacity: statusLoading ? 0.7 : 1 }}
               >
@@ -528,7 +656,9 @@ export function AppointmentPage() {
                 Finalizar sesión
               </button>
             )}
-            {linkedRecords.length === 0 && (
+            {/* Once the session started the encounter happened — it can no
+                longer be cancelled, only finished (backend enforces it too) */}
+            {isScheduled && linkedRecords.length === 0 && (
               <button
               onClick={() => setCancelOpen(v => !v)}
               style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', background: '#fff', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: 9, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
@@ -536,6 +666,12 @@ export function AppointmentPage() {
               <X size={14} /> Cancelar cita
             </button>
             )}
+          </div>
+        )}
+
+        {recNote && (
+          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, fontSize: 12.5, color: '#92400e' }}>
+            <AlertTriangle size={13} /> {recNote}
           </div>
         )}
 
@@ -667,6 +803,8 @@ export function AppointmentPage() {
               appointmentId={id!}
               patientId={appt.patient_id}
               draftId={draftId}
+              recordType={defaultRecordType}
+              sessionDate={apptDate}
               onDraftCreated={handleDraftCreated}
             />
           ) : (
@@ -697,7 +835,7 @@ export function AppointmentPage() {
           onClose={() => setCompleteDataOpen(false)}
           onSaved={() => {
             queryClient.invalidateQueries({ queryKey: ['patient', appt?.patient_id] });
-            handleStatusChange('IN_PROGRESS');
+            handleStartSession();
           }}
         />
       )}

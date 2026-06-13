@@ -9,7 +9,8 @@ export interface AIDraft {
   status: DraftStatus;
   ai_model_version: string;
   whisper_model: string;
-  draft_content_plain?: Record<string, string> | null;
+  /** New drafts: { record_type, sections: {...} }. Legacy drafts: flat SOAP keys. */
+  draft_content_plain?: Record<string, unknown> | null;
   error_message?: string;
   processed_at?: string;
   resolved_at?: string;
@@ -17,6 +18,7 @@ export interface AIDraft {
 }
 
 export interface ApproveDraftInput {
+  sections?: Record<string, string>;
   subjective?: string;
   objective?: string;
   assessment?: string;
@@ -24,6 +26,7 @@ export interface ApproveDraftInput {
   session_date?: string;
   record_type?: string;
   appointment_id?: string;
+  risk_level?: string;
 }
 
 export const aiDraftsApi = {

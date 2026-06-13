@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { X, FileCheck, ChevronDown, CheckCircle2 } from 'lucide-react';
+import { X, FileCheck, CheckCircle2 } from 'lucide-react';
 import { consentsApi, consentTemplatesApi, type ConsentType } from '@/api/clinicalRecords';
 import { Spinner } from '@/components/ui/Spinner';
 import { SignatureCanvas } from './SignatureCanvas';
@@ -29,7 +29,6 @@ export function UnifiedConsentSignModal({ patientId, alreadySigned = [], onClose
   const signedSet = new Set(alreadySigned);
   const [checked, setChecked] = useState<Set<ConsentType>>(() =>
     new Set(TYPE_META.filter(m => m.required && !signedSet.has(m.type)).map(m => m.type)));
-  const [expanded, setExpanded] = useState<ConsentType | null>(null);
   const [accepted, setAccepted] = useState(false);
   const [signature, setSignature] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -87,8 +86,9 @@ export function UnifiedConsentSignModal({ patientId, alreadySigned = [], onClose
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)' }}><X size={18} /></button>
         </div>
         <p style={{ margin: '0 0 16px', fontSize: 12.5, color: 'var(--s500)', lineHeight: 1.6 }}>
-          El paciente marca lo que autoriza, lee cada documento y firma una sola vez.
-          Cada autorización queda como consentimiento independiente y revocable por separado.
+          El paciente marca lo que autoriza, lee un solo documento con las secciones
+          seleccionadas y firma una vez. Cada autorización queda como consentimiento
+          independiente y revocable por separado.
         </p>
 
         {isLoading ? (
@@ -99,10 +99,9 @@ export function UnifiedConsentSignModal({ patientId, alreadySigned = [], onClose
               const tpl = templateOf(m.type);
               const done = signedSet.has(m.type);
               const isChecked = checked.has(m.type);
-              const isOpen = expanded === m.type;
               return (
-                <div key={m.type} style={{ border: `1.5px solid ${done ? '#a7f3d0' : isChecked ? 'var(--teal)' : 'var(--s200)'}`, borderRadius: 10, marginBottom: 8, background: done ? '#f0fdf4' : '#fff', overflow: 'hidden' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px' }}>
+                <div key={m.type} style={{ border: `1.5px solid ${done ? '#a7f3d0' : isChecked ? 'var(--teal)' : 'var(--s200)'}`, borderRadius: 10, marginBottom: 8, background: done ? '#f0fdf4' : '#fff' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px' }}>
                     {done ? (
                       <CheckCircle2 size={17} color="#10b981" style={{ flexShrink: 0 }} />
                     ) : (
@@ -123,23 +122,27 @@ export function UnifiedConsentSignModal({ patientId, alreadySigned = [], onClose
                         {done ? 'Ya firmado y vigente' : tpl ? m.hint : 'Sin plantilla activa — créala en Configuración'}
                       </div>
                     </div>
-                    {tpl && (
-                      <button
-                        onClick={() => setExpanded(isOpen ? null : m.type)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', cursor: 'pointer', color: 'var(--teal)', fontSize: 12, fontWeight: 600, padding: 4 }}
-                      >
-                        Leer <ChevronDown size={13} style={{ transform: isOpen ? 'rotate(180deg)' : '', transition: 'transform .2s' }} />
-                      </button>
-                    )}
                   </div>
-                  {isOpen && tpl && (
-                    <div style={{ maxHeight: 240, overflowY: 'auto', padding: '12px 16px', background: 'var(--s50)', borderTop: '1px solid var(--s100)' }}>
-                      <p style={{ margin: 0, fontSize: 13, color: 'var(--s700)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{tpl.body}</p>
-                    </div>
-                  )}
                 </div>
               );
             })}
+
+            {/* One continuous document: the selected sections, read once */}
+            {selected.length > 0 && (
+              <div style={{ maxHeight: 320, overflowY: 'auto', padding: '16px 18px', background: 'var(--s50)', borderRadius: 10, border: '1px solid var(--s200)', marginTop: 14 }}>
+                {selected.map((m, i) => {
+                  const tpl = templateOf(m.type)!;
+                  return (
+                    <div key={m.type} style={{ marginTop: i === 0 ? 0 : 18, paddingTop: i === 0 ? 0 : 16, borderTop: i === 0 ? 'none' : '1px solid var(--s200)' }}>
+                      <h4 style={{ margin: '0 0 8px', fontSize: 13.5, fontWeight: 700, color: 'var(--s800)' }}>
+                        {i + 1}. {tpl.title}
+                      </h4>
+                      <p style={{ margin: 0, fontSize: 12.5, color: 'var(--s700)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{tpl.body}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {selected.length > 0 && (
               <>
