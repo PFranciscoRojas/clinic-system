@@ -8,6 +8,7 @@ import {
 import { patientsApi, type CreatePatientBody } from '@/api/patients';
 import { appointmentsApi } from '@/api/appointments';
 import { validateBirthDate } from '@/lib/age';
+import { BirthDateField } from '@/components/patients/BirthDateField';
 import { Spinner } from '@/components/ui/Spinner';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -180,11 +181,6 @@ export function NewPatientPage() {
   const age        = birthDate ? calcAge(birthDate) : null;
 
   // Max date for birth_date field: today
-  const todayStr = (() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  })();
-
   const { mutate: create, isPending, isSuccess } = useMutation({
     mutationFn: (body: CreatePatientBody) => patientsApi.create(body),
     onSuccess: async (data) => {
@@ -206,11 +202,8 @@ export function NewPatientPage() {
     else if (docNumErr)        newErrors.docNumber = docNumErr;
     if (!firstName.trim())     newErrors.firstName = 'El primer nombre es requerido.';
     if (!pLastName.trim())     newErrors.pLastName = 'El apellido paterno es requerido.';
-    // A half-typed date (e.g. only the year) leaves value="" but badInput=true —
-    // without this check it would save silently with no birth date.
-    const birthInput = birthWrapRef.current?.querySelector('input');
-    if (birthInput?.validity.badInput) newErrors.birthDate = 'Fecha incompleta — ingresa día, mes y año.';
-    else if (ageError)         newErrors.birthDate = ageError;
+    // BirthDateField only emits complete dates, so a partial date is impossible.
+    if (ageError)              newErrors.birthDate = ageError;
     if (phoneError)            newErrors.phone     = phoneError;
     if (emailError)            newErrors.email     = emailError;
 
@@ -349,14 +342,19 @@ export function NewPatientPage() {
 
             {/* Birth date + age preview */}
             <div ref={birthWrapRef}>
-              <Field
-                label="Fecha de nacimiento"
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--s700)', marginBottom: 6 }}>
+                Fecha de nacimiento
+              </label>
+              <BirthDateField
                 value={birthDate}
                 onChange={v => { setBirthDate(v); setErrors(e => ({ ...e, birthDate: '' })); }}
-                type="date"
-                max={todayStr}
                 error={errors.birthDate}
               />
+              {errors.birthDate && (
+                <div style={{ marginTop: 5, fontSize: 12, color: 'var(--red)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <AlertCircle size={12} />{errors.birthDate}
+                </div>
+              )}
               {age !== null && !errors.birthDate && (
                 <div style={{ marginTop: 5, fontSize: 12, color: ageError ? 'var(--red)' : 'var(--teal-d)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
                   {ageError
