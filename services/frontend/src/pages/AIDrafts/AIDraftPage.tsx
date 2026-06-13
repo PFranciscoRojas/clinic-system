@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Brain, Clock, CheckCircle2, AlertTriangle, RefreshCw,
-  Edit3, Save, ChevronDown, ChevronUp, Sparkles, FileText,
+  Edit3, Save, ChevronDown, ChevronUp, Sparkles, FileText, Stethoscope, Search, X,
 } from 'lucide-react';
 import { aiDraftsApi, type DraftStatus } from '@/api/aiDrafts';
+import { diagnosesApi, type ICD10Code } from '@/api/diagnoses';
 import { TEMPLATE_SECTIONS, RECORD_TYPE_LABELS, type SectionDef } from '@/components/clinical/constants';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
@@ -53,6 +54,9 @@ export function AIDraftPage() {
   // Lets the professional correct the record type before approving
   const [typeOverride, setTypeOverride] = useState('');
   const [showTranscript, setShowTranscript] = useState(false);
+  // ICD-10 to assign on approve — seeded from the AI suggestion, confirmable.
+  // undefined = not yet initialised from the draft; null = explicitly removed.
+  const [icd10, setIcd10] = useState<ICD10Code | null | undefined>(undefined);
 
   const { data: draft, isLoading, isError, refetch } = useQuery({
     queryKey: ['ai-draft', id],
@@ -63,6 +67,17 @@ export function AIDraftPage() {
       return (status === 'PENDING' || status === 'PROCESSING') ? 3000 : false;
     },
   });
+
+  // Seed the ICD-10 selector from the AI suggestion once, when the draft loads
+  useEffect(() => {
+    if (icd10 !== undefined) return;
+    const sug = (draft?.draft_content_plain as Record<string, unknown> | null)?.suggested_icd10 as
+      | { code?: string; description?: string } | null | undefined;
+    if (sug && typeof sug.code === 'string' && sug.code.trim()) {
+      setIcd10({ code: sug.code.trim(), description: sug.description ?? '', chapter: '' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft]);
 
   const handleApprove = async () => {
     if (!id) return;
@@ -90,6 +105,16 @@ export function AIDraftPage() {
             appointment_id: qsAppointmentId || undefined,
           });
       setCreatedRecordId(res.clinical_record_id);
+      // Assign the confirmed diagnosis (if any) to the new record
+      if (icd10?.code && draft?.patient_id) {
+        try {
+          await diagnosesApi.create(draft.patient_id, {
+            icd10_code: icd10.code,
+            clinical_record_id: res.clinical_record_id,
+            diagnosis_type: 'PRINCIPAL',
+          });
+        } catch { /* record is approved; diagnosis can be added later from the profile */ }
+      }
       queryClient.invalidateQueries({ queryKey: ['ai-draft', id] });
     } catch {
       setApproveErr('Error al aprobar. Intenta de nuevo.');
@@ -308,6 +333,15 @@ export function AIDraftPage() {
             })}
           </div>
 
+          {/* ICD-10 suggestion — the AI proposes, the professional confirms */}
+          {(isReady || draft.status === 'APPROVED') && (
+            <Icd10Suggestion
+              value={icd10 ?? null}
+              editable={isReady}
+              onChange={setIcd10}
+            />
+          )}
+
           {/* Action bar */}
           {isReady && (
             <div style={{ display: 'flex', gap: 12 }}>
@@ -381,5 +415,97 @@ function InfoLine({ label, value }: { label: string; value: string }) {
     <span style={{ fontSize: 12, color: 'var(--s400)' }}>
       <span style={{ fontWeight: 600 }}>{label}:</span> {value}
     </span>
+  );
+}
+
+// Shows the AI's ICD-10 suggestion and lets the professional confirm, change
+// or remove it before it becomes the record's diagnosis. The suggestion is
+// never assigned automatically — clinical responsibility stays with the human.
+function Icd10Suggestion({ value, editable, onChange }: {
+  value: ICD10Code | null;
+  editable: boolean;
+  onChange: (v: ICD10Code | null) => void;
+}) {
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
+  const [debounced, setDebounced] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(query), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const { data, isFetching } = useQuery({
+    queryKey: ['icd10', debounced],
+    queryFn: () => diagnosesApi.searchIcd10(debounced),
+    enabled: debounced.length >= 2,
+  });
+  const results: ICD10Code[] = data?.items ?? [];
+
+  return (
+    <div className="card" style={{ padding: 18, marginBottom: 16, border: '1px solid #ede9fe', background: '#faf5ff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <Stethoscope size={16} color="#7c3aed" />
+        <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--s800)' }}>Diagnóstico CIE-10 sugerido</span>
+        <span style={{ fontSize: 11, color: '#7c3aed', background: '#ede9fe', borderRadius: 6, padding: '1px 7px', fontWeight: 600 }}>sugerencia IA</span>
+      </div>
+
+      {value ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: '1.5px solid #ddd6fe', borderRadius: 9, padding: '10px 14px' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#5b21b6' }}>{value.code}</span>
+            {value.description && <span style={{ fontSize: 13, color: 'var(--s600)' }}> — {value.description}</span>}
+          </div>
+          {editable && (
+            <button onClick={() => { onChange(null); setSearching(false); }} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--s400)', display: 'flex', padding: 2 }} title="Quitar diagnóstico">
+              <X size={15} />
+            </button>
+          )}
+        </div>
+      ) : (
+        <p style={{ margin: '0 0 8px', fontSize: 12.5, color: 'var(--s500)' }}>
+          Sin diagnóstico asignado. {editable && 'Puedes buscar uno para asignarlo al aprobar.'}
+        </p>
+      )}
+
+      {editable && !searching && (
+        <button
+          onClick={() => setSearching(true)}
+          style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 8, border: '1px solid #ddd6fe', background: '#fff', color: '#7c3aed', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+        >
+          <Search size={13} /> {value ? 'Cambiar diagnóstico' : 'Buscar diagnóstico'}
+        </button>
+      )}
+
+      {editable && searching && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1.5px solid #ddd6fe', borderRadius: 9, padding: '8px 12px' }}>
+            {isFetching ? <Spinner size={13} color="#7c3aed" /> : <Search size={13} color="var(--s400)" />}
+            <input
+              autoFocus
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Código o descripción (mín. 2 caracteres)…"
+              style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 13, color: 'var(--s700)', outline: 'none' }}
+            />
+            <button onClick={() => { setSearching(false); setQuery(''); }} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--s400)', display: 'flex', padding: 0 }}><X size={13} /></button>
+          </div>
+          {debounced.length >= 2 && results.length > 0 && (
+            <div style={{ marginTop: 6, background: '#fff', border: '1px solid var(--s200)', borderRadius: 9, overflow: 'hidden', maxHeight: 220, overflowY: 'auto' }}>
+              {results.map(c => (
+                <button
+                  key={c.code}
+                  onClick={() => { onChange(c); setSearching(false); setQuery(''); }}
+                  style={{ width: '100%', textAlign: 'left', padding: '9px 13px', border: 'none', borderBottom: '1px solid var(--s50)', background: 'none', cursor: 'pointer', fontSize: 12.5 }}
+                >
+                  <span style={{ fontWeight: 700, color: '#5b21b6' }}>{c.code}</span>
+                  <span style={{ color: 'var(--s600)' }}> — {c.description}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

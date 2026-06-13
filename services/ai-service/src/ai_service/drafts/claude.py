@@ -46,8 +46,13 @@ REGLAS ESTRICTAS:
 3. Nunca incluyas nombres, documentos o datos de contacto — el texto ya fue anonimizado.
 4. Usa terminología psicológica precisa y lenguaje formal clínico, en tercera persona.
 5. Responde ÚNICAMENTE con el objeto JSON, sin texto adicional ni marcas de formato.
+6. Añade además la clave "suggested_icd10": una SUGERENCIA (no un diagnóstico definitivo)
+   del código CIE-10 más probable según lo expresado en la sesión, como objeto
+   {{"code": "F41.1", "description": "Trastorno de ansiedad generalizada"}}.
+   Usa códigos de salud mental (capítulo F). Si no hay base suficiente, usa null.
+   El profesional confirmará o cambiará esta sugerencia antes de aprobar.
 
-Formato de respuesta — un objeto JSON con exactamente estas claves:
+Formato de respuesta — un objeto JSON con las claves de secciones y "suggested_icd10":
 {schema}"""
 
 
@@ -66,7 +71,7 @@ async def generate_soap_draft(anonymized_transcription: str, record_type: str = 
     rt, schema = _schema_for(record_type)
 
     if not anonymized_transcription.strip():
-        return json.dumps({"record_type": rt, "sections": {}}, ensure_ascii=False)
+        return json.dumps({"record_type": rt, "sections": {}, "suggested_icd10": None}, ensure_ascii=False)
 
     logger.info("generating clinical draft", extra={"chars": len(anonymized_transcription), "record_type": rt})
 
@@ -103,5 +108,14 @@ async def generate_soap_draft(anonymized_transcription: str, record_type: str = 
     # Keep only known sections with actual content
     sections = {k: v for k, v in parsed.items() if k in schema and isinstance(v, str) and v.strip()}
 
-    logger.info("clinical draft generated", extra={"input_tokens": message.usage.input_tokens, "sections": len(sections)})
-    return json.dumps({"record_type": rt, "sections": sections}, ensure_ascii=False)
+    # ICD-10 suggestion (the professional confirms it before it becomes a diagnosis)
+    suggested = None
+    raw_icd = parsed.get("suggested_icd10")
+    if isinstance(raw_icd, dict) and isinstance(raw_icd.get("code"), str) and raw_icd["code"].strip():
+        suggested = {
+            "code": raw_icd["code"].strip().upper(),
+            "description": str(raw_icd.get("description") or "").strip(),
+        }
+
+    logger.info("clinical draft generated", extra={"input_tokens": message.usage.input_tokens, "sections": len(sections), "icd10": bool(suggested)})
+    return json.dumps({"record_type": rt, "sections": sections, "suggested_icd10": suggested}, ensure_ascii=False)
