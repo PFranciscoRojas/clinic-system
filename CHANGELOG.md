@@ -10,6 +10,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- Admin-only "Limpiar datos de prueba" in Settings → Seguridad: wipes the organization's patients, appointments, records, AI drafts and consents while preserving the professional profile + signature, consent templates, users and catalogs. Triple-gated: server flag `ALLOW_DATA_RESET`, CLINIC_ADMIN role, and a typed confirmation — meant for the construction/testing phase, hidden in normal production
 - Session recording in the browser: recording starts automatically with "Iniciar sesión" when the patient's RECORDING consent is active (manual "Grabar" button too), stops at "Finalizar sesión" and uploads straight into the AI pipeline
 - AI drafts now follow the clinical record structure instead of generic SOAP: the session's record type (initial/evolution/discharge) travels with the audio job, Claude fills the same sections the professional would write by hand, and approving creates the record linked to the appointment with the real session date
 - Responsive layout for phones and tablets: the sidebar becomes a hamburger drawer, agenda/inbox and the new-appointment columns stack vertically, Settings nav turns into a scrollable tab bar, patients always show as cards on phones, wide clinical tables scroll horizontally, and the month calendar compacts

@@ -29,5 +29,6 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		"roles":                claims.Roles,
 		"permissions":          claims.Permissions,
 		"onboarding_completed": onboarded,
+		"data_reset_enabled":   h.dataResetOpen,
 	})
 }

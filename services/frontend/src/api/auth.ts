@@ -15,6 +15,7 @@ export interface Me {
   roles: string[];
   permissions?: string[];
   onboarding_completed?: boolean;
+  data_reset_enabled?: boolean;  // admin-only test-data wipe is available
 }
 
 export const authApi = {
