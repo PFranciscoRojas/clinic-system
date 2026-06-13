@@ -19,15 +19,19 @@ func (h *Handler) getDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The reviewer needs the decrypted SOAP sections to edit and approve;
-	// content only exists once the worker finished (DRAFT_READY)
+	// The reviewer needs the decrypted sections (and transcription) to edit
+	// and approve. Content exists once the worker finished — show it for both
+	// DRAFT_READY and APPROVED so an approved draft never falls back to a
+	// legacy layout.
 	var contentPlain map[string]any
-	if draft.Status == "DRAFT_READY" {
-		_, content, err := h.svc.DecryptDraftContent(r.Context(), claims.OrganizationID, draft.ID)
+	var transcription string
+	if draft.Status == "DRAFT_READY" || draft.Status == "APPROVED" {
+		_, content, trans, err := h.svc.DecryptForReview(r.Context(), claims.OrganizationID, draft.ID)
 		if err != nil {
 			writeErr(w, err)
 			return
 		}
+		transcription = trans
 		if content != "" {
 			if err := json.Unmarshal([]byte(content), &contentPlain); err != nil {
 				contentPlain = map[string]any{"subjective": content}
@@ -43,6 +47,7 @@ func (h *Handler) getDraft(w http.ResponseWriter, r *http.Request) {
 		"ai_model_version":    draft.AIModelVersion,
 		"whisper_model":       draft.WhisperModel,
 		"draft_content_plain": contentPlain,
+		"transcription":       transcription,
 		"error_message":       draft.ErrorMessage,
 		"processed_at":        draft.ProcessedAt,
 		"resolved_at":         draft.ResolvedAt,

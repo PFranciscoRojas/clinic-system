@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronLeft, ChevronRight, Clock, MapPin, Video, Repeat,
   CalendarCheck, CalendarPlus, CheckCircle2, Bell, BellOff,
@@ -625,6 +625,7 @@ const secondaryBtn: React.CSSProperties = {
 
 export function NewAppointmentPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const compact = useIsCompact();
   const [searchParams] = useSearchParams();
   const returnPatientId = searchParams.get('patient_id');
@@ -772,6 +773,10 @@ export function NewAppointmentPage() {
       });
     },
     onSuccess: () => {
+      // Refresh the day agenda (dashboard) and the calendar range so the new
+      // appointment shows without a manual F5
+      queryClient.invalidateQueries({ queryKey: ['appointments-day'] });
+      queryClient.invalidateQueries({ queryKey: ['cal-range'] });
       setConfirmed(true);
       const dest = returnPatientId ? `/patients/${returnPatientId}` : '/';
       setTimeout(() => navigate(dest), 2000);

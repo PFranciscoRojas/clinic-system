@@ -63,10 +63,11 @@ interface AudioSectionProps {
   draftId: string;
   recordType: string;
   sessionDate: string;
+  processing?: boolean;
   onDraftCreated: (draftId: string) => void;
 }
 
-function AudioSection({ appointmentId, patientId, draftId, recordType, sessionDate, onDraftCreated }: AudioSectionProps) {
+function AudioSection({ appointmentId, patientId, draftId, recordType, sessionDate, processing, onDraftCreated }: AudioSectionProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState('');
@@ -80,6 +81,20 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, sessionDa
       return (s === 'PENDING' || s === 'PROCESSING') ? 3000 : false;
     },
   });
+
+  // The session just ended and the recording is being saved/uploaded: show
+  // an immediate "processing" state until the draft id exists.
+  if (processing && !draftId) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: '#e0f2fe', borderRadius: 10, border: '1px solid #bae6fd' }}>
+        <Spinner size={18} color="#0369a1" />
+        <div>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--s800)' }}>Procesando la grabación…</p>
+          <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--s500)' }}>Transcribiendo el audio y preparando el borrador. Puede tardar unos minutos.</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleFile = async (file: File) => {
     setUploading(true); setUploadErr('');
@@ -224,22 +239,52 @@ function SessionTimer({ startedAt, durationMin }: { startedAt: string; durationM
   );
 }
 
-// Pulsing indicator while the session audio is being recorded.
-function RecChip({ startMs }: { startMs: number }) {
+// Recording indicator with a live mic-level meter: five bars that react to
+// the actual audio coming in, so the professional can confirm the mic is
+// capturing — not just that recording "started".
+function RecChip({ startMs, analyser }: { startMs: number; analyser: AnalyserNode | null }) {
   const [now, setNow] = useState(() => Date.now());
+  const [level, setLevel] = useState(0);
+
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  useEffect(() => {
+    if (!analyser) return;
+    const buf = new Uint8Array(analyser.frequencyBinCount);
+    let raf = 0;
+    const tick = () => {
+      analyser.getByteTimeDomainData(buf);
+      // RMS deviation from the 128 midpoint → 0..1 loudness
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+      setLevel(Math.min(1, Math.sqrt(sum / buf.length) * 3));
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [analyser]);
+
   const sec = Math.max(0, Math.floor((now - startMs) / 1000));
   const mmss = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+  const bars = [0.15, 0.4, 0.7, 0.4, 0.15]; // per-bar sensitivity thresholds
+
   return (
     <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px',
+      display: 'inline-flex', alignItems: 'center', gap: 9, padding: '8px 14px',
       borderRadius: 9, fontSize: 13, fontWeight: 700, background: '#fee2e2',
       border: '1.5px solid #fca5a5', color: '#991b1b',
     }}>
       <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#dc2626', animation: 'pulse 1.5s infinite' }} />
+      <span style={{ display: 'inline-flex', alignItems: 'flex-end', gap: 2, height: 16 }}>
+        {bars.map((thr, i) => {
+          const active = level > thr;
+          const h = active ? 4 + Math.round(level * 12) : 3;
+          return <span key={i} style={{ width: 3, height: h, borderRadius: 2, background: active ? '#dc2626' : '#fca5a5', transition: 'height .08s, background .08s' }} />;
+        })}
+      </span>
       Grabando · {mmss}
     </span>
   );
@@ -285,9 +330,20 @@ export function AppointmentPage() {
   // required), stops at "Finalizar sesión" and uploads to the AI pipeline.
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const audioCtxRef = useRef<AudioContext | null>(null);
   const [recording, setRecording] = useState(false);
   const [recStart, setRecStart] = useState(0);
   const [recNote, setRecNote] = useState('');
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
+  // true between "Finalizar sesión" and the draft appearing — drives the
+  // "procesando grabación" feedback instead of the upload dropzone
+  const [processingAudio, setProcessingAudio] = useState(false);
+
+  const teardownAudio = () => {
+    audioCtxRef.current?.close().catch(() => {});
+    audioCtxRef.current = null;
+    setAnalyser(null);
+  };
 
   const startRecording = async () => {
     if (mediaRef.current) return;
@@ -299,6 +355,18 @@ export function AppointmentPage() {
       rec.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       rec.start(1000);
       mediaRef.current = rec;
+
+      // Live level meter so the user can see the mic is actually capturing
+      try {
+        const ctx = new AudioContext();
+        const src = ctx.createMediaStreamSource(stream);
+        const an = ctx.createAnalyser();
+        an.fftSize = 512;
+        src.connect(an);
+        audioCtxRef.current = ctx;
+        setAnalyser(an);
+      } catch { /* meter is best-effort */ }
+
       setRecording(true);
       setRecStart(Date.now());
       setRecNote('');
@@ -313,6 +381,7 @@ export function AppointmentPage() {
     rec.onstop = () => {
       rec.stream.getTracks().forEach(t => t.stop());
       mediaRef.current = null;
+      teardownAudio();
       setRecording(false);
       const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' });
       chunksRef.current = [];
@@ -328,6 +397,7 @@ export function AppointmentPage() {
       rec.stream.getTracks().forEach(t => t.stop());
       mediaRef.current = null;
     }
+    teardownAudio();
   }, []);
 
   const { data: patient } = useQuery({
@@ -383,6 +453,8 @@ export function AppointmentPage() {
   };
 
   const handleFinishSession = async () => {
+    const wasRecording = !!mediaRef.current;
+    if (wasRecording) setProcessingAudio(true);
     const audio = await stopRecording();
     await handleStatusChange('COMPLETED');
     if (audio && appt?.patient_id) {
@@ -390,8 +462,11 @@ export function AppointmentPage() {
         const res = await appointmentsApi.uploadAudio(id!, appt.patient_id, audio, defaultRecordType);
         handleDraftCreated(res.draft_id);
       } catch {
+        setProcessingAudio(false);
         setRecNote('La grabación terminó pero no se pudo subir — usa "Subir grabación" en Borrador IA.');
       }
+    } else {
+      setProcessingAudio(false);
     }
   };
 
@@ -637,7 +712,7 @@ export function AppointmentPage() {
               </span>
             )}
             {isInProgress && <SessionTimer startedAt={appt.started_at ?? appt.scheduled_at} durationMin={appt.duration_min} />}
-            {isInProgress && recording && <RecChip startMs={recStart} />}
+            {isInProgress && recording && <RecChip startMs={recStart} analyser={analyser} />}
             {isInProgress && recordingConsent && !recording && (
               <button
                 onClick={startRecording}
@@ -757,7 +832,7 @@ export function AppointmentPage() {
                   <span><b>Registro extemporáneo</b> — motivo: {lateReason}. Quedará declarado en la historia y en el PDF.</span>
                 </div>
               )}
-              <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} onSaved={handleRecordSaved} />
+              <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} onSaved={handleRecordSaved} />
             </div>
           ) : canWriteNote ? (
             <div style={{ textAlign: 'center', padding: '24px 0' }}>
@@ -805,6 +880,7 @@ export function AppointmentPage() {
               draftId={draftId}
               recordType={defaultRecordType}
               sessionDate={apptDate}
+              processing={processingAudio}
               onDraftCreated={handleDraftCreated}
             />
           ) : (

@@ -50,6 +50,9 @@ export function AIDraftPage() {
   const [approving, setApproving] = useState(false);
   const [approveErr, setApproveErr] = useState('');
   const [createdRecordId, setCreatedRecordId] = useState('');
+  // Lets the professional correct the record type before approving
+  const [typeOverride, setTypeOverride] = useState('');
+  const [showTranscript, setShowTranscript] = useState(false);
 
   const { data: draft, isLoading, isError, refetch } = useQuery({
     queryKey: ['ai-draft', id],
@@ -122,7 +125,8 @@ export function AIDraftPage() {
   const contentRaw = draft.draft_content_plain as Record<string, unknown> | null;
   // New drafts carry the clinical-record sections; legacy drafts are flat SOAP.
   const isStructured = !!contentRaw && typeof contentRaw.sections === 'object' && contentRaw.sections !== null;
-  const recordType = (qsRecordType || (contentRaw?.record_type as string) || 'EVOLUTION') as keyof typeof TEMPLATE_SECTIONS;
+  const recordType = (typeOverride || qsRecordType || (contentRaw?.record_type as string) || 'EVOLUTION') as keyof typeof TEMPLATE_SECTIONS;
+  const transcription = (draft.transcription ?? '').trim();
   const baseContent: Record<string, string> = isStructured
     ? (contentRaw!.sections as Record<string, string>)
     : ((contentRaw ?? {}) as Record<string, string>);
@@ -154,8 +158,23 @@ export function AIDraftPage() {
               <h1 style={{ fontSize: 18, fontWeight: 700, color: 'var(--s800)', margin: 0 }}>Borrador IA</h1>
               <Badge label={statusCfg.label} color={statusCfg.color} bg={statusCfg.bg} />
             </div>
-            <div style={{ display: 'flex', gap: 20 }}>
-              <InfoLine label="Tipo" value={RECORD_TYPE_LABELS[recordType] ?? recordType} />
+            <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+              {isReady && isStructured ? (
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--s400)', marginBottom: 3 }}>Tipo de registro</div>
+                  <select
+                    value={recordType}
+                    onChange={e => setTypeOverride(e.target.value)}
+                    style={{ padding: '5px 10px', borderRadius: 8, border: '1.5px solid var(--s200)', fontSize: 13, fontWeight: 600, color: 'var(--s800)', background: '#fff', cursor: 'pointer' }}
+                  >
+                    {(['INITIAL', 'EVOLUTION', 'DISCHARGE'] as const).map(t => (
+                      <option key={t} value={t}>{RECORD_TYPE_LABELS[t] ?? t}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <InfoLine label="Tipo" value={RECORD_TYPE_LABELS[recordType] ?? recordType} />
+              )}
               <InfoLine label="Modelo" value={draft.ai_model_version ?? '—'} />
               <InfoLine label="Draft ID" value={id?.slice(-8) ?? '—'} />
             </div>
@@ -210,6 +229,39 @@ export function AIDraftPage() {
               Generado por IA · Revisa y edita antes de aprobar
             </p>
           </div>
+
+          {/* Empty draft: the audio was transcribed but had no clinical content
+              to structure (e.g. a test recording). Make that explicit. */}
+          {sectionDefs.every(({ key }) => !getSoap(key).trim()) && (
+            <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+              <AlertTriangle size={15} color="#d97706" style={{ flexShrink: 0, marginTop: 1 }} />
+              <span style={{ fontSize: 12.5, color: '#92400e', lineHeight: 1.6 }}>
+                Se transcribió el audio pero la IA no encontró contenido clínico para estructurar
+                {transcription ? ' (revisa la transcripción abajo).' : '.'} Puedes escribir el registro a mano o grabar de nuevo.
+              </span>
+            </div>
+          )}
+
+          {/* Transcription — always available once processed, even if the
+              sections are empty, so the professional can confirm what was heard */}
+          {transcription && (
+            <div className="card" style={{ padding: 0, marginBottom: 16, overflow: 'hidden' }}>
+              <button
+                onClick={() => setShowTranscript(v => !v)}
+                style={{ width: '100%', padding: '12px 18px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', textAlign: 'left' }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--s700)' }}>
+                  <FileText size={14} color="var(--s400)" /> Transcripción del audio
+                </span>
+                {showTranscript ? <ChevronUp size={16} color="var(--s400)" /> : <ChevronDown size={16} color="var(--s400)" />}
+              </button>
+              {showTranscript && (
+                <div style={{ padding: '0 18px 16px', borderTop: '1px solid var(--s100)' }}>
+                  <p style={{ margin: '12px 0 0', fontSize: 13, color: 'var(--s600)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{transcription}</p>
+                </div>
+              )}
+            </div>
+          )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
             {sectionDefs.map(({ key, label, description }) => {
