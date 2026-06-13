@@ -11,6 +11,8 @@ export interface AIDraft {
   whisper_model: string;
   /** New drafts: { record_type, sections: {...} }. Legacy drafts: flat SOAP keys. */
   draft_content_plain?: Record<string, unknown> | null;
+  /** Whisper transcription — always available once processed, even if sections are empty. */
+  transcription?: string;
   error_message?: string;
   processed_at?: string;
   resolved_at?: string;

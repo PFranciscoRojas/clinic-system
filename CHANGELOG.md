@@ -10,6 +10,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- AI draft review now shows the audio transcription (collapsible) and lets the professional correct the record type (initial/evolution/discharge) before approving; when the audio had no clinical content to structure, an explicit note says so instead of leaving blank sections
 - Admin-only "Limpiar datos de prueba" in Settings → Seguridad: wipes the organization's patients, appointments, records, AI drafts and consents while preserving the professional profile + signature, consent templates, users and catalogs. Triple-gated: server flag `ALLOW_DATA_RESET`, CLINIC_ADMIN role, and a typed confirmation — meant for the construction/testing phase, hidden in normal production
 - Session recording in the browser: recording starts automatically with "Iniciar sesión" when the patient's RECORDING consent is active (manual "Grabar" button too), stops at "Finalizar sesión" and uploads straight into the AI pipeline
 - AI drafts now follow the clinical record structure instead of generic SOAP: the session's record type (initial/evolution/discharge) travels with the audio job, Claude fills the same sections the professional would write by hand, and approving creates the record linked to the appointment with the real session date
@@ -31,6 +32,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Grace window for the session note: after "Finalizar sesión" the record form stays available until the note is written (next patient can be attended first); the note stores the real session date and the dashboard inbox lists "Nota de sesión pendiente" reminders
 
 ### Changed
+- Birth date is entered with three explicit selects (Año / Mes / Día) instead of the native date input, whose placeholder order depended on the browser locale and contradicted the validation
+- Recording indicator shows a live microphone level meter so it's clear the mic is actually capturing
+- After "Finalizar sesión" the AI panel immediately shows "Procesando la grabación…" instead of the upload dropzone, until the draft is ready
 - Sessions can only be started on the day of the appointment — future appointments show their data but "Iniciar sesión" stays disabled
 - The session timer counts down the configured duration from the moment "Iniciar sesión" is pressed (`appointments.started_at`, migration 000016), not from the scheduled slot
 - An appointment can no longer be cancelled once the session started (UI and API): it ends as completed or no-show
