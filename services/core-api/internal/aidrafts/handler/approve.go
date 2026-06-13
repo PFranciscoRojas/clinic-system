@@ -13,8 +13,14 @@ import (
 	"sghcp/core-api/internal/shared/middleware"
 )
 
-// draftSOAP is the shape of the JSON stored in ai_drafts.draft_content_enc by the AI worker.
-type draftSOAP struct {
+// draftContent is the shape stored in ai_drafts.draft_content_enc by the AI
+// worker: the clinical-record sections for the session's record type.
+// Legacy drafts stored flat SOAP keys instead — both are accepted.
+type draftContent struct {
+	RecordType string            `json:"record_type"`
+	Sections   map[string]string `json:"sections"`
+
+	// Legacy v1 SOAP shape
 	Subjective string `json:"subjective"`
 	Objective  string `json:"objective"`
 	Assessment string `json:"assessment"`
@@ -22,7 +28,7 @@ type draftSOAP struct {
 }
 
 // POST /api/v1/ai-drafts/{id}/approve
-// Accepts the final (possibly edited) SOAP content, creates a clinical_record,
+// Accepts the final (possibly edited) sections, creates a clinical_record,
 // and marks the draft as APPROVED.
 func (h *Handler) approveDraft(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
@@ -35,42 +41,46 @@ func (h *Handler) approveDraft(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Fetch and decrypt the draft to get patient_id and the original SOAP.
+	// Fetch and decrypt the draft to get patient_id and the original content.
 	draft, rawContent, err := h.svc.DecryptDraftContent(r.Context(), claims.OrganizationID, draftID)
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
 
-	// Start from the AI-generated SOAP; override with any edits from the body.
-	soap := draftSOAP{}
+	stored := draftContent{}
 	if rawContent != "" {
-		_ = json.Unmarshal([]byte(rawContent), &soap)
+		_ = json.Unmarshal([]byte(rawContent), &stored)
 	}
 
 	var body struct {
-		Subjective  string `json:"subjective"`
-		Objective   string `json:"objective"`
-		Assessment  string `json:"assessment"`
-		Plan        string `json:"plan"`
-		SessionDate string `json:"session_date"` // "2006-01-02"; defaults to today
-		RecordType  string `json:"record_type"`  // defaults to EVOLUTION
-		AppointmentID string `json:"appointment_id"`
+		Sections      map[string]string `json:"sections"`
+		SessionDate   string            `json:"session_date"` // "2006-01-02"; defaults to today
+		RecordType    string            `json:"record_type"`
+		AppointmentID string            `json:"appointment_id"`
+		RiskLevel     string            `json:"risk_level"`
+
+		// Legacy SOAP edits
+		Subjective string `json:"subjective"`
+		Objective  string `json:"objective"`
+		Assessment string `json:"assessment"`
+		Plan       string `json:"plan"`
 	}
 	// Body is optional — silently ignore decode errors.
 	_ = httputil.DecodeJSON(r, &body)
 
-	if body.Subjective != "" {
-		soap.Subjective = body.Subjective
+	// Start from the AI-generated sections; the body's edits win wholesale.
+	sections := stored.Sections
+	if len(body.Sections) > 0 {
+		sections = body.Sections
 	}
-	if body.Objective != "" {
-		soap.Objective = body.Objective
-	}
-	if body.Assessment != "" {
-		soap.Assessment = body.Assessment
-	}
-	if body.Plan != "" {
-		soap.Plan = body.Plan
+
+	recordType := clinicalrecords.RecordTypeEvolution
+	switch {
+	case body.RecordType != "":
+		recordType = clinicalrecords.RecordType(body.RecordType)
+	case stored.RecordType != "":
+		recordType = clinicalrecords.RecordType(stored.RecordType)
 	}
 
 	sessionDate := time.Now()
@@ -80,17 +90,12 @@ func (h *Handler) approveDraft(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	recordType := clinicalrecords.RecordTypeEvolution
-	if body.RecordType != "" {
-		recordType = clinicalrecords.RecordType(body.RecordType)
-	}
-
 	appointmentID := body.AppointmentID
 	if appointmentID == "" {
 		appointmentID = draft.ClinicalRecordID // reuse existing link if present
 	}
 
-	recordID, err := h.crr.Create(r.Context(), crrsvc.CreateInput{
+	in := crrsvc.CreateInput{
 		OrganizationID:     claims.OrganizationID,
 		PatientID:          draft.PatientID,
 		ResponsibleStaffID: claims.UserID,
@@ -98,11 +103,40 @@ func (h *Handler) approveDraft(w http.ResponseWriter, r *http.Request) {
 		AppointmentID:      appointmentID,
 		RecordType:         recordType,
 		SessionDate:        sessionDate,
-		Subjective:         soap.Subjective,
-		Objective:          soap.Objective,
-		Assessment:         soap.Assessment,
-		Plan:               soap.Plan,
-	})
+	}
+	if body.RiskLevel != "" {
+		in.RiskLevel = clinicalrecords.RiskLevel(body.RiskLevel)
+	}
+
+	if len(sections) > 0 {
+		in.Sections = make(map[string]any, len(sections))
+		for k, v := range sections {
+			if v != "" {
+				in.Sections[k] = v
+			}
+		}
+	} else {
+		// Legacy SOAP draft, possibly edited field by field
+		soap := stored
+		if body.Subjective != "" {
+			soap.Subjective = body.Subjective
+		}
+		if body.Objective != "" {
+			soap.Objective = body.Objective
+		}
+		if body.Assessment != "" {
+			soap.Assessment = body.Assessment
+		}
+		if body.Plan != "" {
+			soap.Plan = body.Plan
+		}
+		in.Subjective = soap.Subjective
+		in.Objective = soap.Objective
+		in.Assessment = soap.Assessment
+		in.Plan = soap.Plan
+	}
+
+	recordID, err := h.crr.Create(r.Context(), in)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "failed to create clinical record")
 		return

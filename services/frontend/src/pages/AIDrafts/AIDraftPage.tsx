@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Brain, Clock, CheckCircle2, AlertTriangle, RefreshCw,
   Edit3, Save, ChevronDown, ChevronUp, Sparkles, FileText,
 } from 'lucide-react';
 import { aiDraftsApi, type DraftStatus } from '@/api/aiDrafts';
+import { TEMPLATE_SECTIONS, RECORD_TYPE_LABELS, type SectionDef } from '@/components/clinical/constants';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
 
@@ -24,7 +25,7 @@ interface DraftSection {
   description: string;
 }
 
-// The v1 AI pipeline still emits four fixed sections; only the wording changed.
+// Legacy drafts (v1 pipeline) stored four fixed SOAP sections.
 const DRAFT_SECTIONS: DraftSection[] = [
   { key: 'subjective', label: 'Relato del paciente', description: 'Lo que reporta el paciente: síntomas, sentimientos, preocupaciones en sus propias palabras.' },
   { key: 'objective',  label: 'Observación clínica', description: 'Observaciones clínicas: comportamiento, afecto, apariencia, pruebas aplicadas.' },
@@ -34,10 +35,17 @@ const DRAFT_SECTIONS: DraftSection[] = [
 
 export function AIDraftPage() {
   const { id } = useParams<{ id: string }>();
+  const [params] = useSearchParams();
   const navigate = useNavigate();
+  // Session context passed by the appointment page so the approved record
+  // lands linked to the right appointment, date and record type.
+  const qsAppointmentId = params.get('appointment_id') ?? '';
+  const qsSessionDate   = params.get('session_date') ?? '';
+  const qsRecordType    = params.get('record_type') ?? '';
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set(['subjective']));
+  // All sections start open — collapsing is the exception
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [soapEdit, setSoapEdit] = useState<Record<string, string>>({});
   const [approving, setApproving] = useState(false);
   const [approveErr, setApproveErr] = useState('');
@@ -58,12 +66,26 @@ export function AIDraftPage() {
     setApproving(true);
     setApproveErr('');
     try {
-      const res = await aiDraftsApi.approve(id, {
-        subjective:  soapEdit['subjective']  ?? content?.['subjective'],
-        objective:   soapEdit['objective']   ?? content?.['objective'],
-        assessment:  soapEdit['assessment']  ?? content?.['assessment'],
-        plan:        soapEdit['plan']        ?? content?.['plan'],
-      });
+      const finalSections: Record<string, string> = {};
+      for (const def of sectionDefs) {
+        const v = (soapEdit[def.key] ?? baseContent[def.key] ?? '').trim();
+        if (v) finalSections[def.key] = v;
+      }
+      const res = await aiDraftsApi.approve(id, isStructured
+        ? {
+            sections: finalSections,
+            record_type: recordType,
+            session_date: qsSessionDate || undefined,
+            appointment_id: qsAppointmentId || undefined,
+          }
+        : {
+            subjective:  finalSections['subjective'],
+            objective:   finalSections['objective'],
+            assessment:  finalSections['assessment'],
+            plan:        finalSections['plan'],
+            session_date: qsSessionDate || undefined,
+            appointment_id: qsAppointmentId || undefined,
+          });
       setCreatedRecordId(res.clinical_record_id);
       queryClient.invalidateQueries({ queryKey: ['ai-draft', id] });
     } catch {
@@ -74,7 +96,7 @@ export function AIDraftPage() {
   };
 
   const toggleSection = (key: string) => {
-    setExpanded(prev => {
+    setCollapsed(prev => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
@@ -97,9 +119,19 @@ export function AIDraftPage() {
   const isPending = draft.status === 'PENDING' || draft.status === 'PROCESSING';
   const isReady = draft.status === 'DRAFT_READY';
 
-  const content = draft.draft_content_plain as Record<string, string> | null;
+  const contentRaw = draft.draft_content_plain as Record<string, unknown> | null;
+  // New drafts carry the clinical-record sections; legacy drafts are flat SOAP.
+  const isStructured = !!contentRaw && typeof contentRaw.sections === 'object' && contentRaw.sections !== null;
+  const recordType = (qsRecordType || (contentRaw?.record_type as string) || 'EVOLUTION') as keyof typeof TEMPLATE_SECTIONS;
+  const baseContent: Record<string, string> = isStructured
+    ? (contentRaw!.sections as Record<string, string>)
+    : ((contentRaw ?? {}) as Record<string, string>);
+  const sectionDefs: { key: string; label: string; description: string }[] = isStructured
+    ? (TEMPLATE_SECTIONS[recordType] ?? TEMPLATE_SECTIONS.EVOLUTION).map((d: SectionDef) => ({ key: d.key, label: d.label, description: d.placeholder }))
+    : DRAFT_SECTIONS;
+  const content = contentRaw; // truthiness gate for the render below
 
-  const getSoap = (key: string) => soapEdit[key] ?? content?.[key] ?? '';
+  const getSoap = (key: string) => soapEdit[key] ?? baseContent[key] ?? '';
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto' }}>
@@ -123,6 +155,7 @@ export function AIDraftPage() {
               <Badge label={statusCfg.label} color={statusCfg.color} bg={statusCfg.bg} />
             </div>
             <div style={{ display: 'flex', gap: 20 }}>
+              <InfoLine label="Tipo" value={RECORD_TYPE_LABELS[recordType] ?? recordType} />
               <InfoLine label="Modelo" value={draft.ai_model_version ?? '—'} />
               <InfoLine label="Draft ID" value={id?.slice(-8) ?? '—'} />
             </div>
@@ -179,8 +212,8 @@ export function AIDraftPage() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-            {DRAFT_SECTIONS.map(({ key, label, description }) => {
-              const isOpen = expanded.has(key);
+            {sectionDefs.map(({ key, label, description }) => {
+              const isOpen = !collapsed.has(key);
               return (
                 <div key={key} className="card" style={{ overflow: 'hidden', padding: 0 }}>
                   <button

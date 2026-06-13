@@ -83,6 +83,7 @@ class AIWorker:
     async def _handle(self, message_id: str, fields: dict[str, Any]) -> None:
         draft_id = fields.get("draft_id")
         audio_path = fields.get("audio_path")
+        record_type = fields.get("record_type") or "EVOLUTION"
 
         if not draft_id or not audio_path:
             logger.warning("ai_job missing fields", extra={"message_id": message_id, "fields": list(fields.keys())})
@@ -92,22 +93,22 @@ class AIWorker:
         logger.info("processing ai draft", extra={"draft_id": draft_id})
         try:
             await self._set_status(draft_id, "PROCESSING")
-            await self._process_draft(draft_id, audio_path)
+            await self._process_draft(draft_id, audio_path, record_type)
             await self._ack(message_id)
         except Exception as exc:
             logger.error("draft processing failed", extra={"draft_id": draft_id, "err": str(exc)})
             await self._set_error(draft_id, str(exc))
             # Do NOT ack — message stays in PEL for retry or manual inspection
 
-    async def _process_draft(self, draft_id: str, audio_path: str) -> None:
+    async def _process_draft(self, draft_id: str, audio_path: str, record_type: str) -> None:
         # 1. Transcribe locally — audio never leaves the server
         transcription = await asyncio.to_thread(transcribe_audio, audio_path)
 
         # 2. Anonymize — strip names, document numbers, phones before Claude sees anything
         anonymized = anonymize(transcription)
 
-        # 3. Generate SOAP draft via Claude API with anonymized text only
-        soap_draft = await generate_soap_draft(anonymized)
+        # 3. Generate the clinical-record sections via Claude API with anonymized text only
+        soap_draft = await generate_soap_draft(anonymized, record_type)
 
         # 4. Encrypt both outputs with the draft's DEK before storing
         assert self._db is not None

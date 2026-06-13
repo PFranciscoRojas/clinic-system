@@ -57,7 +57,7 @@ func (s *Service) UploadAudio(ctx context.Context, in UploadAudioInput) (string,
 		return "", err
 	}
 
-	if err := s.enqueue(ctx, draftID, audioPath); err != nil {
+	if err := s.enqueue(ctx, draftID, audioPath, in.RecordType); err != nil {
 		// Non-fatal: the outbox publisher will not pick this up, but the draft
 		// can be re-enqueued manually. Log-worthy but don't fail the upload.
 		_ = err
@@ -85,13 +85,14 @@ func (s *Service) saveAudio(in UploadAudioInput) (string, error) {
 	return dest, nil
 }
 
-func (s *Service) enqueue(ctx context.Context, draftID, audioPath string) error {
+func (s *Service) enqueue(ctx context.Context, draftID, audioPath, recordType string) error {
 	return s.rdb.XAdd(ctx, &redis.XAddArgs{
 		Stream: aiStream,
 		ID:     "*",
 		Values: map[string]any{
-			"draft_id":   draftID,
-			"audio_path": audioPath,
+			"draft_id":    draftID,
+			"audio_path":  audioPath,
+			"record_type": recordType,
 		},
 	}).Err()
 }
