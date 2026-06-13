@@ -10,6 +10,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 
+	adminhandler "sghcp/core-api/internal/admin/handler"
 	aidraftshandler "sghcp/core-api/internal/aidrafts/handler"
 	apptshandler "sghcp/core-api/internal/appointments/handler"
 	authhandler "sghcp/core-api/internal/auth/handler"
@@ -111,6 +112,12 @@ func (a *app) buildRouter() http.Handler {
 		r.Method(http.MethodPost, "/api/v1/appointments/{appointment_id}/audio", aiDrafts.AppointmentAudioRoute())
 
 		r.Mount("/api/v1/booking-requests", bookingH.Routes())
+
+		// Admin-only destructive maintenance — mounted only while the operator
+		// opts in via ALLOW_DATA_RESET, so it doesn't exist in normal production.
+		if a.cfg.AllowDataReset {
+			r.Mount("/api/v1/admin", adminhandler.New(a.pool).Routes())
+		}
 	})
 
 	return r

@@ -34,6 +34,10 @@ type Config struct {
 	// AppBaseURL is the public origin of the SPA, used to build links sent to
 	// patients (e.g. remote consent signature).
 	AppBaseURL string
+
+	// AllowDataReset enables the admin-only "wipe clinical test data" endpoint.
+	// Off by default; turn on only while the clinic is in a testing phase.
+	AllowDataReset bool
 }
 
 func Load() Config {
@@ -66,6 +70,19 @@ func Load() Config {
 		ResendFrom:   getEnv("RESEND_FROM", ""),
 
 		AppBaseURL: getEnv("APP_BASE_URL", "http://localhost:5173"),
+
+		AllowDataReset: getEnvBool("ALLOW_DATA_RESET", false),
+	}
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
 	}
 }
 

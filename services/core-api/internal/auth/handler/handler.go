@@ -10,10 +10,11 @@ import (
 )
 
 type Handler struct {
-	svc svcPort
+	svc           svcPort
+	dataResetOpen bool
 }
 
 func New(db *pgxpool.Pool, rdb *redis.Client, cfg config.Config) *Handler {
 	repo := authrepo.New(db)
-	return &Handler{svc: authsvc.New(repo, rdb, cfg)}
+	return &Handler{svc: authsvc.New(repo, rdb, cfg), dataResetOpen: cfg.AllowDataReset}
 }

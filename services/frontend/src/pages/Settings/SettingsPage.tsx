@@ -11,6 +11,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
 import { authApi } from '@/api/auth';
+import { adminApi } from '@/api/admin';
 import { consentTemplatesApi, type ConsentType } from '@/api/clinicalRecords';
 import { profilesApi, splitName, type Specialty } from '@/api/profiles';
 import { ACCENT_COLORS, saveAccentColor } from '@/lib/theme';
@@ -882,7 +883,74 @@ function SecuritySection({ setDirty }: { setDirty: (v: boolean) => void }) {
           </button>
         </form>
       </SectionCard>
+
+      {/* Admin-only test-data wipe — only when the server has it enabled */}
+      {user?.data_reset_enabled && (user?.roles ?? []).includes('CLINIC_ADMIN') && <DataResetCard />}
     </>
+  );
+}
+
+// Wipes all clinical test data for the organization. Gated three ways: the
+// server flag (ALLOW_DATA_RESET), the CLINIC_ADMIN role, and a typed
+// confirmation. Meant for the testing phase only.
+function DataResetCard() {
+  const queryClient = useQueryClient();
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy]       = useState(false);
+  const [done, setDone]       = useState('');
+  const [err, setErr]         = useState('');
+
+  const handleReset = async () => {
+    setErr(''); setDone('');
+    if (confirm !== 'ELIMINAR') { setErr('Escribe ELIMINAR para confirmar.'); return; }
+    setBusy(true);
+    try {
+      const res = await adminApi.resetClinicalData(confirm);
+      const total = Object.values(res.deleted).reduce((a, b) => a + b, 0);
+      setDone(`Datos de prueba eliminados (${total} registros). La base quedó limpia.`);
+      setConfirm('');
+      queryClient.invalidateQueries();
+    } catch {
+      setErr('No se pudo limpiar los datos. Intenta de nuevo.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <SectionCard title="Zona de pruebas — limpiar datos" icon={Trash2} color="#dc2626">
+      <div style={{ padding: '14px 0' }}>
+        <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+          <AlertCircle size={15} color="#dc2626" style={{ flexShrink: 0, marginTop: 1 }} />
+          <span style={{ fontSize: 12.5, color: '#991b1b', lineHeight: 1.6 }}>
+            Elimina <b>todos</b> los pacientes, citas, registros clínicos, borradores de IA y
+            consentimientos firmados de la organización. <b>Conserva</b> tu perfil profesional con
+            firma, las plantillas de consentimiento, los usuarios y los catálogos.
+            Es <b>irreversible</b> — úsalo solo mientras haces pruebas.
+          </span>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--s500)', marginBottom: 6 }}>Escribe <b>ELIMINAR</b> para confirmar</div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            value={confirm}
+            onChange={e => { setConfirm(e.target.value); setErr(''); }}
+            placeholder="ELIMINAR"
+            style={{ padding: '9px 12px', borderRadius: 9, border: `1.5px solid ${err ? '#dc2626' : 'var(--s200)'}`, fontSize: 13, width: 180, letterSpacing: 1, fontWeight: 600 }}
+          />
+          <button
+            onClick={handleReset}
+            disabled={busy || confirm !== 'ELIMINAR'}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none', background: busy || confirm !== 'ELIMINAR' ? 'var(--s200)' : '#dc2626', color: busy || confirm !== 'ELIMINAR' ? 'var(--s400)' : '#fff', fontSize: 13, fontWeight: 700, cursor: busy || confirm !== 'ELIMINAR' ? 'not-allowed' : 'pointer' }}
+          >
+            {busy
+              ? <><span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: 99, animation: 'spin .7s linear infinite', display: 'inline-block' }} />Limpiando…</>
+              : <><Trash2 size={14} />Limpiar datos de prueba</>}
+          </button>
+        </div>
+        {err  && <div style={{ fontSize: 12.5, color: 'var(--red)', marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}><AlertCircle size={13} />{err}</div>}
+        {done && <div style={{ fontSize: 12.5, color: '#10b981', marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}><CheckCircle size={13} />{done}</div>}
+      </div>
+    </SectionCard>
   );
 }
 
