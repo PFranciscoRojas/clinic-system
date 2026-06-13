@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -14,15 +14,6 @@ import { useIsMobile, useIsCompact } from '@/lib/useMediaQuery';
 import { Spinner } from '@/components/ui/Spinner';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function useDebounce(value: string, delay: number) {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(t);
-  }, [value, delay]);
-  return debounced;
-}
 
 const AVATAR_COLORS = [
   '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b',
@@ -407,25 +398,14 @@ export function PatientsPage() {
   );
   const changeView = (v: ViewMode) => { setViewMode(v); localStorage.setItem('sghcp_patients_view', v); };
   const [selected,      setSelected]      = useState<Patient | null>(null);
-  const [q,             setQ]             = useState('');
   const [statusFilter,  setStatusFilter]  = useState<StatusFilter>('all');
   const [page,          setPage]          = useState(0);
 
-  const dq      = useDebounce(q, 380);
-  const isSearching = dq.trim().length >= 2;
-  // Same smart rule as the header search: digits = document, text = last name.
-  const isDocQuery = /^\d{4,}$/.test(dq.trim());
-
-  const { data, isLoading, isError, isFetching } = useQuery({
-    queryKey: ['patients', isDocQuery ? 'doc' : 'name', dq, page],
-    queryFn:  () =>
-      isSearching
-        ? patientsApi.search({
-            last_name: isDocQuery ? undefined : dq.trim(),
-            document:  isDocQuery ? dq.trim() : undefined,
-            limit: LIMIT, offset: page * LIMIT,
-          })
-        : patientsApi.list({ limit: LIMIT, offset: page * LIMIT }),
+  // Search lives in the header (global, with a results dropdown). This page
+  // just lists and filters by status.
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['patients', 'list', page],
+    queryFn:  () => patientsApi.list({ limit: LIMIT, offset: page * LIMIT }),
     staleTime: 30_000,
     placeholderData: prev => prev,
   });
@@ -441,8 +421,6 @@ export function PatientsPage() {
   const actives  = all.filter(p => p.is_active).length;
   const inactive = all.filter(p => !p.is_active).length;
 
-  const handleQ = (v: string) => { setQ(v); setPage(0); };
-
   // The fixed-column table doesn't fit a phone — always show cards there.
   const effectiveView: ViewMode = isMobile ? 'grid' : viewMode;
 
@@ -452,28 +430,9 @@ export function PatientsPage() {
       {/* ── Filters toolbar ─────────────────────────────────────────────────── */}
       <div style={{ background: '#fff', borderBottom: '1px solid var(--s200)', padding: '10px 24px', display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
 
-        {/* Search box */}
-        <div
-          style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--s50)', border: '1.5px solid var(--s200)', borderRadius: 10, padding: '7px 13px', flex: 1, maxWidth: 380, transition: 'all .15s' }}
-          onFocusCapture={e => (e.currentTarget.style.borderColor = 'var(--teal)')}
-          onBlurCapture={e => (e.currentTarget.style.borderColor = 'var(--s200)')}
-        >
-          {isFetching && isSearching
-            ? <Spinner size={14} color="var(--teal)" />
-            : <Search size={14} color="var(--s400)" />
-          }
-          <input
-            value={q}
-            onChange={e => handleQ(e.target.value)}
-            placeholder="Buscar por apellido o documento…"
-            style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 13.5, color: 'var(--s700)', outline: 'none' }}
-          />
-          {q && (
-            <button onClick={() => handleQ('')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--s300)', display: 'flex', padding: 0 }}>
-              <X size={13} />
-            </button>
-          )}
-        </div>
+        {/* Search lives in the header — use it to find a patient by last name
+            or document. This toolbar keeps only the status filters and view. */}
+        <div style={{ flex: 1 }} />
 
         {/* Status filter pills */}
         <div style={{ display: 'flex', gap: 5 }}>
@@ -542,7 +501,7 @@ export function PatientsPage() {
           </div>
         ) : shown.length === 0 ? (
           <EmptyState
-            query={isSearching ? dq : ''}
+            query=""
             filter={statusFilter}
             onNew={() => navigate('/patients/new')}
           />
