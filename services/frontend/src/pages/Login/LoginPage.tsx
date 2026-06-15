@@ -206,6 +206,10 @@ export function LoginPage() {
   const [regErr,         setRegErr]         = useState('');
   const [regLoading,     setRegLoading]     = useState(false);
 
+  const [forgotEmail,    setForgotEmail]    = useState('');
+  const [forgotSent,     setForgotSent]     = useState(false);
+  const [forgotLoading,  setForgotLoading]  = useState(false);
+
   // Onboarding — step 0: Profile
   // Pre-fill with the display_name set during registration so the user doesn't re-type it.
   const [name,         setName]         = useState(user?.display_name ?? '');
@@ -249,6 +253,17 @@ export function LoginPage() {
   const [done,   setDone]   = useState(false);
 
   const ONBOARD_TOTAL = 4;
+
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail.trim()) return;
+    setForgotLoading(true);
+    // The endpoint always answers 200 (no account enumeration); we show the
+    // same confirmation whether or not the email is registered.
+    try { await authApi.forgotPassword(forgotEmail.trim()); } catch { /* ignore */ }
+    setForgotSent(true);
+    setForgotLoading(false);
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -465,25 +480,39 @@ export function LoginPage() {
               </div>
               <div style={{ fontWeight: 800, fontSize: 22, color: '#fff', marginBottom: 6 }}>¿Olvidaste tu contraseña?</div>
               <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.65)', lineHeight: 1.6 }}>
-                El administrador de tu clínica puede restablecerla.
+                Te enviaremos un enlace seguro para crear una nueva.
               </div>
             </div>
             <div className="glass" style={{ borderRadius: 18, padding: '28px 30px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
-              <div style={{ textAlign: 'center', padding: '8px 0' }}>
-                <div style={{ fontSize: 40, marginBottom: 16 }}>🔑</div>
-                <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--s800)', marginBottom: 10 }}>
-                  Contacta a tu administrador
+              {forgotSent ? (
+                <div style={{ textAlign: 'center', padding: '8px 0' }}>
+                  <div style={{ fontSize: 40, marginBottom: 16 }}>📬</div>
+                  <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--s800)', marginBottom: 10 }}>
+                    Revisa tu correo
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--s500)', lineHeight: 1.7, marginBottom: 24 }}>
+                    Si <strong>{forgotEmail.trim()}</strong> corresponde a una cuenta, te enviamos un enlace
+                    para restablecer la contraseña. El enlace vence en 1 hora. Revisa también la carpeta de spam.
+                  </div>
+                  <button onClick={() => { setScreen('login'); setForgotSent(false); setForgotEmail(''); }} style={{ width: '100%', padding: 11, borderRadius: 11, border: 'none', background: 'var(--teal)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                    ← Volver al inicio de sesión
+                  </button>
                 </div>
-                <div style={{ fontSize: 13, color: 'var(--s500)', lineHeight: 1.7, marginBottom: 8 }}>
-                  Por seguridad, el restablecimiento de contraseñas requiere la intervención del administrador de tu organización.
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--s500)', lineHeight: 1.7, marginBottom: 24, padding: '10px 14px', background: 'var(--s50)', borderRadius: 9, border: '1px solid var(--s200)' }}>
-                  <strong>Si eres el administrador,</strong> ingresa al panel de Configuración → Usuarios y usa la opción "Restablecer contraseña".
-                </div>
-                <button onClick={() => setScreen('login')} style={{ width: '100%', padding: 11, borderRadius: 11, border: 'none', background: 'var(--teal)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-                  ← Volver al inicio de sesión
-                </button>
-              </div>
+              ) : (
+                <form onSubmit={handleForgot}>
+                  <div style={{ fontSize: 13, color: 'var(--s500)', lineHeight: 1.7, marginBottom: 18 }}>
+                    Ingresa el correo con el que inicias sesión y te enviaremos las instrucciones.
+                  </div>
+                  <TField label="Correo electrónico" value={forgotEmail} onChange={setForgotEmail}
+                    placeholder="tu@correo.com" icon={Mail} type="email" autoComplete="email" required />
+                  <button type="submit" disabled={forgotLoading} style={{ width: '100%', padding: 12, borderRadius: 11, border: 'none', background: forgotLoading ? 'var(--s300)' : 'var(--teal)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: forgotLoading ? 'wait' : 'pointer', marginBottom: 14 }}>
+                    {forgotLoading ? 'Enviando…' : 'Enviar enlace de recuperación'}
+                  </button>
+                  <button type="button" onClick={() => setScreen('login')} style={{ width: '100%', padding: 9, borderRadius: 11, border: 'none', background: 'none', color: 'var(--s500)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                    ← Volver al inicio de sesión
+                  </button>
+                </form>
+              )}
             </div>
           </div>
         )}

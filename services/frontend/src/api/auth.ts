@@ -36,6 +36,14 @@ export const authApi = {
   resetPassword: (target_email: string, new_password: string) =>
     api.post<void>('/auth/reset-password', { target_email, new_password }),
 
+  // Self-service: requests a reset link by email. Always resolves (the backend
+  // returns 200 whether or not the address is registered).
+  forgotPassword: (email: string) =>
+    api.post<void>('/auth/forgot-password', { email }),
+
+  confirmReset: (token: string, new_password: string) =>
+    api.post<void>('/auth/reset-password-confirm', { token, new_password }),
+
   changePassword: (current_password: string, new_password: string) =>
     api.post<void>('/auth/change-password', { current_password, new_password }),
   onboardingComplete: () =>

@@ -190,13 +190,13 @@ function ChipBtn({ active, color = 'var(--teal)', onClick, children }: {
 
 function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
   const { user, logout, updateProfile } = useAuth();
+  const queryClient = useQueryClient();
   const mark = <T,>(fn: (v: T) => void) => (v: T) => { fn(v); setDirty(true); };
 
   const savedProfile = (() => { try { return JSON.parse(localStorage.getItem('sghcp_profile') ?? '{}'); } catch { return {}; } })();
   // display_name from the JWT is the source of truth for the app UI.
   const [name,      setName]      = useState(user?.display_name || savedProfile.name || '');
   const [email,     setEmail]     = useState(user?.email ?? '');
-  const [bio,       setBio]       = useState('');
   const savedAccent = localStorage.getItem(`sghcp_accent_${user?.user_id}`) ?? '#14b8a6';
   const [color,     setColor]     = useState(savedAccent);
   const [saving,    setSaving]    = useState(false);
@@ -214,6 +214,9 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
   const [signature,   setSignature]   = useState<string | null>(null);
   const [sigBusy,     setSigBusy]     = useState(false);
   const [sigErr,      setSigErr]      = useState('');
+  const [avatar,      setAvatar]      = useState<string | null>(null);
+  const [avatarBusy,  setAvatarBusy]  = useState(false);
+  const [avatarErr,   setAvatarErr]   = useState('');
 
   useEffect(() => {
     profilesApi.specialties()
@@ -230,6 +233,7 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
         setSpecialtyId(p.specialty_id);
         if (p.phone) setPhone(p.phone);
         setSignature(p.signature_png ?? null);
+        setAvatar(p.avatar_png ?? null);
       })
       .catch(() => { /* 404 — no profile yet */ });
   }, []);
@@ -267,6 +271,56 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
     }
   };
 
+  // Downscale to a 256px square JPEG before upload — keeps the stored data URL
+  // a few KB and avoids shipping a multi-MB phone photo to the server.
+  const handleAvatarFile = (file: File | null) => {
+    if (!file) return;
+    setAvatarErr('');
+    if (!file.type.startsWith('image/')) { setAvatarErr('Selecciona una imagen.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = async () => {
+        const SIZE = 256;
+        const canvas = document.createElement('canvas');
+        canvas.width = SIZE; canvas.height = SIZE;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { setAvatarErr('No se pudo procesar la imagen.'); return; }
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2;
+        const sy = (img.height - side) / 2;
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, SIZE, SIZE);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        setAvatarBusy(true);
+        try {
+          await profilesApi.uploadAvatar(dataUrl);
+          setAvatar(dataUrl);
+          queryClient.invalidateQueries({ queryKey: ['my-profile'] });
+        } catch {
+          setAvatarErr('No se pudo guardar. Completa y guarda primero el perfil profesional.');
+        } finally {
+          setAvatarBusy(false);
+        }
+      };
+      img.onerror = () => setAvatarErr('No se pudo leer la imagen.');
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAvatarDelete = async () => {
+    setAvatarBusy(true); setAvatarErr('');
+    try {
+      await profilesApi.deleteAvatar();
+      setAvatar(null);
+      queryClient.invalidateQueries({ queryKey: ['my-profile'] });
+    } catch {
+      setAvatarErr('No se pudo eliminar la foto.');
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
   const handleSaveName = async () => {
     if (!name.trim()) return;
     setSaving(true); setSaveErr('');
@@ -290,6 +344,8 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
         return;
       }
       localStorage.setItem('sghcp_profile', JSON.stringify({ ...savedProfile, name: name.trim(), phone }));
+      // Refresh the sidebar's specialty label (sourced from the server profile).
+      queryClient.invalidateQueries({ queryKey: ['my-profile'] });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
       setDirty(false);
@@ -359,17 +415,6 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
           </div>
           {sigErr && <p style={{ margin: '8px 0 0', fontSize: 12.5, color: 'var(--red)' }}>{sigErr}</p>}
         </FieldRow>
-        <FieldRow label="Bio profesional" sub="Se muestra en el portal de pacientes">
-          <textarea
-            value={bio}
-            onChange={e => { setBio(e.target.value); setDirty(true); }}
-            rows={3}
-            placeholder="Psicólogo/a clínico/a con experiencia en…"
-            style={{ width: '100%', padding: '8px 12px', border: '1.5px solid var(--s200)', borderRadius: 9, fontSize: 13.5, lineHeight: 1.65, color: 'var(--s800)', resize: 'vertical', fontFamily: "'DM Sans', sans-serif" }}
-            onFocus={e => (e.target.style.borderColor = 'var(--teal)')}
-            onBlur={e => (e.target.style.borderColor = 'var(--s200)')}
-          />
-        </FieldRow>
         <div style={{ paddingTop: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={handleSaveName} disabled={saving} style={{
             display: 'flex', alignItems: 'center', gap: 7, padding: '9px 20px',
@@ -405,16 +450,26 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
             )}
           </div>
         </FieldRow>
-        <FieldRow label="Avatar / foto de perfil" sub="Disponible próximamente — almacenamiento de archivos en desarrollo">
+        <FieldRow label="Avatar / foto de perfil" sub="Se muestra en el menú lateral. Se recorta a un cuadrado y se reduce automáticamente.">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 48, height: 48, borderRadius: 99, background: `linear-gradient(135deg, ${color}, ${color}99)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
-              {ini}
-            </div>
+            {avatar
+              ? <img src={avatar} alt="Avatar" style={{ width: 48, height: 48, borderRadius: 99, objectFit: 'cover', flexShrink: 0 }} />
+              : <div style={{ width: 48, height: 48, borderRadius: 99, background: `linear-gradient(135deg, ${color}, ${color}99)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
+                  {ini}
+                </div>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <button disabled style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid var(--s200)', background: 'var(--s50)', borderRadius: 9, padding: '7px 14px', fontSize: 12.5, color: 'var(--s400)', cursor: 'not-allowed', opacity: 0.6 }}>
-                <Upload size={13} />Subir foto
-              </button>
-              <span style={{ fontSize: 11, color: 'var(--s400)' }}>Próximamente</span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid var(--s200)', background: '#fff', borderRadius: 9, padding: '7px 14px', fontSize: 12.5, color: 'var(--s600)', cursor: avatarBusy ? 'wait' : 'pointer', fontWeight: 600 }}>
+                  <Upload size={13} />{avatarBusy ? 'Subiendo…' : avatar ? 'Cambiar' : 'Subir foto'}
+                  <input type="file" accept="image/*" disabled={avatarBusy} onChange={e => handleAvatarFile(e.target.files?.[0] ?? null)} style={{ display: 'none' }} />
+                </label>
+                {avatar && (
+                  <button onClick={handleAvatarDelete} disabled={avatarBusy} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 9, border: 'none', background: '#fee2e2', color: '#991b1b', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+                    <Trash2 size={13} /> Quitar
+                  </button>
+                )}
+              </div>
+              {avatarErr && <span style={{ fontSize: 11.5, color: 'var(--red)' }}>{avatarErr}</span>}
             </div>
           </div>
         </FieldRow>
@@ -463,6 +518,7 @@ const DAYS_ES = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const HOURS   = Array.from({ length: 25 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
 
 function ScheduleSection() {
+  const queryClient = useQueryClient();
   const init = useMemo(() => loadSchedule(), []);
   const [activeDays,  setActiveDays]  = useState<string[]>(init.activeDays);
   const [startHour,   setStartHour]   = useState(init.startHour);
@@ -495,10 +551,13 @@ function ScheduleSection() {
   useEffect(() => {
     if (!hydrated) return; // don't overwrite the server copy with stale cache on mount
     const t = setTimeout(() => {
-      persistSchedule({ activeDays, startHour, endHour, sessionLen: sessionDur, breakStart, breakEnd, buffer, maxPerDay });
+      persistSchedule({ activeDays, startHour, endHour, sessionLen: sessionDur, breakStart, breakEnd, buffer, maxPerDay })
+        // Refresh the scheduler's cached copy so the agenda reflects the new
+        // hours without a manual reload.
+        .then(() => queryClient.invalidateQueries({ queryKey: ['my-schedule'] }));
     }, 600);
     return () => clearTimeout(t);
-  }, [hydrated, activeDays, startHour, endHour, sessionDur, breakStart, breakEnd, buffer, maxPerDay]);
+  }, [hydrated, activeDays, startHour, endHour, sessionDur, breakStart, breakEnd, buffer, maxPerDay, queryClient]);
 
   const toggleDay = (d: string) => {
     setActiveDays(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d]);
@@ -1086,12 +1145,6 @@ function UsersSection() {
   const [inviteLoading,setInviteLoading]= useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
 
-  const [resetEmail,   setResetEmail]   = useState('');
-  const [resetPwd,     setResetPwd]     = useState('');
-  const [resetLoading, setResetLoading] = useState(false);
-  const [resetDone,    setResetDone]    = useState(false);
-  const [resetErr,     setResetErr]     = useState('');
-
   const handleGenerateInvite = async () => {
     setInviteLoading(true); setInviteCode(''); setInviteCopied(false);
     try {
@@ -1110,21 +1163,6 @@ function UsersSection() {
     navigator.clipboard.writeText(inviteCode);
     setInviteCopied(true);
     setTimeout(() => setInviteCopied(false), 2000);
-  };
-
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setResetErr(''); setResetDone(false); setResetLoading(true);
-    try {
-      const { authApi } = await import('@/api/auth');
-      await authApi.resetPassword(resetEmail.trim(), resetPwd);
-      setResetDone(true); setResetEmail(''); setResetPwd('');
-      setTimeout(() => setResetDone(false), 3000);
-    } catch (err: unknown) {
-      setResetErr(err instanceof Error ? err.message : 'Error al restablecer');
-    } finally {
-      setResetLoading(false);
-    }
   };
 
   return (
@@ -1179,38 +1217,15 @@ function UsersSection() {
         </div>
       </SectionCard>
 
-      {isAdmin && <SectionCard title="Restablecer contraseña" icon={Key} color="#ef4444">
-        <form onSubmit={handleResetPassword} style={{ padding: '12px 0' }}>
-          <div style={{ fontSize: 13, color: 'var(--s500)', marginBottom: 14, lineHeight: 1.6 }}>
-            Como administrador puedes restablecer la contraseña de cualquier usuario de tu organización.
+      {isAdmin && (
+        <SectionCard title="Contraseñas de usuarios" icon={Key} color="#64748b">
+          <div style={{ padding: '12px 0', fontSize: 13, color: 'var(--s500)', lineHeight: 1.7 }}>
+            Cada usuario restablece su propia contraseña de forma autónoma: en la pantalla de
+            inicio de sesión, con la opción <b>"¿Olvidaste tu contraseña?"</b>, recibe un enlace
+            seguro por correo. Ya no es necesario que el administrador la asigne manualmente.
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-            <div>
-              <div style={{ fontSize: 12, color: 'var(--s500)', marginBottom: 6, fontWeight: 500 }}>Correo del usuario</div>
-              <input value={resetEmail} onChange={e => setResetEmail(e.target.value)} type="email" required
-                placeholder="usuario@clinica.co"
-                style={{ width: '100%', padding: '9px 12px', borderRadius: 9, border: '1.5px solid var(--s200)', fontSize: 13, boxSizing: 'border-box' }} />
-            </div>
-            <div>
-              <div style={{ fontSize: 12, color: 'var(--s500)', marginBottom: 6, fontWeight: 500 }}>Nueva contraseña</div>
-              <input value={resetPwd} onChange={e => setResetPwd(e.target.value)} type="password" required minLength={8}
-                placeholder="Mínimo 8 caracteres"
-                style={{ width: '100%', padding: '9px 12px', borderRadius: 9, border: '1.5px solid var(--s200)', fontSize: 13, boxSizing: 'border-box' }} />
-            </div>
-          </div>
-          {resetErr && <div style={{ fontSize: 12.5, color: 'var(--red)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}><AlertCircle size={13} />{resetErr}</div>}
-          {resetDone && <div style={{ fontSize: 12.5, color: '#10b981', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}><CheckCircle size={13} />Contraseña restablecida correctamente.</div>}
-          <button type="submit" disabled={resetLoading} style={{
-            display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none',
-            background: resetLoading ? 'var(--s200)' : '#ef4444', color: resetLoading ? 'var(--s400)' : '#fff',
-            fontSize: 13, fontWeight: 700, cursor: resetLoading ? 'not-allowed' : 'pointer',
-          }}>
-            {resetLoading
-              ? <><span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: 99, animation: 'spin .7s linear infinite', display: 'inline-block' }} />Restableciendo…</>
-              : <><Key size={14} />Restablecer contraseña</>}
-          </button>
-        </form>
-      </SectionCard>}
+        </SectionCard>
+      )}
     </>
   );
 }

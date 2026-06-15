@@ -10,6 +10,7 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { useIsMobile } from '@/lib/useMediaQuery';
 import { patientsApi, type Patient } from '@/api/patients';
+import { profilesApi } from '@/api/profiles';
 
 // Facturación hidden until the real billing backend exists (mock-only today);
 // Evaluaciones postponed by decision 2026-06-09 — both tracked in the backlog.
@@ -109,10 +110,15 @@ export function AppShell({ children }: Props) {
     RECEPTIONIST: 'Recepcionista',
   };
   const roleLabel = user?.roles?.[0] ? (ROLE_LABEL[user.roles[0]] ?? user.roles[0]) : '';
-  const savedSpecialty = (() => {
-    try { return JSON.parse(localStorage.getItem('sghcp_profile') ?? '{}').specialty ?? ''; } catch { return ''; }
-  })();
-  const subtitleLabel = savedSpecialty || roleLabel;
+  // The professional profile (specialty + avatar) follows the user across
+  // devices; the sidebar subtitle prefers the specialty, falling back to role.
+  const { data: profile } = useQuery({
+    queryKey: ['my-profile'],
+    queryFn: () => profilesApi.get().catch(() => null),
+    staleTime: 5 * 60_000,
+  });
+  const subtitleLabel = profile?.specialty_name || roleLabel;
+  const avatarUrl = profile?.avatar_png ?? null;
 
   const handleLogout = async () => {
     await logout();
@@ -225,9 +231,11 @@ export function AppShell({ children }: Props) {
           {/* User mini card */}
           <div style={{ padding: showCollapsed ? '12px 0' : '12px 16px', borderTop: '1px solid rgba(255,255,255,.10)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: showCollapsed ? 'center' : 'flex-start' }} title={showCollapsed ? displayName : undefined}>
-              <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,.20)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
-                {initials}
-              </div>
+              {avatarUrl
+                ? <img src={avatarUrl} alt={displayName} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                : <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,.20)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                    {initials}
+                  </div>}
               {!showCollapsed && (
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 12.5, fontWeight: 500, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -342,9 +350,11 @@ export function AppShell({ children }: Props) {
                 border: '1.5px solid var(--s200)', borderRadius: 10,
                 padding: '5px 10px 5px 5px', cursor: 'pointer', transition: 'all .15s',
               }}>
-                <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg, var(--teal), var(--teal-d))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff' }}>
-                  {initials}
-                </div>
+                {avatarUrl
+                  ? <img src={avatarUrl} alt={displayName} style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover' }} />
+                  : <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg, var(--teal), var(--teal-d))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff' }}>
+                      {initials}
+                    </div>}
                 {!isMobile && <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--s700)' }}>{displayName}</span>}
                 <ChevronDown size={13} color="var(--s400)" style={{ transform: profileOpen ? 'rotate(180deg)' : '', transition: 'transform .2s' }} />
               </button>
