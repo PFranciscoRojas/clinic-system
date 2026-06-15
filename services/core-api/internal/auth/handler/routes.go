@@ -14,6 +14,8 @@ func (h *Handler) Routes(jwtSecret []byte) chi.Router {
 	r.Post("/refresh", h.refresh)
 	r.Post("/logout", h.logout)
 	r.Post("/register", h.register)
+	r.Post("/forgot-password", h.forgotPassword)
+	r.Post("/reset-password-confirm", h.confirmReset)
 
 	// Protected — valid JWT required.
 	r.Group(func(r chi.Router) {

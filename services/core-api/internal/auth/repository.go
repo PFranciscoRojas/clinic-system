@@ -16,6 +16,7 @@ type Repository interface {
 
 	// User provisioning — used by the registration and admin flows.
 	FindUserByEmailInOrg(ctx context.Context, orgID, email string) (*User, error)
+	FindUserByEmailGlobal(ctx context.Context, email string) (*User, error)
 	FindUserByID(ctx context.Context, userID string) (*User, error)
 	FindRoleIDByName(ctx context.Context, roleName string) (string, error)
 	CreateUser(ctx context.Context, orgID, email, passwordHash, displayName string) (string, error)

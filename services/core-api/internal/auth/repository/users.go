@@ -198,6 +198,28 @@ func (r *Repository) UpdatePassword(ctx context.Context, orgID, targetEmail, pas
 	return nil
 }
 
+// FindUserByEmailGlobal looks up a user by email without an org filter — used by
+// the self-service password reset, where the requester supplies only their email.
+// Returns the minimal identity needed to build the reset link; no roles/permissions.
+func (r *Repository) FindUserByEmailGlobal(ctx context.Context, email string) (*auth.User, error) {
+	u := &auth.User{}
+	err := r.db.QueryRow(ctx, `
+		SELECT id, organization_id, email, display_name, is_active
+		FROM users
+		WHERE email_hash = $1
+		LIMIT 1
+	`, hash.Normalize(email)).Scan(
+		&u.ID, &u.OrganizationID, &u.Email, &u.DisplayName, &u.IsActive,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, auth.ErrUserNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find user by email global: %w", err)
+	}
+	return u, nil
+}
+
 // UpdatePasswordByID sets a new password hash for the given user.
 func (r *Repository) UpdatePasswordByID(ctx context.Context, userID, passwordHash string) error {
 	tag, err := r.db.Exec(ctx,

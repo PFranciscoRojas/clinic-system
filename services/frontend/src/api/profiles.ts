@@ -17,6 +17,7 @@ export interface ProfessionalProfile {
   license_number: string;
   phone: string;
   signature_png?: string; // data URL, present when a signature stamp is uploaded
+  avatar_png?: string;    // data URL, present when a profile photo is uploaded
 }
 
 export interface SaveProfileInput {
@@ -37,6 +38,10 @@ export const profilesApi = {
     api.put<{ status: string }>('/me/professional-profile/signature', { signature_png: signaturePng }),
   deleteSignature: () =>
     api.delete<{ status: string }>('/me/professional-profile/signature'),
+  uploadAvatar: (avatarPng: string) =>
+    api.put<{ status: string }>('/me/professional-profile/avatar', { avatar_png: avatarPng }),
+  deleteAvatar: () =>
+    api.delete<{ status: string }>('/me/professional-profile/avatar'),
   getSchedule: () =>
     api.get<{ schedule: unknown }>('/me/professional-profile/schedule'),
   saveSchedule: (schedule: unknown) =>

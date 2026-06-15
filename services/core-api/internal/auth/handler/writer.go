@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 
+	"sghcp/core-api/internal/auth"
 	authdto "sghcp/core-api/internal/auth/dto"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
@@ -123,6 +125,49 @@ func (h *Handler) resetPassword(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.ResetPassword(r.Context(), claims.OrganizationID, req.TargetEmail, req.NewPassword); err != nil {
 		slog.Error("auth.reset-password", "err", err)
 		writeErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// POST /api/v1/auth/forgot-password — public, self-service.
+// Always returns 200 regardless of whether the email exists, to avoid
+// account enumeration. The email (if any) is sent asynchronously.
+func (h *Handler) forgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req authdto.ForgotPasswordRequest
+	if err := httputil.DecodeJSON(r, &req); err != nil || req.Email == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "email is required")
+		return
+	}
+	if err := h.svc.RequestPasswordReset(r.Context(), req.Email); err != nil {
+		slog.Error("auth.forgot-password", "err", err)
+		// Still answer 200 — never leak internal state to the caller.
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// POST /api/v1/auth/reset-password-confirm — public, consumes a reset token.
+func (h *Handler) confirmReset(w http.ResponseWriter, r *http.Request) {
+	var req authdto.ConfirmResetRequest
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Token == "" || req.NewPassword == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "token and new_password are required")
+		return
+	}
+	if err := h.svc.ConfirmPasswordReset(r.Context(), req.Token, req.NewPassword); err != nil {
+		if errors.Is(err, auth.ErrWeakPassword) {
+			httputil.WriteError(w, http.StatusUnprocessableEntity, "password must be at least 8 characters")
+			return
+		}
+		if errors.Is(err, auth.ErrInviteInvalid) {
+			httputil.WriteError(w, http.StatusBadRequest, "el enlace es inválido o expiró")
+			return
+		}
+		slog.Error("auth.reset-password-confirm", "err", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "could not reset password")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

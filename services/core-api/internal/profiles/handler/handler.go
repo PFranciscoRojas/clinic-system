@@ -81,6 +81,9 @@ func (h *Handler) getOwn(w http.ResponseWriter, r *http.Request) {
 	if sig := loadSignature(r, h, claims.UserID); sig != nil {
 		resp["signature_png"] = signaturePrefix + base64.StdEncoding.EncodeToString(sig)
 	}
+	if avatar := loadAvatar(r, h, claims.UserID); avatar != "" {
+		resp["avatar_png"] = avatar
+	}
 	httputil.WriteJSON(w, http.StatusOK, resp)
 }
 

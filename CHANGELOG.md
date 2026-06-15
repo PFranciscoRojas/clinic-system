@@ -10,6 +10,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- Self-service password reset by email: "¿Olvidaste tu contraseña?" sends a one-time link (`POST /auth/forgot-password`, token in Redis, 1h TTL, no account enumeration) to a public reset page (`/reset-password`); reuses the existing Resend transactional email. Replaces the previous "contact your administrator" dead-end
+- Profile photo / avatar: upload from Settings → Perfil (auto-cropped to a square and downscaled to 256px), stored server-side (`professional_profiles.avatar_png`, migration 000017) and shown in the sidebar across devices
 - AI draft review suggests an ICD-10 diagnosis from the session: the suggestion is shown but never assigned automatically — the professional confirms, changes (catalog search) or removes it, and it's attached to the record on approval
 - AI draft review now shows the audio transcription (collapsible) and lets the professional correct the record type (initial/evolution/discharge) before approving; when the audio had no clinical content to structure, an explicit note says so instead of leaving blank sections
 - Admin-only "Limpiar datos de prueba" in Settings → Seguridad: wipes the organization's patients, appointments, records, AI drafts and consents while preserving the professional profile + signature, consent templates, users and catalogs. Triple-gated: server flag `ALLOW_DATA_RESET`, CLINIC_ADMIN role, and a typed confirmation — meant for the construction/testing phase, hidden in normal production
@@ -33,6 +35,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Grace window for the session note: after "Finalizar sesión" the record form stays available until the note is written (next patient can be attended first); the note stores the real session date and the dashboard inbox lists "Nota de sesión pendiente" reminders
 
 ### Changed
+- Saving the working schedule in Settings now refreshes the scheduler's cached copy, so new hours show in the agenda without a manual reload
+- The sidebar role/subtitle now reads the specialty from the server profile (falling back to the role label) instead of a device-local copy, so it's consistent across devices
+- Admin manual password reset removed in favour of self-service: Settings → Usuarios now explains users reset their own password by email (the `users:update` reset endpoint stays for support, just unexposed in the UI)
 - "Sesión pasada" (extemporaneous entry) uses the same three-select date and an optional, simpler time (hour/minutes, defaults to noon) — only the date is required
 - Patients page no longer has its own search box: search is the global header field (last name or document, with a results dropdown), leaving the page with status filters and views
 - Birth date is entered with three explicit selects (Año / Mes / Día) instead of the native date input, whose placeholder order depended on the browser locale and contradicted the validation
@@ -70,6 +75,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Settings → Horario y agenda actually persists changes (it previously only pretended to save)
 
 ### Removed
+- "Bio profesional" field from Settings (it was never persisted nor shown anywhere; it returns when the public patient/booking portal is built)
 - "Cédula / RUT" field from the onboarding wizard (never persisted, Chilean placeholder; the clinical document legally requires name + tarjeta profesional)
 - All fabricated UI data: fake notification bell ("3 urgentes"), hardcoded inbox items, "Borradores IA" and "Facturación del mes" tiles, "+3 este mes" badge, "PHQ-9 alto" and "Con pendientes" patient KPIs
 - Mock Settings sections: "Plan y facturación" (fictitious SaaS plan), "Integraciones" (fake connect buttons), mock note templates, fictitious active-sessions device list, dead 2FA toggles, raw permission-code list in the profile
