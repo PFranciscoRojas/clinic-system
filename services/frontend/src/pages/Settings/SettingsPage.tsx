@@ -1145,6 +1145,12 @@ function UsersSection() {
   const [inviteLoading,setInviteLoading]= useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
 
+  const [resetEmail,   setResetEmail]   = useState('');
+  const [resetPwd,     setResetPwd]     = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetDone,    setResetDone]    = useState(false);
+  const [resetErr,     setResetErr]     = useState('');
+
   const handleGenerateInvite = async () => {
     setInviteLoading(true); setInviteCode(''); setInviteCopied(false);
     try {
@@ -1163,6 +1169,21 @@ function UsersSection() {
     navigator.clipboard.writeText(inviteCode);
     setInviteCopied(true);
     setTimeout(() => setInviteCopied(false), 2000);
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetErr(''); setResetDone(false); setResetLoading(true);
+    try {
+      const { authApi } = await import('@/api/auth');
+      await authApi.resetPassword(resetEmail.trim(), resetPwd);
+      setResetDone(true); setResetEmail(''); setResetPwd('');
+      setTimeout(() => setResetDone(false), 3000);
+    } catch (err: unknown) {
+      setResetErr(err instanceof Error ? err.message : 'Error al restablecer');
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   return (
@@ -1217,15 +1238,39 @@ function UsersSection() {
         </div>
       </SectionCard>
 
-      {isAdmin && (
-        <SectionCard title="Contraseñas de usuarios" icon={Key} color="#64748b">
-          <div style={{ padding: '12px 0', fontSize: 13, color: 'var(--s500)', lineHeight: 1.7 }}>
-            Cada usuario restablece su propia contraseña de forma autónoma: en la pantalla de
-            inicio de sesión, con la opción <b>"¿Olvidaste tu contraseña?"</b>, recibe un enlace
-            seguro por correo. Ya no es necesario que el administrador la asigne manualmente.
+      {isAdmin && <SectionCard title="Restablecer contraseña" icon={Key} color="#ef4444">
+        <form onSubmit={handleResetPassword} style={{ padding: '12px 0' }}>
+          <div style={{ fontSize: 13, color: 'var(--s500)', marginBottom: 14, lineHeight: 1.6 }}>
+            Como administrador puedes restablecer la contraseña de cualquier usuario de tu organización.
+            Cada usuario también puede hacerlo por su cuenta desde <b>"¿Olvidaste tu contraseña?"</b> en el inicio de sesión.
           </div>
-        </SectionCard>
-      )}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--s500)', marginBottom: 6, fontWeight: 500 }}>Correo del usuario</div>
+              <input value={resetEmail} onChange={e => setResetEmail(e.target.value)} type="email" required
+                placeholder="usuario@clinica.co"
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 9, border: '1.5px solid var(--s200)', fontSize: 13, boxSizing: 'border-box' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--s500)', marginBottom: 6, fontWeight: 500 }}>Nueva contraseña</div>
+              <input value={resetPwd} onChange={e => setResetPwd(e.target.value)} type="password" required minLength={8}
+                placeholder="Mínimo 8 caracteres"
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 9, border: '1.5px solid var(--s200)', fontSize: 13, boxSizing: 'border-box' }} />
+            </div>
+          </div>
+          {resetErr && <div style={{ fontSize: 12.5, color: 'var(--red)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}><AlertCircle size={13} />{resetErr}</div>}
+          {resetDone && <div style={{ fontSize: 12.5, color: '#10b981', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}><CheckCircle size={13} />Contraseña restablecida correctamente.</div>}
+          <button type="submit" disabled={resetLoading} style={{
+            display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none',
+            background: resetLoading ? 'var(--s200)' : '#ef4444', color: resetLoading ? 'var(--s400)' : '#fff',
+            fontSize: 13, fontWeight: 700, cursor: resetLoading ? 'not-allowed' : 'pointer',
+          }}>
+            {resetLoading
+              ? <><span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: 99, animation: 'spin .7s linear infinite', display: 'inline-block' }} />Restableciendo…</>
+              : <><Key size={14} />Restablecer contraseña</>}
+          </button>
+        </form>
+      </SectionCard>}
     </>
   );
 }
