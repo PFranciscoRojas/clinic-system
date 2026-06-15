@@ -17,6 +17,8 @@ type svcPort interface {
 	Invite(ctx context.Context, orgID, callerUserID, roleName string) (code string, expiresAt time.Time, err error)
 	Register(ctx context.Context, inviteCode, email, password, displayName string) (*token.Pair, error)
 	ResetPassword(ctx context.Context, callerOrgID, targetEmail, newPassword string) error
+	RequestPasswordReset(ctx context.Context, email string) error
+	ConfirmPasswordReset(ctx context.Context, token, newPassword string) error
 	UpdateProfile(ctx context.Context, userID, displayName string) (*token.Pair, error)
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
 	CompleteOnboarding(ctx context.Context, userID string) error

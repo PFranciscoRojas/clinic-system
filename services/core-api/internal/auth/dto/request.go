@@ -43,3 +43,14 @@ type ResetPasswordRequest struct {
 	TargetEmail string `json:"target_email"`
 	NewPassword string `json:"new_password"`
 }
+
+// ForgotPasswordRequest is the JSON body for POST /api/v1/auth/forgot-password (public).
+type ForgotPasswordRequest struct {
+	Email string `json:"email"`
+}
+
+// ConfirmResetRequest is the JSON body for POST /api/v1/auth/reset-password-confirm (public).
+type ConfirmResetRequest struct {
+	Token       string `json:"token"`
+	NewPassword string `json:"new_password"`
+}

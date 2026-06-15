@@ -23,6 +23,12 @@ type ConsentLinkDetails struct {
 	Link             string
 }
 
+// PasswordResetDetails carries the data for the self-service reset email.
+type PasswordResetDetails struct {
+	Name string // display name or email prefix — just a greeting
+	Link string // one-time reset URL, expires within the hour
+}
+
 // Notifier dispatches booking-lifecycle and consent emails.
 // Implementations must not block — callers fire them in goroutines.
 // Errors are logged internally; they never reach the HTTP response.
@@ -31,13 +37,15 @@ type Notifier interface {
 	BookingConfirmed(ctx context.Context, b BookingDetails)
 	BookingRejected(ctx context.Context, b BookingDetails)
 	ConsentSignLink(ctx context.Context, toEmail string, d ConsentLinkDetails)
+	PasswordReset(ctx context.Context, toEmail string, d PasswordResetDetails)
 }
 
 // NoopNotifier satisfies Notifier without sending anything.
 // Used when RESEND_API_KEY is absent (dev/CI environments).
 type NoopNotifier struct{}
 
-func (NoopNotifier) NewBooking(_ context.Context, _ BookingDetails, _ []string)       {}
-func (NoopNotifier) BookingConfirmed(_ context.Context, _ BookingDetails)             {}
-func (NoopNotifier) BookingRejected(_ context.Context, _ BookingDetails)              {}
+func (NoopNotifier) NewBooking(_ context.Context, _ BookingDetails, _ []string)        {}
+func (NoopNotifier) BookingConfirmed(_ context.Context, _ BookingDetails)              {}
+func (NoopNotifier) BookingRejected(_ context.Context, _ BookingDetails)               {}
 func (NoopNotifier) ConsentSignLink(_ context.Context, _ string, _ ConsentLinkDetails) {}
+func (NoopNotifier) PasswordReset(_ context.Context, _ string, _ PasswordResetDetails) {}

@@ -67,6 +67,16 @@ func (n *ResendNotifier) ConsentSignLink(ctx context.Context, toEmail string, d 
 	}
 }
 
+func (n *ResendNotifier) PasswordReset(ctx context.Context, toEmail string, d PasswordResetDetails) {
+	html, err := renderPasswordReset(d)
+	if err != nil {
+		return
+	}
+	if err := n.send(ctx, toEmail, "Restablece tu contraseña · SGHCP", html); err != nil {
+		slog.Default().Warn("notify: password-reset email failed", "err", err)
+	}
+}
+
 func (n *ResendNotifier) send(ctx context.Context, to, subject, htmlBody string) error {
 	payload, err := json.Marshal(map[string]any{
 		"from":    n.from,
