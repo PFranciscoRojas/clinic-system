@@ -37,7 +37,6 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ### Changed
 - Saving the working schedule in Settings now refreshes the scheduler's cached copy, so new hours show in the agenda without a manual reload
 - The sidebar role/subtitle now reads the specialty from the server profile (falling back to the role label) instead of a device-local copy, so it's consistent across devices
-- Admin manual password reset removed in favour of self-service: Settings → Usuarios now explains users reset their own password by email (the `users:update` reset endpoint stays for support, just unexposed in the UI)
 - "Sesión pasada" (extemporaneous entry) uses the same three-select date and an optional, simpler time (hour/minutes, defaults to noon) — only the date is required
 - Patients page no longer has its own search box: search is the global header field (last name or document, with a results dropdown), leaving the page with status filters and views
 - Birth date is entered with three explicit selects (Año / Mes / Día) instead of the native date input, whose placeholder order depended on the browser locale and contradicted the validation
