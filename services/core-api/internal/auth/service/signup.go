@@ -80,6 +80,36 @@ func (s *Service) OrgInfo(ctx context.Context, orgID string) (name, status strin
 	return s.repo.OrgInfo(ctx, orgID)
 }
 
+// ResendVerification re-issues a verification link for an unverified account.
+// Like the password-reset flow it never reveals whether the email exists or is
+// already verified — the handler always answers 200 — so it can't be used to
+// enumerate accounts.
+func (s *Service) ResendVerification(ctx context.Context, email string) error {
+	u, err := s.repo.FindUserByEmailGlobal(ctx, email)
+	if err != nil || !u.IsActive || u.EmailVerifiedAt != nil {
+		return nil // silent no-op: unknown, disabled, or already verified
+	}
+
+	token, err := generateResetToken()
+	if err != nil {
+		return fmt.Errorf("generating verification token: %w", err)
+	}
+	if err := s.rdb.Set(ctx, emailVerifyPrefix+hash.Token(token), u.ID, emailVerifyTTL).Err(); err != nil {
+		return fmt.Errorf("storing verification token: %w", err)
+	}
+
+	name := email
+	if u.DisplayName != nil && *u.DisplayName != "" {
+		name = *u.DisplayName
+	}
+	link := fmt.Sprintf("%s/verify-email?token=%s", s.appBaseURL, token)
+	go s.notifier.AccountVerification(context.Background(), email, notify.VerificationDetails{
+		Name: name,
+		Link: link,
+	})
+	return nil
+}
+
 // VerifyEmail consumes a one-time verification token and marks the account
 // confirmed. The token is single-use (GetDel) and expires within 24h.
 func (s *Service) VerifyEmail(ctx context.Context, token string) error {

@@ -21,6 +21,13 @@ export function SignupPage() {
   const [show, setShow] = useState(false);
   const [state, setState] = useState<PageState>('form');
   const [err, setErr] = useState('');
+  const [resendMsg, setResendMsg] = useState('');
+
+  const handleResend = async () => {
+    setResendMsg('Enviando…');
+    try { await authApi.resendVerification(email.trim()); } catch { /* always-200 endpoint */ }
+    setResendMsg('Te reenviamos el enlace. Revisa tu bandeja y la carpeta de spam.');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,13 +73,21 @@ export function SignupPage() {
             <div style={{ textAlign: 'center', padding: '8px 0' }}>
               <CheckCircle2 size={44} color="#10b981" style={{ margin: '0 auto 14px' }} />
               <div style={{ fontWeight: 700, fontSize: 17, color: 'var(--s800)', marginBottom: 10 }}>Revisa tu correo</div>
-              <div style={{ fontSize: 13.5, color: 'var(--s500)', lineHeight: 1.7, marginBottom: 24 }}>
+              <div style={{ fontSize: 13.5, color: 'var(--s500)', lineHeight: 1.7, marginBottom: 18 }}>
                 Te enviamos un enlace a <strong style={{ color: 'var(--s700)' }}>{email.trim()}</strong> para
-                confirmar tu cuenta. Ábrelo para activarla y empezar.
+                confirmar tu consultorio. Ábrelo para activarlo y empezar. Si no llega en un par de minutos,
+                revisa la carpeta de <strong>spam</strong>.
               </div>
-              <button onClick={() => navigate('/login')} style={{ width: '100%', padding: 12, borderRadius: 11, border: 'none', background: 'var(--teal)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+              <button onClick={() => navigate('/login')} style={{ width: '100%', padding: 12, borderRadius: 11, border: 'none', background: 'var(--teal)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginBottom: 12 }}>
                 Ir al inicio de sesión
               </button>
+              {resendMsg ? (
+                <div style={{ fontSize: 12.5, color: 'var(--teal)', lineHeight: 1.6 }}>{resendMsg}</div>
+              ) : (
+                <button onClick={handleResend} style={{ border: 'none', background: 'none', fontSize: 13, color: 'var(--teal)', fontWeight: 600, cursor: 'pointer' }}>
+                  ¿No te llegó? Reenviar correo
+                </button>
+              )}
             </div>
           ) : (
             <form onSubmit={handleSubmit}>
