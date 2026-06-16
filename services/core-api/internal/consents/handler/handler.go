@@ -303,6 +303,7 @@ func (h *Handler) sendLink(w http.ResponseWriter, r *http.Request) {
 
 	link := h.appBaseURL + "/sign/" + token
 	go h.notifier.ConsentSignLink(context.Background(), email, notify.ConsentLinkDetails{
+		OrgID:            claims.OrganizationID,
 		PatientFirstName: firstName,
 		ConsentTitle:     tpl.Title,
 		Link:             link,

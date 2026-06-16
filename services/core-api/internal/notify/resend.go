@@ -11,17 +11,31 @@ import (
 
 // ResendNotifier sends transactional emails via the Resend HTTP API.
 type ResendNotifier struct {
-	apiKey string
-	from   string
+	apiKey  string
+	from    string
+	resolve BrandingResolver // per-tenant branding for patient-facing emails
 }
 
-func NewResend(apiKey, from string) *ResendNotifier {
-	return &ResendNotifier{apiKey: apiKey, from: from}
+// NewResend builds the notifier. resolve may be nil for callers that only send
+// product-branded account emails (e.g. password reset); patient-facing emails
+// then fall back to DefaultBranding.
+func NewResend(apiKey, from string, resolve BrandingResolver) *ResendNotifier {
+	return &ResendNotifier{apiKey: apiKey, from: from, resolve: resolve}
+}
+
+// brandFor resolves the tenant's branding, falling back to a neutral default.
+func (n *ResendNotifier) brandFor(ctx context.Context, orgID string) Branding {
+	if n.resolve == nil || orgID == "" {
+		return DefaultBranding()
+	}
+	return n.resolve(ctx, orgID)
 }
 
 func (n *ResendNotifier) NewBooking(ctx context.Context, b BookingDetails, adminEmails []string) {
-	if html, err := renderReceived(b); err == nil {
-		if err := n.send(ctx, b.PatientEmail, "Recibimos tu solicitud de cita · Marcela Chapués", html); err != nil {
+	brand := n.brandFor(ctx, b.OrgID)
+	if html, err := renderReceived(brand, b); err == nil {
+		subj := "Recibimos tu solicitud de cita · " + brand.PublicName
+		if err := n.send(ctx, b.PatientEmail, subj, html); err != nil {
 			slog.Default().Warn("notify: booking-received to patient failed", "err", err)
 		}
 	}
@@ -38,31 +52,34 @@ func (n *ResendNotifier) NewBooking(ctx context.Context, b BookingDetails, admin
 }
 
 func (n *ResendNotifier) BookingConfirmed(ctx context.Context, b BookingDetails) {
-	html, err := renderConfirmed(b)
+	brand := n.brandFor(ctx, b.OrgID)
+	html, err := renderConfirmed(brand, b)
 	if err != nil {
 		return
 	}
-	if err := n.send(ctx, b.PatientEmail, "¡Tu cita fue confirmada! · Marcela Chapués", html); err != nil {
+	if err := n.send(ctx, b.PatientEmail, "¡Tu cita fue confirmada! · "+brand.PublicName, html); err != nil {
 		slog.Default().Warn("notify: booking-confirmed email failed", "err", err)
 	}
 }
 
 func (n *ResendNotifier) BookingRejected(ctx context.Context, b BookingDetails) {
-	html, err := renderRejected(b)
+	brand := n.brandFor(ctx, b.OrgID)
+	html, err := renderRejected(brand, b)
 	if err != nil {
 		return
 	}
-	if err := n.send(ctx, b.PatientEmail, "Sobre tu solicitud de cita · Marcela Chapués", html); err != nil {
+	if err := n.send(ctx, b.PatientEmail, "Sobre tu solicitud de cita · "+brand.PublicName, html); err != nil {
 		slog.Default().Warn("notify: booking-rejected email failed", "err", err)
 	}
 }
 
 func (n *ResendNotifier) ConsentSignLink(ctx context.Context, toEmail string, d ConsentLinkDetails) {
-	html, err := renderConsentSignLink(d)
+	brand := n.brandFor(ctx, d.OrgID)
+	html, err := renderConsentSignLink(brand, d)
 	if err != nil {
 		return
 	}
-	if err := n.send(ctx, toEmail, "Documento de consentimiento para tu firma · Marcela Chapués", html); err != nil {
+	if err := n.send(ctx, toEmail, "Documento de consentimiento para tu firma · "+brand.PublicName, html); err != nil {
 		slog.Default().Warn("notify: consent sign-link email failed", "err", err)
 	}
 }

@@ -5,6 +5,7 @@ import "context"
 // BookingDetails carries the data needed to render notification emails.
 // All pointer fields are already dereferenced (empty string if nil).
 type BookingDetails struct {
+	OrgID         string // tenant whose branding stamps the patient-facing email
 	ID            string
 	FirstName     string
 	LastName      string
@@ -18,6 +19,7 @@ type BookingDetails struct {
 
 // ConsentLinkDetails carries the data for the remote-signature email.
 type ConsentLinkDetails struct {
+	OrgID            string // tenant whose branding stamps the email
 	PatientFirstName string
 	ConsentTitle     string
 	Link             string
