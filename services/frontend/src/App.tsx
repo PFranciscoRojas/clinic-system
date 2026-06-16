@@ -19,6 +19,7 @@ import { ResetPasswordPage } from '@/pages/Public/ResetPasswordPage';
 import { SignupPage } from '@/pages/Public/SignupPage';
 import { VerifyEmailPage } from '@/pages/Public/VerifyEmailPage';
 import { BillingReturnPage } from '@/pages/Public/BillingReturnPage';
+import { BookingWizardPage } from '@/pages/Public/BookingWizardPage';
 import { BookingRequestsPage } from '@/pages/BookingRequests/BookingRequestsPage';
 import { EvaluationsPage } from '@/pages/Evaluations/EvaluationsPage';
 import { BillingPage } from '@/pages/Billing/BillingPage';
@@ -67,6 +68,7 @@ export function App() {
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/billing/return" element={<BillingReturnPage />} />
+      <Route path="/book/:slug" element={<BookingWizardPage />} />
 
       <Route
         path="/*"
