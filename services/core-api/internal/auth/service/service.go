@@ -14,6 +14,10 @@ const (
 	maxFailedAttempts  = 5
 	lockoutDuration    = 15 * time.Minute
 	refreshTokenPrefix = "refresh:"
+	// pwEpochPrefix keys a per-user counter stamped into every refresh token.
+	// Bumping it (on password reset/change) invalidates all outstanding refresh
+	// tokens at once, without tracking each one individually.
+	pwEpochPrefix = "pwepoch:"
 )
 
 type Service struct {

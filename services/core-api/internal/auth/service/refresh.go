@@ -27,6 +27,11 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*token.Pair
 
 	s.rdb.Del(ctx, key)
 
+	// Reject tokens issued before the user's last password reset/change.
+	if payload.Epoch != s.passwordEpoch(ctx, payload.UserID) {
+		return nil, errors.New("refresh token invalidated by password change")
+	}
+
 	user := &auth.User{
 		ID:             payload.UserID,
 		OrganizationID: payload.OrgID,

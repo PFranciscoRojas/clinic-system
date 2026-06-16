@@ -8,6 +8,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"sghcp/core-api/internal/auth"
+	"sghcp/core-api/internal/shared/hash"
 	"sghcp/core-api/internal/shared/token"
 )
 
@@ -18,7 +19,8 @@ func (s *Service) Register(ctx context.Context, inviteCode, email, password, dis
 		return nil, auth.ErrWeakPassword
 	}
 
-	raw, err := s.rdb.GetDel(ctx, invitePrefix+inviteCode).Bytes()
+	inviteKey := invitePrefix + hash.Token(inviteCode)
+	raw, err := s.rdb.GetDel(ctx, inviteKey).Bytes()
 	if err != nil {
 		return nil, auth.ErrInviteInvalid
 	}
@@ -31,7 +33,7 @@ func (s *Service) Register(ctx context.Context, inviteCode, email, password, dis
 	// Guard: duplicate email in this org.
 	if _, err := s.repo.FindUserByEmailInOrg(ctx, payload.OrgID, email); err == nil {
 		// Restore invite so the admin can share it again or the user can fix their email.
-		s.rdb.Set(ctx, invitePrefix+inviteCode, raw, inviteTTL)
+		s.rdb.Set(ctx, inviteKey, raw, inviteTTL)
 		return nil, auth.ErrEmailAlreadyExists
 	}
 
