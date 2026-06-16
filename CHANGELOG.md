@@ -35,6 +35,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Grace window for the session note: after "Finalizar sesión" the record form stays available until the note is written (next patient can be attended first); the note stores the real session date and the dashboard inbox lists "Nota de sesión pendiente" reminders
 
 ### Changed
+- Patient-facing emails (booking received/confirmed/rejected, consent sign link) are now branded per organization — name, accent color and contact resolved from the tenant's profile at send time — instead of being hardcoded to a single clinic; account/system emails stay product-branded. First step toward multi-tenant SaaS
 - Saving the working schedule in Settings now refreshes the scheduler's cached copy, so new hours show in the agenda without a manual reload
 - The sidebar role/subtitle now reads the specialty from the server profile (falling back to the role label) instead of a device-local copy, so it's consistent across devices
 - "Sesión pasada" (extemporaneous entry) uses the same three-select date and an optional, simpler time (hour/minutes, defaults to noon) — only the date is required

@@ -313,6 +313,7 @@ func toDetails(br *bookingrequests.BookingRequest) notify.BookingDetails {
 		modality = "Virtual"
 	}
 	return notify.BookingDetails{
+		OrgID:         br.OrganizationID,
 		ID:            br.ID,
 		FirstName:     br.FirstName,
 		LastName:      br.LastName,

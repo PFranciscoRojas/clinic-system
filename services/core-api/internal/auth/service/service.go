@@ -33,7 +33,9 @@ type Service struct {
 func New(repo auth.Repository, rdb *redis.Client, cfg config.Config) *Service {
 	var notifier notify.Notifier = notify.NoopNotifier{}
 	if cfg.ResendAPIKey != "" {
-		notifier = notify.NewResend(cfg.ResendAPIKey, cfg.ResendFrom)
+		// Auth only sends the product-branded password-reset email, so it needs
+		// no tenant branding resolver.
+		notifier = notify.NewResend(cfg.ResendAPIKey, cfg.ResendFrom, nil)
 	}
 	return &Service{
 		repo:       repo,

@@ -19,6 +19,7 @@ import (
 	consentshandler "sghcp/core-api/internal/consents/handler"
 	diagnoseshandler "sghcp/core-api/internal/diagnoses/handler"
 	"sghcp/core-api/internal/notify"
+	"sghcp/core-api/internal/orgs"
 	patientshandler "sghcp/core-api/internal/patients/handler"
 	profileshandler "sghcp/core-api/internal/profiles/handler"
 	"sghcp/core-api/internal/shared/middleware"
@@ -63,7 +64,8 @@ func (a *app) buildRouter() http.Handler {
 
 	var notifier notify.Notifier = notify.NoopNotifier{}
 	if a.cfg.ResendAPIKey != "" {
-		notifier = notify.NewResend(a.cfg.ResendAPIKey, a.cfg.ResendFrom)
+		brandingResolver := orgs.New(a.pool).ResolveBranding
+		notifier = notify.NewResend(a.cfg.ResendAPIKey, a.cfg.ResendFrom, brandingResolver)
 	}
 	bookingH := bookingrequestshandler.New(a.pool, a.km, notifier)
 	r.Group(func(r chi.Router) {
