@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   CalendarDays, Users, Settings,
   Brain, Search, Plus, ChevronDown, Lock, LogOut, Menu,
-  UserCircle, Calendar, X, Globe,
+  UserCircle, Calendar, X, Globe, Clock,
   PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -392,12 +392,48 @@ export function AppShell({ children }: Props) {
             </div>
           </header>
 
+          <TrialBanner status={user?.subscription_status} daysLeft={user?.trial_days_left} />
+
           <main style={{ flex: 1, overflow: 'auto' }}>
             {children}
           </main>
         </div>
       </div>
     </>
+  );
+}
+
+/* ── Trial banner ───────────────────────────────────────────────── */
+// Shows the remaining trial days while the org is on a trial. Dismissible for
+// the session (sessionStorage); reappears on reload so the deadline stays
+// visible. Turns urgent (amber) in the last three days.
+function TrialBanner({ status, daysLeft }: { status?: string; daysLeft?: number }) {
+  const [hidden, setHidden] = useState(() => sessionStorage.getItem('sghcp_trial_banner_hidden') === '1');
+  if (status !== 'trialing' || daysLeft == null || hidden) return null;
+
+  const urgent = daysLeft <= 3;
+  const bg = urgent ? '#fffbeb' : '#f0fdfa';
+  const border = urgent ? '#fcd34d' : '#99f6e4';
+  const fg = urgent ? '#92400e' : '#0f766e';
+  const label =
+    daysLeft <= 0 ? 'Tu prueba termina hoy'
+    : daysLeft === 1 ? 'Te queda 1 día de prueba'
+    : `Te quedan ${daysLeft} días de prueba`;
+
+  const dismiss = () => { sessionStorage.setItem('sghcp_trial_banner_hidden', '1'); setHidden(true); };
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10, padding: '9px 18px',
+      background: bg, borderBottom: `1px solid ${border}`, color: fg, fontSize: 13,
+    }}>
+      <Clock size={15} style={{ flexShrink: 0 }} />
+      <span style={{ fontWeight: 600 }}>{label}.</span>
+      <span style={{ color: 'var(--s500)' }}>Activa tu plan para no perder el acceso a tu consultorio.</span>
+      <button onClick={dismiss} title="Ocultar" style={{ marginLeft: 'auto', border: 'none', background: 'none', cursor: 'pointer', color: fg, display: 'flex', opacity: 0.7 }}>
+        <X size={15} />
+      </button>
+    </div>
   );
 }
 

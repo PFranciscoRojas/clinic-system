@@ -73,10 +73,46 @@ func (r *Repository) CreateOrgWithOwner(ctx context.Context, p auth.CreateOrgPar
 		}
 	}
 
+	// Seed the four starter consent templates so the new tenant can capture
+	// consents from day one (migration 000010 only seeds orgs that existed then).
+	// They're editable later in Settings → Plantillas clínicas.
+	if _, err = tx.Exec(ctx, seedConsentTemplatesSQL, orgID, userID); err != nil {
+		return "", "", "", fmt.Errorf("seed consent templates: %w", err)
+	}
+
 	if err = tx.Commit(ctx); err != nil {
 		return "", "", "", fmt.Errorf("commit signup tx: %w", err)
 	}
 	return orgID, slug, userID, nil
+}
+
+// seedConsentTemplatesSQL inserts the four default, editable consent templates
+// for a freshly provisioned org ($1) authored by its owner ($2). The bodies
+// mirror the starters in migration 000010.
+const seedConsentTemplatesSQL = `
+INSERT INTO consent_templates (organization_id, consent_type, version, title, body, updated_by)
+VALUES
+  ($1, 'TREATMENT', 1, 'Consentimiento informado para atención psicológica',
+   E'Declaro que he sido informado(a) sobre la naturaleza, objetivos y alcance de la atención psicológica que recibiré, conforme a la Ley 1090 de 2006.\n\nEntiendo que la información compartida en sesión es confidencial y está protegida por el secreto profesional, con las excepciones que la ley contempla (riesgo para la vida propia o de terceros, requerimiento judicial).\n\nAcepto voluntariamente iniciar este proceso de atención psicológica.', $2),
+  ($1, 'DATA_PROCESSING', 1, 'Autorización para el tratamiento de datos personales',
+   E'Autorizo el tratamiento de mis datos personales, incluidos datos sensibles de salud, conforme a la Ley 1581 de 2012 y al Decreto 1377 de 2013, con la finalidad exclusiva de la prestación del servicio de atención psicológica y la gestión de mi historia clínica.\n\nConozco mis derechos a conocer, actualizar, rectificar y suprimir mis datos, y a revocar esta autorización.', $2),
+  ($1, 'RECORDING', 1, 'Consentimiento para grabación de sesiones',
+   E'Autorizo la grabación de audio de mis sesiones con fines exclusivos de apoyo a la elaboración de la nota clínica. El audio se procesa en la infraestructura del prestador, no se comparte con terceros y puedo revocar esta autorización en cualquier momento.', $2),
+  ($1, 'INFORMATION_SHARING', 1, 'Autorización para compartir información clínica',
+   E'Autorizo compartir la información clínica estrictamente necesaria con los terceros que yo indique expresamente (otros profesionales de salud, EPS, familiares autorizados), conforme a la Ley 23 de 1981 y la Resolución 1995 de 1999.', $2)
+`
+
+// OrgSubscription returns the tenant's subscription status and trial deadline,
+// used to drive the trial banner. A missing trial_ends_at comes back as nil.
+func (r *Repository) OrgSubscription(ctx context.Context, orgID string) (status string, trialEndsAt *time.Time, err error) {
+	err = r.db.QueryRow(ctx,
+		`SELECT subscription_status, trial_ends_at FROM organizations WHERE id = $1`,
+		orgID,
+	).Scan(&status, &trialEndsAt)
+	if err != nil {
+		return "", nil, fmt.Errorf("load org subscription: %w", err)
+	}
+	return status, trialEndsAt, nil
 }
 
 // MarkEmailVerified stamps email_verified_at for a user. Idempotent: a second

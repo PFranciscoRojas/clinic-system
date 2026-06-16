@@ -71,6 +71,12 @@ func (s *Service) Signup(ctx context.Context, fullName, email, password string) 
 	return nil
 }
 
+// Subscription returns the caller org's subscription status and trial deadline,
+// used by /me to drive the trial banner.
+func (s *Service) Subscription(ctx context.Context, orgID string) (status string, trialEndsAt *time.Time, err error) {
+	return s.repo.OrgSubscription(ctx, orgID)
+}
+
 // VerifyEmail consumes a one-time verification token and marks the account
 // confirmed. The token is single-use (GetDel) and expires within 24h.
 func (s *Service) VerifyEmail(ctx context.Context, token string) error {

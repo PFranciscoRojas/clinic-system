@@ -10,6 +10,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- Self-serve onboarding for new clinics: a fresh signup is born ready — the four starter consent templates are seeded for the new organization (so consents can be captured from day one) and the existing onboarding wizard now creates the professional profile (name, license, specialty, schedule) on first login
+- Trial banner: while an organization is on its trial, the app shows the remaining days ("Te quedan N días de prueba"), turning amber in the last three; `GET /auth/me` now reports `subscription_status`, `trial_ends_at` and `trial_days_left`
 - Self-serve signup: anyone can create their own clinic from a public `/signup` page (`POST /auth/signup`) — it provisions a new organization (in a 14-day trial) and its owner user with CLINIC_ADMIN + PROFESSIONAL roles, generates a unique slug, and emails a one-time verification link. Onboarding then collects the professional profile. First step of the multi-tenant SaaS funnel (migration 000019)
 - Email verification: signups must confirm their address before logging in. The verification token is single-use and expires in 24h (`POST /auth/verify-email`, public `/verify-email` landing page, hashed token in Redis); existing accounts were backfilled as verified
 - Self-service password reset by email: "¿Olvidaste tu contraseña?" sends a one-time link (`POST /auth/forgot-password`, token in Redis, 1h TTL, no account enumeration) to a public reset page (`/reset-password`); reuses the existing Resend transactional email. Replaces the previous "contact your administrator" dead-end

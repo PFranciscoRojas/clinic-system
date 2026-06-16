@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"math"
 	"net/http"
+	"time"
 
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
@@ -21,7 +23,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		onboarded = true // fail open: never re-show onboarding by accident
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+	resp := map[string]any{
 		"user_id":              claims.UserID,
 		"org_id":               claims.OrganizationID,
 		"email":                claims.Email,
@@ -30,5 +32,22 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		"permissions":          claims.Permissions,
 		"onboarding_completed": onboarded,
 		"data_reset_enabled":   h.dataResetOpen,
-	})
+	}
+
+	// Subscription state drives the trial banner. A lookup failure is non-fatal —
+	// /me still returns the identity.
+	if status, trialEndsAt, err := h.svc.Subscription(r.Context(), claims.OrganizationID); err == nil {
+		resp["subscription_status"] = status
+		if trialEndsAt != nil {
+			resp["trial_ends_at"] = trialEndsAt.UTC().Format(time.RFC3339)
+			// Whole days left, rounded up, never negative.
+			days := int(math.Ceil(time.Until(*trialEndsAt).Hours() / 24))
+			if days < 0 {
+				days = 0
+			}
+			resp["trial_days_left"] = days
+		}
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, resp)
 }
