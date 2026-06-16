@@ -1,0 +1,133 @@
+// Package mercadopago is a thin client over the MercadoPago subscriptions
+// (preapproval) API — the parts SGHCP needs to bill tenants in Colombia.
+//
+// Flow (hosted, no card data touches us): create one preapproval_plan per org
+// carrying external_reference = org id, redirect the owner to its init_point so
+// MercadoPago captures the card, then react to the webhook by fetching the
+// resulting subscription and reading back the external_reference.
+package mercadopago
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"time"
+)
+
+const base = "https://api.mercadopago.com"
+
+type Client struct {
+	accessToken string
+	http        *http.Client
+}
+
+func New(accessToken string) *Client {
+	return &Client{accessToken: accessToken, http: &http.Client{Timeout: 15 * time.Second}}
+}
+
+// Enabled reports whether billing is configured (a token is present).
+func (c *Client) Enabled() bool { return c.accessToken != "" }
+
+// CreatePlan creates a monthly COP subscription plan tied to an org and returns
+// its id and the hosted checkout URL (init_point) the owner is redirected to.
+func (c *Client) CreatePlan(ctx context.Context, orgID, reason string, amountCOP int, backURL, notificationURL string) (planID, initPoint string, err error) {
+	payload := map[string]any{
+		"reason":             reason,
+		"external_reference": orgID,
+		"back_url":           backURL,
+		"notification_url":   notificationURL,
+		"auto_recurring": map[string]any{
+			"frequency":          1,
+			"frequency_type":     "months",
+			"transaction_amount": amountCOP,
+			"currency_id":        "COP",
+		},
+		"payment_methods_allowed": map[string]any{
+			"payment_types": []map[string]string{{"id": "credit_card"}},
+		},
+	}
+	var out struct {
+		ID        string `json:"id"`
+		InitPoint string `json:"init_point"`
+		Message   string `json:"message"`
+	}
+	if err := c.do(ctx, http.MethodPost, "/preapproval_plan", payload, &out); err != nil {
+		return "", "", err
+	}
+	if out.ID == "" {
+		return "", "", fmt.Errorf("mercadopago: plan not created: %s", out.Message)
+	}
+	return out.ID, out.InitPoint, nil
+}
+
+// Preapproval is a subscriber's subscription as returned by the API.
+type Preapproval struct {
+	ID                string `json:"id"`
+	Status            string `json:"status"` // pending | authorized | paused | cancelled
+	ExternalReference string `json:"external_reference"`
+	NextPaymentDate   string `json:"next_payment_date"` // RFC3339-ish
+	PayerEmail        string `json:"payer_email"`
+}
+
+// GetPreapproval fetches a subscription by id (from a webhook notification).
+func (c *Client) GetPreapproval(ctx context.Context, id string) (*Preapproval, error) {
+	var p Preapproval
+	if err := c.do(ctx, http.MethodGet, "/preapproval/"+id, nil, &p); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// Payment is a single charge (used for recurring renewal notifications).
+type Payment struct {
+	ID                int64  `json:"id"`
+	Status            string `json:"status"` // approved | rejected | ...
+	ExternalReference string `json:"external_reference"`
+}
+
+// GetPayment fetches a payment by id (from an authorized-payment webhook).
+func (c *Client) GetPayment(ctx context.Context, id string) (*Payment, error) {
+	var p Payment
+	if err := c.do(ctx, http.MethodGet, "/v1/payments/"+id, nil, &p); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+func (c *Client) do(ctx context.Context, method, path string, body, out any) error {
+	var reader *bytes.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			return err
+		}
+		reader = bytes.NewReader(b)
+	} else {
+		reader = bytes.NewReader(nil)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, base+path, reader)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.accessToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("mercadopago request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		var e struct {
+			Message string `json:"message"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&e)
+		return fmt.Errorf("mercadopago %d: %s", resp.StatusCode, e.Message)
+	}
+	if out != nil {
+		return json.NewDecoder(resp.Body).Decode(out)
+	}
+	return nil
+}
