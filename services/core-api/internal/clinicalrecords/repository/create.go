@@ -9,7 +9,7 @@ import (
 
 func (r *Repository) CreateEncKey(ctx context.Context, encryptedDEK []byte, keySource string) (string, error) {
 	var id string
-	err := r.db.QueryRow(ctx, `
+	err := r.q(ctx).QueryRow(ctx, `
 		INSERT INTO encryption_keys (encrypted_dek, key_source, algorithm)
 		VALUES ($1, $2, 'AES-256-GCM')
 		RETURNING id
@@ -22,7 +22,7 @@ func (r *Repository) CreateEncKey(ctx context.Context, encryptedDEK []byte, keyS
 
 func (r *Repository) Create(ctx context.Context, p clinicalrecords.CreateParams) (string, error) {
 	var id string
-	err := r.db.QueryRow(ctx, `
+	err := r.q(ctx).QueryRow(ctx, `
 		INSERT INTO clinical_records (
 			organization_id, patient_id, responsible_staff_id, created_by,
 			appointment_id, dek_id, record_type, session_date,

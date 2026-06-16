@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"sghcp/core-api/internal/shared/dbctx"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
 )
@@ -66,7 +67,9 @@ func (h *Handler) resetClinicalData(w http.ResponseWriter, r *http.Request) {
 // single transaction, then drops the now-orphaned per-record DEKs (never the
 // professional signature DEK). Returns row counts per table.
 func (h *Handler) wipeOrg(ctx context.Context, orgID string) (map[string]int64, error) {
-	tx, err := h.pool.Begin(ctx)
+	// Use the request-scoped tenant connection so the deletes run under the
+	// org's RLS scope (belt-and-suspenders with the explicit org filters).
+	tx, err := dbctx.From(ctx, h.pool).Begin(ctx)
 	if err != nil {
 		return nil, err
 	}

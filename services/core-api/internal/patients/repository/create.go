@@ -13,7 +13,7 @@ import (
 // pgx pool auto-commits each Exec.
 func (r *Repository) CreateEncKey(ctx context.Context, encryptedDEK []byte, keySource string) (string, error) {
 	var id string
-	err := r.db.QueryRow(ctx, `
+	err := r.q(ctx).QueryRow(ctx, `
 		INSERT INTO encryption_keys (encrypted_dek, key_source, algorithm)
 		VALUES ($1, $2, 'AES-256-GCM')
 		RETURNING id
@@ -28,7 +28,7 @@ func (r *Repository) CreateEncKey(ctx context.Context, encryptedDEK []byte, keyS
 // The caller must have already persisted the DEK and obtained dekID.
 func (r *Repository) Create(ctx context.Context, p patients.CreateParams) (string, error) {
 	var id string
-	err := r.db.QueryRow(ctx, `
+	err := r.q(ctx).QueryRow(ctx, `
 		INSERT INTO patients (
 			organization_id, document_type_code, dek_id,
 			first_name_enc, middle_name_enc,

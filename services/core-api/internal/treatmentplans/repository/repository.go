@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"sghcp/core-api/internal/shared/dbctx"
 	"sghcp/core-api/internal/treatmentplans"
 )
 
@@ -19,9 +20,13 @@ func New(db *pgxpool.Pool) *Repository {
 	return &Repository{db: db}
 }
 
+// q returns the request-scoped querier (tenant connection with the org GUC
+// set) when present, falling back to the pool otherwise.
+func (r *Repository) q(ctx context.Context) dbctx.Querier { return dbctx.From(ctx, r.db) }
+
 func (r *Repository) CreateEncKey(ctx context.Context, encryptedDEK []byte, keySource string) (string, error) {
 	var id string
-	err := r.db.QueryRow(ctx, `
+	err := r.q(ctx).QueryRow(ctx, `
 		INSERT INTO encryption_keys (encrypted_dek, key_source, algorithm)
 		VALUES ($1, $2, 'AES-256-GCM')
 		RETURNING id
@@ -34,7 +39,7 @@ func (r *Repository) CreateEncKey(ctx context.Context, encryptedDEK []byte, keyS
 
 func (r *Repository) FindEncKey(ctx context.Context, dekID string) (*treatmentplans.EncKeyRow, error) {
 	var k treatmentplans.EncKeyRow
-	err := r.db.QueryRow(ctx,
+	err := r.q(ctx).QueryRow(ctx,
 		`SELECT id, encrypted_dek, key_source FROM encryption_keys WHERE id = $1`,
 		dekID,
 	).Scan(&k.ID, &k.EncryptedDEK, &k.KeySource)
@@ -46,7 +51,7 @@ func (r *Repository) FindEncKey(ctx context.Context, dekID string) (*treatmentpl
 
 func (r *Repository) CreatePlan(ctx context.Context, p treatmentplans.CreatePlanParams) (string, error) {
 	var id string
-	err := r.db.QueryRow(ctx, `
+	err := r.q(ctx).QueryRow(ctx, `
 		INSERT INTO treatment_plans
 			(organization_id, patient_id, staff_id, dek_id, title_enc, start_date)
 		VALUES ($1, $2, $3, $4, $5, $6)
@@ -75,7 +80,7 @@ func scanPlan(row pgx.Row) (*treatmentplans.RawPlan, error) {
 }
 
 func (r *Repository) FindPlanByID(ctx context.Context, orgID, planID string) (*treatmentplans.RawPlan, error) {
-	p, err := scanPlan(r.db.QueryRow(ctx,
+	p, err := scanPlan(r.q(ctx).QueryRow(ctx,
 		`SELECT `+planColumns+` FROM treatment_plans WHERE id = $1 AND organization_id = $2`,
 		planID, orgID,
 	))
@@ -89,7 +94,7 @@ func (r *Repository) FindPlanByID(ctx context.Context, orgID, planID string) (*t
 }
 
 func (r *Repository) ListPlansByPatient(ctx context.Context, orgID, patientID string) ([]*treatmentplans.RawPlan, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.q(ctx).Query(ctx, `
 		SELECT `+planColumns+`
 		FROM treatment_plans
 		WHERE organization_id = $1 AND patient_id = $2
@@ -113,7 +118,7 @@ func (r *Repository) ListPlansByPatient(ctx context.Context, orgID, patientID st
 
 func (r *Repository) HasActivePlan(ctx context.Context, orgID, patientID string) (bool, error) {
 	var exists bool
-	err := r.db.QueryRow(ctx, `
+	err := r.q(ctx).QueryRow(ctx, `
 		SELECT EXISTS (
 			SELECT 1 FROM treatment_plans
 			WHERE organization_id = $1 AND patient_id = $2 AND status = 'ACTIVE'
@@ -126,7 +131,7 @@ func (r *Repository) HasActivePlan(ctx context.Context, orgID, patientID string)
 }
 
 func (r *Repository) UpdatePlan(ctx context.Context, p treatmentplans.UpdatePlanParams) error {
-	tag, err := r.db.Exec(ctx, `
+	tag, err := r.q(ctx).Exec(ctx, `
 		UPDATE treatment_plans SET
 			title_enc = COALESCE($3, title_enc),
 			status    = COALESCE($4::plan_status, status),
@@ -145,7 +150,7 @@ func (r *Repository) UpdatePlan(ctx context.Context, p treatmentplans.UpdatePlan
 
 func (r *Repository) CreateGoal(ctx context.Context, p treatmentplans.CreateGoalParams) (string, error) {
 	var id string
-	err := r.db.QueryRow(ctx, `
+	err := r.q(ctx).QueryRow(ctx, `
 		INSERT INTO treatment_goals (plan_id, description_enc, target_date, sort_order)
 		VALUES ($1, $2, $3, $4)
 		RETURNING id
@@ -173,7 +178,7 @@ func scanGoal(row pgx.Row) (*treatmentplans.RawGoal, error) {
 }
 
 func (r *Repository) ListGoalsByPlan(ctx context.Context, planID string) ([]*treatmentplans.RawGoal, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.q(ctx).Query(ctx, `
 		SELECT `+goalColumns+`
 		FROM treatment_goals
 		WHERE plan_id = $1
@@ -196,7 +201,7 @@ func (r *Repository) ListGoalsByPlan(ctx context.Context, planID string) ([]*tre
 }
 
 func (r *Repository) FindGoalByID(ctx context.Context, orgID, planID, goalID string) (*treatmentplans.RawGoal, error) {
-	g, err := scanGoal(r.db.QueryRow(ctx, `
+	g, err := scanGoal(r.q(ctx).QueryRow(ctx, `
 		SELECT g.id, g.plan_id, g.description_enc, g.progress_notes_enc, g.status,
 		       g.target_date, g.sort_order, g.created_at, g.updated_at
 		FROM treatment_goals g
@@ -213,7 +218,7 @@ func (r *Repository) FindGoalByID(ctx context.Context, orgID, planID, goalID str
 }
 
 func (r *Repository) UpdateGoal(ctx context.Context, p treatmentplans.UpdateGoalParams) error {
-	tag, err := r.db.Exec(ctx, `
+	tag, err := r.q(ctx).Exec(ctx, `
 		UPDATE treatment_goals g SET
 			description_enc    = COALESCE($4, g.description_enc),
 			progress_notes_enc = COALESCE($5, g.progress_notes_enc),

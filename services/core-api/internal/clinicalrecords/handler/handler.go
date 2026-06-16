@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"context"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	crrrepo "sghcp/core-api/internal/clinicalrecords/repository"
@@ -10,6 +12,7 @@ import (
 	patssvc "sghcp/core-api/internal/patients/service"
 	"sghcp/core-api/internal/shared/audit"
 	"sghcp/core-api/internal/shared/crypto"
+	"sghcp/core-api/internal/shared/dbctx"
 )
 
 type Handler struct {
@@ -20,6 +23,10 @@ type Handler struct {
 	km       *crypto.KeyManager
 	audit    *audit.Writer
 }
+
+// q returns the request-scoped tenant querier (RLS-scoped) for the direct
+// SQL the PDF exporter runs, falling back to the pool.
+func (h *Handler) q(ctx context.Context) dbctx.Querier { return dbctx.From(ctx, h.db) }
 
 func New(db *pgxpool.Pool, km *crypto.KeyManager) *Handler {
 	crrRepo := crrrepo.New(db)

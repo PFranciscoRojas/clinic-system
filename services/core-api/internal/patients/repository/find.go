@@ -12,7 +12,7 @@ import (
 )
 
 func (r *Repository) FindByID(ctx context.Context, orgID, patientID string) (*patients.RawPatient, error) {
-	row := r.db.QueryRow(ctx, `
+	row := r.q(ctx).QueryRow(ctx, `
 		SELECT id, organization_id, document_type_code, dek_id,
 		       first_name_enc, middle_name_enc,
 		       paternal_last_name_enc, maternal_last_name_enc,
@@ -27,7 +27,7 @@ func (r *Repository) FindByID(ctx context.Context, orgID, patientID string) (*pa
 
 func (r *Repository) FindEncKey(ctx context.Context, dekID string) (*patients.EncKeyRow, error) {
 	var k patients.EncKeyRow
-	err := r.db.QueryRow(ctx,
+	err := r.q(ctx).QueryRow(ctx,
 		`SELECT id, encrypted_dek, key_source FROM encryption_keys WHERE id = $1`,
 		dekID,
 	).Scan(&k.ID, &k.EncryptedDEK, &k.KeySource)
@@ -39,7 +39,7 @@ func (r *Repository) FindEncKey(ctx context.Context, dekID string) (*patients.En
 
 // List returns all active patients for the organization, ordered by creation date desc.
 func (r *Repository) List(ctx context.Context, orgID string, limit, offset int) ([]*patients.RawPatient, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.q(ctx).Query(ctx, `
 		SELECT id, organization_id, document_type_code, dek_id,
 		       first_name_enc, middle_name_enc,
 		       paternal_last_name_enc, maternal_last_name_enc,
@@ -92,7 +92,7 @@ func (r *Repository) Search(ctx context.Context, orgID string, f patients.Search
 	args = append(args, f.Limit, f.Offset)
 	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", len(args)-1, len(args))
 
-	rows, err := r.db.Query(ctx, query, args...)
+	rows, err := r.q(ctx).Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("search patients: %w", err)
 	}

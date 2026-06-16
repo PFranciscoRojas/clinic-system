@@ -94,7 +94,7 @@ func (h *Handler) exportPDF(w http.ResponseWriter, r *http.Request) {
 
 	// Integrity fingerprint stored at write time (not exposed by the read API).
 	var contentHash string
-	h.db.QueryRow(ctx,
+	h.q(ctx).QueryRow(ctx,
 		`SELECT content_hash FROM clinical_records WHERE id = $1 AND organization_id = $2`,
 		recordID, claims.OrganizationID,
 	).Scan(&contentHash)
@@ -151,7 +151,7 @@ func (h *Handler) exportPDF(w http.ResponseWriter, r *http.Request) {
 // has no professional profile yet.
 func (h *Handler) professionalInfo(ctx context.Context, userID, orgID string) pdf.ProfessionalInfo {
 	var first, middle, paternal, maternal, license, specialty string
-	err := h.db.QueryRow(ctx, `
+	err := h.q(ctx).QueryRow(ctx, `
 		SELECT pp.first_name, COALESCE(pp.middle_name, ''), pp.paternal_last_name,
 		       COALESCE(pp.maternal_last_name, ''), pp.license_number, s.name
 		FROM professional_profiles pp
@@ -168,7 +168,7 @@ func (h *Handler) professionalInfo(ctx context.Context, userID, orgID string) pd
 	}
 
 	var displayName string
-	if err := h.db.QueryRow(ctx,
+	if err := h.q(ctx).QueryRow(ctx,
 		`SELECT COALESCE(display_name, '') FROM users WHERE id = $1 AND organization_id = $2`,
 		userID, orgID,
 	).Scan(&displayName); err != nil || displayName == "" {
@@ -182,7 +182,7 @@ func (h *Handler) professionalInfo(ctx context.Context, userID, orgID string) pd
 func (h *Handler) professionalSignature(ctx context.Context, userID string) []byte {
 	var sealed []byte
 	var dekID *string
-	if err := h.db.QueryRow(ctx, `
+	if err := h.q(ctx).QueryRow(ctx, `
 		SELECT signature_enc, signature_dek_id::text FROM professional_profiles WHERE user_id = $1
 	`, userID).Scan(&sealed, &dekID); err != nil || len(sealed) == 0 || dekID == nil {
 		return nil
@@ -190,7 +190,7 @@ func (h *Handler) professionalSignature(ctx context.Context, userID string) []by
 
 	var encDEK []byte
 	var keySource string
-	if err := h.db.QueryRow(ctx,
+	if err := h.q(ctx).QueryRow(ctx,
 		`SELECT encrypted_dek, key_source FROM encryption_keys WHERE id = $1`, *dekID,
 	).Scan(&encDEK, &keySource); err != nil {
 		return nil
@@ -211,7 +211,7 @@ func (h *Handler) professionalSignature(ctx context.Context, userID string) []by
 func (h *Handler) orgInfo(ctx context.Context, orgID string) pdf.OrgInfo {
 	var name, nit string
 	var settingsRaw []byte
-	if err := h.db.QueryRow(ctx,
+	if err := h.q(ctx).QueryRow(ctx,
 		`SELECT name, COALESCE(nit, ''), settings FROM organizations WHERE id = $1`,
 		orgID,
 	).Scan(&name, &nit, &settingsRaw); err != nil {

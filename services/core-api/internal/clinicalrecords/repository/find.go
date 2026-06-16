@@ -12,7 +12,7 @@ import (
 
 func (r *Repository) FindEncKey(ctx context.Context, dekID string) (*clinicalrecords.EncKeyRow, error) {
 	var k clinicalrecords.EncKeyRow
-	err := r.db.QueryRow(ctx,
+	err := r.q(ctx).QueryRow(ctx,
 		`SELECT id, encrypted_dek, key_source FROM encryption_keys WHERE id = $1`,
 		dekID,
 	).Scan(&k.ID, &k.EncryptedDEK, &k.KeySource)
@@ -23,7 +23,7 @@ func (r *Repository) FindEncKey(ctx context.Context, dekID string) (*clinicalrec
 }
 
 func (r *Repository) FindByID(ctx context.Context, orgID, recordID string) (*clinicalrecords.RawRecord, error) {
-	row := r.db.QueryRow(ctx, `
+	row := r.q(ctx).QueryRow(ctx, `
 		SELECT id, organization_id, patient_id, responsible_staff_id, created_by,
 		       COALESCE(appointment_id::text, ''), dek_id,
 		       record_type, session_date,
@@ -58,7 +58,7 @@ func (r *Repository) FindByID(ctx context.Context, orgID, recordID string) (*cli
 }
 
 func (r *Repository) List(ctx context.Context, f clinicalrecords.ListFilter) ([]*clinicalrecords.RecordMeta, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.q(ctx).Query(ctx, `
 		SELECT id, patient_id, responsible_staff_id, created_by,
 		       COALESCE(appointment_id::text, ''), record_type,
 		       session_date, template_version, risk_level::text,
@@ -95,7 +95,7 @@ func (r *Repository) List(ctx context.Context, f clinicalrecords.ListFilter) ([]
 // a patient, the basis of the open-process rules for template v2 records.
 func (r *Repository) GetProcessDates(ctx context.Context, orgID, patientID string) (clinicalrecords.ProcessDates, error) {
 	var d clinicalrecords.ProcessDates
-	err := r.db.QueryRow(ctx, `
+	err := r.q(ctx).QueryRow(ctx, `
 		SELECT
 			MAX(session_date) FILTER (WHERE record_type = 'INITIAL'),
 			MAX(session_date) FILTER (WHERE record_type = 'DISCHARGE')
