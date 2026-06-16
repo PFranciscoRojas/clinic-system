@@ -74,9 +74,10 @@ func (s *Service) Signup(ctx context.Context, orgName, adminName, email, passwor
 	return nil
 }
 
-// OrgInfo returns the caller org's name, subscription status and trial
-// deadline, used by /me to label the org and drive the trial banner.
-func (s *Service) OrgInfo(ctx context.Context, orgID string) (name, status string, trialEndsAt *time.Time, err error) {
+// OrgInfo returns the caller org's name, subscription status and the trial /
+// paid-period deadlines, used by /me to label the org, drive the trial banner
+// and compute entitlement.
+func (s *Service) OrgInfo(ctx context.Context, orgID string) (name, status string, trialEndsAt, currentPeriodEnd *time.Time, err error) {
 	return s.repo.OrgInfo(ctx, orgID)
 }
 

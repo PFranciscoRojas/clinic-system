@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   CalendarDays, Users, Settings,
   Brain, Search, Plus, ChevronDown, Lock, LogOut, Menu,
-  UserCircle, Calendar, X, Globe, Clock,
+  UserCircle, Calendar, X, Globe, Clock, Building2,
   PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -132,6 +132,12 @@ export function AppShell({ children }: Props) {
     });
   };
 
+  // Trial/subscription lapsed → hard-block the app behind a reactivation screen.
+  // The operator (SYSTEM_ADMIN) and entitled tenants pass through.
+  if (user && user.entitled === false) {
+    return <SubscriptionExpired onLogout={logout} />;
+  }
+
   return (
     <>
       {locked && <LockScreen userId={user?.user_id} onUnlock={() => setLocked(false)} />}
@@ -228,6 +234,22 @@ export function AppShell({ children }: Props) {
                 </Link>
               );
             })}
+            {user?.roles?.includes('SYSTEM_ADMIN') && (() => {
+              const active = location.pathname.startsWith('/admin');
+              return (
+                <Link to="/admin" title={showCollapsed ? 'Operador' : undefined} onClick={() => setMobileNavOpen(false)} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  justifyContent: showCollapsed ? 'center' : 'flex-start',
+                  padding: showCollapsed ? '12px 0' : '10px 12px', borderRadius: 8, marginBottom: 2, marginTop: 8,
+                  background: active ? 'rgba(255,255,255,.18)' : 'transparent',
+                  color: active ? '#fff' : 'rgba(255,255,255,.65)',
+                  fontSize: 13.5, fontWeight: active ? 600 : 400,
+                }}>
+                  <Building2 size={showCollapsed ? 18 : 16} color={active ? '#fff' : 'rgba(255,255,255,.65)'} />
+                  {!showCollapsed && <span style={{ flex: 1 }}>Operador SaaS</span>}
+                </Link>
+              );
+            })()}
           </nav>
 
           {/* User mini card */}
@@ -435,6 +457,35 @@ function TrialBanner({ status, daysLeft }: { status?: string; daysLeft?: number 
       <button onClick={dismiss} title="Ocultar" style={{ marginLeft: 'auto', border: 'none', background: 'none', cursor: 'pointer', color: fg, display: 'flex', opacity: 0.7 }}>
         <X size={15} />
       </button>
+    </div>
+  );
+}
+
+/* ── Subscription expired ───────────────────────────────────────── */
+// Full-screen block shown when the trial/subscription has lapsed. Payment is
+// handled out-of-band for now (the operator activates the account manually), so
+// this screen explains how to reactivate rather than charging a card.
+function SubscriptionExpired({ onLogout }: { onLogout: () => void }) {
+  return (
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0f766e, #134e4a)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+      <div style={{ background: '#fff', borderRadius: 18, padding: '36px 34px', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', width: '100%', maxWidth: 460, textAlign: 'center' }}>
+        <div style={{ width: 60, height: 60, borderRadius: 16, background: '#fffbeb', border: '1.5px solid #fcd34d', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
+          <Clock size={28} color="#92400e" />
+        </div>
+        <div style={{ fontWeight: 800, fontSize: 21, color: 'var(--s800)', marginBottom: 10 }}>Tu período de prueba terminó</div>
+        <div style={{ fontSize: 14, color: 'var(--s500)', lineHeight: 1.7, marginBottom: 24 }}>
+          Para seguir usando tu consultorio, activa tu plan. Escríbenos para reactivar tu cuenta
+          (pago por transferencia, Nequi o efectivo) y la dejamos lista enseguida.
+          <br /><br />
+          Tus historias clínicas siguen seguras y puedes exportarlas en cualquier momento.
+        </div>
+        <a href="https://wa.me/" target="_blank" rel="noreferrer" style={{ display: 'block', width: '100%', boxSizing: 'border-box', padding: 13, borderRadius: 12, background: 'var(--teal)', color: '#fff', fontSize: 15, fontWeight: 700, textDecoration: 'none', marginBottom: 12 }}>
+          Activar mi plan
+        </a>
+        <button onClick={onLogout} style={{ border: 'none', background: 'none', fontSize: 13, color: 'var(--s500)', fontWeight: 600, cursor: 'pointer' }}>
+          Cerrar sesión
+        </button>
+      </div>
     </div>
   );
 }

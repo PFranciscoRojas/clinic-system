@@ -86,6 +86,9 @@ func (a *app) buildRouter() http.Handler {
 		r.Use(middleware.RequireAuth([]byte(a.cfg.JWTSecret)))
 		// Pin a connection with the org GUC set so RLS policies scope every query.
 		r.Use(middleware.TenantScope(a.pool))
+		// Block clinical access once the trial/subscription lapses (export and
+		// the operator console stay open; SYSTEM_ADMIN is never gated).
+		r.Use(middleware.SubscriptionGate(a.pool))
 
 		r.Mount("/api/v1/patients", patientshandler.New(a.pool, a.km).Routes())
 		r.Mount("/api/v1/appointments", apptshandler.New(a.pool).Routes())
@@ -117,11 +120,9 @@ func (a *app) buildRouter() http.Handler {
 
 		r.Mount("/api/v1/booking-requests", bookingH.Routes())
 
-		// Admin-only destructive maintenance — mounted only while the operator
-		// opts in via ALLOW_DATA_RESET, so it doesn't exist in normal production.
-		if a.cfg.AllowDataReset {
-			r.Mount("/api/v1/admin", adminhandler.New(a.pool).Routes())
-		}
+		// Operator console: SYSTEM_ADMIN billing endpoints are always mounted;
+		// the destructive data-reset route only exists while ALLOW_DATA_RESET is on.
+		r.Mount("/api/v1/admin", adminhandler.New(a.pool, a.cfg.AllowDataReset).Routes())
 	})
 
 	return r

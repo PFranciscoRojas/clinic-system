@@ -22,6 +22,7 @@ import { BookingRequestsPage } from '@/pages/BookingRequests/BookingRequestsPage
 import { EvaluationsPage } from '@/pages/Evaluations/EvaluationsPage';
 import { BillingPage } from '@/pages/Billing/BillingPage';
 import { SettingsPage } from '@/pages/Settings/SettingsPage';
+import { SuperAdminPage } from '@/pages/Admin/SuperAdminPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -83,6 +84,7 @@ export function App() {
                 <Route path="evaluations" element={<EvaluationsPage />} />
                 <Route path="billing" element={<BillingPage />} />
                 <Route path="settings" element={<SettingsPage />} />
+                <Route path="admin" element={<SuperAdminPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </AppShell>

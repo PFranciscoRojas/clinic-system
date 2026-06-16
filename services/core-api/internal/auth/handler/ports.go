@@ -26,7 +26,7 @@ type svcPort interface {
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
 	CompleteOnboarding(ctx context.Context, userID string) error
 	OnboardingCompleted(ctx context.Context, userID string) (bool, error)
-	OrgInfo(ctx context.Context, orgID string) (name, status string, trialEndsAt *time.Time, err error)
+	OrgInfo(ctx context.Context, orgID string) (name, status string, trialEndsAt, currentPeriodEnd *time.Time, err error)
 }
 
 // compile-time guard: *authsvc.Service must satisfy svcPort.

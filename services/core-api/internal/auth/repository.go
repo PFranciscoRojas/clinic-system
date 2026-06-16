@@ -21,7 +21,7 @@ type Repository interface {
 	FindRoleIDByName(ctx context.Context, roleName string) (string, error)
 	CreateUser(ctx context.Context, orgID, email, passwordHash, displayName string) (string, error)
 	CreateOrgWithOwner(ctx context.Context, p CreateOrgParams) (orgID, slug, userID string, err error)
-	OrgInfo(ctx context.Context, orgID string) (name, status string, trialEndsAt *time.Time, err error)
+	OrgInfo(ctx context.Context, orgID string) (name, status string, trialEndsAt, currentPeriodEnd *time.Time, err error)
 	MarkEmailVerified(ctx context.Context, userID string) error
 	AssignRole(ctx context.Context, orgID, userID, roleID, assignedByUserID string) error
 	UpdatePassword(ctx context.Context, orgID, targetEmail, passwordHash string) error

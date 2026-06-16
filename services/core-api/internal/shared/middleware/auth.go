@@ -64,6 +64,27 @@ func RequirePermission(permission string) func(http.Handler) http.Handler {
 	}
 }
 
+// RequireRole checks that the authenticated user holds the given system role
+// (e.g. "SYSTEM_ADMIN" for the SaaS operator). Must be composed after RequireAuth.
+func RequireRole(role string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims := ClaimsFromContext(r.Context())
+			if claims == nil {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			for _, role2 := range claims.Roles {
+				if role2 == role {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+			http.Error(w, "forbidden", http.StatusForbidden)
+		})
+	}
+}
+
 // ClaimsFromContext retrieves JWT claims from the request context.
 // Returns nil if called outside a RequireAuth-protected route.
 func ClaimsFromContext(ctx context.Context) *token.Claims {
