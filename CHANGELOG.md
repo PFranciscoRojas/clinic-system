@@ -80,6 +80,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Mock Settings sections: "Plan y facturación" (fictitious SaaS plan), "Integraciones" (fake connect buttons), mock note templates, fictitious active-sessions device list, dead 2FA toggles, raw permission-code list in the profile
 - Billing and Evaluations hidden from navigation until their backends exist (code kept as design reference)
 
+### Security
+- Password-reset link tokens and invite codes are now stored hashed (SHA-256) in Redis instead of in plaintext: a leaked snapshot can no longer be replayed to take over an account; the raw secret lives only in the email link / the code shared by the admin
+- Resetting or changing a password now invalidates every existing session: refresh tokens carry a per-user "password epoch" that is bumped on reset/change, so old refresh tokens stop working immediately (the access token keeps working until it expires, ~minutes)
+
 ## [0.5.0] — 2026-06-10 · psychology-native clinical history, consents, treatment plans & PDF export
 
 ### Added

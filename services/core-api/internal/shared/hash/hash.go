@@ -14,3 +14,12 @@ func Normalize(s string) string {
 	h := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(s))))
 	return fmt.Sprintf("%x", h)
 }
+
+// Token SHA-256 hashes a high-entropy secret (password-reset link token,
+// invite code) exactly as presented — no lowercasing or trimming, which
+// would alter the value. Only the digest is ever stored in Redis, so a
+// leaked snapshot cannot be replayed to take over an account.
+func Token(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return fmt.Sprintf("%x", h)
+}

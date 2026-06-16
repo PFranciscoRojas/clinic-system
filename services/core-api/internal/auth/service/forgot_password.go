@@ -11,6 +11,7 @@ import (
 
 	"sghcp/core-api/internal/auth"
 	"sghcp/core-api/internal/notify"
+	"sghcp/core-api/internal/shared/hash"
 )
 
 const (
@@ -32,7 +33,8 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email string) error 
 	if err != nil {
 		return fmt.Errorf("generating reset token: %w", err)
 	}
-	if err := s.rdb.Set(ctx, pwResetPrefix+token, u.ID, pwResetTTL).Err(); err != nil {
+	// Only the hash is stored; the raw token lives solely in the email link.
+	if err := s.rdb.Set(ctx, pwResetPrefix+hash.Token(token), u.ID, pwResetTTL).Err(); err != nil {
 		return fmt.Errorf("storing reset token: %w", err)
 	}
 
@@ -54,16 +56,23 @@ func (s *Service) ConfirmPasswordReset(ctx context.Context, token, newPassword s
 		return auth.ErrWeakPassword
 	}
 
-	userID, err := s.rdb.GetDel(ctx, pwResetPrefix+token).Result()
+	userID, err := s.rdb.GetDel(ctx, pwResetPrefix+hash.Token(token)).Result()
 	if err != nil || userID == "" {
 		return auth.ErrInviteInvalid // reused/expired/unknown token
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	pwHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("hashing password: %w", err)
 	}
-	return s.repo.UpdatePasswordByID(ctx, userID, string(hash))
+	if err := s.repo.UpdatePasswordByID(ctx, userID, string(pwHash)); err != nil {
+		return err
+	}
+
+	// A reset means the account may have been compromised: end every existing
+	// session so old refresh tokens can no longer be exchanged.
+	s.bumpPasswordEpoch(ctx, userID)
+	return nil
 }
 
 func generateResetToken() (string, error) {

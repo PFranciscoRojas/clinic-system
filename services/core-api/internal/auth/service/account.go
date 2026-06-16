@@ -28,7 +28,14 @@ func (s *Service) ChangePassword(ctx context.Context, userID, currentPassword, n
 	if err != nil {
 		return fmt.Errorf("hashing password: %w", err)
 	}
-	return s.repo.UpdatePasswordByID(ctx, userID, string(hash))
+	if err := s.repo.UpdatePasswordByID(ctx, userID, string(hash)); err != nil {
+		return err
+	}
+
+	// Changing the password ends all existing sessions (this one included);
+	// the user signs in again with the new credentials.
+	s.bumpPasswordEpoch(ctx, userID)
+	return nil
 }
 
 // CompleteOnboarding stamps the server-side onboarding flag (idempotent).

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sghcp/core-api/internal/auth"
+	"sghcp/core-api/internal/shared/hash"
 )
 
 const (
@@ -42,7 +43,8 @@ func (s *Service) Invite(ctx context.Context, orgID, callerUserID, roleName stri
 		return "", time.Time{}, fmt.Errorf("marshalling invite payload: %w", err)
 	}
 
-	if err := s.rdb.Set(ctx, invitePrefix+code, raw, inviteTTL).Err(); err != nil {
+	// Store only the hash; the raw code is shown once to the admin who shares it.
+	if err := s.rdb.Set(ctx, invitePrefix+hash.Token(code), raw, inviteTTL).Err(); err != nil {
 		return "", time.Time{}, fmt.Errorf("storing invite: %w", err)
 	}
 	return code, expiresAt, nil

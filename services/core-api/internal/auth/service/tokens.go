@@ -20,6 +20,22 @@ type refreshPayload struct {
 	OrgID  string   `json:"org"`
 	Roles  []string `json:"roles"`
 	Perms  []string `json:"perms"`
+	Epoch  int64    `json:"ep"` // password epoch this token was issued under
+}
+
+// passwordEpoch returns the user's current password epoch (0 when unset).
+func (s *Service) passwordEpoch(ctx context.Context, userID string) int64 {
+	v, err := s.rdb.Get(ctx, pwEpochPrefix+userID).Int64()
+	if err != nil {
+		return 0
+	}
+	return v
+}
+
+// bumpPasswordEpoch advances the epoch, invalidating every refresh token the
+// user holds. Called after a password reset or change.
+func (s *Service) bumpPasswordEpoch(ctx context.Context, userID string) {
+	_ = s.rdb.Incr(ctx, pwEpochPrefix+userID).Err()
 }
 
 func (s *Service) issueTokenPair(ctx context.Context, user *auth.User) (*token.Pair, error) {
@@ -55,6 +71,7 @@ func (s *Service) issueTokenPair(ctx context.Context, user *auth.User) (*token.P
 		OrgID:  user.OrganizationID,
 		Roles:  user.Roles,
 		Perms:  user.Permissions,
+		Epoch:  s.passwordEpoch(ctx, user.ID),
 	}
 	payloadJSON, _ := json.Marshal(payload)
 
