@@ -17,7 +17,9 @@ var authErrors = httputil.ErrorMapper(func(err error) (int, string) {
 	case errors.Is(err, auth.ErrInviteInvalid):
 		return http.StatusBadRequest, "invite code is invalid or expired"
 	case errors.Is(err, auth.ErrEmailAlreadyExists):
-		return http.StatusConflict, "email already registered in this organization"
+		return http.StatusConflict, "ese correo ya tiene una cuenta"
+	case errors.Is(err, auth.ErrEmailNotVerified):
+		return http.StatusForbidden, "confirma tu correo antes de iniciar sesión"
 	case errors.Is(err, auth.ErrWeakPassword):
 		return http.StatusBadRequest, "password must be at least 8 characters"
 	case errors.Is(err, auth.ErrUserNotFound):

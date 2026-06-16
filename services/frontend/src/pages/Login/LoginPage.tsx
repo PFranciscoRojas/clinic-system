@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Brain, Mail, Lock, Building2, Eye, EyeOff, ShieldCheck, AlertCircle, User, Award, Stethoscope, Phone } from 'lucide-react';
+import { Brain, Mail, Lock, Eye, EyeOff, ShieldCheck, AlertCircle, User, Award, Stethoscope, Phone } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { authApi } from '@/api/auth';
+import { ApiError } from '@/api/client';
 import { profilesApi, splitName, type Specialty } from '@/api/profiles';
 
 /* ── Animated blobs ──────────────────────────────────────────── */
@@ -190,7 +191,6 @@ export function LoginPage() {
   const [onbStep,  setOnbStep]  = useState(0);
 
   // Login fields
-  const [org,      setOrg]      = useState('');
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
@@ -268,13 +268,12 @@ export function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const errs: Record<string, string> = {};
-    if (!org.trim())   errs.org      = 'Requerido';
     if (!email.trim()) errs.email    = 'Ingresa un correo válido';
     if (!password)     errs.password = 'Requerido';
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setErrors({}); setLoginErr(''); setLoading(true);
     try {
-      const me = await login(org.trim().toLowerCase(), email.trim(), password);
+      const me = await login(email.trim(), password);
       // Server-side flag is the source of truth; localStorage is only a cache.
       const onboarded = me.onboarding_completed ?? !!localStorage.getItem(`sghcp_onboarding_done_${me.user_id}`);
       if (!onboarded) {
@@ -282,8 +281,14 @@ export function LoginPage() {
       } else {
         navigate('/');
       }
-    } catch {
-      setLoginErr('Credenciales incorrectas. Verifica organización, correo y contraseña.');
+    } catch (err) {
+      // 403 = the account exists and the password is right, but the email
+      // hasn't been confirmed yet (fresh self-serve signup).
+      if (err instanceof ApiError && err.status === 403) {
+        setLoginErr('Confirma tu correo antes de iniciar sesión. Revisa tu bandeja de entrada.');
+      } else {
+        setLoginErr('Credenciales incorrectas. Verifica tu correo y contraseña.');
+      }
     } finally {
       setLoading(false);
     }
@@ -389,8 +394,6 @@ export function LoginPage() {
               <div style={{ fontSize: 13, color: 'var(--s400)', marginBottom: 24 }}>Accede a tu cuenta profesional</div>
 
               <form onSubmit={handleLogin}>
-                <TField label="Organización" value={org} onChange={v => { setOrg(v); setErrors(e => ({...e, org: ''})); }}
-                  placeholder="slug-de-tu-clinica" icon={Building2} autoComplete="organization" error={errors.org} required />
                 <TField label="Correo electrónico" value={email} onChange={v => { setEmail(v); setErrors(e => ({...e, email: ''})); }}
                   placeholder="nombre@clinica.com" icon={Mail} type="email" autoComplete="email" error={errors.email} required />
                 <PwField value={password} onChange={v => { setPassword(v); setErrors(e => ({...e, password: ''})); }} error={errors.password} />
@@ -462,6 +465,13 @@ export function LoginPage() {
                 <p style={{ fontSize: 12, color: 'var(--s500)', lineHeight: 1.6, margin: 0 }}>
                   Sesión protegida con cifrado TLS 1.3. Datos clínicos bajo la <strong>Ley 1581/2012</strong> y Res. 1995/1999.
                 </p>
+              </div>
+
+              <div style={{ textAlign: 'center', marginTop: 18, fontSize: 13.5, color: 'var(--s500)' }}>
+                ¿No tienes cuenta?{' '}
+                <button type="button" onClick={() => navigate('/signup')} style={{ border: 'none', background: 'none', padding: 0, fontSize: 13.5, color: 'var(--teal)', fontWeight: 700, cursor: 'pointer' }}>
+                  Crear cuenta gratis
+                </button>
               </div>
             </div>
 

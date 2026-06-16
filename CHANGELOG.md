@@ -10,6 +10,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- Self-serve signup: anyone can create their own clinic from a public `/signup` page (`POST /auth/signup`) — it provisions a new organization (in a 14-day trial) and its owner user with CLINIC_ADMIN + PROFESSIONAL roles, generates a unique slug, and emails a one-time verification link. Onboarding then collects the professional profile. First step of the multi-tenant SaaS funnel (migration 000019)
+- Email verification: signups must confirm their address before logging in. The verification token is single-use and expires in 24h (`POST /auth/verify-email`, public `/verify-email` landing page, hashed token in Redis); existing accounts were backfilled as verified
 - Self-service password reset by email: "¿Olvidaste tu contraseña?" sends a one-time link (`POST /auth/forgot-password`, token in Redis, 1h TTL, no account enumeration) to a public reset page (`/reset-password`); reuses the existing Resend transactional email. Replaces the previous "contact your administrator" dead-end
 - Profile photo / avatar: upload from Settings → Perfil (auto-cropped to a square and downscaled to 256px), stored server-side (`professional_profiles.avatar_png`, migration 000017) and shown in the sidebar across devices
 - AI draft review suggests an ICD-10 diagnosis from the session: the suggestion is shown but never assigned automatically — the professional confirms, changes (catalog search) or removes it, and it's attached to the record on approval
@@ -35,6 +37,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Grace window for the session note: after "Finalizar sesión" the record form stays available until the note is written (next patient can be attended first); the note stores the real session date and the dashboard inbox lists "Nota de sesión pendiente" reminders
 
 ### Changed
+- Login is now by email alone — the tenant is resolved from the account, so the "Organización" field was removed from the login form. Email addresses are now globally unique across all organizations (migration 000019)
 - Patient-facing emails (booking received/confirmed/rejected, consent sign link) are now branded per organization — name, accent color and contact resolved from the tenant's profile at send time — instead of being hardcoded to a single clinic; account/system emails stay product-branded. First step toward multi-tenant SaaS
 - Saving the working schedule in Settings now refreshes the scheduler's cached copy, so new hours show in the agenda without a manual reload
 - The sidebar role/subtitle now reads the specialty from the server profile (falling back to the role label) instead of a device-local copy, so it's consistent across devices

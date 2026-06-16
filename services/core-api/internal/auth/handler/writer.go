@@ -18,12 +18,12 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.OrgSlug == "" || req.Email == "" || req.Password == "" {
-		httputil.WriteError(w, http.StatusBadRequest, "org_slug, email and password are required")
+	if req.Email == "" || req.Password == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "email and password are required")
 		return
 	}
 
-	pair, err := h.svc.Login(r.Context(), req.OrgSlug, req.Email, req.Password, httputil.ExtractIP(r), r.UserAgent())
+	pair, err := h.svc.Login(r.Context(), req.Email, req.Password, httputil.ExtractIP(r), r.UserAgent())
 	if err != nil {
 		slog.Error("auth.login", "err", err)
 		writeErr(w, err)
@@ -84,6 +84,55 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.WriteJSON(w, http.StatusCreated, pair)
+}
+
+// POST /api/v1/auth/signup — public, self-serve tenant provisioning.
+// Creates an organization + owner in 'trialing' and emails a verification link.
+// The account cannot log in until the address is confirmed.
+func (h *Handler) signup(w http.ResponseWriter, r *http.Request) {
+	var req authdto.SignupRequest
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.FullName == "" || req.Email == "" || req.Password == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "full_name, email and password are required")
+		return
+	}
+
+	err := h.svc.Signup(r.Context(), req.FullName, req.Email, req.Password)
+	switch {
+	case err == nil:
+		w.WriteHeader(http.StatusCreated)
+	case errors.Is(err, auth.ErrEmailAlreadyExists):
+		httputil.WriteError(w, http.StatusConflict, "ese correo ya tiene una cuenta")
+	case errors.Is(err, auth.ErrWeakPassword):
+		httputil.WriteError(w, http.StatusUnprocessableEntity, "la contraseña debe tener al menos 8 caracteres")
+	case errors.Is(err, auth.ErrInvalidCredentials):
+		httputil.WriteError(w, http.StatusBadRequest, "revisa el nombre y el correo")
+	default:
+		slog.Error("auth.signup", "err", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "could not create account")
+	}
+}
+
+// POST /api/v1/auth/verify-email — public, consumes a one-time verification token.
+func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
+	var req authdto.VerifyEmailRequest
+	if err := httputil.DecodeJSON(r, &req); err != nil || req.Token == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "token is required")
+		return
+	}
+	if err := h.svc.VerifyEmail(r.Context(), req.Token); err != nil {
+		if errors.Is(err, auth.ErrInviteInvalid) {
+			httputil.WriteError(w, http.StatusBadRequest, "el enlace es inválido o expiró")
+			return
+		}
+		slog.Error("auth.verify-email", "err", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "could not verify email")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // POST /api/v1/auth/invite — protected, requires users:create permission.

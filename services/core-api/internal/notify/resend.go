@@ -94,6 +94,16 @@ func (n *ResendNotifier) PasswordReset(ctx context.Context, toEmail string, d Pa
 	}
 }
 
+func (n *ResendNotifier) AccountVerification(ctx context.Context, toEmail string, d VerificationDetails) {
+	html, err := renderVerification(d)
+	if err != nil {
+		return
+	}
+	if err := n.send(ctx, toEmail, "Confirma tu correo · SGHCP", html); err != nil {
+		slog.Default().Warn("notify: account-verification email failed", "err", err)
+	}
+}
+
 func (n *ResendNotifier) send(ctx context.Context, to, subject, htmlBody string) error {
 	payload, err := json.Marshal(map[string]any{
 		"from":    n.from,

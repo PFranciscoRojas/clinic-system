@@ -4,7 +4,7 @@ import { authApi, type Me } from '@/api/auth';
 interface AuthState {
   user: Me | null;
   isLoading: boolean;
-  login: (orgSlug: string, email: string, password: string) => Promise<Me>;
+  login: (email: string, password: string) => Promise<Me>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<Me | null>;
   updateProfile: (displayName: string) => Promise<void>;
@@ -33,8 +33,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { fetchMe(); }, [fetchMe]);
 
-  const login = async (orgSlug: string, email: string, password: string): Promise<Me> => {
-    const tokens = await authApi.login(orgSlug, email, password);
+  const login = async (email: string, password: string): Promise<Me> => {
+    const tokens = await authApi.login(email, password);
     localStorage.setItem('access_token', tokens.access_token);
     localStorage.setItem('refresh_token', tokens.refresh_token);
     const me = await fetchMe();

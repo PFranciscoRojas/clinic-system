@@ -12,6 +12,7 @@ var (
 	tmplRejected      = template.Must(template.New("rejected").Parse(tmplRejectedSrc))
 	tmplConsentLink   = template.Must(template.New("consent-link").Parse(tmplConsentLinkSrc))
 	tmplPasswordReset = template.Must(template.New("password-reset").Parse(tmplPasswordResetSrc))
+	tmplVerification  = template.Must(template.New("verification").Parse(tmplVerificationSrc))
 )
 
 // bookingView and consentView pair tenant branding with the email payload so
@@ -48,6 +49,10 @@ func renderConsentSignLink(brand Branding, d ConsentLinkDetails) (string, error)
 
 func renderPasswordReset(d PasswordResetDetails) (string, error) {
 	return execTemplate(tmplPasswordReset, d)
+}
+
+func renderVerification(d VerificationDetails) (string, error) {
+	return execTemplate(tmplVerification, d)
 }
 
 func execTemplate(t *template.Template, data any) (string, error) {
@@ -286,6 +291,43 @@ const tmplPasswordResetSrc = `<!DOCTYPE html>
           <p style="margin:0;font-size:13px;color:#999;line-height:1.6;">
             El enlace es personal, de un solo uso y vence en 1 hora.<br>
             Si no solicitaste este cambio, ignora este correo — tu contraseña actual sigue siendo válida.
+          </p>
+        </td></tr>
+        <tr><td style="padding:16px 36px 24px;border-top:1px solid #ece9e3;">
+          <p style="margin:0;font-size:12px;color:#aaa;line-height:1.6;">
+            Este es un mensaje automático del sistema de gestión clínica. No respondas a este correo.
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+
+const tmplVerificationSrc = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f5f4f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f5f4f0;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="background:#fff;border-radius:10px;overflow:hidden;max-width:560px;width:100%;">
+        <tr><td style="background:#0f766e;padding:28px 36px;">
+          <p style="margin:0;color:#fff;font-size:16px;font-weight:600;letter-spacing:.02em;">SGHCP · Sistema de Gestión Clínica</p>
+        </td></tr>
+        <tr><td style="padding:36px;">
+          <h1 style="margin:0 0 16px;font-size:20px;color:#1a1a1a;font-weight:600;">Confirma tu correo</h1>
+          <p style="margin:0 0 24px;font-size:15px;color:#555;line-height:1.7;">
+            Hola <strong>{{.Name}}</strong>,<br>
+            ¡bienvenida! Creaste tu cuenta en SGHCP. Confirma esta dirección para activarla y empezar a usar el sistema.
+          </p>
+          <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 0 24px;">
+            <tr><td style="border-radius:8px;background:#0f766e;">
+              <a href="{{.Link}}" style="display:inline-block;padding:13px 28px;color:#fff;font-size:15px;font-weight:600;text-decoration:none;">Confirmar mi correo</a>
+            </td></tr>
+          </table>
+          <p style="margin:0;font-size:13px;color:#999;line-height:1.6;">
+            El enlace es personal, de un solo uso y vence en 24 horas.<br>
+            Si no creaste esta cuenta, ignora este correo.
           </p>
         </td></tr>
         <tr><td style="padding:16px 36px 24px;border-top:1px solid #ece9e3;">

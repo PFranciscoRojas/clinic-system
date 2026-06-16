@@ -1,10 +1,22 @@
 package dto
 
 // LoginRequest is the JSON body for POST /api/v1/auth/login.
+// Login resolves the tenant from the email alone — no org slug needed.
 type LoginRequest struct {
-	OrgSlug  string `json:"org_slug"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
+}
+
+// SignupRequest is the JSON body for POST /api/v1/auth/signup (public, self-serve).
+type SignupRequest struct {
+	FullName string `json:"full_name"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+// VerifyEmailRequest is the JSON body for POST /api/v1/auth/verify-email (public).
+type VerifyEmailRequest struct {
+	Token string `json:"token"`
 }
 
 // RefreshRequest is the JSON body for POST /api/v1/auth/refresh.

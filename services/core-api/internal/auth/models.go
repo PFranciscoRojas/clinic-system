@@ -13,8 +13,11 @@ type User struct {
 	IsActive       bool
 	FailedAttempts int
 	LockedUntil    *time.Time
-	Roles          []string
-	Permissions    []string
+	// EmailVerifiedAt is nil until the user confirms their address via the
+	// verification email. Login is denied while it is nil.
+	EmailVerifiedAt *time.Time
+	Roles           []string
+	Permissions     []string
 }
 
 // AuditEntry carries the fields written to audit_log on each auth event.
