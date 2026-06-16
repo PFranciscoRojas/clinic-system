@@ -95,12 +95,12 @@ func (h *Handler) signup(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.FullName == "" || req.Email == "" || req.Password == "" {
-		httputil.WriteError(w, http.StatusBadRequest, "full_name, email and password are required")
+	if req.OrgName == "" || req.FullName == "" || req.Email == "" || req.Password == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "org_name, full_name, email and password are required")
 		return
 	}
 
-	err := h.svc.Signup(r.Context(), req.FullName, req.Email, req.Password)
+	err := h.svc.Signup(r.Context(), req.OrgName, req.FullName, req.Email, req.Password)
 	switch {
 	case err == nil:
 		w.WriteHeader(http.StatusCreated)

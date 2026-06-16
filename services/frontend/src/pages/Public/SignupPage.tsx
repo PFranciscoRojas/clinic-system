@@ -1,17 +1,20 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Brain, User, Mail, Lock, Eye, EyeOff, AlertTriangle, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { Building2, User, Mail, Lock, Eye, EyeOff, AlertTriangle, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { authApi } from '@/api/auth';
 import { ApiError } from '@/api/client';
 
 type PageState = 'form' | 'saving' | 'done';
 
-// Public self-serve signup (/signup). Provisions a new tenant + owner and sends
-// a verification email. The account can't log in until the address is confirmed,
-// so on success we show a "check your inbox" screen rather than logging in.
+// Public self-serve org creation (/signup). Creates a NEW organization (the
+// clinic) plus its owner/admin, and sends a verification email. The account
+// can't log in until the address is confirmed, so on success we show a
+// "check your inbox" screen rather than logging in. Additional staff join an
+// existing org later via invite codes — this page is only for new clinics.
 export function SignupPage() {
   const navigate = useNavigate();
 
+  const [orgName, setOrgName] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [pwd, setPwd] = useState('');
@@ -22,12 +25,13 @@ export function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr('');
+    if (!orgName.trim())                 { setErr('Ingresa el nombre del consultorio.'); return; }
     if (!name.trim())                    { setErr('Ingresa tu nombre completo.'); return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { setErr('Ingresa un correo válido.'); return; }
     if (pwd.length < 8)                  { setErr('La contraseña debe tener al menos 8 caracteres.'); return; }
     setState('saving');
     try {
-      await authApi.signup(name.trim(), email.trim(), pwd);
+      await authApi.signup(orgName.trim(), name.trim(), email.trim(), pwd);
       setState('done');
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
@@ -44,16 +48,17 @@ export function SignupPage() {
   const card: React.CSSProperties = { background: '#fff', borderRadius: 18, padding: '32px 30px', boxShadow: '0 20px 60px rgba(0,0,0,0.12)', width: '100%', maxWidth: 430, boxSizing: 'border-box' };
   const inputWrap: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, border: '1.5px solid var(--s200)', borderRadius: 11, padding: '11px 14px', marginBottom: 12, background: '#fff' };
   const input: React.CSSProperties = { border: 'none', outline: 'none', flex: 1, fontSize: 14, color: 'var(--s800)', background: 'transparent' };
+  const sectionLabel: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--s500)', letterSpacing: '.06em', textTransform: 'uppercase', margin: '4px 2px 10px' };
 
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0f766e, #134e4a)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <div style={{ width: '100%', maxWidth: 430 }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', border: '1.5px solid rgba(255,255,255,0.20)' }}>
-            <Brain size={26} color="#fff" />
+            <Building2 size={26} color="#fff" />
           </div>
-          <div style={{ fontWeight: 800, fontSize: 22, color: '#fff' }}>Crea tu cuenta</div>
-          <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.65)', marginTop: 6 }}>SGHCP · 14 días de prueba, sin tarjeta</div>
+          <div style={{ fontWeight: 800, fontSize: 22, color: '#fff' }}>Registra tu consultorio</div>
+          <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.65)', marginTop: 6 }}>Crea tu organización en SGHCP · 14 días de prueba, sin tarjeta</div>
         </div>
 
         <div style={card}>
@@ -71,10 +76,21 @@ export function SignupPage() {
             </div>
           ) : (
             <form onSubmit={handleSubmit}>
+              <div style={sectionLabel}>Tu consultorio</div>
+              <div style={inputWrap}>
+                <Building2 size={16} color="var(--s400)" />
+                <input value={orgName} onChange={e => setOrgName(e.target.value)}
+                  placeholder="Nombre del consultorio o clínica" autoComplete="organization" style={input} />
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--s400)', margin: '-6px 2px 16px', lineHeight: 1.5 }}>
+                Es el nombre de tu organización. Más adelante podrás invitar a otras personas a este consultorio.
+              </div>
+
+              <div style={sectionLabel}>Tú (administrador)</div>
               <div style={inputWrap}>
                 <User size={16} color="var(--s400)" />
                 <input value={name} onChange={e => setName(e.target.value)}
-                  placeholder="Nombre completo" autoComplete="name" style={input} />
+                  placeholder="Tu nombre completo" autoComplete="name" style={input} />
               </div>
               <div style={inputWrap}>
                 <Mail size={16} color="var(--s400)" />
@@ -95,7 +111,7 @@ export function SignupPage() {
                 </div>
               )}
               <button type="submit" disabled={state === 'saving'} style={{ width: '100%', padding: 12, borderRadius: 11, border: 'none', background: state === 'saving' ? 'var(--s300)' : 'var(--teal)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: state === 'saving' ? 'wait' : 'pointer', marginBottom: 16 }}>
-                {state === 'saving' ? 'Creando cuenta…' : 'Crear cuenta'}
+                {state === 'saving' ? 'Creando consultorio…' : 'Crear consultorio'}
               </button>
 
               <div style={{ padding: '11px 13px', background: 'var(--s50)', borderRadius: 9, border: '1px solid var(--s200)', display: 'flex', gap: 9 }}>

@@ -102,17 +102,18 @@ VALUES
    E'Autorizo compartir la información clínica estrictamente necesaria con los terceros que yo indique expresamente (otros profesionales de salud, EPS, familiares autorizados), conforme a la Ley 23 de 1981 y la Resolución 1995 de 1999.', $2)
 `
 
-// OrgSubscription returns the tenant's subscription status and trial deadline,
-// used to drive the trial banner. A missing trial_ends_at comes back as nil.
-func (r *Repository) OrgSubscription(ctx context.Context, orgID string) (status string, trialEndsAt *time.Time, err error) {
+// OrgInfo returns the tenant's name, subscription status and trial deadline —
+// used by /me to label the current org and drive the trial banner. A missing
+// trial_ends_at comes back as nil.
+func (r *Repository) OrgInfo(ctx context.Context, orgID string) (name, status string, trialEndsAt *time.Time, err error) {
 	err = r.db.QueryRow(ctx,
-		`SELECT subscription_status, trial_ends_at FROM organizations WHERE id = $1`,
+		`SELECT name, subscription_status, trial_ends_at FROM organizations WHERE id = $1`,
 		orgID,
-	).Scan(&status, &trialEndsAt)
+	).Scan(&name, &status, &trialEndsAt)
 	if err != nil {
-		return "", nil, fmt.Errorf("load org subscription: %w", err)
+		return "", "", nil, fmt.Errorf("load org info: %w", err)
 	}
-	return status, trialEndsAt, nil
+	return name, status, trialEndsAt, nil
 }
 
 // MarkEmailVerified stamps email_verified_at for a user. Idempotent: a second

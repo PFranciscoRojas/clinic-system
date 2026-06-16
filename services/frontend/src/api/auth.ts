@@ -12,6 +12,7 @@ export interface Me {
   organization_id?: string;  // alias — backend returns org_id
   email?: string;
   display_name?: string | null;
+  org_name?: string;             // the tenant/clinic name, shown in the sidebar
   roles: string[];
   permissions?: string[];
   onboarding_completed?: boolean;
@@ -25,10 +26,11 @@ export const authApi = {
   login: (email: string, password: string) =>
     api.post<TokenPair>('/auth/login', { email, password }),
 
-  // Self-serve signup: provisions a new tenant + owner and emails a verification
-  // link. Returns 201; the account can't log in until the email is confirmed.
-  signup: (full_name: string, email: string, password: string) =>
-    api.post<void>('/auth/signup', { full_name, email, password }),
+  // Self-serve signup = create a new organization. org_name is the clinic, and
+  // full_name is the admin's own name. Emails a verification link; the account
+  // can't log in until the email is confirmed.
+  signup: (org_name: string, full_name: string, email: string, password: string) =>
+    api.post<void>('/auth/signup', { org_name, full_name, email, password }),
 
   // Confirms the address from the one-time token in the verification email link.
   verifyEmail: (token: string) =>

@@ -34,9 +34,10 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		"data_reset_enabled":   h.dataResetOpen,
 	}
 
-	// Subscription state drives the trial banner. A lookup failure is non-fatal —
-	// /me still returns the identity.
-	if status, trialEndsAt, err := h.svc.Subscription(r.Context(), claims.OrganizationID); err == nil {
+	// Org name labels the current tenant; subscription state drives the trial
+	// banner. A lookup failure is non-fatal — /me still returns the identity.
+	if name, status, trialEndsAt, err := h.svc.OrgInfo(r.Context(), claims.OrganizationID); err == nil {
+		resp["org_name"] = name
 		resp["subscription_status"] = status
 		if trialEndsAt != nil {
 			resp["trial_ends_at"] = trialEndsAt.UTC().Format(time.RFC3339)
