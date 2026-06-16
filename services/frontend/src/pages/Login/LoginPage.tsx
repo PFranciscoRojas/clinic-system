@@ -468,9 +468,9 @@ export function LoginPage() {
               </div>
 
               <div style={{ textAlign: 'center', marginTop: 18, fontSize: 13.5, color: 'var(--s500)' }}>
-                ¿No tienes cuenta?{' '}
+                ¿Tu consultorio aún no está en SGHCP?{' '}
                 <button type="button" onClick={() => navigate('/signup')} style={{ border: 'none', background: 'none', padding: 0, fontSize: 13.5, color: 'var(--teal)', fontWeight: 700, cursor: 'pointer' }}>
-                  Crear cuenta gratis
+                  Registra tu consultorio
                 </button>
               </div>
             </div>

@@ -165,8 +165,10 @@ export function AppShell({ children }: Props) {
               </div>
               {!showCollapsed && (
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: '#fff', letterSpacing: '-0.2px' }}>SGHCP</div>
-                  <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.55)', marginTop: 1 }}>Salud Mental Pro</div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: '#fff', letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={user?.org_name || 'SGHCP'}>
+                    {user?.org_name || 'SGHCP'}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.55)', marginTop: 1 }}>SGHCP · Salud Mental Pro</div>
                 </div>
               )}
               {!showCollapsed && !isMobile && (

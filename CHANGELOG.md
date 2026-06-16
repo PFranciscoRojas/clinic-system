@@ -10,6 +10,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- The current organization's name is now shown in the sidebar header, so it's always clear which clinic you're working in (`GET /auth/me` returns `org_name`)
 - Self-serve onboarding for new clinics: a fresh signup is born ready — the four starter consent templates are seeded for the new organization (so consents can be captured from day one) and the existing onboarding wizard now creates the professional profile (name, license, specialty, schedule) on first login
 - Trial banner: while an organization is on its trial, the app shows the remaining days ("Te quedan N días de prueba"), turning amber in the last three; `GET /auth/me` now reports `subscription_status`, `trial_ends_at` and `trial_days_left`
 - Self-serve signup: anyone can create their own clinic from a public `/signup` page (`POST /auth/signup`) — it provisions a new organization (in a 14-day trial) and its owner user with CLINIC_ADMIN + PROFESSIONAL roles, generates a unique slug, and emails a one-time verification link. Onboarding then collects the professional profile. First step of the multi-tenant SaaS funnel (migration 000019)
@@ -39,6 +40,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Grace window for the session note: after "Finalizar sesión" the record form stays available until the note is written (next patient can be attended first); the note stores the real session date and the dashboard inbox lists "Nota de sesión pendiente" reminders
 
 ### Changed
+- Signup is now framed as "Registra tu consultorio" (creating an organization), not "create an account": the form asks for the clinic name separately from the admin's own name, so the clinic name becomes the organization/slug and the person's name becomes their profile. Adding more staff to an existing clinic stays invite-code only, avoiding the confusion of someone creating a whole new organization when they just meant to add a user
 - Login is now by email alone — the tenant is resolved from the account, so the "Organización" field was removed from the login form. Email addresses are now globally unique across all organizations (migration 000019)
 - Patient-facing emails (booking received/confirmed/rejected, consent sign link) are now branded per organization — name, accent color and contact resolved from the tenant's profile at send time — instead of being hardcoded to a single clinic; account/system emails stay product-branded. First step toward multi-tenant SaaS
 - Saving the working schedule in Settings now refreshes the scheduler's cached copy, so new hours show in the agenda without a manual reload

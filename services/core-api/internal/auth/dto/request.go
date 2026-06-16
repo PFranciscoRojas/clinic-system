@@ -8,8 +8,11 @@ type LoginRequest struct {
 }
 
 // SignupRequest is the JSON body for POST /api/v1/auth/signup (public, self-serve).
+// Signup creates a new organization, so the clinic/practice name (OrgName) is
+// separate from the admin's own name (FullName).
 type SignupRequest struct {
-	FullName string `json:"full_name"`
+	OrgName  string `json:"org_name"`  // clinic/practice name → organization + slug
+	FullName string `json:"full_name"` // the admin's name → display name + profile
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }

@@ -21,13 +21,16 @@ const (
 	trialDays         = 14
 )
 
-// Signup provisions a new tenant (organization + owner) from a public form and
-// emails a one-time verification link. The account exists immediately but
-// cannot log in until the address is confirmed (see Login's verified gate).
-func (s *Service) Signup(ctx context.Context, fullName, email, password string) error {
-	fullName = strings.TrimSpace(fullName)
+// Signup provisions a new tenant from a public form and emails a one-time
+// verification link. orgName is the clinic/practice (becomes the organization
+// and its slug); adminName is the owner's own name (becomes their display name
+// and, after onboarding, their professional profile). The account exists
+// immediately but cannot log in until the address is confirmed.
+func (s *Service) Signup(ctx context.Context, orgName, adminName, email, password string) error {
+	orgName = strings.TrimSpace(orgName)
+	adminName = strings.TrimSpace(adminName)
 	email = strings.TrimSpace(email)
-	if fullName == "" || !looksLikeEmail(email) {
+	if orgName == "" || adminName == "" || !looksLikeEmail(email) {
 		return auth.ErrInvalidCredentials
 	}
 	if len(password) < 8 {
@@ -40,11 +43,11 @@ func (s *Service) Signup(ctx context.Context, fullName, email, password string) 
 	}
 
 	_, _, userID, err := s.repo.CreateOrgWithOwner(ctx, auth.CreateOrgParams{
-		OrgName:      fullName,
-		BaseSlug:     slugify(fullName),
+		OrgName:      orgName,
+		BaseSlug:     slugify(orgName),
 		Email:        email,
 		PasswordHash: string(pwHash),
-		DisplayName:  fullName,
+		DisplayName:  adminName,
 		TrialDays:    trialDays,
 	})
 	if errors.Is(err, auth.ErrEmailAlreadyExists) {
@@ -65,16 +68,16 @@ func (s *Service) Signup(ctx context.Context, fullName, email, password string) 
 
 	link := fmt.Sprintf("%s/verify-email?token=%s", s.appBaseURL, token)
 	go s.notifier.AccountVerification(context.Background(), email, notify.VerificationDetails{
-		Name: fullName,
+		Name: adminName,
 		Link: link,
 	})
 	return nil
 }
 
-// Subscription returns the caller org's subscription status and trial deadline,
-// used by /me to drive the trial banner.
-func (s *Service) Subscription(ctx context.Context, orgID string) (status string, trialEndsAt *time.Time, err error) {
-	return s.repo.OrgSubscription(ctx, orgID)
+// OrgInfo returns the caller org's name, subscription status and trial
+// deadline, used by /me to label the org and drive the trial banner.
+func (s *Service) OrgInfo(ctx context.Context, orgID string) (name, status string, trialEndsAt *time.Time, err error) {
+	return s.repo.OrgInfo(ctx, orgID)
 }
 
 // VerifyEmail consumes a one-time verification token and marks the account
