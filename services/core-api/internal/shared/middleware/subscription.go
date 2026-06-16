@@ -23,8 +23,9 @@ func SubscriptionGate(pool *pgxpool.Pool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			path := r.URL.Path
-			// Always-open: data export (custody) and the operator console.
-			if strings.HasSuffix(path, "/export") || strings.HasPrefix(path, "/api/v1/admin") {
+			// Always-open: data export (custody), the operator console, and
+			// billing (so a lapsed tenant can still pay to reactivate).
+			if strings.HasSuffix(path, "/export") || strings.HasPrefix(path, "/api/v1/admin") || strings.HasPrefix(path, "/api/v1/billing") {
 				next.ServeHTTP(w, r)
 				return
 			}

@@ -14,6 +14,7 @@ import (
 	aidraftshandler "sghcp/core-api/internal/aidrafts/handler"
 	apptshandler "sghcp/core-api/internal/appointments/handler"
 	authhandler "sghcp/core-api/internal/auth/handler"
+	billinghandler "sghcp/core-api/internal/billing/handler"
 	bookingrequestshandler "sghcp/core-api/internal/bookingrequests/handler"
 	crrhandler "sghcp/core-api/internal/clinicalrecords/handler"
 	consentshandler "sghcp/core-api/internal/consents/handler"
@@ -79,6 +80,10 @@ func (a *app) buildRouter() http.Handler {
 		r.Mount("/api/v1/public/consents", consentsH.PublicRoutes())
 	})
 
+	// MercadoPago webhook — public (the gateway calls it), no JWT.
+	billingH := billinghandler.New(a.pool, a.cfg)
+	r.Mount("/api/v1/public/billing", billingH.PublicRoutes())
+
 	// ── Protected routes — valid JWT required on every request ────────────────
 	// RequireAuth validates the Bearer token and injects claims into context.
 	// RequirePermission (per-endpoint) checks a specific permission code from those claims.
@@ -119,6 +124,10 @@ func (a *app) buildRouter() http.Handler {
 		r.Method(http.MethodPost, "/api/v1/appointments/{appointment_id}/audio", aiDrafts.AppointmentAudioRoute())
 
 		r.Mount("/api/v1/booking-requests", bookingH.Routes())
+
+		// Subscription checkout — allowlisted in SubscriptionGate so a lapsed
+		// tenant can still reach it to pay.
+		r.Mount("/api/v1/billing", billingH.Routes())
 
 		// Operator console: SYSTEM_ADMIN billing endpoints are always mounted;
 		// the destructive data-reset route only exists while ALLOW_DATA_RESET is on.

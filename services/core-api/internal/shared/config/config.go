@@ -19,9 +19,9 @@ type Config struct {
 
 	MasterKey string
 
-	JWTSecret          string
-	JWTAccessTTLMin    int
-	JWTRefreshTTLDays  int
+	JWTSecret         string
+	JWTAccessTTLMin   int
+	JWTRefreshTTLDays int
 
 	AIServiceURL string
 	AudioDir     string
@@ -38,6 +38,12 @@ type Config struct {
 	// AllowDataReset enables the admin-only "wipe clinical test data" endpoint.
 	// Off by default; turn on only while the clinic is in a testing phase.
 	AllowDataReset bool
+
+	// MercadoPago subscription billing (MT5b). When the access token is empty,
+	// the billing endpoints respond 503 and tenants are activated manually.
+	MPAccessToken string
+	MPPlanAmount  int    // monthly price in the smallest COP unit the gateway expects (whole pesos)
+	MPPlanReason  string // plan name shown on the MercadoPago checkout
 }
 
 func Load() Config {
@@ -72,6 +78,10 @@ func Load() Config {
 		AppBaseURL: getEnv("APP_BASE_URL", "http://localhost:5173"),
 
 		AllowDataReset: getEnvBool("ALLOW_DATA_RESET", false),
+
+		MPAccessToken: getEnv("MP_ACCESS_TOKEN", ""),
+		MPPlanAmount:  getEnvInt("MP_PLAN_AMOUNT", 79000),
+		MPPlanReason:  getEnv("MP_PLAN_REASON", "SGHCP · Plan mensual"),
 	}
 }
 

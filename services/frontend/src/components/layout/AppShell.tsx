@@ -10,6 +10,7 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { useIsMobile } from '@/lib/useMediaQuery';
 import { patientsApi, type Patient } from '@/api/patients';
+import { startCheckout } from '@/api/billing';
 import { profilesApi } from '@/api/profiles';
 
 // Facturación hidden until the real billing backend exists (mock-only today);
@@ -453,7 +454,9 @@ function TrialBanner({ status, daysLeft }: { status?: string; daysLeft?: number 
     }}>
       <Clock size={15} style={{ flexShrink: 0 }} />
       <span style={{ fontWeight: 600 }}>{label}.</span>
-      <span style={{ color: 'var(--s500)' }}>Activa tu plan para no perder el acceso a tu consultorio.</span>
+      <button onClick={() => { startCheckout().catch(() => {}); }} style={{ border: 'none', background: 'none', cursor: 'pointer', color: fg, fontWeight: 700, textDecoration: 'underline', fontSize: 13 }}>
+        Activar mi plan
+      </button>
       <button onClick={dismiss} title="Ocultar" style={{ marginLeft: 'auto', border: 'none', background: 'none', cursor: 'pointer', color: fg, display: 'flex', opacity: 0.7 }}>
         <X size={15} />
       </button>
@@ -462,10 +465,17 @@ function TrialBanner({ status, daysLeft }: { status?: string; daysLeft?: number 
 }
 
 /* ── Subscription expired ───────────────────────────────────────── */
-// Full-screen block shown when the trial/subscription has lapsed. Payment is
-// handled out-of-band for now (the operator activates the account manually), so
-// this screen explains how to reactivate rather than charging a card.
+// Full-screen block shown when the trial/subscription has lapsed. "Activar mi
+// plan" sends the owner to the MercadoPago hosted checkout; if online billing
+// isn't available yet, the operator can still activate the account manually.
 function SubscriptionExpired({ onLogout }: { onLogout: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const go = async () => {
+    setBusy(true); setErr('');
+    try { await startCheckout(); }
+    catch { setErr('El pago en línea no está disponible. Escríbenos para activar tu cuenta.'); setBusy(false); }
+  };
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0f766e, #134e4a)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <div style={{ background: '#fff', borderRadius: 18, padding: '36px 34px', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', width: '100%', maxWidth: 460, textAlign: 'center' }}>
@@ -479,9 +489,10 @@ function SubscriptionExpired({ onLogout }: { onLogout: () => void }) {
           <br /><br />
           Tus historias clínicas siguen seguras y puedes exportarlas en cualquier momento.
         </div>
-        <a href="https://wa.me/" target="_blank" rel="noreferrer" style={{ display: 'block', width: '100%', boxSizing: 'border-box', padding: 13, borderRadius: 12, background: 'var(--teal)', color: '#fff', fontSize: 15, fontWeight: 700, textDecoration: 'none', marginBottom: 12 }}>
-          Activar mi plan
-        </a>
+        <button onClick={go} disabled={busy} style={{ width: '100%', boxSizing: 'border-box', padding: 13, borderRadius: 12, border: 'none', background: 'var(--teal)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: busy ? 'wait' : 'pointer', marginBottom: 12 }}>
+          {busy ? 'Redirigiendo…' : 'Activar mi plan'}
+        </button>
+        {err && <div style={{ fontSize: 12.5, color: 'var(--red)', marginBottom: 12, lineHeight: 1.5 }}>{err}</div>}
         <button onClick={onLogout} style={{ border: 'none', background: 'none', fontSize: 13, color: 'var(--s500)', fontWeight: 600, cursor: 'pointer' }}>
           Cerrar sesión
         </button>
