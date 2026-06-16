@@ -82,6 +82,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Billing and Evaluations hidden from navigation until their backends exist (code kept as design reference)
 
 ### Security
+- Tenant isolation enforced in the database via Postgres Row-Level Security on the core clinical tables (patients, clinical records + addenda, appointments, treatment plans, diagnoses): every query is scoped to the caller's organization at the engine level, so even a query missing its explicit org filter cannot read or write another tenant's data. The app now connects as a dedicated non-superuser role (`sghcp_app`) for RLS to take effect; migrations still run as the owner
 - Password-reset link tokens and invite codes are now stored hashed (SHA-256) in Redis instead of in plaintext: a leaked snapshot can no longer be replayed to take over an account; the raw secret lives only in the email link / the code shared by the admin
 - Resetting or changing a password now invalidates every existing session: refresh tokens carry a per-user "password epoch" that is bumped on reset/change, so old refresh tokens stop working immediately (the access token keeps working until it expires, ~minutes)
 
