@@ -36,8 +36,12 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError(res.status, body.error ?? res.statusText);
   }
 
+  // Tolerate any success with an empty body (204, or a 201 that returns no
+  // JSON, like signup): parsing "" as JSON would throw and surface as a fake
+  // failure even though the request succeeded.
   if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 async function tryRefresh(): Promise<boolean> {
