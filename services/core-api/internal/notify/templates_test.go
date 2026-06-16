@@ -44,6 +44,29 @@ func TestPatientTemplatesRenderWithBranding(t *testing.T) {
 	}
 }
 
+// TestAccountEmailsRender checks the product-branded account emails parse,
+// execute, and embed the one-time link.
+func TestAccountEmailsRender(t *testing.T) {
+	reset, err := renderPasswordReset(PasswordResetDetails{Name: "Marcela", Link: "https://app/reset-password?token=abc"})
+	if err != nil {
+		t.Fatalf("password-reset render error: %v", err)
+	}
+	if !strings.Contains(reset, "https://app/reset-password?token=abc") {
+		t.Error("password-reset: missing link")
+	}
+
+	verify, err := renderVerification(VerificationDetails{Name: "Marcela", Link: "https://app/verify-email?token=xyz"})
+	if err != nil {
+		t.Fatalf("verification render error: %v", err)
+	}
+	if !strings.Contains(verify, "https://app/verify-email?token=xyz") {
+		t.Error("verification: missing link")
+	}
+	if !strings.Contains(verify, "Marcela") {
+		t.Error("verification: missing greeting name")
+	}
+}
+
 // TestRejectedOmitsEmptyContact verifies optional contact lines disappear when
 // a tenant hasn't configured reply-to / website (e.g. a fresh signup).
 func TestRejectedOmitsEmptyContact(t *testing.T) {

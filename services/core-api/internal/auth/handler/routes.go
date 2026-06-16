@@ -11,6 +11,8 @@ func (h *Handler) Routes(jwtSecret []byte) chi.Router {
 
 	// Public — no JWT required.
 	r.Post("/login", h.login)
+	r.Post("/signup", h.signup)
+	r.Post("/verify-email", h.verifyEmail)
 	r.Post("/refresh", h.refresh)
 	r.Post("/logout", h.logout)
 	r.Post("/register", h.register)

@@ -11,7 +11,9 @@ import (
 // svcPort is the contract the handler requires from the service layer.
 // Defined here so the handler owns its dependency boundary — DIP.
 type svcPort interface {
-	Login(ctx context.Context, orgSlug, email, password, ip, userAgent string) (*token.Pair, error)
+	Login(ctx context.Context, email, password, ip, userAgent string) (*token.Pair, error)
+	Signup(ctx context.Context, fullName, email, password string) error
+	VerifyEmail(ctx context.Context, token string) error
 	Refresh(ctx context.Context, refreshToken string) (*token.Pair, error)
 	Logout(ctx context.Context, refreshToken string) error
 	Invite(ctx context.Context, orgID, callerUserID, roleName string) (code string, expiresAt time.Time, err error)

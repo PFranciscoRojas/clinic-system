@@ -16,6 +16,8 @@ import { ClinicalRecordPage } from '@/pages/ClinicalRecords/ClinicalRecordPage';
 import { BookingPage } from '@/pages/Booking/BookingPage';
 import { ConsentSignPage } from '@/pages/Public/ConsentSignPage';
 import { ResetPasswordPage } from '@/pages/Public/ResetPasswordPage';
+import { SignupPage } from '@/pages/Public/SignupPage';
+import { VerifyEmailPage } from '@/pages/Public/VerifyEmailPage';
 import { BookingRequestsPage } from '@/pages/BookingRequests/BookingRequestsPage';
 import { EvaluationsPage } from '@/pages/Evaluations/EvaluationsPage';
 import { BillingPage } from '@/pages/Billing/BillingPage';
@@ -60,6 +62,8 @@ export function App() {
       {/* Public remote consent signature — the single-use token is the credential */}
       <Route path="/sign/:token" element={<ConsentSignPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/signup" element={<SignupPage />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
 
       <Route
         path="/*"

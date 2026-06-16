@@ -12,10 +12,13 @@ import (
 	"sghcp/core-api/internal/shared/token"
 )
 
-func (s *Service) Login(ctx context.Context, orgSlug, email, password, ip, userAgent string) (*token.Pair, error) {
+// Login authenticates by email alone — the tenant is resolved from the account,
+// so a user never needs to know their org slug. A self-serve signup is not
+// usable until the owner confirms their address, hence the email-verified gate.
+func (s *Service) Login(ctx context.Context, email, password, ip, userAgent string) (*token.Pair, error) {
 	emailHash := hash.Normalize(email)
 
-	user, err := s.repo.FindByEmail(ctx, orgSlug, email)
+	user, err := s.repo.FindForLogin(ctx, email)
 	if err != nil {
 		s.repo.WriteAuditLog(ctx, auth.AuditEntry{
 			EmailHash: emailHash, Action: "auth.login", ResourceType: "user",
@@ -56,6 +59,17 @@ func (s *Service) Login(ctx context.Context, orgSlug, email, password, ip, userA
 	}
 
 	_ = s.repo.ClearFailedAttempts(ctx, user.ID)
+
+	// Checked only after the password is correct, so an unverified account can't
+	// be enumerated by anyone who merely guesses an email.
+	if user.EmailVerifiedAt == nil {
+		s.repo.WriteAuditLog(ctx, auth.AuditEntry{
+			OrgID: &user.OrganizationID, UserID: &user.ID, EmailHash: emailHash,
+			Action: "auth.login", ResourceType: "user",
+			IP: ip, UserAgent: userAgent, Success: false, ErrorCode: ptr("EMAIL_NOT_VERIFIED"),
+		})
+		return nil, auth.ErrEmailNotVerified
+	}
 
 	pair, err := s.issueTokenPair(ctx, user)
 	if err != nil {

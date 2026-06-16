@@ -19,8 +19,17 @@ export interface Me {
 }
 
 export const authApi = {
-  login: (org_slug: string, email: string, password: string) =>
-    api.post<TokenPair>('/auth/login', { org_slug, email, password }),
+  login: (email: string, password: string) =>
+    api.post<TokenPair>('/auth/login', { email, password }),
+
+  // Self-serve signup: provisions a new tenant + owner and emails a verification
+  // link. Returns 201; the account can't log in until the email is confirmed.
+  signup: (full_name: string, email: string, password: string) =>
+    api.post<void>('/auth/signup', { full_name, email, password }),
+
+  // Confirms the address from the one-time token in the verification email link.
+  verifyEmail: (token: string) =>
+    api.post<void>('/auth/verify-email', { token }),
 
   register: (invite_code: string, email: string, password: string, display_name: string) =>
     api.post<TokenPair>('/auth/register', { invite_code, email, password, display_name }),
