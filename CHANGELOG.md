@@ -10,6 +10,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- Subscription gating: once an organization's trial (or paid period) lapses, clinical access returns 402 and the app shows a "tu período de prueba terminó" screen — while data export stays available at all times (legal duty of custody). Entitlement is decoupled from any payment provider, so cash/transfer/manual activations gate exactly like card payments will
+- Operator console (SYSTEM_ADMIN): "Operador SaaS" page lists every tenant with its subscription state and lets the operator activate an organization for N months — the manual path for tenants who pay out-of-band (cash, Nequi, transfer). Backend: GET /admin/orgs and POST /admin/orgs/{id}/activate
 - The current organization's name is now shown in the sidebar header, so it's always clear which clinic you're working in (`GET /auth/me` returns `org_name`)
 - Self-serve onboarding for new clinics: a fresh signup is born ready — the four starter consent templates are seeded for the new organization (so consents can be captured from day one) and the existing onboarding wizard now creates the professional profile (name, license, specialty, schedule) on first login
 - Trial banner: while an organization is on its trial, the app shows the remaining days ("Te quedan N días de prueba"), turning amber in the last three; `GET /auth/me` now reports `subscription_status`, `trial_ends_at` and `trial_days_left`

@@ -35,10 +35,25 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Org name labels the current tenant; subscription state drives the trial
-	// banner. A lookup failure is non-fatal — /me still returns the identity.
-	if name, status, trialEndsAt, err := h.svc.OrgInfo(r.Context(), claims.OrganizationID); err == nil {
+	// banner and the reactivation screen. A lookup failure is non-fatal — /me
+	// still returns the identity (and entitled defaults to true so a hiccup
+	// never locks the user out of their own UI).
+	resp["entitled"] = true
+	if name, status, trialEndsAt, currentPeriodEnd, err := h.svc.OrgInfo(r.Context(), claims.OrganizationID); err == nil {
 		resp["org_name"] = name
 		resp["subscription_status"] = status
+		accessUntil := currentPeriodEnd
+		if accessUntil == nil {
+			accessUntil = trialEndsAt
+		}
+		// SYSTEM_ADMIN (the SaaS operator) is never gated.
+		isOperator := false
+		for _, role := range claims.Roles {
+			if role == "SYSTEM_ADMIN" {
+				isOperator = true
+			}
+		}
+		resp["entitled"] = isOperator || middleware.Entitled(status, accessUntil)
 		if trialEndsAt != nil {
 			resp["trial_ends_at"] = trialEndsAt.UTC().Format(time.RFC3339)
 			// Whole days left, rounded up, never negative.

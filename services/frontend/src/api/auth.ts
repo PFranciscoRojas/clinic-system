@@ -20,6 +20,7 @@ export interface Me {
   subscription_status?: string;  // trialing | active | past_due | canceled
   trial_ends_at?: string;        // RFC3339, when subscription_status = trialing
   trial_days_left?: number;      // whole days remaining in the trial, >= 0
+  entitled?: boolean;            // false when the trial/subscription has lapsed → block access
 }
 
 export const authApi = {
