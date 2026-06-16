@@ -36,6 +36,11 @@ export const authApi = {
   verifyEmail: (token: string) =>
     api.post<void>('/auth/verify-email', { token }),
 
+  // Re-sends the verification email. Always resolves (200 whether or not the
+  // address exists or is already verified).
+  resendVerification: (email: string) =>
+    api.post<void>('/auth/resend-verification', { email }),
+
   register: (invite_code: string, email: string, password: string, display_name: string) =>
     api.post<TokenPair>('/auth/register', { invite_code, email, password, display_name }),
 

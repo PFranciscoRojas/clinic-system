@@ -116,6 +116,22 @@ func (h *Handler) signup(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// POST /api/v1/auth/resend-verification — public, self-service.
+// Always returns 200 (no account enumeration); re-sends the verification email
+// only if the account exists and isn't verified yet.
+func (h *Handler) resendVerification(w http.ResponseWriter, r *http.Request) {
+	var req authdto.ForgotPasswordRequest // same shape: { email }
+	if err := httputil.DecodeJSON(r, &req); err != nil || req.Email == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "email is required")
+		return
+	}
+	if err := h.svc.ResendVerification(r.Context(), req.Email); err != nil {
+		slog.Error("auth.resend-verification", "err", err)
+		// Still answer 200 — never leak internal state.
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // POST /api/v1/auth/verify-email — public, consumes a one-time verification token.
 func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
 	var req authdto.VerifyEmailRequest

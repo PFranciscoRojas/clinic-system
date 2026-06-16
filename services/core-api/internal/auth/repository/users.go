@@ -204,12 +204,12 @@ func (r *Repository) UpdatePassword(ctx context.Context, orgID, targetEmail, pas
 func (r *Repository) FindUserByEmailGlobal(ctx context.Context, email string) (*auth.User, error) {
 	u := &auth.User{}
 	err := r.db.QueryRow(ctx, `
-		SELECT id, organization_id, email, display_name, is_active
+		SELECT id, organization_id, email, display_name, is_active, email_verified_at
 		FROM users
 		WHERE email_hash = $1
 		LIMIT 1
 	`, hash.Normalize(email)).Scan(
-		&u.ID, &u.OrganizationID, &u.Email, &u.DisplayName, &u.IsActive,
+		&u.ID, &u.OrganizationID, &u.Email, &u.DisplayName, &u.IsActive, &u.EmailVerifiedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, auth.ErrUserNotFound

@@ -14,6 +14,7 @@ type svcPort interface {
 	Login(ctx context.Context, email, password, ip, userAgent string) (*token.Pair, error)
 	Signup(ctx context.Context, orgName, adminName, email, password string) error
 	VerifyEmail(ctx context.Context, token string) error
+	ResendVerification(ctx context.Context, email string) error
 	Refresh(ctx context.Context, refreshToken string) (*token.Pair, error)
 	Logout(ctx context.Context, refreshToken string) error
 	Invite(ctx context.Context, orgID, callerUserID, roleName string) (code string, expiresAt time.Time, err error)

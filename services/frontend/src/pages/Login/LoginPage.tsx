@@ -197,6 +197,8 @@ export function LoginPage() {
   const [errors,   setErrors]   = useState<Record<string, string>>({});
   const [loading,  setLoading]  = useState(false);
   const [loginErr, setLoginErr] = useState('');
+  const [needsVerify, setNeedsVerify] = useState(false);
+  const [resendMsg,   setResendMsg]   = useState('');
 
   // Register (invite code flow)
   const [regCode,        setRegCode]        = useState('');
@@ -271,7 +273,7 @@ export function LoginPage() {
     if (!email.trim()) errs.email    = 'Ingresa un correo válido';
     if (!password)     errs.password = 'Requerido';
     if (Object.keys(errs).length) { setErrors(errs); return; }
-    setErrors({}); setLoginErr(''); setLoading(true);
+    setErrors({}); setLoginErr(''); setNeedsVerify(false); setResendMsg(''); setLoading(true);
     try {
       const me = await login(email.trim(), password);
       // Server-side flag is the source of truth; localStorage is only a cache.
@@ -285,13 +287,20 @@ export function LoginPage() {
       // 403 = the account exists and the password is right, but the email
       // hasn't been confirmed yet (fresh self-serve signup).
       if (err instanceof ApiError && err.status === 403) {
-        setLoginErr('Confirma tu correo antes de iniciar sesión. Revisa tu bandeja de entrada.');
+        setLoginErr('Confirma tu correo antes de iniciar sesión. Revisa tu bandeja (y el spam).');
+        setNeedsVerify(true);
       } else {
         setLoginErr('Credenciales incorrectas. Verifica tu correo y contraseña.');
       }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleResendVerify = async () => {
+    setResendMsg('Enviando…');
+    try { await authApi.resendVerification(email.trim()); } catch { /* always-200 endpoint */ }
+    setResendMsg('Te reenviamos el enlace de confirmación. Revisa tu bandeja y el spam.');
   };
 
   const toggleDay = (d: string) =>
@@ -403,6 +412,15 @@ export function LoginPage() {
                     <AlertCircle size={14} />
                     {loginErr}
                   </div>
+                )}
+                {needsVerify && (
+                  resendMsg ? (
+                    <div style={{ fontSize: 12.5, color: 'var(--teal)', marginBottom: 16, lineHeight: 1.6 }}>{resendMsg}</div>
+                  ) : (
+                    <button type="button" onClick={handleResendVerify} style={{ border: 'none', background: 'none', padding: 0, marginBottom: 16, fontSize: 13, color: 'var(--teal)', fontWeight: 600, cursor: 'pointer' }}>
+                      Reenviar correo de confirmación
+                    </button>
+                  )
                 )}
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
