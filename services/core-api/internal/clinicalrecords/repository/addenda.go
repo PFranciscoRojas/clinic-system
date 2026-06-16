@@ -9,7 +9,7 @@ import (
 
 func (r *Repository) CreateAddendum(ctx context.Context, orgID, recordID, createdBy string, contentEnc []byte) (string, error) {
 	var id string
-	err := r.db.QueryRow(ctx, `
+	err := r.q(ctx).QueryRow(ctx, `
 		INSERT INTO clinical_record_addenda (record_id, organization_id, created_by, content_enc)
 		VALUES ($1, $2, $3, $4)
 		RETURNING id
@@ -21,7 +21,7 @@ func (r *Repository) CreateAddendum(ctx context.Context, orgID, recordID, create
 }
 
 func (r *Repository) ListAddenda(ctx context.Context, orgID, recordID string) ([]*clinicalrecords.RawAddendum, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.q(ctx).Query(ctx, `
 		SELECT a.id, a.record_id, a.created_by, COALESCE(u.display_name, ''), a.content_enc, a.created_at
 		FROM clinical_record_addenda a
 		JOIN users u ON u.id = a.created_by

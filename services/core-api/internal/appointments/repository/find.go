@@ -11,7 +11,7 @@ import (
 )
 
 func (r *Repository) FindByID(ctx context.Context, orgID, appointmentID string) (*appointments.Appointment, error) {
-	row := r.db.QueryRow(ctx, `
+	row := r.q(ctx).QueryRow(ctx, `
 		SELECT id::text, organization_id::text, patient_id::text, guest_name, staff_id::text,
 		       scheduled_at, duration_min, modality::text, status::text,
 		       notes_enc, rescheduled_to::text, cancelled_by::text, cancel_reason,
@@ -61,7 +61,7 @@ func (r *Repository) List(ctx context.Context, orgID string, f appointments.List
 	args = append(args, f.Limit, f.Offset)
 	q += fmt.Sprintf(" ORDER BY scheduled_at ASC LIMIT $%d OFFSET $%d", len(args)-1, len(args))
 
-	rows, err := r.db.Query(ctx, q, args...)
+	rows, err := r.q(ctx).Query(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list appointments: %w", err)
 	}

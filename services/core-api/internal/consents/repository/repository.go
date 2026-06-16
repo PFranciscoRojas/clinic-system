@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"sghcp/core-api/internal/consents"
+	"sghcp/core-api/internal/shared/dbctx"
 )
 
 type Repository struct {
@@ -20,9 +21,13 @@ var _ consents.Repository = (*Repository)(nil)
 
 func New(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
+// q returns the request-scoped querier (tenant connection with the org GUC
+// set) when present, falling back to the pool otherwise.
+func (r *Repository) q(ctx context.Context) dbctx.Querier { return dbctx.From(ctx, r.db) }
+
 func (r *Repository) CreateEncKey(ctx context.Context, encryptedDEK []byte, keySource string) (string, error) {
 	var id string
-	err := r.db.QueryRow(ctx, `
+	err := r.q(ctx).QueryRow(ctx, `
 		INSERT INTO encryption_keys (encrypted_dek, key_source, algorithm)
 		VALUES ($1, $2, 'AES-256-GCM') RETURNING id
 	`, encryptedDEK, keySource).Scan(&id)
@@ -34,7 +39,7 @@ func (r *Repository) CreateEncKey(ctx context.Context, encryptedDEK []byte, keyS
 
 func (r *Repository) Create(ctx context.Context, p consents.CreateParams) (string, error) {
 	var id string
-	err := r.db.QueryRow(ctx, `
+	err := r.q(ctx).QueryRow(ctx, `
 		INSERT INTO consents (
 			organization_id, patient_id, staff_id, dek_id,
 			consent_type, signing_method,
@@ -57,7 +62,7 @@ func (r *Repository) Create(ctx context.Context, p consents.CreateParams) (strin
 }
 
 func (r *Repository) List(ctx context.Context, orgID, patientID string) ([]*consents.Consent, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.q(ctx).Query(ctx, `
 		SELECT id, organization_id, patient_id, staff_id,
 		       consent_type, signing_method, signed_at, valid_until, revoked_at, created_at
 		FROM consents
@@ -100,7 +105,7 @@ func scanTemplate(row pgx.Row) (*consents.Template, error) {
 }
 
 func (r *Repository) ListActiveTemplates(ctx context.Context, orgID string) ([]*consents.Template, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.q(ctx).Query(ctx, `
 		SELECT `+templateCols+` FROM consent_templates
 		WHERE organization_id = $1 AND is_active
 		ORDER BY consent_type
@@ -122,7 +127,7 @@ func (r *Repository) ListActiveTemplates(ctx context.Context, orgID string) ([]*
 }
 
 func (r *Repository) GetActiveTemplate(ctx context.Context, orgID string, ct consents.ConsentType) (*consents.Template, error) {
-	t, err := scanTemplate(r.db.QueryRow(ctx, `
+	t, err := scanTemplate(r.q(ctx).QueryRow(ctx, `
 		SELECT `+templateCols+` FROM consent_templates
 		WHERE organization_id = $1 AND consent_type = $2 AND is_active
 	`, orgID, ct))
@@ -136,7 +141,7 @@ func (r *Repository) GetActiveTemplate(ctx context.Context, orgID string, ct con
 }
 
 func (r *Repository) GetTemplateByID(ctx context.Context, templateID string) (*consents.Template, error) {
-	t, err := scanTemplate(r.db.QueryRow(ctx, `
+	t, err := scanTemplate(r.q(ctx).QueryRow(ctx, `
 		SELECT `+templateCols+` FROM consent_templates WHERE id = $1
 	`, templateID))
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -150,7 +155,7 @@ func (r *Repository) GetTemplateByID(ctx context.Context, templateID string) (*c
 
 // CreateTemplateVersion deactivates the current version and inserts the next one.
 func (r *Repository) CreateTemplateVersion(ctx context.Context, orgID string, ct consents.ConsentType, title, body, updatedBy string) (*consents.Template, error) {
-	tx, err := r.db.Begin(ctx)
+	tx, err := r.q(ctx).Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin template version: %w", err)
 	}
@@ -184,7 +189,7 @@ func (r *Repository) CreateTemplateVersion(ctx context.Context, orgID string, ct
 
 func (r *Repository) CreateSignToken(ctx context.Context, t consents.SignToken) (string, error) {
 	var id string
-	err := r.db.QueryRow(ctx, `
+	err := r.q(ctx).QueryRow(ctx, `
 		INSERT INTO consent_sign_tokens
 			(organization_id, patient_id, consent_type, template_id, token_hash, created_by, expires_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -198,7 +203,7 @@ func (r *Repository) CreateSignToken(ctx context.Context, t consents.SignToken) 
 
 func (r *Repository) GetSignToken(ctx context.Context, tokenHash string) (*consents.SignToken, error) {
 	var t consents.SignToken
-	err := r.db.QueryRow(ctx, `
+	err := r.q(ctx).QueryRow(ctx, `
 		SELECT id, organization_id, patient_id, consent_type, template_id,
 		       token_hash, created_by, expires_at, used_at
 		FROM consent_sign_tokens WHERE token_hash = $1
@@ -214,7 +219,7 @@ func (r *Repository) GetSignToken(ctx context.Context, tokenHash string) (*conse
 }
 
 func (r *Repository) MarkTokenUsed(ctx context.Context, id string) error {
-	tag, err := r.db.Exec(ctx, `
+	tag, err := r.q(ctx).Exec(ctx, `
 		UPDATE consent_sign_tokens SET used_at = NOW() WHERE id = $1 AND used_at IS NULL
 	`, id)
 	if err != nil {
@@ -232,7 +237,7 @@ func (r *Repository) GetDocument(ctx context.Context, orgID, consentID string) (
 	var d consents.ConsentDocument
 	var validUntil, revokedAt *time.Time
 	var scanFileType, templateID *string
-	err := r.db.QueryRow(ctx, `
+	err := r.q(ctx).QueryRow(ctx, `
 		SELECT c.id, c.organization_id, c.patient_id, c.staff_id,
 		       c.consent_type, c.signing_method, c.signed_at, c.valid_until, c.revoked_at, c.created_at,
 		       c.document_enc, c.signature_enc, c.scan_file_enc, c.scan_file_type, c.evidence_enc, c.template_id,
@@ -264,7 +269,7 @@ func (r *Repository) GetDocument(ctx context.Context, orgID, consentID string) (
 }
 
 func (r *Repository) Revoke(ctx context.Context, orgID, consentID, reason string) error {
-	tag, err := r.db.Exec(ctx, `
+	tag, err := r.q(ctx).Exec(ctx, `
 		UPDATE consents SET revoked_at = NOW(), revocation_reason = $3
 		WHERE id = $1 AND organization_id = $2 AND revoked_at IS NULL
 	`, consentID, orgID, reason)
@@ -280,7 +285,7 @@ func (r *Repository) Revoke(ctx context.Context, orgID, consentID, reason string
 // ── Patient contact (for the sign-link email) ─────────────────────────────────
 
 func (r *Repository) PatientContact(ctx context.Context, orgID, patientID string) (emailEnc, firstNameEnc []byte, dek consents.EncKeyRow, err error) {
-	err = r.db.QueryRow(ctx, `
+	err = r.q(ctx).QueryRow(ctx, `
 		SELECT p.email_enc, p.first_name_enc, k.id, k.encrypted_dek, k.key_source
 		FROM patients p
 		JOIN encryption_keys k ON k.id = p.dek_id

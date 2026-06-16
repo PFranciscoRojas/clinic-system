@@ -8,7 +8,7 @@ import (
 )
 
 func (r *Repository) Update(ctx context.Context, p clinicalrecords.UpdateParams) error {
-	tag, err := r.db.Exec(ctx, `
+	tag, err := r.q(ctx).Exec(ctx, `
 		UPDATE clinical_records
 		SET subjective_enc   = $3,
 		    objective_enc    = $4,
@@ -38,7 +38,7 @@ func (r *Repository) Update(ctx context.Context, p clinicalrecords.UpdateParams)
 }
 
 func (r *Repository) Approve(ctx context.Context, orgID, recordID, approvedBy string) error {
-	tag, err := r.db.Exec(ctx, `
+	tag, err := r.q(ctx).Exec(ctx, `
 		UPDATE clinical_records
 		SET status      = 'APPROVED',
 		    approved_at = NOW(),
@@ -57,7 +57,7 @@ func (r *Repository) Approve(ctx context.Context, orgID, recordID, approvedBy st
 }
 
 func (r *Repository) Cosign(ctx context.Context, orgID, recordID, supervisorID string) error {
-	tag, err := r.db.Exec(ctx, `
+	tag, err := r.q(ctx).Exec(ctx, `
 		UPDATE clinical_records
 		SET supervisor_cosigned_at = NOW(),
 		    updated_at             = NOW()

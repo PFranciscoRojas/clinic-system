@@ -22,7 +22,7 @@ func (r *Repository) Create(ctx context.Context, p appointments.CreateParams) (s
 	}
 
 	var id string
-	err := r.db.QueryRow(ctx, q,
+	err := r.q(ctx).QueryRow(ctx, q,
 		p.OrganizationID,
 		patientID,
 		guestName,

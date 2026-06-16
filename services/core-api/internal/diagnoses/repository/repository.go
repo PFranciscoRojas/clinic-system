@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"sghcp/core-api/internal/diagnoses"
+	"sghcp/core-api/internal/shared/dbctx"
 )
 
 type Repository struct {
@@ -19,9 +20,13 @@ func New(db *pgxpool.Pool) *Repository {
 	return &Repository{db: db}
 }
 
+// q returns the request-scoped querier (tenant connection with the org GUC
+// set) when present, falling back to the pool otherwise.
+func (r *Repository) q(ctx context.Context) dbctx.Querier { return dbctx.From(ctx, r.db) }
+
 // SearchCodes matches active catalog entries by code prefix or description substring.
 func (r *Repository) SearchCodes(ctx context.Context, query string, limit int) ([]*diagnoses.ICD10Code, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.q(ctx).Query(ctx, `
 		SELECT code, description, COALESCE(chapter, '')
 		FROM icd10_codes
 		WHERE is_active AND (code ILIKE $1 || '%' OR description ILIKE '%' || $1 || '%')
@@ -46,7 +51,7 @@ func (r *Repository) SearchCodes(ctx context.Context, query string, limit int) (
 
 func (r *Repository) Create(ctx context.Context, p diagnoses.CreateParams) (string, error) {
 	var id string
-	err := r.db.QueryRow(ctx, `
+	err := r.q(ctx).QueryRow(ctx, `
 		INSERT INTO patient_diagnoses
 			(organization_id, patient_id, staff_id, clinical_record_id,
 			 icd10_code, diagnosis_type, diagnosed_at)
@@ -65,7 +70,7 @@ func (r *Repository) Create(ctx context.Context, p diagnoses.CreateParams) (stri
 }
 
 func (r *Repository) ListByPatient(ctx context.Context, orgID, patientID string) ([]*diagnoses.Diagnosis, error) {
-	rows, err := r.db.Query(ctx, `
+	rows, err := r.q(ctx).Query(ctx, `
 		SELECT d.id, d.patient_id, d.staff_id, d.clinical_record_id,
 		       d.icd10_code, c.description, d.diagnosis_type, d.status,
 		       d.diagnosed_at, d.resolved_at, d.created_at
@@ -97,7 +102,7 @@ func (r *Repository) ListByPatient(ctx context.Context, orgID, patientID string)
 // UpdateStatus moves a diagnosis through its lifecycle; resolved_at is set
 // when leaving ACTIVE and cleared when returning to it.
 func (r *Repository) UpdateStatus(ctx context.Context, orgID, diagnosisID string, status diagnoses.Status) error {
-	tag, err := r.db.Exec(ctx, `
+	tag, err := r.q(ctx).Exec(ctx, `
 		UPDATE patient_diagnoses
 		SET status = $3,
 		    resolved_at = CASE WHEN $3 = 'ACTIVE' THEN NULL ELSE COALESCE(resolved_at, CURRENT_DATE) END,

@@ -8,7 +8,7 @@ import (
 )
 
 func (r *Repository) Update(ctx context.Context, p patients.UpdateParams) error {
-	_, err := r.db.Exec(ctx, `
+	_, err := r.q(ctx).Exec(ctx, `
 		UPDATE patients SET
 			first_name_enc          = $3,
 			middle_name_enc         = $4,
@@ -43,7 +43,7 @@ func (r *Repository) Update(ctx context.Context, p patients.UpdateParams) error 
 }
 
 func (r *Repository) Deactivate(ctx context.Context, orgID, patientID string) error {
-	_, err := r.db.Exec(ctx,
+	_, err := r.q(ctx).Exec(ctx,
 		`UPDATE patients SET is_active = FALSE, updated_at = NOW() WHERE id = $1 AND organization_id = $2`,
 		patientID, orgID,
 	)

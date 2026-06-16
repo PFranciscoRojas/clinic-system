@@ -84,6 +84,8 @@ func (a *app) buildRouter() http.Handler {
 	// RequirePermission (per-endpoint) checks a specific permission code from those claims.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RequireAuth([]byte(a.cfg.JWTSecret)))
+		// Pin a connection with the org GUC set so RLS policies scope every query.
+		r.Use(middleware.TenantScope(a.pool))
 
 		r.Mount("/api/v1/patients", patientshandler.New(a.pool, a.km).Routes())
 		r.Mount("/api/v1/appointments", apptshandler.New(a.pool).Routes())
