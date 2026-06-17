@@ -68,13 +68,13 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusBadRequest, "id is required")
 		return
 	}
-	var st, modality, clinic string
+	var st, modality, clinic, slug string
 	var when time.Time
 	err := h.pool.QueryRow(r.Context(), `
-		SELECT b.status, b.modality, b.scheduled_at, COALESCE(o.name, '')
+		SELECT b.status, b.modality, b.scheduled_at, COALESCE(o.name, ''), COALESCE(o.slug, '')
 		FROM bookings b JOIN organizations o ON o.id = b.organization_id
 		WHERE b.id = $1
-	`, id).Scan(&st, &modality, &when, &clinic)
+	`, id).Scan(&st, &modality, &when, &clinic, &slug)
 	if errors.Is(err, pgx.ErrNoRows) {
 		httputil.WriteError(w, http.StatusNotFound, "reserva no encontrada")
 		return
@@ -88,6 +88,7 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 		"modality":     modality,
 		"scheduled_at": when.UTC().Format(time.RFC3339),
 		"clinic_name":  clinic,
+		"org_slug":     slug,
 	})
 }
 
@@ -98,13 +99,14 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		OrgSlug  string `json:"org_slug"`
-		Modality string `json:"modality"`
-		Date     string `json:"date"` // YYYY-MM-DD
-		Time     string `json:"time"` // HH:MM
-		Name     string `json:"name"`
-		Email    string `json:"email"`
-		Phone    string `json:"phone"`
+		OrgSlug       string `json:"org_slug"`
+		Modality      string `json:"modality"`
+		Date          string `json:"date"` // YYYY-MM-DD
+		Time          string `json:"time"` // HH:MM
+		Name          string `json:"name"`
+		Email         string `json:"email"`
+		Phone         string `json:"phone"`
+		PrevBookingID string `json:"prev_booking_id"` // hold to release before re-checking out
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
@@ -136,6 +138,17 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	scheduledAt := when.UTC()
+
+	// Release the patient's own prior unpaid holds before re-checking the slot.
+	// Without this, going back to edit the summary and re-submitting collides
+	// with the hold the same patient just created (a self-inflicted 409).
+	if body.PrevBookingID != "" {
+		_, _ = h.pool.Exec(r.Context(),
+			`DELETE FROM bookings WHERE id = $1 AND status = 'PENDING_PAYMENT'`, body.PrevBookingID)
+	}
+	_, _ = h.pool.Exec(r.Context(),
+		`DELETE FROM bookings WHERE email = $1 AND staff_id = $2 AND scheduled_at = $3 AND status = 'PENDING_PAYMENT'`,
+		body.Email, prof.StaffID, scheduledAt)
 
 	taken, err := h.slotTaken(r.Context(), prof.OrgID, prof.StaffID, scheduledAt)
 	if err != nil {
@@ -177,6 +190,7 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"init_point": initPoint,
+		"booking_id": bookingID,
 		"summary": map[string]any{
 			"date": body.Date, "time": body.Time, "modality": modality,
 			"amount": amount, "currency": "COP",

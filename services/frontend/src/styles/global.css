@@ -95,3 +95,9 @@ a { color: inherit; text-decoration: none; }
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
+
+/* Onboarding profile grid collapses to a single column on small screens so
+   the two-up fields (Nombres / Apellidos) don't get squeezed. */
+@media (max-width: 480px) {
+  .onb-grid { grid-template-columns: 1fr !important; }
+}

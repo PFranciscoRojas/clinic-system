@@ -2,36 +2,15 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Video, MapPin, User, Mail, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { publicBookingApi, type OrgInfo } from '@/api/publicBooking';
+import { COUNTRIES, validatePhone } from '@/lib/phone';
 
 type Modality = 'VIRTUAL' | 'IN_PERSON';
 type Step = 'modality' | 'slot' | 'data' | 'summary';
-type Checkout = { init_point: string; summary: { date: string; time: string; modality: string; amount: number; currency: string } };
+type Checkout = { init_point: string; booking_id: string; summary: { date: string; time: string; modality: string; amount: number; currency: string } };
 
 // Editorial palette mirroring marcelachapues.com.
 const PAPER = '#faf6f1', INK = '#2a2420', INK_SOFT = '#6b5f55', INK_FAINT = '#a89c90', LINE = '#e6ddd2';
 const DISPLAY = "'Fraunces', Georgia, serif";
-
-// Country dial codes with flags + the expected national number length and an
-// optional first-digit rule (Colombian mobiles are 10 digits starting with 3).
-const COUNTRIES = [
-  { flag: '🇨🇴', code: '+57', name: 'Colombia', len: 10, starts: '3' },
-  { flag: '🇲🇽', code: '+52', name: 'México', len: 10 },
-  { flag: '🇵🇪', code: '+51', name: 'Perú', len: 9 },
-  { flag: '🇨🇱', code: '+56', name: 'Chile', len: 9 },
-  { flag: '🇦🇷', code: '+54', name: 'Argentina', len: 10 },
-  { flag: '🇪🇨', code: '+593', name: 'Ecuador', len: 9 },
-  { flag: '🇻🇪', code: '+58', name: 'Venezuela', len: 10 },
-  { flag: '🇺🇸', code: '+1', name: 'EE. UU.', len: 10 },
-  { flag: '🇪🇸', code: '+34', name: 'España', len: 9 },
-];
-
-function validatePhone(code: string, digits: string): string {
-  const c = COUNTRIES.find(x => x.code === code);
-  if (!c) return '';
-  if (digits.length !== c.len) return `El número debe tener ${c.len} dígitos.`;
-  if (c.starts && !digits.startsWith(c.starts)) return `En ${c.name} el celular empieza por ${c.starts}.`;
-  return '';
-}
 
 const DOW = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -95,6 +74,9 @@ export function BookingWizardPage() {
       const res = await publicBookingApi.checkout({
         org_slug: slug, modality, date: picked.date, time: picked.time,
         name: name.trim(), email: email.trim(), phone: `${code} ${phone.trim()}`,
+        // Release any prior hold from this same wizard session so editing the
+        // summary and re-submitting doesn't collide with the patient's own slot.
+        prev_booking_id: checkout?.booking_id,
       });
       setCheckout(res);
       setStep('summary');
