@@ -151,7 +151,8 @@ func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// POST /api/v1/auth/invite — protected, requires users:create permission.
+// POST /api/v1/auth/invite — protected. A CLINIC_ADMIN may invite any staff
+// role; a PROFESSIONAL may invite only support roles (INTERN, RECEPTIONIST).
 func (h *Handler) invite(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 
@@ -161,7 +162,43 @@ func (h *Handler) invite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	code, expiresAt, err := h.svc.Invite(r.Context(), claims.OrganizationID, claims.UserID, req.RoleName)
+	role := req.RoleName
+	if role == "" {
+		role = "PROFESSIONAL"
+	}
+	// Only ever mint staff invites — never CLINIC_ADMIN/SYSTEM_ADMIN/PATIENT.
+	switch role {
+	case "PROFESSIONAL", "INTERN", "RECEPTIONIST":
+	default:
+		httputil.WriteError(w, http.StatusForbidden, "rol de invitación no permitido")
+		return
+	}
+	isAdmin := false
+	for _, rn := range claims.Roles {
+		if rn == "CLINIC_ADMIN" || rn == "SYSTEM_ADMIN" {
+			isAdmin = true
+		}
+	}
+	isProfessional := false
+	for _, rn := range claims.Roles {
+		if rn == "PROFESSIONAL" {
+			isProfessional = true
+		}
+	}
+	// A non-admin professional may only invite support roles, and nobody below
+	// professional may invite at all.
+	if !isAdmin {
+		if !isProfessional {
+			httputil.WriteError(w, http.StatusForbidden, "no tienes permiso para invitar usuarios")
+			return
+		}
+		if role == "PROFESSIONAL" {
+			httputil.WriteError(w, http.StatusForbidden, "solo un administrador puede invitar a otro profesional")
+			return
+		}
+	}
+
+	code, expiresAt, err := h.svc.Invite(r.Context(), claims.OrganizationID, claims.UserID, role)
 	if err != nil {
 		slog.Error("auth.invite", "err", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "could not generate invite")

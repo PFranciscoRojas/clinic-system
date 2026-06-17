@@ -7,7 +7,7 @@ const PAPER = '#faf6f1', INK = '#2a2420', INK_SOFT = '#6b5f55', ACCENT = '#8a5a5
 const DISPLAY = "'Fraunces', Georgia, serif";
 const DURATION_MIN = 50;
 
-type Booking = { status: string; modality: string; scheduled_at: string; clinic_name: string; org_slug: string };
+type Booking = { status: string; modality: string; scheduled_at: string; clinic_name: string; org_slug: string; website: string };
 
 // MercadoPago appends ?status= / ?collection_status= to the back URL. "Volver a
 // la tienda" without paying lands here with a null/rejected/cancelled status, so
@@ -26,10 +26,16 @@ export function BookingPaymentReturnPage() {
   const abandoned = !!mpStatus && FAILED_STATUSES.has(mpStatus);
   const [b, setB] = useState<Booking | null>(null);
   const [tries, setTries] = useState(0);
+  const [released, setReleased] = useState(false);
 
   useEffect(() => {
-    if (!bookingId || abandoned) return;
+    if (!bookingId) return;
     let stop = false;
+    // Abandoned/failed: fetch status once (for the clinic's website) but don't poll.
+    if (abandoned) {
+      publicBookingApi.status(bookingId).then(res => { if (!stop) setB(res); }).catch(() => {});
+      return () => { stop = true; };
+    }
     const poll = async () => {
       try {
         const res = await publicBookingApi.status(bookingId);
@@ -45,7 +51,18 @@ export function BookingPaymentReturnPage() {
   const paid = b?.status === 'PAID';
   // Not paid, and either the gateway reported a non-success status or polling ran out.
   const failed = !paid && (abandoned || tries >= 6);
-  const retryHref = b?.org_slug ? `/book/${b.org_slug}` : '/';
+
+  // Free the held slot right away when the payment didn't go through, so it
+  // becomes bookable again without waiting for the 15-minute hold to expire.
+  useEffect(() => {
+    if (failed && bookingId && !released) {
+      setReleased(true);
+      publicBookingApi.release(bookingId).catch(() => {});
+    }
+  }, [failed, bookingId, released]);
+
+  // Send the patient back to the clinic's own site ("la tienda"), not the API host.
+  const retryHref = b?.website || (b?.org_slug ? `/book/${b.org_slug}` : '/');
   const start = b ? new Date(b.scheduled_at) : null;
   const end = start ? new Date(start.getTime() + DURATION_MIN * 60000) : null;
   const title = `Cita${b?.clinic_name ? ' · ' + b.clinic_name : ''}`;

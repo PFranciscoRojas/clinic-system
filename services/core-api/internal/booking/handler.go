@@ -57,7 +57,24 @@ func (h *Handler) PublicRoutes() chi.Router {
 	r.Post("/checkout", h.checkout)
 	r.Post("/webhook", h.webhook)
 	r.Get("/status", h.status)
+	r.Post("/release", h.release)
 	return r
+}
+
+// POST /release {id} — frees a held slot right away when the patient abandons or
+// cancels payment, instead of waiting for the 15-minute hold to expire. Only
+// unpaid holds are released, so a confirmed (PAID) booking is never touched.
+func (h *Handler) release(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ID == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "id is required")
+		return
+	}
+	_, _ = h.pool.Exec(r.Context(),
+		`DELETE FROM bookings WHERE id = $1 AND status = 'PENDING_PAYMENT'`, body.ID)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // GET /status?id=<booking_id> — public lookup the return page uses to show the
@@ -69,12 +86,14 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var st, modality, clinic, slug string
+	var website *string
 	var when time.Time
 	err := h.pool.QueryRow(r.Context(), `
-		SELECT b.status, b.modality, b.scheduled_at, COALESCE(o.name, ''), COALESCE(o.slug, '')
+		SELECT b.status, b.modality, b.scheduled_at, COALESCE(o.name, ''), COALESCE(o.slug, ''),
+		       o.settings->'branding'->>'website'
 		FROM bookings b JOIN organizations o ON o.id = b.organization_id
 		WHERE b.id = $1
-	`, id).Scan(&st, &modality, &when, &clinic, &slug)
+	`, id).Scan(&st, &modality, &when, &clinic, &slug, &website)
 	if errors.Is(err, pgx.ErrNoRows) {
 		httputil.WriteError(w, http.StatusNotFound, "reserva no encontrada")
 		return
@@ -83,12 +102,17 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusInternalServerError, "error")
 		return
 	}
+	site := ""
+	if website != nil {
+		site = *website
+	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":       st,
 		"modality":     modality,
 		"scheduled_at": when.UTC().Format(time.RFC3339),
 		"clinic_name":  clinic,
 		"org_slug":     slug,
+		"website":      site,
 	})
 }
 
@@ -235,10 +259,17 @@ func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	pay, err := h.mp.GetPayment(ctx, id)
-	if err != nil || pay.ExternalReference == "" || pay.Status != "approved" {
+	if err != nil || pay.ExternalReference == "" {
 		return
 	}
-	h.confirm(ctx, pay.ExternalReference, id)
+	switch pay.Status {
+	case "approved":
+		h.confirm(ctx, pay.ExternalReference, id)
+	case "rejected", "cancelled", "refunded", "charged_back":
+		// Free the held slot immediately so it can be booked again.
+		_, _ = h.pool.Exec(ctx,
+			`DELETE FROM bookings WHERE id = $1 AND status = 'PENDING_PAYMENT'`, pay.ExternalReference)
+	}
 }
 
 // confirm creates the appointment for a paid booking (idempotent on status).

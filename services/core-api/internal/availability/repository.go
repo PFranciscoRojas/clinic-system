@@ -64,19 +64,21 @@ func (r *Repository) ResolveBySlug(ctx context.Context, slug string) (*Professio
 type OrgPublicInfo struct {
 	PublicName string `json:"public_name"`
 	BrandColor string `json:"brand_color"`
+	Website    string `json:"website"`
 }
 
 // PublicInfo returns the clinic's public name and brand color (from
 // settings.branding, falling back to the org name). organizations has no RLS.
 func (r *Repository) PublicInfo(ctx context.Context, slug string) (*OrgPublicInfo, error) {
 	var name string
-	var publicName, brandColor *string
+	var publicName, brandColor, website *string
 	err := r.pool.QueryRow(ctx, `
 		SELECT name,
 		       settings->'branding'->>'public_name',
-		       settings->'branding'->>'brand_color'
+		       settings->'branding'->>'brand_color',
+		       settings->'branding'->>'website'
 		FROM organizations WHERE slug = $1 AND is_active
-	`, slug).Scan(&name, &publicName, &brandColor)
+	`, slug).Scan(&name, &publicName, &brandColor, &website)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -89,6 +91,9 @@ func (r *Repository) PublicInfo(ctx context.Context, slug string) (*OrgPublicInf
 	}
 	if brandColor != nil {
 		info.BrandColor = *brandColor
+	}
+	if website != nil {
+		info.Website = *website
 	}
 	return info, nil
 }

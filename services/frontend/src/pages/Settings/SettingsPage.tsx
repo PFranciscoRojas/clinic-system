@@ -1139,7 +1139,9 @@ const ROLES = [
 function UsersSection() {
   const { user } = useAuth();
   const isAdmin = user?.roles?.includes('CLINIC_ADMIN') ?? false;
-  const [roleName,     setRoleName]     = useState('PROFESSIONAL');
+  // A non-admin professional can invite support roles only; an admin, any role.
+  const availableRoles = isAdmin ? ROLES : ROLES.filter(r => r.value !== 'PROFESSIONAL');
+  const [roleName,     setRoleName]     = useState(isAdmin ? 'PROFESSIONAL' : 'INTERN');
   const [inviteCode,   setInviteCode]   = useState('');
   const [inviteExp,    setInviteExp]    = useState('');
   const [inviteLoading,setInviteLoading]= useState(false);
@@ -1196,7 +1198,7 @@ function UsersSection() {
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 12, color: 'var(--s500)', marginBottom: 6, fontWeight: 500 }}>Rol a asignar</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-              {ROLES.map(r => (
+              {availableRoles.map(r => (
                 <button key={r.value} onClick={() => setRoleName(r.value)} style={{
                   padding: '6px 13px', borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', transition: 'all .12s',
                   border: `1.5px solid ${roleName === r.value ? '#0ea5e9' : 'var(--s200)'}`,

@@ -20,6 +20,7 @@ export interface BookingForm {
 export interface OrgInfo {
   public_name: string;
   brand_color: string;
+  website: string;
 }
 
 // Public booking API — no auth. Used by /book/:slug.
@@ -46,7 +47,10 @@ export const publicBookingApi = {
 
   // Booking status for the post-payment return page (PAID once the webhook lands).
   status: (id: string) =>
-    api.get<{ status: string; modality: string; scheduled_at: string; clinic_name: string; org_slug: string }>(
+    api.get<{ status: string; modality: string; scheduled_at: string; clinic_name: string; org_slug: string; website: string }>(
       `/public/pay/status?id=${encodeURIComponent(id)}`,
     ),
+
+  // Frees a held slot immediately when the patient abandons/cancels payment.
+  release: (id: string) => api.post<void>('/public/pay/release', { id }),
 };
