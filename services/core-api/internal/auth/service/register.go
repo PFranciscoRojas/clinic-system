@@ -47,6 +47,13 @@ func (s *Service) Register(ctx context.Context, inviteCode, email, password, dis
 		return nil, fmt.Errorf("creating user: %w", err)
 	}
 
+	// An invite code (admin-issued, one-time) is itself proof the address is
+	// trusted, so invited users are verified immediately — there's no
+	// confirmation email for them, and login requires a verified address.
+	if err := s.repo.MarkEmailVerified(ctx, userID); err != nil {
+		return nil, fmt.Errorf("marking invited user verified: %w", err)
+	}
+
 	roleID, err := s.repo.FindRoleIDByName(ctx, payload.RoleName)
 	if err != nil {
 		return nil, fmt.Errorf("finding role %q: %w", payload.RoleName, err)
