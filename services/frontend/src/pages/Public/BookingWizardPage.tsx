@@ -105,6 +105,13 @@ export function BookingWizardPage() {
   };
 
   const money = (n: number) => '$' + n.toLocaleString('es-CO') + ' COP';
+  // Patients read 3:30 p.m., not 15:30 (the 24h value is what we send).
+  const fmt12h = (hhmm: string) => {
+    const [h, m] = hhmm.split(':').map(Number);
+    const ap = h < 12 ? 'a.m.' : 'p.m.';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${String(m).padStart(2, '0')} ${ap}`;
+  };
 
   const fmtLongDay = (iso: string) => {
     const d = new Date(iso + 'T12:00:00');
@@ -218,7 +225,7 @@ export function BookingWizardPage() {
                       {(byDate[selDate] ?? []).map(t => (
                         <button key={t} onClick={() => { setPicked({ date: selDate, time: t }); setStep('data'); }} style={chip(false)}
                           onMouseEnter={e => { e.currentTarget.style.borderColor = accent; e.currentTarget.style.color = accent; }}
-                          onMouseLeave={e => { e.currentTarget.style.borderColor = LINE; e.currentTarget.style.color = INK; }}>{t}</button>
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = LINE; e.currentTarget.style.color = INK; }}>{fmt12h(t)}</button>
                       ))}
                       {selDate && (byDate[selDate]?.length ?? 0) === 0 && <div style={{ color: INK_FAINT, fontSize: 13 }}>Sin horarios este día.</div>}
                     </div>
@@ -235,7 +242,7 @@ export function BookingWizardPage() {
               </button>
               <h1 style={{ fontFamily: DISPLAY, fontWeight: 500, fontSize: 24, marginBottom: 14 }}>Tus datos</h1>
               <div style={{ background: '#fff', border: `1.5px solid ${LINE}`, borderRadius: 11, padding: '12px 15px', marginBottom: 18, fontSize: 14, color: INK }}>
-                <strong style={{ textTransform: 'capitalize', fontFamily: DISPLAY }}>{fmtLongDay(picked.date)}</strong> · {picked.time} · {modality === 'VIRTUAL' ? 'Online' : 'Presencial'}
+                <strong style={{ textTransform: 'capitalize', fontFamily: DISPLAY }}>{fmtLongDay(picked.date)}</strong> · {fmt12h(picked.time)} · {modality === 'VIRTUAL' ? 'Online' : 'Presencial'}
               </div>
               <div style={inputWrap}><User size={16} color={INK_FAINT} /><input value={name} onChange={e => setName(e.target.value)} placeholder="Tu nombre" style={input} /></div>
               <div style={inputWrap}><Mail size={16} color={INK_FAINT} /><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Correo electrónico" style={input} /></div>
@@ -255,10 +262,13 @@ export function BookingWizardPage() {
 
           {step === 'summary' && picked && checkout && (
             <div>
+              <button onClick={() => setStep('data')} style={{ display: 'flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', color: accent, fontWeight: 600, fontSize: 13, cursor: 'pointer', marginBottom: 14, padding: 0 }}>
+                <ChevronLeft size={15} /> Volver y corregir
+              </button>
               <h1 style={{ fontFamily: DISPLAY, fontWeight: 500, fontSize: 25, marginBottom: 4 }}>Resumen de tu cita</h1>
               <p style={{ color: INK_SOFT, fontSize: 13.5, marginBottom: 20 }}>Revisa y continúa al pago seguro.</p>
               <div style={{ background: '#fff', border: `1.5px solid ${LINE}`, borderRadius: 13, overflow: 'hidden', marginBottom: 18 }}>
-                {[['Fecha', fmtLongDay(picked.date)], ['Hora', picked.time], ['Modalidad', modality === 'VIRTUAL' ? 'Online' : 'Presencial'], ['Paciente', name.trim()], ['Correo', email.trim()], ['Teléfono', `${code} ${phone.trim()}`]].map(([k, v], i) => (
+                {[['Fecha', fmtLongDay(picked.date)], ['Hora', fmt12h(picked.time)], ['Modalidad', modality === 'VIRTUAL' ? 'Online' : 'Presencial'], ['Paciente', name.trim()], ['Correo', email.trim()], ['Teléfono', `${code} ${phone.trim()}`]].map(([k, v], i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', borderTop: i ? `1px solid ${LINE}` : 'none', fontSize: 14 }}>
                     <span style={{ color: INK_SOFT, flexShrink: 0, marginRight: 14 }}>{k}</span>
                     <span style={{ color: INK, fontWeight: 500, textTransform: k === 'Fecha' ? 'capitalize' : 'none', textAlign: 'right', wordBreak: 'break-word' }}>{v}</span>

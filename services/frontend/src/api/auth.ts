@@ -30,8 +30,8 @@ export const authApi = {
   // Self-serve signup = create a new organization. org_name is the clinic, and
   // full_name is the admin's own name. Emails a verification link; the account
   // can't log in until the email is confirmed.
-  signup: (org_name: string, full_name: string, email: string, password: string) =>
-    api.post<void>('/auth/signup', { org_name, full_name, email, password }),
+  signup: (org_name: string, full_name: string, email: string, password: string, is_professional: boolean) =>
+    api.post<void>('/auth/signup', { org_name, full_name, email, password, is_professional }),
 
   // Confirms the address from the one-time token in the verification email link.
   verifyEmail: (token: string) =>

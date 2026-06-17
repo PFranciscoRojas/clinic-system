@@ -18,6 +18,7 @@ export function SignupPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [pwd, setPwd] = useState('');
+  const [isProfessional, setIsProfessional] = useState(true);
   const [show, setShow] = useState(false);
   const [state, setState] = useState<PageState>('form');
   const [err, setErr] = useState('');
@@ -38,7 +39,7 @@ export function SignupPage() {
     if (pwd.length < 8)                  { setErr('La contraseña debe tener al menos 8 caracteres.'); return; }
     setState('saving');
     try {
-      await authApi.signup(orgName.trim(), name.trim(), email.trim(), pwd);
+      await authApi.signup(orgName.trim(), name.trim(), email.trim(), pwd, isProfessional);
       setState('done');
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
@@ -120,6 +121,21 @@ export function SignupPage() {
                   {show ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
+
+              <div style={{ ...sectionLabel, marginTop: 16 }}>¿Atiendes pacientes directamente?</div>
+              {([[true, 'Sí, yo soy quien atiende', 'Tendrás tu agenda y horario; las reservas se hacen contigo'], [false, 'No, solo administro', 'Gestionas el consultorio e invitas a los psicólogos que atienden']] as const).map(([val, title, sub]) => (
+                <button type="button" key={String(val)} onClick={() => setIsProfessional(val)} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%', textAlign: 'left',
+                  border: `1.5px solid ${isProfessional === val ? 'var(--teal)' : 'var(--s200)'}`, borderRadius: 11, padding: '11px 14px', marginBottom: 10, background: '#fff', cursor: 'pointer',
+                }}>
+                  <div style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${isProfessional === val ? 'var(--teal)' : 'var(--s300)'}`, marginTop: 2, flexShrink: 0, background: isProfessional === val ? 'var(--teal)' : '#fff', boxShadow: isProfessional === val ? 'inset 0 0 0 2.5px #fff' : 'none' }} />
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--s800)' }}>{title}</div>
+                    <div style={{ fontSize: 11.5, color: 'var(--s500)', marginTop: 2, lineHeight: 1.4 }}>{sub}</div>
+                  </div>
+                </button>
+              ))}
+
               {err && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 9, padding: '9px 12px', marginBottom: 14 }}>
                   <AlertTriangle size={14} style={{ flexShrink: 0 }} />{err}

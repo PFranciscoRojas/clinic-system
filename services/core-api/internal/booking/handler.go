@@ -56,7 +56,39 @@ func (h *Handler) PublicRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.Post("/checkout", h.checkout)
 	r.Post("/webhook", h.webhook)
+	r.Get("/status", h.status)
 	return r
+}
+
+// GET /status?id=<booking_id> — public lookup the return page uses to show the
+// confirmed appointment + an add-to-calendar option once the webhook lands.
+func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "id is required")
+		return
+	}
+	var st, modality, clinic string
+	var when time.Time
+	err := h.pool.QueryRow(r.Context(), `
+		SELECT b.status, b.modality, b.scheduled_at, COALESCE(o.name, '')
+		FROM bookings b JOIN organizations o ON o.id = b.organization_id
+		WHERE b.id = $1
+	`, id).Scan(&st, &modality, &when, &clinic)
+	if errors.Is(err, pgx.ErrNoRows) {
+		httputil.WriteError(w, http.StatusNotFound, "reserva no encontrada")
+		return
+	}
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "error")
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		"status":       st,
+		"modality":     modality,
+		"scheduled_at": when.UTC().Format(time.RFC3339),
+		"clinic_name":  clinic,
+	})
 }
 
 // POST /checkout — hold the slot and return a MercadoPago checkout URL.
@@ -128,7 +160,7 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	title := "Sesión psicológica"
+	title := "Sesión psicológica · " + when.Format("02/01 03:04 pm") + " · " + modalityLabel(modality)
 	prefID, initPoint, err := h.mp.CreatePreference(
 		r.Context(), title, amount, bookingID, body.Email,
 		h.cfg.AppBaseURL+"/book/return",

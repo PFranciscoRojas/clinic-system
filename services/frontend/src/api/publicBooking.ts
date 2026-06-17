@@ -42,4 +42,10 @@ export const publicBookingApi = {
     api.post<{ init_point: string; summary: { date: string; time: string; modality: string; amount: number; currency: string } }>(
       '/public/pay/checkout', body,
     ),
+
+  // Booking status for the post-payment return page (PAID once the webhook lands).
+  status: (id: string) =>
+    api.get<{ status: string; modality: string; scheduled_at: string; clinic_name: string }>(
+      `/public/pay/status?id=${encodeURIComponent(id)}`,
+    ),
 };
