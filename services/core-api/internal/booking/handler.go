@@ -336,17 +336,12 @@ func (h *Handler) notifyConfirmed(ctx context.Context, orgID, bookingID string) 
 		PreferredDate: local.Format("2006-01-02"),
 		PreferredTime: local.Format("15:04"),
 	}
-	// Patient: confirmed. Professional(s): a heads-up (patient email blanked so
-	// only admins are mailed).
+	// Patient gets the branded confirmation; admins get a paid-booking heads-up
+	// with the patient's contact (a dedicated template, not the unpaid-request one).
 	h.notifier.BookingConfirmed(ctx, d)
 
 	admins, _ := h.orgAdminEmails(ctx, orgID)
-	if len(admins) > 0 {
-		dAdmin := d
-		dAdmin.PatientEmail = ""
-		dAdmin.LastName = "(pagada)"
-		h.notifier.NewBooking(ctx, dAdmin, admins)
-	}
+	h.notifier.BookingPaidAdmin(ctx, d, admins)
 }
 
 func (h *Handler) orgAdminEmails(ctx context.Context, orgID string) ([]string, error) {

@@ -51,6 +51,25 @@ func (n *ResendNotifier) NewBooking(ctx context.Context, b BookingDetails, admin
 	}
 }
 
+// BookingPaidAdmin tells the clinic's admins that a public booking was paid and
+// auto-confirmed. Distinct from NewBooking, which announces an unpaid request
+// awaiting manual confirmation.
+func (n *ResendNotifier) BookingPaidAdmin(ctx context.Context, b BookingDetails, adminEmails []string) {
+	if len(adminEmails) == 0 {
+		return
+	}
+	html, err := renderPaidAdmin(b)
+	if err != nil {
+		return
+	}
+	subj := fmt.Sprintf("Cita pagada: %s %s", b.FirstName, b.LastName)
+	for _, adminEmail := range adminEmails {
+		if err := n.send(ctx, adminEmail, subj, html); err != nil {
+			slog.Default().Warn("notify: booking-paid to admin failed", "to", adminEmail, "err", err)
+		}
+	}
+}
+
 func (n *ResendNotifier) BookingConfirmed(ctx context.Context, b BookingDetails) {
 	brand := n.brandFor(ctx, b.OrgID)
 	html, err := renderConfirmed(brand, b)

@@ -8,6 +8,7 @@ import (
 var (
 	tmplReceived      = template.Must(template.New("received").Parse(tmplReceivedSrc))
 	tmplReceivedAdmin = template.Must(template.New("received-admin").Parse(tmplReceivedAdminSrc))
+	tmplPaidAdmin     = template.Must(template.New("paid-admin").Parse(tmplPaidAdminSrc))
 	tmplConfirmed     = template.Must(template.New("confirmed").Parse(tmplConfirmedSrc))
 	tmplRejected      = template.Must(template.New("rejected").Parse(tmplRejectedSrc))
 	tmplConsentLink   = template.Must(template.New("consent-link").Parse(tmplConsentLinkSrc))
@@ -33,6 +34,10 @@ func renderReceived(brand Branding, b BookingDetails) (string, error) {
 
 func renderReceivedAdmin(b BookingDetails) (string, error) {
 	return execTemplate(tmplReceivedAdmin, b)
+}
+
+func renderPaidAdmin(b BookingDetails) (string, error) {
+	return execTemplate(tmplPaidAdmin, b)
 }
 
 func renderConfirmed(brand Branding, b BookingDetails) (string, error) {
@@ -256,6 +261,41 @@ const tmplReceivedAdminSrc = `<!DOCTYPE html>
           </table>
           <p style="margin:0;font-size:14px;color:#777;">
             Ingresa al sistema para confirmar o rechazar la solicitud.
+          </p>
+        </td></tr>
+        <tr><td style="padding:16px 36px 24px;border-top:1px solid #ece9e3;">
+          <p style="margin:0;font-size:12px;color:#aaa;">Sistema de Gestión Clínica · SGHCP</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+
+const tmplPaidAdminSrc = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f5f4f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f5f4f0;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="background:#fff;border-radius:10px;overflow:hidden;max-width:560px;width:100%;">
+        <tr><td style="background:#3e6b4e;padding:28px 36px;">
+          <p style="margin:0;color:#fff;font-size:16px;font-weight:600;letter-spacing:.02em;">Cita pagada y confirmada</p>
+        </td></tr>
+        <tr><td style="padding:36px;">
+          <h1 style="margin:0 0 8px;font-size:20px;color:#1a1a1a;font-weight:600;">{{.FirstName}} {{.LastName}}</h1>
+          <p style="margin:0 0 24px;font-size:14px;color:#3e6b4e;font-weight:600;">Pago confirmado · ya está en tu agenda</p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f4f0;border-radius:8px;margin-bottom:24px;">
+            <tr><td style="padding:20px 24px;">
+              <p style="margin:0 0 10px;font-size:11px;color:#999;text-transform:uppercase;letter-spacing:.08em;font-weight:600;">Datos del paciente</p>
+              {{if .PatientEmail}}<p style="margin:0 0 6px;font-size:14px;color:#333;"><strong>Email:</strong> <a href="mailto:{{.PatientEmail}}" style="color:#3e6b4e;text-decoration:none;">{{.PatientEmail}}</a></p>{{end}}
+              <p style="margin:0 0 6px;font-size:14px;color:#333;"><strong>Modalidad:</strong> {{.Modality}}</p>
+              {{if .PreferredDate}}<p style="margin:0 0 6px;font-size:14px;color:#333;"><strong>Fecha:</strong> {{.PreferredDate}}</p>{{end}}
+              {{if .PreferredTime}}<p style="margin:0;font-size:14px;color:#333;"><strong>Hora:</strong> {{.PreferredTime}}</p>{{end}}
+            </td></tr>
+          </table>
+          <p style="margin:0;font-size:14px;color:#777;">
+            El paciente ya pagó la sesión; la cita quedó agendada automáticamente. No necesitas confirmarla.
           </p>
         </td></tr>
         <tr><td style="padding:16px 36px 24px;border-top:1px solid #ece9e3;">
