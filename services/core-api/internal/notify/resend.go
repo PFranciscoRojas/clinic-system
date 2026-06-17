@@ -81,6 +81,18 @@ func (n *ResendNotifier) BookingConfirmed(ctx context.Context, b BookingDetails)
 	}
 }
 
+// AppointmentReminder nudges the patient ahead of their appointment (24h/2h).
+func (n *ResendNotifier) AppointmentReminder(ctx context.Context, b BookingDetails, hoursBefore int) {
+	brand := n.brandFor(ctx, b.OrgID)
+	html, err := renderReminder(brand, b, hoursBefore)
+	if err != nil {
+		return
+	}
+	if err := n.send(ctx, b.PatientEmail, "Recordatorio de tu cita · "+brand.PublicName, html); err != nil {
+		slog.Default().Warn("notify: appointment-reminder email failed", "err", err)
+	}
+}
+
 func (n *ResendNotifier) BookingRejected(ctx context.Context, b BookingDetails) {
 	brand := n.brandFor(ctx, b.OrgID)
 	html, err := renderRejected(brand, b)

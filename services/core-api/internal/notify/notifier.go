@@ -45,6 +45,7 @@ type Notifier interface {
 	BookingPaidAdmin(ctx context.Context, b BookingDetails, adminEmails []string)
 	BookingConfirmed(ctx context.Context, b BookingDetails)
 	BookingRejected(ctx context.Context, b BookingDetails)
+	AppointmentReminder(ctx context.Context, b BookingDetails, hoursBefore int)
 	ConsentSignLink(ctx context.Context, toEmail string, d ConsentLinkDetails)
 	PasswordReset(ctx context.Context, toEmail string, d PasswordResetDetails)
 	AccountVerification(ctx context.Context, toEmail string, d VerificationDetails)
@@ -58,6 +59,7 @@ func (NoopNotifier) NewBooking(_ context.Context, _ BookingDetails, _ []string) 
 func (NoopNotifier) BookingPaidAdmin(_ context.Context, _ BookingDetails, _ []string)       {}
 func (NoopNotifier) BookingConfirmed(_ context.Context, _ BookingDetails)                   {}
 func (NoopNotifier) BookingRejected(_ context.Context, _ BookingDetails)                    {}
+func (NoopNotifier) AppointmentReminder(_ context.Context, _ BookingDetails, _ int)         {}
 func (NoopNotifier) ConsentSignLink(_ context.Context, _ string, _ ConsentLinkDetails)      {}
 func (NoopNotifier) PasswordReset(_ context.Context, _ string, _ PasswordResetDetails)      {}
 func (NoopNotifier) AccountVerification(_ context.Context, _ string, _ VerificationDetails) {}

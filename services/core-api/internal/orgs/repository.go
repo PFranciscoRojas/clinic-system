@@ -22,6 +22,38 @@ func New(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
+// NotificationSettings holds a tenant's patient-reminder preferences (email).
+// WhatsApp/SMS and internal alerts are a later wave and not represented here.
+type NotificationSettings struct {
+	Reminder24h bool `json:"reminder_24h"`
+	Reminder2h  bool `json:"reminder_2h"`
+}
+
+// GetNotifications reads settings.notifications, defaulting to 24h-on/2h-off
+// when the org hasn't configured anything yet.
+func (r *Repository) GetNotifications(ctx context.Context, orgID string) (NotificationSettings, error) {
+	s := NotificationSettings{Reminder24h: true, Reminder2h: false}
+	err := r.pool.QueryRow(ctx, `
+		SELECT COALESCE((settings->'notifications'->>'reminder_24h')::bool, true),
+		       COALESCE((settings->'notifications'->>'reminder_2h')::bool, false)
+		FROM organizations WHERE id = $1`, orgID).Scan(&s.Reminder24h, &s.Reminder2h)
+	return s, err
+}
+
+// SetNotifications merges the reminder prefs into settings.notifications without
+// disturbing other settings keys (branding, payments, …).
+func (r *Repository) SetNotifications(ctx context.Context, orgID string, s NotificationSettings) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE organizations
+		SET settings = COALESCE(settings,'{}'::jsonb)
+		    || jsonb_build_object('notifications',
+		         COALESCE(settings->'notifications','{}'::jsonb)
+		         || jsonb_build_object('reminder_24h', $2::bool, 'reminder_2h', $3::bool)),
+		    updated_at = NOW()
+		WHERE id = $1`, orgID, s.Reminder24h, s.Reminder2h)
+	return err
+}
+
 // hexColor guards against injecting arbitrary CSS through the brand color.
 var hexColor = regexp.MustCompile(`^#[0-9a-fA-F]{3,8}$`)
 

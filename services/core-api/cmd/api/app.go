@@ -11,6 +11,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"sghcp/core-api/internal/notify"
+	"sghcp/core-api/internal/orgs"
+	"sghcp/core-api/internal/reminders"
 	"sghcp/core-api/internal/shared/config"
 	"sghcp/core-api/internal/shared/crypto"
 	"sghcp/core-api/internal/shared/db"
@@ -80,6 +83,14 @@ func (a *app) run(ctx context.Context) error {
 	// in-flight publish cycle is interrupted mid-transaction.
 	pub := outbox.NewPublisher(a.pool, a.rdb, slog.Default())
 	go pub.Run(ctx)
+
+	// Email reminder engine — sweeps upcoming appointments and sends 24h/2h
+	// patient reminders. Skipped (Noop) when Resend isn't configured.
+	var notifier notify.Notifier = notify.NoopNotifier{}
+	if a.cfg.ResendAPIKey != "" {
+		notifier = notify.NewResend(a.cfg.ResendAPIKey, a.cfg.ResendFrom, orgs.New(a.pool).ResolveBranding)
+	}
+	go reminders.New(a.pool, a.km, notifier, slog.Default()).Run(ctx)
 
 	// ListenAndServe blocks forever, so it runs in a goroutine.
 	// We capture unexpected errors (anything other than ErrServerClosed,

@@ -9,6 +9,7 @@ var (
 	tmplReceived      = template.Must(template.New("received").Parse(tmplReceivedSrc))
 	tmplReceivedAdmin = template.Must(template.New("received-admin").Parse(tmplReceivedAdminSrc))
 	tmplPaidAdmin     = template.Must(template.New("paid-admin").Parse(tmplPaidAdminSrc))
+	tmplReminder      = template.Must(template.New("reminder").Parse(tmplReminderSrc))
 	tmplConfirmed     = template.Must(template.New("confirmed").Parse(tmplConfirmedSrc))
 	tmplRejected      = template.Must(template.New("rejected").Parse(tmplRejectedSrc))
 	tmplConsentLink   = template.Must(template.New("consent-link").Parse(tmplConsentLinkSrc))
@@ -26,6 +27,25 @@ type bookingView struct {
 type consentView struct {
 	Brand Branding
 	D     ConsentLinkDetails
+}
+
+// reminderView adds the human "in 24 hours / in 2 hours" lead time to the
+// booking payload for the appointment-reminder template.
+type reminderView struct {
+	Brand Branding
+	D     BookingDetails
+	When  string // e.g. "mañana" / "en 2 horas"
+}
+
+func renderReminder(brand Branding, b BookingDetails, hoursBefore int) (string, error) {
+	when := "pronto"
+	switch hoursBefore {
+	case 24:
+		when = "mañana"
+	case 2:
+		when = "en 2 horas"
+	}
+	return execTemplate(tmplReminder, reminderView{Brand: brand, D: b, When: when})
 }
 
 func renderReceived(brand Branding, b BookingDetails) (string, error) {
@@ -226,6 +246,44 @@ const tmplConsentLinkSrc = `<!DOCTYPE html>
           <p style="margin:0;font-size:12px;color:#aaa;line-height:1.6;">
             {{.Brand.DisplayName}}{{if .Brand.Location}} · {{.Brand.Location}}{{end}}{{if .Brand.ReplyTo}}<br>
             <a href="mailto:{{.Brand.ReplyTo}}" style="color:{{.Brand.BrandColor}};text-decoration:none;">{{.Brand.ReplyTo}}</a>{{end}}
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+
+const tmplReminderSrc = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f5f4f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f5f4f0;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="background:#fff;border-radius:10px;overflow:hidden;max-width:560px;width:100%;">
+        <tr><td style="background:{{.Brand.BrandColor}};padding:28px 36px;">
+          <p style="margin:0;color:#fff;font-size:16px;font-weight:600;letter-spacing:.02em;">{{.Brand.DisplayName}}</p>
+        </td></tr>
+        <tr><td style="padding:36px;">
+          <h1 style="margin:0 0 16px;font-size:20px;color:#1a1a1a;font-weight:600;">Recordatorio de tu cita</h1>
+          <p style="margin:0 0 24px;font-size:15px;color:#555;line-height:1.7;">
+            Hola <strong>{{.D.FirstName}}</strong>, te recordamos que tienes una cita <strong>{{.When}}</strong>.
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f4f0;border-radius:8px;margin-bottom:24px;">
+            <tr><td style="padding:20px 24px;">
+              {{if .D.PreferredDate}}<p style="margin:0 0 6px;font-size:14px;color:#333;"><strong>Fecha:</strong> {{.D.PreferredDate}}</p>{{end}}
+              {{if .D.PreferredTime}}<p style="margin:0 0 6px;font-size:14px;color:#333;"><strong>Hora:</strong> {{.D.PreferredTime}}</p>{{end}}
+              <p style="margin:0;font-size:14px;color:#333;"><strong>Modalidad:</strong> {{.D.Modality}}</p>
+            </td></tr>
+          </table>
+          <p style="margin:0;font-size:14px;color:#777;line-height:1.6;">
+            Si no puedes asistir, por favor avísanos con tiempo{{if .Brand.ReplyTo}} a
+            <a href="mailto:{{.Brand.ReplyTo}}" style="color:{{.Brand.BrandColor}};text-decoration:none;">{{.Brand.ReplyTo}}</a>{{end}}.
+          </p>
+        </td></tr>
+        <tr><td style="padding:16px 36px 24px;border-top:1px solid #ece9e3;">
+          <p style="margin:0;font-size:12px;color:#aaa;line-height:1.6;">
+            {{.Brand.DisplayName}}{{if .Brand.Location}} · {{.Brand.Location}}{{end}}
           </p>
         </td></tr>
       </table>
