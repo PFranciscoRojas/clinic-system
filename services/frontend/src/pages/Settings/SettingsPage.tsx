@@ -1139,6 +1139,9 @@ const ROLES = [
 function UsersSection() {
   const { user } = useAuth();
   const isAdmin = user?.roles?.includes('CLINIC_ADMIN') ?? false;
+  const isProfessional = user?.roles?.includes('PROFESSIONAL') ?? false;
+  // Only admins and practitioners may invite; interns/receptionists cannot.
+  const canInvite = isAdmin || isProfessional;
   // A non-admin professional can invite support roles only; an admin, any role.
   const availableRoles = isAdmin ? ROLES : ROLES.filter(r => r.value !== 'PROFESSIONAL');
   const [roleName,     setRoleName]     = useState(isAdmin ? 'PROFESSIONAL' : 'INTERN');
@@ -1190,6 +1193,7 @@ function UsersSection() {
 
   return (
     <>
+      {canInvite && (
       <SectionCard title="Invitar nuevo usuario" icon={Plus} color="#0ea5e9">
         <div style={{ padding: '12px 0' }}>
           <div style={{ fontSize: 13, color: 'var(--s500)', marginBottom: 14, lineHeight: 1.6 }}>
@@ -1239,6 +1243,7 @@ function UsersSection() {
           )}
         </div>
       </SectionCard>
+      )}
 
       {isAdmin && <SectionCard title="Restablecer contraseña" icon={Key} color="#ef4444">
         <form onSubmit={handleResetPassword} style={{ padding: '12px 0' }}>
@@ -1273,6 +1278,15 @@ function UsersSection() {
           </button>
         </form>
       </SectionCard>}
+
+      {!canInvite && !isAdmin && (
+        <SectionCard title="Usuarios" icon={Users} color="#0ea5e9">
+          <div style={{ padding: '16px 0', fontSize: 13.5, color: 'var(--s500)', lineHeight: 1.6 }}>
+            No tienes permisos para invitar o administrar usuarios. Si necesitas dar acceso a alguien,
+            pídeselo al administrador o al profesional de tu consultorio.
+          </div>
+        </SectionCard>
+      )}
     </>
   );
 }
