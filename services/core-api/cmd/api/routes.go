@@ -78,6 +78,7 @@ func (a *app) buildRouter() http.Handler {
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RateLimit(30, time.Minute))
 		r.Mount("/api/v1/public/availability", availabilityH.PublicRoutes())
+		r.Mount("/api/v1/public/org", availabilityH.InfoRoutes())
 	})
 
 	consentsH := consentshandler.New(a.pool, a.km, notifier, a.cfg.AppBaseURL)

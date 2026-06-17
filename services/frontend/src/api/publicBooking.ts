@@ -17,8 +17,16 @@ export interface BookingForm {
   notes?: string;
 }
 
+export interface OrgInfo {
+  public_name: string;
+  brand_color: string;
+}
+
 // Public booking API — no auth. Used by /book/:slug.
 export const publicBookingApi = {
+  orgInfo: (slug: string) =>
+    api.get<OrgInfo>(`/public/org?org_slug=${encodeURIComponent(slug)}`),
+
   availability: (slug: string, modality: string, from: string, to: string) =>
     api.get<{ days: DayAvailability[] }>(
       `/public/availability?org_slug=${encodeURIComponent(slug)}&modality=${modality}&from=${from}&to=${to}`,

@@ -1,177 +1,248 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { Video, MapPin, User, Mail, Phone, AlertTriangle, CheckCircle2, ChevronLeft } from 'lucide-react';
-import { publicBookingApi, type DayAvailability } from '@/api/publicBooking';
+import { Video, MapPin, User, Mail, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { publicBookingApi, type OrgInfo } from '@/api/publicBooking';
 import { splitName } from '@/api/profiles';
 
 type Modality = 'VIRTUAL' | 'IN_PERSON';
 type Step = 'modality' | 'slot' | 'data' | 'done';
 
-// Public booking wizard (/book/:slug). No auth. Modality → real slot grid →
-// contact details → request. Payment is added in a later phase.
+// Editorial palette mirroring marcelachapues.com.
+const PAPER = '#faf6f1', INK = '#2a2420', INK_SOFT = '#6b5f55', INK_FAINT = '#a89c90', LINE = '#e6ddd2';
+const DISPLAY = "'Fraunces', Georgia, serif";
+
+const COUNTRY_CODES = ['+57', '+1', '+52', '+51', '+56', '+54', '+593', '+58', '+34'];
+const DOW = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+// Public booking wizard (/book/:slug). No auth. Themed per tenant.
+// modality → month calendar + slots → contact → request.
 export function BookingWizardPage() {
   const { slug = '' } = useParams();
 
+  const [info, setInfo] = useState<OrgInfo | null>(null);
   const [step, setStep] = useState<Step>('modality');
   const [modality, setModality] = useState<Modality>('VIRTUAL');
-  const [days, setDays] = useState<DayAvailability[]>([]);
+  const [byDate, setByDate] = useState<Record<string, string[]>>({});
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [viewMonth, setViewMonth] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
+  const [selDate, setSelDate] = useState<string>('');
   const [picked, setPicked] = useState<{ date: string; time: string } | null>(null);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [code, setCode] = useState('+57');
   const [phone, setPhone] = useState('');
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const today = new Date();
-  const from = today.toISOString().slice(0, 10);
-  const to = new Date(today.getTime() + 21 * 86400000).toISOString().slice(0, 10);
+  const accent = info?.brand_color && /^#[0-9a-fA-F]{3,8}$/.test(info.brand_color) ? info.brand_color : '#8a5a5a';
+  const clinicName = info?.public_name || 'el consultorio';
+
+  const from = new Date().toISOString().slice(0, 10);
+  const to = new Date(Date.now() + 45 * 86400000).toISOString().slice(0, 10);
+
+  useEffect(() => { publicBookingApi.orgInfo(slug).then(setInfo).catch(() => {}); }, [slug]);
 
   // Load availability when entering the slot step or changing modality.
   useEffect(() => {
     if (step !== 'slot') return;
-    setLoadingSlots(true); setNotFound(false);
+    setLoadingSlots(true); setNotFound(false); setSelDate('');
     publicBookingApi.availability(slug, modality, from, to)
-      .then(r => setDays(r.days ?? []))
-      .catch((e) => { if (e?.status === 404) setNotFound(true); setDays([]); })
+      .then(r => {
+        const map: Record<string, string[]> = {};
+        (r.days ?? []).forEach(d => { map[d.date] = d.slots; });
+        setByDate(map);
+        const first = (r.days ?? [])[0]?.date;
+        if (first) { setSelDate(first); const [y, m] = first.split('-').map(Number); setViewMonth({ y, m: m - 1 }); }
+      })
+      .catch((e) => { if (e?.status === 404) setNotFound(true); setByDate({}); })
       .finally(() => setLoadingSlots(false));
   }, [step, modality, slug]);
 
   const submit = async () => {
     setErr('');
-    if (!name.trim())                    { setErr('Ingresa tu nombre.'); return; }
+    if (!name.trim()) { setErr('Ingresa tu nombre.'); return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { setErr('Ingresa un correo válido.'); return; }
-    if (!phone.trim())                   { setErr('Ingresa un teléfono.'); return; }
+    if (!phone.trim()) { setErr('Ingresa un teléfono.'); return; }
     if (!picked) { setStep('slot'); return; }
     setSaving(true);
-    const [first, middle] = splitName(name.trim());
-    const [paternal, maternal] = splitName(''); // last name optional from a single field
+    const [first, rest] = splitName(name.trim());
     try {
       await publicBookingApi.create({
         org_slug: slug,
         first_name: first || name.trim(),
-        last_name: [middle, paternal, maternal].filter(Boolean).join(' ') || '—',
-        email: email.trim(), phone: phone.trim(),
+        last_name: rest || '—',
+        email: email.trim(), phone: `${code} ${phone.trim()}`,
         modality,
         preferred_date: picked.date, preferred_time: picked.time,
       });
       setStep('done');
-    } catch {
-      setErr('No se pudo enviar tu reserva. Inténtalo de nuevo.');
-    } finally {
-      setSaving(false);
-    }
+    } catch { setErr('No se pudo enviar tu reserva. Inténtalo de nuevo.'); } finally { setSaving(false); }
   };
 
-  const fmtDay = (iso: string) => {
+  const fmtLongDay = (iso: string) => {
     const d = new Date(iso + 'T12:00:00');
-    return d.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
+    return `${['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'][d.getDay()]} ${d.getDate()} de ${MONTHS[d.getMonth()]}`;
   };
 
-  const wrap: React.CSSProperties = { minHeight: '100vh', background: 'linear-gradient(135deg, #0f766e, #134e4a)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" };
-  const card: React.CSSProperties = { background: '#fff', borderRadius: 18, padding: '30px 30px', boxShadow: '0 20px 60px rgba(0,0,0,0.16)', width: '100%', maxWidth: 520, boxSizing: 'border-box' };
-  const inputWrap: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, border: '1.5px solid var(--s200)', borderRadius: 11, padding: '11px 14px', marginBottom: 12, background: '#fff' };
-  const input: React.CSSProperties = { border: 'none', outline: 'none', flex: 1, fontSize: 14, color: 'var(--s800)', background: 'transparent' };
+  // Month grid cells (Mon-first), with availability flag.
+  const cells = useMemo(() => {
+    const { y, m } = viewMonth;
+    const first = new Date(y, m, 1);
+    const lead = (first.getDay() + 6) % 7; // Monday=0
+    const days = new Date(y, m + 1, 0).getDate();
+    const out: ({ date: string; day: number; has: boolean } | null)[] = [];
+    for (let i = 0; i < lead; i++) out.push(null);
+    for (let d = 1; d <= days; d++) {
+      const iso = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      out.push({ date: iso, day: d, has: (byDate[iso]?.length ?? 0) > 0 });
+    }
+    return out;
+  }, [viewMonth, byDate]);
+
+  const canPrev = (viewMonth.y > new Date().getFullYear()) || (viewMonth.m > new Date().getMonth());
+  const shiftMonth = (delta: number) => setViewMonth(v => { const d = new Date(v.y, v.m + delta, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
+
+  // ── styles ──
+  const page: React.CSSProperties = { minHeight: '100vh', background: PAPER, color: INK, fontFamily: "'DM Sans', -apple-system, sans-serif", display: 'flex', alignItems: 'stretch' };
+  const inputWrap: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, border: `1.5px solid ${LINE}`, borderRadius: 10, padding: '11px 13px', marginBottom: 11, background: '#fff' };
+  const input: React.CSSProperties = { border: 'none', outline: 'none', flex: 1, fontSize: 14.5, color: INK, background: 'transparent' };
+  const chip = (active: boolean): React.CSSProperties => ({ border: `1.5px solid ${active ? accent : LINE}`, color: active ? '#fff' : INK, background: active ? accent : '#fff', borderRadius: 8, padding: '9px 14px', fontSize: 13.5, fontWeight: 500, cursor: 'pointer' });
 
   return (
-    <div style={wrap}>
-      <div style={{ width: '100%', maxWidth: 520 }}>
-        <div style={{ textAlign: 'center', marginBottom: 20 }}>
-          <div style={{ fontWeight: 800, fontSize: 22, color: '#fff' }}>Reserva tu cita</div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', marginTop: 4 }}>Elige modalidad y horario</div>
+    <div style={page} className="booking-page">
+      {/* ── Hero panel (engaging) ── */}
+      <div style={{ flex: '0 0 38%', maxWidth: 460, background: INK, color: PAPER, padding: '48px 44px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }} className="booking-hero">
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: '.22em', textTransform: 'uppercase', color: INK_FAINT }}>Reserva en línea</div>
+        <div>
+          <div style={{ fontFamily: DISPLAY, fontSize: 38, lineHeight: 1.08, fontWeight: 500, marginBottom: 18 }}>
+            El primer paso es <span style={{ fontStyle: 'italic', color: accent === '#8a5a5a' ? '#d9a7a7' : accent }}>agendar</span> una conversación.
+          </div>
+          <p style={{ fontSize: 14.5, lineHeight: 1.7, color: '#d8cdc0', maxWidth: 320 }}>
+            Una sesión de reconocimiento para vernos, contarme qué te trae y saber si podemos
+            caminar juntos en este proceso.
+          </p>
         </div>
+        <div style={{ fontSize: 13, color: INK_FAINT }}>{clinicName}</div>
+      </div>
 
-        <div style={card}>
-          {/* STEP 1 — modality */}
+      {/* ── Wizard ── */}
+      <div style={{ flex: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '48px 32px', overflowY: 'auto' }}>
+        <div style={{ width: '100%', maxWidth: 540 }}>
+
           {step === 'modality' && (
             <div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--s700)', marginBottom: 14 }}>¿Cómo prefieres tu sesión?</div>
-              {([['VIRTUAL', 'Online', 'Por videollamada', Video], ['IN_PERSON', 'Presencial', 'En el consultorio', MapPin]] as const).map(([val, title, sub, Icon]) => (
+              <h1 style={{ fontFamily: DISPLAY, fontWeight: 500, fontSize: 27, marginBottom: 6 }}>Agenda tu cita</h1>
+              <p style={{ color: INK_SOFT, fontSize: 14.5, marginBottom: 26 }}>¿Cómo prefieres tu sesión?</p>
+              {([['VIRTUAL', 'Online', 'Por videollamada · mañana o tarde', Video], ['IN_PERSON', 'Presencial', 'En el consultorio · tardes', MapPin]] as const).map(([val, title, sub, Icon]) => (
                 <button key={val} onClick={() => { setModality(val); setStep('slot'); }} style={{
-                  display: 'flex', alignItems: 'center', gap: 14, width: '100%', textAlign: 'left',
-                  border: `1.5px solid ${modality === val ? 'var(--teal)' : 'var(--s200)'}`, borderRadius: 12, padding: '16px 18px', marginBottom: 12, background: '#fff', cursor: 'pointer',
-                }}>
-                  <Icon size={22} color="var(--teal)" />
+                  display: 'flex', alignItems: 'center', gap: 16, width: '100%', textAlign: 'left',
+                  border: `1.5px solid ${LINE}`, borderRadius: 13, padding: '18px 20px', marginBottom: 13, background: '#fff', cursor: 'pointer', transition: 'border-color .15s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = accent)}
+                onMouseLeave={e => (e.currentTarget.style.borderColor = LINE)}>
+                  <Icon size={24} color={accent} />
                   <div>
-                    <div style={{ fontWeight: 700, color: 'var(--s800)', fontSize: 15 }}>{title}</div>
-                    <div style={{ fontSize: 12.5, color: 'var(--s500)' }}>{sub}</div>
+                    <div style={{ fontWeight: 600, fontSize: 16, fontFamily: DISPLAY }}>{title}</div>
+                    <div style={{ fontSize: 13, color: INK_SOFT, marginTop: 2 }}>{sub}</div>
                   </div>
                 </button>
               ))}
             </div>
           )}
 
-          {/* STEP 2 — slots */}
           {step === 'slot' && (
             <div>
-              <button onClick={() => setStep('modality')} style={{ display: 'flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', color: 'var(--teal)', fontWeight: 600, fontSize: 13, cursor: 'pointer', marginBottom: 12, padding: 0 }}>
+              <button onClick={() => setStep('modality')} style={{ display: 'flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', color: accent, fontWeight: 600, fontSize: 13, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
                 <ChevronLeft size={15} /> {modality === 'VIRTUAL' ? 'Online' : 'Presencial'} · cambiar
               </button>
               {loadingSlots ? (
-                <div style={{ fontSize: 14, color: 'var(--s400)', padding: '20px 0', textAlign: 'center' }}>Cargando horarios…</div>
+                <div style={{ color: INK_FAINT, padding: '24px 0' }}>Cargando horarios…</div>
               ) : notFound ? (
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13.5, color: 'var(--s600)', padding: '16px 0' }}>
-                  <AlertTriangle size={16} color="#f59e0b" /> No encontramos este consultorio.
-                </div>
-              ) : days.length === 0 ? (
-                <div style={{ fontSize: 13.5, color: 'var(--s500)', padding: '16px 0' }}>No hay horarios disponibles en las próximas semanas. Intenta más tarde.</div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', color: INK_SOFT, padding: '16px 0' }}><AlertTriangle size={16} color="#b45309" /> No encontramos este consultorio.</div>
+              ) : Object.keys(byDate).length === 0 ? (
+                <div style={{ color: INK_SOFT, padding: '16px 0' }}>No hay horarios disponibles en las próximas semanas.</div>
               ) : (
-                <div style={{ maxHeight: 420, overflowY: 'auto' }}>
-                  {days.map(d => (
-                    <div key={d.date} style={{ marginBottom: 16 }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--s600)', textTransform: 'capitalize', marginBottom: 8 }}>{fmtDay(d.date)}</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        {d.slots.map(t => (
-                          <button key={t} onClick={() => { setPicked({ date: d.date, time: t }); setStep('data'); }} style={{
-                            border: '1.5px solid var(--s200)', borderRadius: 9, padding: '8px 14px', background: '#fff', color: 'var(--s700)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer',
-                          }}
-                          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLElement).style.color = 'var(--teal)'; }}
-                          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--s200)'; (e.currentTarget as HTMLElement).style.color = 'var(--s700)'; }}>
-                            {t}
-                          </button>
-                        ))}
-                      </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 26 }} className="booking-cal">
+                  {/* Calendar */}
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                      <button onClick={() => canPrev && shiftMonth(-1)} disabled={!canPrev} style={{ border: 'none', background: 'none', cursor: canPrev ? 'pointer' : 'default', color: canPrev ? INK : INK_FAINT, display: 'flex', padding: 4 }}><ChevronLeft size={18} /></button>
+                      <div style={{ fontFamily: DISPLAY, fontSize: 16, textTransform: 'capitalize' }}>{MONTHS[viewMonth.m]} {viewMonth.y}</div>
+                      <button onClick={() => shiftMonth(1)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: INK, display: 'flex', padding: 4 }}><ChevronRight size={18} /></button>
                     </div>
-                  ))}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3, textAlign: 'center' }}>
+                      {DOW.map((d, i) => <div key={i} style={{ fontSize: 10.5, color: INK_FAINT, fontWeight: 600, padding: '4px 0' }}>{d}</div>)}
+                      {cells.map((c, i) => c === null ? <div key={i} /> : (
+                        <button key={i} disabled={!c.has} onClick={() => setSelDate(c.date)} style={{
+                          aspectRatio: '1', border: 'none', borderRadius: 8, fontSize: 13, cursor: c.has ? 'pointer' : 'default',
+                          background: selDate === c.date ? accent : c.has ? '#fff' : 'transparent',
+                          color: selDate === c.date ? '#fff' : c.has ? INK : INK_FAINT,
+                          fontWeight: c.has ? 600 : 400, boxShadow: c.has && selDate !== c.date ? `inset 0 0 0 1.5px ${LINE}` : 'none',
+                        }}>{c.day}</button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Slots for selected day */}
+                  <div>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: INK_SOFT, marginBottom: 12, minHeight: 18, textTransform: 'capitalize' }}>
+                      {selDate ? fmtLongDay(selDate) : 'Elige un día'}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
+                      {(byDate[selDate] ?? []).map(t => (
+                        <button key={t} onClick={() => { setPicked({ date: selDate, time: t }); setStep('data'); }} style={chip(false)}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = accent; e.currentTarget.style.color = accent; }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = LINE; e.currentTarget.style.color = INK; }}>{t}</button>
+                      ))}
+                      {selDate && (byDate[selDate]?.length ?? 0) === 0 && <div style={{ color: INK_FAINT, fontSize: 13 }}>Sin horarios este día.</div>}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* STEP 3 — data */}
           {step === 'data' && picked && (
             <div>
-              <button onClick={() => setStep('slot')} style={{ display: 'flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', color: 'var(--teal)', fontWeight: 600, fontSize: 13, cursor: 'pointer', marginBottom: 14, padding: 0 }}>
+              <button onClick={() => setStep('slot')} style={{ display: 'flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', color: accent, fontWeight: 600, fontSize: 13, cursor: 'pointer', marginBottom: 18, padding: 0 }}>
                 <ChevronLeft size={15} /> Cambiar horario
               </button>
-              <div style={{ background: 'var(--s50)', border: '1px solid var(--s200)', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13.5, color: 'var(--s700)' }}>
-                <strong style={{ textTransform: 'capitalize' }}>{fmtDay(picked.date)}</strong> · {picked.time} · {modality === 'VIRTUAL' ? 'Online' : 'Presencial'}
+              <h1 style={{ fontFamily: DISPLAY, fontWeight: 500, fontSize: 24, marginBottom: 14 }}>Tus datos</h1>
+              <div style={{ background: '#fff', border: `1.5px solid ${LINE}`, borderRadius: 11, padding: '12px 15px', marginBottom: 18, fontSize: 14, color: INK }}>
+                <strong style={{ textTransform: 'capitalize', fontFamily: DISPLAY }}>{fmtLongDay(picked.date)}</strong> · {picked.time} · {modality === 'VIRTUAL' ? 'Online' : 'Presencial'}
               </div>
-              <div style={inputWrap}><User size={16} color="var(--s400)" /><input value={name} onChange={e => setName(e.target.value)} placeholder="Tu nombre" style={input} /></div>
-              <div style={inputWrap}><Mail size={16} color="var(--s400)" /><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Correo electrónico" style={input} /></div>
-              <div style={inputWrap}><Phone size={16} color="var(--s400)" /><input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Teléfono" style={input} /></div>
-              {err && <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 9, padding: '9px 12px', marginBottom: 14 }}><AlertTriangle size={14} />{err}</div>}
-              <button onClick={submit} disabled={saving} style={{ width: '100%', padding: 13, borderRadius: 12, border: 'none', background: saving ? 'var(--s300)' : 'var(--teal)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>
+              <div style={inputWrap}><User size={16} color={INK_FAINT} /><input value={name} onChange={e => setName(e.target.value)} placeholder="Tu nombre" style={input} /></div>
+              <div style={inputWrap}><Mail size={16} color={INK_FAINT} /><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Correo electrónico" style={input} /></div>
+              <div style={{ ...inputWrap, paddingLeft: 4 }}>
+                <select value={code} onChange={e => setCode(e.target.value)} style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 14, color: INK, padding: '0 6px', cursor: 'pointer' }}>
+                  {COUNTRY_CODES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <div style={{ width: 1, height: 20, background: LINE }} />
+                <input value={phone} onChange={e => setPhone(e.target.value.replace(/[^\d]/g, ''))} placeholder="Teléfono" inputMode="numeric" style={input} />
+              </div>
+              {err && <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: '#a8443c', marginBottom: 14 }}><AlertTriangle size={14} />{err}</div>}
+              <button onClick={submit} disabled={saving} style={{ width: '100%', padding: 14, borderRadius: 11, border: 'none', background: saving ? INK_FAINT : accent, color: '#fff', fontSize: 15, fontWeight: 600, cursor: saving ? 'wait' : 'pointer', fontFamily: DISPLAY }}>
                 {saving ? 'Enviando…' : 'Reservar cita'}
               </button>
             </div>
           )}
 
-          {/* DONE */}
           {step === 'done' && picked && (
-            <div style={{ textAlign: 'center', padding: '8px 0' }}>
-              <CheckCircle2 size={46} color="#10b981" style={{ margin: '0 auto 14px' }} />
-              <div style={{ fontWeight: 700, fontSize: 18, color: 'var(--s800)', marginBottom: 10 }}>¡Reserva enviada!</div>
-              <div style={{ fontSize: 13.5, color: 'var(--s500)', lineHeight: 1.7 }}>
-                Tu solicitud para el <strong style={{ textTransform: 'capitalize' }}>{fmtDay(picked.date)}</strong> a las <strong>{picked.time}</strong> quedó registrada.
+            <div style={{ textAlign: 'center', padding: '20px 0' }}>
+              <CheckCircle2 size={48} color="#3e6b4e" style={{ margin: '0 auto 16px' }} />
+              <h1 style={{ fontFamily: DISPLAY, fontWeight: 500, fontSize: 25, marginBottom: 12 }}>¡Reserva enviada!</h1>
+              <p style={{ color: INK_SOFT, fontSize: 14.5, lineHeight: 1.7, maxWidth: 380, margin: '0 auto' }}>
+                Tu solicitud para el <strong style={{ textTransform: 'capitalize' }}>{fmtLongDay(picked.date)}</strong> a las <strong>{picked.time}</strong> quedó registrada.
                 Te escribiremos a <strong>{email.trim()}</strong> para confirmarla.
-              </div>
+              </p>
             </div>
           )}
         </div>
       </div>
+
+      <style>{`@media (max-width: 760px){ .booking-page{ flex-direction:column !important; } .booking-hero{ flex-basis:auto !important; max-width:none !important; padding:28px 26px !important; } .booking-cal{ grid-template-columns:1fr !important; } }`}</style>
     </div>
   );
 }
