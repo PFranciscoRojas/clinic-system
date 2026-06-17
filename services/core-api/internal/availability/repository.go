@@ -56,6 +56,39 @@ func (r *Repository) ResolveBySlug(ctx context.Context, slug string) (*Professio
 	return &p, nil
 }
 
+// OrgPublicInfo is the public-facing identity a booking page shows.
+type OrgPublicInfo struct {
+	PublicName string `json:"public_name"`
+	BrandColor string `json:"brand_color"`
+}
+
+// PublicInfo returns the clinic's public name and brand color (from
+// settings.branding, falling back to the org name). organizations has no RLS.
+func (r *Repository) PublicInfo(ctx context.Context, slug string) (*OrgPublicInfo, error) {
+	var name string
+	var publicName, brandColor *string
+	err := r.pool.QueryRow(ctx, `
+		SELECT name,
+		       settings->'branding'->>'public_name',
+		       settings->'branding'->>'brand_color'
+		FROM organizations WHERE slug = $1 AND is_active
+	`, slug).Scan(&name, &publicName, &brandColor)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("org public info: %w", err)
+	}
+	info := &OrgPublicInfo{PublicName: name}
+	if publicName != nil && *publicName != "" {
+		info.PublicName = *publicName
+	}
+	if brandColor != nil {
+		info.BrandColor = *brandColor
+	}
+	return info, nil
+}
+
 // Busy is an occupied window (an existing appointment).
 type Busy struct {
 	Start       time.Time

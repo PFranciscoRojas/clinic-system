@@ -26,6 +26,32 @@ func (h *Handler) PublicRoutes() chi.Router {
 	return r
 }
 
+// InfoRoutes is mounted at /api/v1/public/org — public clinic info (name,
+// brand color) so the booking page can theme itself per tenant.
+func (h *Handler) InfoRoutes() chi.Router {
+	r := chi.NewRouter()
+	r.Get("/", h.info)
+	return r
+}
+
+func (h *Handler) info(w http.ResponseWriter, r *http.Request) {
+	slug := r.URL.Query().Get("org_slug")
+	if slug == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "org_slug is required")
+		return
+	}
+	info, err := h.svc.Info(r.Context(), slug)
+	if errors.Is(err, ErrNotFound) {
+		httputil.WriteError(w, http.StatusNotFound, "organización no encontrada")
+		return
+	}
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "error")
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, info)
+}
+
 // GET /availability?org_slug=&from=&to=  (modality is accepted but not yet
 // differentiated — same hours apply to both for now).
 func (h *Handler) availability(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +71,8 @@ func (h *Handler) availability(w http.ResponseWriter, r *http.Request) {
 		to = now.AddDate(0, 0, 14).Format("2006-01-02")
 	}
 
-	days, err := h.svc.Availability(r.Context(), slug, from, to)
+	modality := q.Get("modality")
+	days, err := h.svc.Availability(r.Context(), slug, modality, from, to)
 	if errors.Is(err, ErrNotFound) {
 		httputil.WriteError(w, http.StatusNotFound, "organización no encontrada")
 		return

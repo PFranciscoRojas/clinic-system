@@ -8,6 +8,12 @@ import (
 
 const slotStepMin = 30 // offer a slot every 30 min, mirroring the clinic app
 
+// inPersonMinMinutes: in-person sessions are only offered in the afternoon
+// (from 2pm Colombia). Virtual sessions use the full configured hours. A booked
+// slot of either modality blocks that time for both (one professional, one
+// calendar) — handled by querying every appointment regardless of modality.
+const inPersonMinMinutes = 14 * 60
+
 // bogota is the clinic's local timezone: working hours are expressed in it,
 // while appointments are stored in UTC.
 var bogota = mustLoad("America/Bogota")
@@ -54,9 +60,15 @@ type Service struct {
 
 func NewService(repo *Repository) *Service { return &Service{repo: repo} }
 
+// Info returns the clinic's public identity for the booking page theme.
+func (s *Service) Info(ctx context.Context, slug string) (*OrgPublicInfo, error) {
+	return s.repo.PublicInfo(ctx, slug)
+}
+
 // Availability returns the free slots between two dates (inclusive) for the
-// org's professional. fromDate/toDate are YYYY-MM-DD in the clinic's timezone.
-func (s *Service) Availability(ctx context.Context, slug, fromDate, toDate string) ([]DayAvailability, error) {
+// org's professional, for the given modality. fromDate/toDate are YYYY-MM-DD in
+// the clinic's timezone. modality is "IN_PERSON" or "VIRTUAL" (default VIRTUAL).
+func (s *Service) Availability(ctx context.Context, slug, modality, fromDate, toDate string) ([]DayAvailability, error) {
 	prof, err := s.repo.ResolveBySlug(ctx, slug)
 	if err != nil {
 		return nil, err
@@ -102,7 +114,7 @@ func (s *Service) Availability(ctx context.Context, slug, fromDate, toDate strin
 		if !contains(cfg.ActiveDays, dayLabels[int(d.Weekday())]) {
 			continue
 		}
-		slots := s.daySlots(d, cfg, busy, now)
+		slots := s.daySlots(d, cfg, busy, now, modality)
 		if len(slots) > 0 {
 			out = append(out, DayAvailability{Date: d.Format("2006-01-02"), Slots: slots})
 		}
@@ -110,11 +122,15 @@ func (s *Service) Availability(ctx context.Context, slug, fromDate, toDate strin
 	return out, nil
 }
 
-func (s *Service) daySlots(day time.Time, cfg scheduleConfig, busy []Busy, now time.Time) []string {
+func (s *Service) daySlots(day time.Time, cfg scheduleConfig, busy []Busy, now time.Time, modality string) []string {
 	start := toMinutes(cfg.StartHour)
 	end := toMinutes(cfg.EndHour)
 	if start < 0 {
 		start = 8 * 60
+	}
+	// In-person sessions only in the afternoon.
+	if modality == "IN_PERSON" && start < inPersonMinMinutes {
+		start = inPersonMinMinutes
 	}
 	if end < 0 {
 		end = 19 * 60
