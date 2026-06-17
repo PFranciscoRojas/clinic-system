@@ -121,6 +121,8 @@ func (a *app) buildRouter() http.Handler {
 		r.Mount("/api/v1/consents", consentsH.OrgRoutes())
 		r.Mount("/api/v1/consent-templates", consentsH.TemplateRoutes())
 
+		r.Mount("/api/v1/org", orgs.NewHandler(orgs.New(a.pool)).Routes())
+
 		diag := diagnoseshandler.New(a.pool)
 		r.Mount("/api/v1/icd10", diag.CatalogRoutes())
 		r.Mount("/api/v1/patients/{patient_id}/diagnoses", diag.PatientRoutes())
