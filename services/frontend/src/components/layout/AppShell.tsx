@@ -31,6 +31,7 @@ export function AppShell({ children }: Props) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [locked,      setLocked]      = useState(false);
   const [collapsed,   setCollapsed]   = useState(() => localStorage.getItem('sghcp_sidebar_collapsed') === '1');
+  const [brainHover,  setBrainHover]  = useState(false);
   const isMobile = useIsMobile();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   // On phones the sidebar is an overlay drawer — always full width when open.
@@ -167,16 +168,27 @@ export function AppShell({ children }: Props) {
           {/* Logo + collapse toggle */}
           <div style={{ padding: showCollapsed ? '24px 0' : '24px 20px', borderBottom: '1px solid rgba(255,255,255,.10)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: showCollapsed ? 'center' : 'flex-start' }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Brain size={18} color="white" />
-              </div>
+              {/* Brain badge: collapsed → expands the menu (shows "open" on hover);
+                  open → goes to the home dashboard. */}
+              {showCollapsed && !isMobile ? (
+                <button onClick={toggleSidebar} title="Abrir menú"
+                  onMouseEnter={() => setBrainHover(true)} onMouseLeave={() => setBrainHover(false)}
+                  style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: 'none', cursor: 'pointer' }}>
+                  {brainHover ? <PanelLeftOpen size={18} color="white" /> : <Brain size={18} color="white" />}
+                </button>
+              ) : (
+                <Link to="/" title="Ir al inicio" onClick={() => setMobileNavOpen(false)}
+                  style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer' }}>
+                  <Brain size={18} color="white" />
+                </Link>
+              )}
               {!showCollapsed && (
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <Link to="/" onClick={() => setMobileNavOpen(false)} style={{ flex: 1, minWidth: 0, textDecoration: 'none' }}>
                   <div style={{ fontWeight: 700, fontSize: 14, color: '#fff', letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={user?.org_name || 'SGHCP'}>
                     {user?.org_name || 'SGHCP'}
                   </div>
                   <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.55)', marginTop: 1 }}>SGHCP · Salud Mental Pro</div>
-                </div>
+                </Link>
               )}
               {!showCollapsed && !isMobile && (
                 <button
@@ -190,17 +202,6 @@ export function AppShell({ children }: Props) {
                 </button>
               )}
             </div>
-            {showCollapsed && (
-              <button
-                onClick={toggleSidebar}
-                title="Expandir menú"
-                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'rgba(255,255,255,.55)', display: 'flex', padding: 4, borderRadius: 6, margin: '12px auto 0' }}
-                onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
-                onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,.55)')}
-              >
-                <PanelLeftOpen size={16} />
-              </button>
-            )}
           </div>
 
           {/* Nav */}

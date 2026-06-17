@@ -278,7 +278,9 @@ export function LoginPage() {
       const me = await login(email.trim(), password);
       // Server-side flag is the source of truth; localStorage is only a cache.
       const onboarded = me.onboarding_completed ?? !!localStorage.getItem(`sghcp_onboarding_done_${me.user_id}`);
-      if (!onboarded) {
+      // Onboarding only makes sense for practitioners; a manager-only admin skips it.
+      const practices = me.roles?.includes('PROFESSIONAL');
+      if (!onboarded && practices) {
         // Pre-fill the name from signup so it isn't asked twice.
         if (me.display_name && !nombres) {
           const parts = me.display_name.trim().split(/\s+/);

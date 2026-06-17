@@ -12,7 +12,7 @@ import (
 // Defined here so the handler owns its dependency boundary — DIP.
 type svcPort interface {
 	Login(ctx context.Context, email, password, ip, userAgent string) (*token.Pair, error)
-	Signup(ctx context.Context, orgName, adminName, email, password string) error
+	Signup(ctx context.Context, orgName, adminName, email, password string, isProfessional bool) error
 	VerifyEmail(ctx context.Context, token string) error
 	ResendVerification(ctx context.Context, email string) error
 	Refresh(ctx context.Context, refreshToken string) (*token.Pair, error)

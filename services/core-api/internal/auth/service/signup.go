@@ -26,7 +26,7 @@ const (
 // and its slug); adminName is the owner's own name (becomes their display name
 // and, after onboarding, their professional profile). The account exists
 // immediately but cannot log in until the address is confirmed.
-func (s *Service) Signup(ctx context.Context, orgName, adminName, email, password string) error {
+func (s *Service) Signup(ctx context.Context, orgName, adminName, email, password string, isProfessional bool) error {
 	orgName = strings.TrimSpace(orgName)
 	adminName = strings.TrimSpace(adminName)
 	email = strings.TrimSpace(email)
@@ -43,12 +43,13 @@ func (s *Service) Signup(ctx context.Context, orgName, adminName, email, passwor
 	}
 
 	_, _, userID, err := s.repo.CreateOrgWithOwner(ctx, auth.CreateOrgParams{
-		OrgName:      orgName,
-		BaseSlug:     slugify(orgName),
-		Email:        email,
-		PasswordHash: string(pwHash),
-		DisplayName:  adminName,
-		TrialDays:    trialDays,
+		OrgName:        orgName,
+		BaseSlug:       slugify(orgName),
+		Email:          email,
+		PasswordHash:   string(pwHash),
+		DisplayName:    adminName,
+		TrialDays:      trialDays,
+		IsProfessional: isProfessional,
 	})
 	if errors.Is(err, auth.ErrEmailAlreadyExists) {
 		return err

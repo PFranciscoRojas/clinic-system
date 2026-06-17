@@ -11,10 +11,11 @@ type LoginRequest struct {
 // Signup creates a new organization, so the clinic/practice name (OrgName) is
 // separate from the admin's own name (FullName).
 type SignupRequest struct {
-	OrgName  string `json:"org_name"`  // clinic/practice name → organization + slug
-	FullName string `json:"full_name"` // the admin's name → display name + profile
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	OrgName        string `json:"org_name"`  // clinic/practice name → organization + slug
+	FullName       string `json:"full_name"` // the admin's name → display name + profile
+	Email          string `json:"email"`
+	Password       string `json:"password"`
+	IsProfessional bool   `json:"is_professional"` // true = owner also practices (bookable agenda)
 }
 
 // VerifyEmailRequest is the JSON body for POST /api/v1/auth/verify-email (public).

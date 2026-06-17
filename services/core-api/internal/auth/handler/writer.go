@@ -100,7 +100,7 @@ func (h *Handler) signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.svc.Signup(r.Context(), req.OrgName, req.FullName, req.Email, req.Password)
+	err := h.svc.Signup(r.Context(), req.OrgName, req.FullName, req.Email, req.Password, req.IsProfessional)
 	switch {
 	case err == nil:
 		w.WriteHeader(http.StatusCreated)

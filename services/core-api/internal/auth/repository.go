@@ -40,6 +40,9 @@ type CreateOrgParams struct {
 	PasswordHash string // bcrypt
 	DisplayName  string // owner display name
 	TrialDays    int    // trial window from now
+	// IsProfessional grants the owner the PROFESSIONAL role (bookable agenda).
+	// False = manager-only admin, who then invites the practitioners.
+	IsProfessional bool
 }
 
 // InvitePayload is serialised to/from Redis for the 48-hour invite window.

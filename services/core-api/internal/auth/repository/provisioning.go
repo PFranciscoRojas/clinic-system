@@ -59,8 +59,13 @@ func (r *Repository) CreateOrgWithOwner(ctx context.Context, p auth.CreateOrgPar
 		return "", "", "", fmt.Errorf("insert owner user: %w", err)
 	}
 
-	// The owner runs their own one-person clinic: full admin + clinical access.
-	for _, role := range []string{"CLINIC_ADMIN", "PROFESSIONAL"} {
+	// The owner always administers; they also get clinical access (and a
+	// bookable agenda) only if they practice — a manager-only admin doesn't.
+	roles := []string{"CLINIC_ADMIN"}
+	if p.IsProfessional {
+		roles = append(roles, "PROFESSIONAL")
+	}
+	for _, role := range roles {
 		var roleID string
 		if err = tx.QueryRow(ctx, `SELECT id FROM roles WHERE name = $1`, role).Scan(&roleID); err != nil {
 			return "", "", "", fmt.Errorf("find role %q: %w", role, err)
