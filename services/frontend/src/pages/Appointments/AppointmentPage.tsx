@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Calendar, Clock, MapPin, Video, User,
   Play, CheckCircle2, AlertTriangle, Brain, FileText,
-  Mic, Upload, X, Phone, CreditCard, Cake, UserPlus,
+  Mic, Upload, X, Phone, CreditCard, Cake, UserPlus, Wallet,
 } from 'lucide-react';
 import { appointmentsApi, type AppointmentStatus } from '@/api/appointments';
 import { patientsApi, type Patient } from '@/api/patients';
@@ -565,6 +565,7 @@ export function AppointmentPage() {
               <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: 'var(--s800)' }}>{patientName}</h1>
               <Badge label={statusCfg.label} color={statusCfg.color} bg={statusCfg.bg} />
               {isGuest && <Badge label="Reserva — sin paciente" color="#92400e" bg="#fef3c7" />}
+              {appt.paid && <Badge label="Pagada" color="#3e6b4e" bg="#e8f2ec" />}
             </div>
 
             {/* Appointment info chips */}
@@ -577,6 +578,13 @@ export function AppointmentPage() {
                 color={isVirtual ? '#6366f1' : undefined}
               />
               {user && <InfoChip icon={<User size={13} />} text={user.display_name ?? user.email ?? 'Terapeuta'} />}
+              {appt.paid && (
+                <InfoChip
+                  icon={<Wallet size={13} />}
+                  text={`$${(appt.paid_amount ?? 0).toLocaleString('es-CO')} ${appt.paid_currency || 'COP'}${appt.payment_ref ? ` · MP #${appt.payment_ref}` : ''}`}
+                  color="#3e6b4e"
+                />
+              )}
               {/* Patient key data — what Marcela needs at hand during the session */}
               {patient && patientAge !== null && <InfoChip icon={<Cake size={13} />} text={`${patientAge} años`} />}
               {patient?.document_number && <InfoChip icon={<CreditCard size={13} />} text={`${patient.document_type_code ?? ''} ${patient.document_number}`.trim()} />}

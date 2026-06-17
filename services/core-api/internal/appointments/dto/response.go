@@ -19,6 +19,11 @@ type AppointmentResponse struct {
 	StartedAt      string `json:"started_at,omitempty"`
 	CreatedAt      string `json:"created_at"`
 	UpdatedAt      string `json:"updated_at"`
+
+	Paid         bool   `json:"paid"`
+	PaidAmount   int    `json:"paid_amount,omitempty"`
+	PaidCurrency string `json:"paid_currency,omitempty"`
+	PaymentRef   string `json:"payment_ref,omitempty"`
 }
 
 func ToResponse(a *appointments.Appointment) AppointmentResponse {
@@ -41,5 +46,9 @@ func ToResponse(a *appointments.Appointment) AppointmentResponse {
 		StartedAt:      startedAt,
 		CreatedAt:      a.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:      a.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		Paid:           a.Paid,
+		PaidAmount:     a.PaidAmount,
+		PaidCurrency:   a.PaidCurrency,
+		PaymentRef:     a.PaymentRef,
 	}
 }
