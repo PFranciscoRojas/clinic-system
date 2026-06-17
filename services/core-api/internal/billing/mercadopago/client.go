@@ -80,6 +80,33 @@ func (c *Client) GetPreapproval(ctx context.Context, id string) (*Preapproval, e
 	return &p, nil
 }
 
+// CreatePreference creates a one-time Checkout Pro preference (used for patient
+// appointment payments) and returns its id and hosted checkout URL.
+func (c *Client) CreatePreference(ctx context.Context, title string, amountCOP int, externalRef, payerEmail, backURL, notificationURL string) (prefID, initPoint string, err error) {
+	payload := map[string]any{
+		"items": []map[string]any{{
+			"title": title, "quantity": 1, "unit_price": amountCOP, "currency_id": "COP",
+		}},
+		"external_reference": externalRef,
+		"back_urls":          map[string]string{"success": backURL, "failure": backURL, "pending": backURL},
+		"auto_return":        "approved",
+		"notification_url":   notificationURL,
+		"payer":              map[string]string{"email": payerEmail},
+	}
+	var out struct {
+		ID        string `json:"id"`
+		InitPoint string `json:"init_point"`
+		Message   string `json:"message"`
+	}
+	if err := c.do(ctx, http.MethodPost, "/checkout/preferences", payload, &out); err != nil {
+		return "", "", err
+	}
+	if out.InitPoint == "" {
+		return "", "", fmt.Errorf("mercadopago: preference not created: %s", out.Message)
+	}
+	return out.ID, out.InitPoint, nil
+}
+
 // Payment is a single charge (used for recurring renewal notifications).
 type Payment struct {
 	ID                int64  `json:"id"`

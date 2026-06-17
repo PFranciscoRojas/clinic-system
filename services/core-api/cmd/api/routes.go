@@ -16,6 +16,7 @@ import (
 	authhandler "sghcp/core-api/internal/auth/handler"
 	availabilityhandler "sghcp/core-api/internal/availability"
 	billinghandler "sghcp/core-api/internal/billing/handler"
+	bookinghandler "sghcp/core-api/internal/booking"
 	bookingrequestshandler "sghcp/core-api/internal/bookingrequests/handler"
 	crrhandler "sghcp/core-api/internal/clinicalrecords/handler"
 	consentshandler "sghcp/core-api/internal/consents/handler"
@@ -79,6 +80,13 @@ func (a *app) buildRouter() http.Handler {
 		r.Use(middleware.RateLimit(30, time.Minute))
 		r.Mount("/api/v1/public/availability", availabilityH.PublicRoutes())
 		r.Mount("/api/v1/public/org", availabilityH.InfoRoutes())
+	})
+
+	// Paid booking: checkout (rate-limited) + MercadoPago webhook.
+	bookingPayH := bookinghandler.New(a.pool, notifier, a.cfg)
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.RateLimit(15, time.Minute))
+		r.Mount("/api/v1/public/pay", bookingPayH.PublicRoutes())
 	})
 
 	consentsH := consentshandler.New(a.pool, a.km, notifier, a.cfg.AppBaseURL)

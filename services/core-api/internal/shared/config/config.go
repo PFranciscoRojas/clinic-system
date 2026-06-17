@@ -44,6 +44,10 @@ type Config struct {
 	MPAccessToken string
 	MPPlanAmount  int    // monthly price in the smallest COP unit the gateway expects (whole pesos)
 	MPPlanReason  string // plan name shown on the MercadoPago checkout
+
+	// BookingSessionPrice is the whole-COP price a patient pays per appointment
+	// through the public booking page.
+	BookingSessionPrice int
 }
 
 func Load() Config {
@@ -82,6 +86,8 @@ func Load() Config {
 		MPAccessToken: getEnv("MP_ACCESS_TOKEN", ""),
 		MPPlanAmount:  getEnvInt("MP_PLAN_AMOUNT", 79000),
 		MPPlanReason:  getEnv("MP_PLAN_REASON", "SGHCP · Plan mensual"),
+
+		BookingSessionPrice: getEnvInt("BOOKING_SESSION_PRICE", 180000),
 	}
 }
 
