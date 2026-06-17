@@ -652,7 +652,7 @@ export function LoginPage() {
                   {/* Step 0: Profile */}
                   {onbStep === 0 && (
                     <div className="anim-fade-up">
-                      <div className="onb-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+                      <div className="onb-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: '0 16px' }}>
                         <div style={{ gridColumn: '1/-1' }}>
                           <TField label="Nombre completo con título" value={name} onChange={setName} placeholder="Dra. / Dr. Nombre Apellido" icon={User} required />
                         </div>
