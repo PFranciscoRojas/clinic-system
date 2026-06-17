@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   ChevronLeft, ChevronRight, Plus, CalendarDays,
-  Video, MapPin, Clock, User, X, Mic, LayoutGrid, List,
+  Video, MapPin, Clock, User, X, Mic, LayoutGrid, List, Wallet,
 } from 'lucide-react';
 import { appointmentsApi, type Appointment } from '@/api/appointments';
 import { patientsApi, type Patient } from '@/api/patients';
@@ -257,6 +257,7 @@ function AppBlock({ appt, onClick }: { appt: Appointment; onClick: (a: Appointme
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3, flexWrap: 'nowrap' }}>
             <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10.5, fontWeight: 700, color: txtClr, whiteSpace: 'nowrap' }}>{t0}–{t1}</span>
             {appt.modality === 'VIRTUAL' ? <Video size={9} color="var(--s400)" /> : <MapPin size={9} color="var(--s400)" />}
+            {appt.paid && <Wallet size={9} color="#3e6b4e" />}
             {inProg && <span style={{ fontSize: 9.5, fontWeight: 800, color: mc.color, background: '#fff', borderRadius: 4, padding: '1px 5px', border: `1px solid ${mc.border}`, whiteSpace: 'nowrap' }}>EN CURSO</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>

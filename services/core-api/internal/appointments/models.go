@@ -19,6 +19,13 @@ type Appointment struct {
 	StartedAt      *time.Time
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+
+	// Payment, surfaced from the linked paid public booking (if any). Paid is
+	// false for in-clinic appointments with no online payment.
+	Paid         bool
+	PaidAmount   int    // whole COP
+	PaidCurrency string // e.g. "COP"
+	PaymentRef   string // MercadoPago payment id
 }
 
 type CreateParams struct {

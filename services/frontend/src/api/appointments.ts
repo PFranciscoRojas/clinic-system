@@ -20,6 +20,10 @@ export interface Appointment {
   cancel_reason?: string | null;
   started_at?: string | null;   // set when the professional starts the session
   created_at: string;
+  paid?: boolean;               // true when linked to a paid online booking
+  paid_amount?: number;         // whole COP
+  paid_currency?: string;       // e.g. "COP"
+  payment_ref?: string;         // MercadoPago payment id
 }
 
 export interface CreateAppointmentBody {
