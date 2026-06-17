@@ -32,7 +32,14 @@ export const publicBookingApi = {
       `/public/availability?org_slug=${encodeURIComponent(slug)}&modality=${modality}&from=${from}&to=${to}`,
     ),
 
-  // Reuses the existing public booking endpoint; in Phase 1 this creates a
-  // pending request (the clinic confirms). Phase 2 will route through payment.
+  // Reuses the existing public booking endpoint; creates a pending request
+  // (the clinic confirms). Kept as a no-payment fallback.
   create: (body: BookingForm) => api.post<{ id: string }>('/public/booking/', body),
+
+  // Holds the slot and returns a MercadoPago checkout URL + a summary to show
+  // before redirecting to pay.
+  checkout: (body: { org_slug: string; modality: string; date: string; time: string; name: string; email: string; phone: string }) =>
+    api.post<{ init_point: string; summary: { date: string; time: string; modality: string; amount: number; currency: string } }>(
+      '/public/pay/checkout', body,
+    ),
 };

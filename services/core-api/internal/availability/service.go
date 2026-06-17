@@ -107,6 +107,12 @@ func (s *Service) Availability(ctx context.Context, slug, modality, fromDate, to
 	if err != nil {
 		return nil, err
 	}
+	// Unpaid holds also occupy their slot until they expire.
+	holds, err := s.repo.BusyHolds(ctx, prof.StaffID, from.UTC(), to.AddDate(0, 0, 1).UTC())
+	if err != nil {
+		return nil, err
+	}
+	busy = append(busy, holds...)
 
 	now := time.Now()
 	out := []DayAvailability{}

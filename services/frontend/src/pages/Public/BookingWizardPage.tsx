@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { Video, MapPin, User, Mail, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Video, MapPin, User, Mail, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { publicBookingApi, type OrgInfo } from '@/api/publicBooking';
-import { splitName } from '@/api/profiles';
 
 type Modality = 'VIRTUAL' | 'IN_PERSON';
-type Step = 'modality' | 'slot' | 'data' | 'done';
+type Step = 'modality' | 'slot' | 'data' | 'summary';
+type Checkout = { init_point: string; summary: { date: string; time: string; modality: string; amount: number; currency: string } };
 
 // Editorial palette mirroring marcelachapues.com.
 const PAPER = '#faf6f1', INK = '#2a2420', INK_SOFT = '#6b5f55', INK_FAINT = '#a89c90', LINE = '#e6ddd2';
@@ -36,6 +36,7 @@ export function BookingWizardPage() {
   const [phone, setPhone] = useState('');
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
+  const [checkout, setCheckout] = useState<Checkout | null>(null);
 
   const accent = info?.brand_color && /^#[0-9a-fA-F]{3,8}$/.test(info.brand_color) ? info.brand_color : '#8a5a5a';
   const clinicName = info?.public_name || 'el consultorio';
@@ -68,19 +69,20 @@ export function BookingWizardPage() {
     if (!phone.trim()) { setErr('Ingresa un teléfono.'); return; }
     if (!picked) { setStep('slot'); return; }
     setSaving(true);
-    const [first, rest] = splitName(name.trim());
     try {
-      await publicBookingApi.create({
-        org_slug: slug,
-        first_name: first || name.trim(),
-        last_name: rest || '—',
-        email: email.trim(), phone: `${code} ${phone.trim()}`,
-        modality,
-        preferred_date: picked.date, preferred_time: picked.time,
+      const res = await publicBookingApi.checkout({
+        org_slug: slug, modality, date: picked.date, time: picked.time,
+        name: name.trim(), email: email.trim(), phone: `${code} ${phone.trim()}`,
       });
-      setStep('done');
-    } catch { setErr('No se pudo enviar tu reserva. Inténtalo de nuevo.'); } finally { setSaving(false); }
+      setCheckout(res);
+      setStep('summary');
+    } catch (e: any) {
+      setErr(e?.status === 409 ? 'Ese horario ya no está disponible. Elige otro.' : 'No se pudo iniciar la reserva. Inténtalo de nuevo.');
+      if (e?.status === 409) setStep('slot');
+    } finally { setSaving(false); }
   };
+
+  const money = (n: number) => '$' + n.toLocaleString('es-CO') + ' COP';
 
   const fmtLongDay = (iso: string) => {
     const d = new Date(iso + 'T12:00:00');
@@ -224,18 +226,32 @@ export function BookingWizardPage() {
               </div>
               {err && <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: '#a8443c', marginBottom: 14 }}><AlertTriangle size={14} />{err}</div>}
               <button onClick={submit} disabled={saving} style={{ width: '100%', padding: 14, borderRadius: 11, border: 'none', background: saving ? INK_FAINT : accent, color: '#fff', fontSize: 15, fontWeight: 600, cursor: saving ? 'wait' : 'pointer', fontFamily: DISPLAY }}>
-                {saving ? 'Enviando…' : 'Reservar cita'}
+                {saving ? 'Un momento…' : 'Continuar al pago'}
               </button>
             </div>
           )}
 
-          {step === 'done' && picked && (
-            <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              <CheckCircle2 size={48} color="#3e6b4e" style={{ margin: '0 auto 16px' }} />
-              <h1 style={{ fontFamily: DISPLAY, fontWeight: 500, fontSize: 25, marginBottom: 12 }}>¡Reserva enviada!</h1>
-              <p style={{ color: INK_SOFT, fontSize: 14.5, lineHeight: 1.7, maxWidth: 380, margin: '0 auto' }}>
-                Tu solicitud para el <strong style={{ textTransform: 'capitalize' }}>{fmtLongDay(picked.date)}</strong> a las <strong>{picked.time}</strong> quedó registrada.
-                Te escribiremos a <strong>{email.trim()}</strong> para confirmarla.
+          {step === 'summary' && picked && checkout && (
+            <div>
+              <h1 style={{ fontFamily: DISPLAY, fontWeight: 500, fontSize: 25, marginBottom: 4 }}>Resumen de tu cita</h1>
+              <p style={{ color: INK_SOFT, fontSize: 13.5, marginBottom: 20 }}>Revisa y continúa al pago seguro.</p>
+              <div style={{ background: '#fff', border: `1.5px solid ${LINE}`, borderRadius: 13, overflow: 'hidden', marginBottom: 18 }}>
+                {[['Fecha', fmtLongDay(picked.date)], ['Hora', picked.time], ['Modalidad', modality === 'VIRTUAL' ? 'Online' : 'Presencial'], ['Paciente', name.trim()]].map(([k, v], i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', borderTop: i ? `1px solid ${LINE}` : 'none', fontSize: 14 }}>
+                    <span style={{ color: INK_SOFT }}>{k}</span>
+                    <span style={{ color: INK, fontWeight: 500, textTransform: k === 'Fecha' ? 'capitalize' : 'none' }}>{v}</span>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 16px', borderTop: `1.5px solid ${LINE}`, background: PAPER }}>
+                  <span style={{ fontWeight: 600, fontFamily: DISPLAY, fontSize: 15 }}>Total</span>
+                  <span style={{ fontWeight: 700, fontFamily: DISPLAY, fontSize: 16, color: accent }}>{money(checkout.summary.amount)}</span>
+                </div>
+              </div>
+              <button onClick={() => { window.location.href = checkout.init_point; }} style={{ width: '100%', padding: 15, borderRadius: 11, border: 'none', background: accent, color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: DISPLAY }}>
+                Pagar con MercadoPago
+              </button>
+              <p style={{ fontSize: 12, color: INK_FAINT, textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
+                Tu horario queda reservado por 15 minutos mientras completas el pago.
               </p>
             </div>
           )}

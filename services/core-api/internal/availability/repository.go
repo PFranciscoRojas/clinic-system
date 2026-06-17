@@ -132,3 +132,27 @@ func (r *Repository) BusyAppointments(ctx context.Context, orgID, staffID string
 	}
 	return out, rows.Err()
 }
+
+// BusyHolds returns the staff's unexpired paid-booking holds in [from, to).
+// bookings has no RLS, so a plain read is fine.
+func (r *Repository) BusyHolds(ctx context.Context, staffID string, from, to time.Time) ([]Busy, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT scheduled_at, duration_min
+		FROM bookings
+		WHERE staff_id = $1 AND status = 'PENDING_PAYMENT' AND hold_expires_at > NOW()
+		  AND scheduled_at >= $2 AND scheduled_at < $3
+	`, staffID, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("query holds: %w", err)
+	}
+	defer rows.Close()
+	var out []Busy
+	for rows.Next() {
+		var b Busy
+		if err := rows.Scan(&b.Start, &b.DurationMin); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
