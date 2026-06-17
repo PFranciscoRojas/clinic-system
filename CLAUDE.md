@@ -31,12 +31,18 @@ La documentación de arquitectura (`docs/`), los ADRs y las conversaciones con e
 
 El usuario trabaja en fases iterativas. **Al completar una fase, detenerse y esperar confirmación explícita antes de continuar.** La confirmación es "Aprobado, siguiente paso" o equivalente.
 
-Fases del proyecto:
-1. **Fase 1: System Design y ADRs** ← COMPLETADA
-2. **Fase 2: Setup y scaffolding** ← COMPLETADA
-3. **Fase 3: Core Backend** — Auth, RBAC, CRUD de pacientes (Go) ← SIGUIENTE
-4. **Fase 4: Integración del Motor IA** — Audio → Whisper → Claude API → Aprobación
-5. **Fase 5: Frontend y Observabilidad** — React + Prometheus/Grafana
+## Estado actual (2026-06)
+
+**El proyecto evolucionó de "sistema a medida para una psicóloga" a un VERTICAL SaaS multi-tenant de psicología (Colombia-first), en producción.** Las fases 1-5 de diseño original están completas; lo que se construye hoy son olas de producto.
+
+- **Fases 1-5 (diseño, scaffolding, core backend, motor IA, frontend)** — ✅ completas y en producción en el VPS.
+- **Ola 2 — producto SaaS vendible** — ✅ completa: multi-tenancy con **RLS por tenant** (rol `sghcp_app` NOSUPERUSER), signup self-serve + verificación de email, onboarding + trial, gating de suscripción (402 al expirar), **cobro por MercadoPago** (suscripción del consultorio).
+- **Ola Booking — agendamiento público de pacientes con pago** — ✅ en producción: página hospedada `/book/:slug`, disponibilidad real server-side, **pago único por MercadoPago** que auto-confirma la cita, recordatorios por email (24h/2h), pago visible en la agenda.
+- **Ola 3 (en curso) — foso de IA**: Recap pre-sesión (resumen de la historia antes de cada cita) + plan terapéutico sugerido por IA. La IA SUGIERE, el humano decide (misma regla que el borrador clínico + CIE-10).
+
+> **Fuente viva del estado y las decisiones:** el documento de contexto `contexto-integracion-booking.md` (repo `claude-skills`, también en `~/.claude/commands/`) se actualiza en cada bloque vía `/actualizar-contexto`. Consúltalo para el estado exacto (PRs, migraciones, pendientes, credenciales). Este CLAUDE.md cubre reglas e invariantes estables; el contexto cubre el día a día.
+
+**Objetivo de negocio:** producto vendible (no consultoría). Banda de precio ~USD 20-40/mes por profesional, bootstrap Colombia-first → Andina → resto hispano. El foso = historia clínica cifrada + privacidad verificable (Whisper local) + cumplimiento colombiano, no la IA en sí.
 
 ## Stack tecnológico (ADRs aprobados)
 
@@ -122,11 +128,10 @@ Este proyecto sigue [Semantic Versioning 2.0.0](https://semver.org/): `MAJOR.MIN
 
 | Versión | Hito |
 |---|---|
-| `0.1.0` | Fases 1 + 2 — diseño y scaffolding ← actual en `main` |
-| `0.2.0` | Fase 3 — BC-1 Auth + BC-3 Pacientes |
-| `0.3.0` | Fase 4 — Motor IA (Whisper + Claude API) |
-| `0.4.0` | Fase 5 — Frontend React + Observabilidad |
-| `1.0.0` | Primera clínica en producción (go-live) |
+| `0.1.0`–`0.4.0` | Fases 1-5 — diseño, core backend, motor IA, frontend ✅ |
+| `0.5.0` | Historia clínica psychology-native + consentimientos + plan + PDF export ✅ (tag publicado 2026-06-10) |
+| (post-0.5) | Ola 2 SaaS (multi-tenant RLS + cobro + signup) y Ola Booking (agendamiento+pago) ✅ en producción |
+| `1.0.0` | Primera clínica real en producción con pacientes (go-live de Marcela) ← **pendiente** (faltan: token MP de producción, precio real, política reembolso, `ALLOW_DATA_RESET=false`) |
 
 **Proceso de release:**
 1. Merge del PR a `main`
