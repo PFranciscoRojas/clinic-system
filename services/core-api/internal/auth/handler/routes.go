@@ -27,7 +27,10 @@ func (h *Handler) Routes(jwtSecret []byte) chi.Router {
 		r.Patch("/profile", h.updateProfile)
 		r.Post("/change-password", h.changePassword)
 		r.Post("/onboarding-complete", h.onboardingComplete)
-		r.With(middleware.RequirePermission("users:create")).Post("/invite", h.invite)
+		// Authorization is role-scoped inside the handler: a CLINIC_ADMIN may
+		// invite any staff role, while a PROFESSIONAL may invite only support
+		// roles (INTERN, RECEPTIONIST) for their own practice.
+		r.Post("/invite", h.invite)
 		r.With(middleware.RequirePermission("users:update")).Post("/reset-password", h.resetPassword)
 	})
 
