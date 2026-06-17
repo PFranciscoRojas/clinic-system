@@ -41,9 +41,10 @@ type Config struct {
 
 	// MercadoPago subscription billing (MT5b). When the access token is empty,
 	// the billing endpoints respond 503 and tenants are activated manually.
-	MPAccessToken string
-	MPPlanAmount  int    // monthly price in the smallest COP unit the gateway expects (whole pesos)
-	MPPlanReason  string // plan name shown on the MercadoPago checkout
+	MPAccessToken   string
+	MPWebhookSecret string // signs MercadoPago webhook notifications (x-signature)
+	MPPlanAmount    int    // monthly price in the smallest COP unit the gateway expects (whole pesos)
+	MPPlanReason    string // plan name shown on the MercadoPago checkout
 
 	// BookingSessionPrice is the whole-COP price a patient pays per appointment
 	// through the public booking page.
@@ -83,9 +84,10 @@ func Load() Config {
 
 		AllowDataReset: getEnvBool("ALLOW_DATA_RESET", false),
 
-		MPAccessToken: getEnv("MP_ACCESS_TOKEN", ""),
-		MPPlanAmount:  getEnvInt("MP_PLAN_AMOUNT", 79000),
-		MPPlanReason:  getEnv("MP_PLAN_REASON", "SGHCP · Plan mensual"),
+		MPAccessToken:   getEnv("MP_ACCESS_TOKEN", ""),
+		MPWebhookSecret: getEnv("MP_WEBHOOK_SECRET", ""),
+		MPPlanAmount:    getEnvInt("MP_PLAN_AMOUNT", 79000),
+		MPPlanReason:    getEnv("MP_PLAN_REASON", "SGHCP · Plan mensual"),
 
 		BookingSessionPrice: getEnvInt("BOOKING_SESSION_PRICE", 180000),
 	}

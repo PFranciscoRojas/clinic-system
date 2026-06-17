@@ -12,6 +12,12 @@
         X-Frame-Options DENY
         Referrer-Policy strict-origin-when-cross-origin
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        # CSP: scripts only from us (the built bundle has no inline JS); inline
+        # styles allowed because the React UI uses style={} attributes; fonts
+        # from Google Fonts; images include data: (base64 avatars/.ics); the API
+        # is same-origin so connect-src 'self' covers it. MercadoPago is a
+        # top-level redirect, so it needs no CSP allowance.
+        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
         -Server
     }
 
