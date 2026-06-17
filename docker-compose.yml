@@ -25,8 +25,11 @@ services:
       dockerfile: Dockerfile
     container_name: sghcp_core_api
     restart: unless-stopped
-    ports:
-      - "8080:8080"
+    # Not published to the host — Caddy reaches it via the internal network
+    # (core-api:8080). Publishing it would expose the whole API over plaintext
+    # HTTP, bypassing TLS, the security headers, and per-IP rate limiting.
+    expose:
+      - "8080"
     env_file:
       - .env
     environment:
@@ -77,8 +80,11 @@ services:
     image: postgres:16-alpine
     container_name: sghcp_postgres
     restart: unless-stopped
-    ports:
-      - "5432:5432"
+    # Never published to the host: the clinical database (PHI) must only be
+    # reachable on the internal network. Admin access goes through
+    # `docker compose exec postgres psql` or an SSH tunnel.
+    expose:
+      - "5432"
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
@@ -98,8 +104,10 @@ services:
     image: redis:7-alpine
     container_name: sghcp_redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    # Not published to the host — only core-api reaches it on the internal
+    # network. Redis holds session/invite/reset state.
+    expose:
+      - "6379"
     command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
     volumes:
       - redis_data:/data
