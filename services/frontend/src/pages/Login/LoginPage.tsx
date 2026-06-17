@@ -279,6 +279,13 @@ export function LoginPage() {
       // Server-side flag is the source of truth; localStorage is only a cache.
       const onboarded = me.onboarding_completed ?? !!localStorage.getItem(`sghcp_onboarding_done_${me.user_id}`);
       if (!onboarded) {
+        // Pre-fill the name from signup so it isn't asked twice.
+        if (me.display_name && !nombres) {
+          const parts = me.display_name.trim().split(/\s+/);
+          setNombres(parts.slice(0, parts.length > 2 ? 2 : 1).join(' '));
+          setApellidos(parts.slice(parts.length > 2 ? 2 : 1).join(' '));
+          setName(me.display_name);
+        }
         setScreen('onboard');
       } else {
         navigate('/');
@@ -856,6 +863,15 @@ export function LoginPage() {
 
             <div style={{ textAlign: 'center', marginTop: 14, fontSize: 12, color: 'rgba(255,255,255,0.50)' }}>
               Paso {onbStep + 1} de {ONBOARD_TOTAL}
+            </div>
+            <div style={{ textAlign: 'center', marginTop: 10 }}>
+              <button type="button" onClick={async () => {
+                if (user) { localStorage.setItem(`sghcp_onboarding_done_${user.user_id}`, 'true'); }
+                try { await authApi.onboardingComplete(); } catch { /* non-blocking */ }
+                navigate('/');
+              }} style={{ border: 'none', background: 'none', fontSize: 12.5, color: 'rgba(255,255,255,0.65)', textDecoration: 'underline', cursor: 'pointer' }}>
+                Omitir por ahora · lo configuro después
+              </button>
             </div>
           </div>
         )}

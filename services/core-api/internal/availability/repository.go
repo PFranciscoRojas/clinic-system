@@ -36,14 +36,18 @@ type Professional struct {
 func (r *Repository) ResolveBySlug(ctx context.Context, slug string) (*Professional, error) {
 	var p Professional
 	var wh []byte
+	// Resolve the org's PROFESSIONAL user by role; the profile (and its working
+	// hours) is optional — a fresh signup has no profile yet, in which case the
+	// service falls back to a default schedule so booking works immediately.
 	err := r.pool.QueryRow(ctx, `
-		SELECT o.id, pp.user_id, COALESCE(pp.working_hours, '{}'::jsonb)
+		SELECT o.id, u.id, COALESCE(pp.working_hours, '{}'::jsonb)
 		FROM organizations o
 		JOIN user_roles ur ON ur.organization_id = o.id
 		JOIN roles r ON r.id = ur.role_id AND r.name = 'PROFESSIONAL'
-		JOIN professional_profiles pp ON pp.user_id = ur.user_id
+		JOIN users u ON u.id = ur.user_id AND u.is_active
+		LEFT JOIN professional_profiles pp ON pp.user_id = u.id
 		WHERE o.slug = $1 AND o.is_active
-		ORDER BY pp.created_at ASC
+		ORDER BY u.created_at ASC
 		LIMIT 1
 	`, slug).Scan(&p.OrgID, &p.StaffID, &wh)
 	if errors.Is(err, pgx.ErrNoRows) {
