@@ -11,7 +11,28 @@ type Checkout = { init_point: string; summary: { date: string; time: string; mod
 const PAPER = '#faf6f1', INK = '#2a2420', INK_SOFT = '#6b5f55', INK_FAINT = '#a89c90', LINE = '#e6ddd2';
 const DISPLAY = "'Fraunces', Georgia, serif";
 
-const COUNTRY_CODES = ['+57', '+1', '+52', '+51', '+56', '+54', '+593', '+58', '+34'];
+// Country dial codes with flags + the expected national number length and an
+// optional first-digit rule (Colombian mobiles are 10 digits starting with 3).
+const COUNTRIES = [
+  { flag: '🇨🇴', code: '+57', name: 'Colombia', len: 10, starts: '3' },
+  { flag: '🇲🇽', code: '+52', name: 'México', len: 10 },
+  { flag: '🇵🇪', code: '+51', name: 'Perú', len: 9 },
+  { flag: '🇨🇱', code: '+56', name: 'Chile', len: 9 },
+  { flag: '🇦🇷', code: '+54', name: 'Argentina', len: 10 },
+  { flag: '🇪🇨', code: '+593', name: 'Ecuador', len: 9 },
+  { flag: '🇻🇪', code: '+58', name: 'Venezuela', len: 10 },
+  { flag: '🇺🇸', code: '+1', name: 'EE. UU.', len: 10 },
+  { flag: '🇪🇸', code: '+34', name: 'España', len: 9 },
+];
+
+function validatePhone(code: string, digits: string): string {
+  const c = COUNTRIES.find(x => x.code === code);
+  if (!c) return '';
+  if (digits.length !== c.len) return `El número debe tener ${c.len} dígitos.`;
+  if (c.starts && !digits.startsWith(c.starts)) return `En ${c.name} el celular empieza por ${c.starts}.`;
+  return '';
+}
+
 const DOW = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
@@ -66,7 +87,8 @@ export function BookingWizardPage() {
     setErr('');
     if (!name.trim()) { setErr('Ingresa tu nombre.'); return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { setErr('Ingresa un correo válido.'); return; }
-    if (!phone.trim()) { setErr('Ingresa un teléfono.'); return; }
+    const phoneErr = validatePhone(code, phone.trim());
+    if (phoneErr) { setErr(phoneErr); return; }
     if (!picked) { setStep('slot'); return; }
     setSaving(true);
     try {
@@ -108,9 +130,9 @@ export function BookingWizardPage() {
   const shiftMonth = (delta: number) => setViewMonth(v => { const d = new Date(v.y, v.m + delta, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
 
   // ── styles ──
-  const page: React.CSSProperties = { minHeight: '100vh', background: PAPER, color: INK, fontFamily: "'DM Sans', -apple-system, sans-serif", display: 'flex', alignItems: 'stretch' };
-  const inputWrap: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, border: `1.5px solid ${LINE}`, borderRadius: 10, padding: '11px 13px', marginBottom: 11, background: '#fff' };
-  const input: React.CSSProperties = { border: 'none', outline: 'none', flex: 1, fontSize: 14.5, color: INK, background: 'transparent' };
+  const page: React.CSSProperties = { minHeight: '100vh', background: PAPER, color: INK, fontFamily: "'DM Sans', -apple-system, sans-serif", display: 'flex', alignItems: 'stretch', overflowX: 'hidden' };
+  const inputWrap: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, border: `1.5px solid ${LINE}`, borderRadius: 10, padding: '11px 13px', marginBottom: 11, background: '#fff', width: '100%', boxSizing: 'border-box' };
+  const input: React.CSSProperties = { border: 'none', outline: 'none', flex: 1, minWidth: 0, fontSize: 14.5, color: INK, background: 'transparent', width: '100%' };
   const chip = (active: boolean): React.CSSProperties => ({ border: `1.5px solid ${active ? accent : LINE}`, color: active ? '#fff' : INK, background: active ? accent : '#fff', borderRadius: 8, padding: '9px 14px', fontSize: 13.5, fontWeight: 500, cursor: 'pointer' });
 
   return (
@@ -131,7 +153,7 @@ export function BookingWizardPage() {
       </div>
 
       {/* ── Wizard ── */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '48px 32px', overflowY: 'auto' }}>
+      <div className="booking-wizard" style={{ flex: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '48px 32px', overflowY: 'auto', boxSizing: 'border-box' }}>
         <div style={{ width: '100%', maxWidth: 540 }}>
 
           {step === 'modality' && (
@@ -217,12 +239,12 @@ export function BookingWizardPage() {
               </div>
               <div style={inputWrap}><User size={16} color={INK_FAINT} /><input value={name} onChange={e => setName(e.target.value)} placeholder="Tu nombre" style={input} /></div>
               <div style={inputWrap}><Mail size={16} color={INK_FAINT} /><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Correo electrónico" style={input} /></div>
-              <div style={{ ...inputWrap, paddingLeft: 4 }}>
-                <select value={code} onChange={e => setCode(e.target.value)} style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 14, color: INK, padding: '0 6px', cursor: 'pointer' }}>
-                  {COUNTRY_CODES.map(c => <option key={c} value={c}>{c}</option>)}
+              <div style={{ ...inputWrap, paddingLeft: 6 }}>
+                <select value={code} onChange={e => setCode(e.target.value)} style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 14, color: INK, padding: '0 4px', cursor: 'pointer', flexShrink: 0 }}>
+                  {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
                 </select>
-                <div style={{ width: 1, height: 20, background: LINE }} />
-                <input value={phone} onChange={e => setPhone(e.target.value.replace(/[^\d]/g, ''))} placeholder="Teléfono" inputMode="numeric" style={input} />
+                <div style={{ width: 1, height: 20, background: LINE, flexShrink: 0 }} />
+                <input value={phone} onChange={e => setPhone(e.target.value.replace(/[^\d]/g, ''))} placeholder="Número de celular" inputMode="numeric" maxLength={11} style={{ ...input, minWidth: 0 }} />
               </div>
               {err && <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: '#a8443c', marginBottom: 14 }}><AlertTriangle size={14} />{err}</div>}
               <button onClick={submit} disabled={saving} style={{ width: '100%', padding: 14, borderRadius: 11, border: 'none', background: saving ? INK_FAINT : accent, color: '#fff', fontSize: 15, fontWeight: 600, cursor: saving ? 'wait' : 'pointer', fontFamily: DISPLAY }}>
@@ -236,10 +258,10 @@ export function BookingWizardPage() {
               <h1 style={{ fontFamily: DISPLAY, fontWeight: 500, fontSize: 25, marginBottom: 4 }}>Resumen de tu cita</h1>
               <p style={{ color: INK_SOFT, fontSize: 13.5, marginBottom: 20 }}>Revisa y continúa al pago seguro.</p>
               <div style={{ background: '#fff', border: `1.5px solid ${LINE}`, borderRadius: 13, overflow: 'hidden', marginBottom: 18 }}>
-                {[['Fecha', fmtLongDay(picked.date)], ['Hora', picked.time], ['Modalidad', modality === 'VIRTUAL' ? 'Online' : 'Presencial'], ['Paciente', name.trim()]].map(([k, v], i) => (
+                {[['Fecha', fmtLongDay(picked.date)], ['Hora', picked.time], ['Modalidad', modality === 'VIRTUAL' ? 'Online' : 'Presencial'], ['Paciente', name.trim()], ['Correo', email.trim()], ['Teléfono', `${code} ${phone.trim()}`]].map(([k, v], i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', borderTop: i ? `1px solid ${LINE}` : 'none', fontSize: 14 }}>
-                    <span style={{ color: INK_SOFT }}>{k}</span>
-                    <span style={{ color: INK, fontWeight: 500, textTransform: k === 'Fecha' ? 'capitalize' : 'none' }}>{v}</span>
+                    <span style={{ color: INK_SOFT, flexShrink: 0, marginRight: 14 }}>{k}</span>
+                    <span style={{ color: INK, fontWeight: 500, textTransform: k === 'Fecha' ? 'capitalize' : 'none', textAlign: 'right', wordBreak: 'break-word' }}>{v}</span>
                   </div>
                 ))}
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 16px', borderTop: `1.5px solid ${LINE}`, background: PAPER }}>
@@ -258,7 +280,7 @@ export function BookingWizardPage() {
         </div>
       </div>
 
-      <style>{`@media (max-width: 760px){ .booking-page{ flex-direction:column !important; } .booking-hero{ flex-basis:auto !important; max-width:none !important; padding:28px 26px !important; } .booking-cal{ grid-template-columns:1fr !important; } }`}</style>
+      <style>{`@media (max-width: 760px){ .booking-page{ flex-direction:column !important; } .booking-hero{ flex-basis:auto !important; max-width:none !important; padding:26px 22px !important; } .booking-wizard{ padding:26px 18px !important; } .booking-cal{ grid-template-columns:1fr !important; } }`}</style>
     </div>
   );
 }
