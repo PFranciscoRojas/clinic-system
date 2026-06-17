@@ -42,6 +42,7 @@ type VerificationDetails struct {
 // Errors are logged internally; they never reach the HTTP response.
 type Notifier interface {
 	NewBooking(ctx context.Context, b BookingDetails, adminEmails []string)
+	BookingPaidAdmin(ctx context.Context, b BookingDetails, adminEmails []string)
 	BookingConfirmed(ctx context.Context, b BookingDetails)
 	BookingRejected(ctx context.Context, b BookingDetails)
 	ConsentSignLink(ctx context.Context, toEmail string, d ConsentLinkDetails)
@@ -54,6 +55,7 @@ type Notifier interface {
 type NoopNotifier struct{}
 
 func (NoopNotifier) NewBooking(_ context.Context, _ BookingDetails, _ []string)             {}
+func (NoopNotifier) BookingPaidAdmin(_ context.Context, _ BookingDetails, _ []string)       {}
 func (NoopNotifier) BookingConfirmed(_ context.Context, _ BookingDetails)                   {}
 func (NoopNotifier) BookingRejected(_ context.Context, _ BookingDetails)                    {}
 func (NoopNotifier) ConsentSignLink(_ context.Context, _ string, _ ConsentLinkDetails)      {}

@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Clock, CalendarPlus, Download, XCircle } from 'lucide-react';
 import { publicBookingApi } from '@/api/publicBooking';
 
-const PAPER = '#faf6f1', INK = '#2a2420', INK_SOFT = '#6b5f55', ACCENT = '#8a5a5a', LINE = '#e6ddd2';
+const PAPER = '#faf6f1', INK = '#2a2420', INK_SOFT = '#6b5f55', INK_FAINT = '#a89c90', ACCENT = '#8a5a5a', LINE = '#e6ddd2';
 const DISPLAY = "'Fraunces', Georgia, serif";
 const DURATION_MIN = 50;
 
@@ -63,6 +63,8 @@ export function BookingPaymentReturnPage() {
 
   // Send the patient back to the clinic's own site ("la tienda"), not the API host.
   const retryHref = b?.website || (b?.org_slug ? `/book/${b.org_slug}` : '/');
+  // After a confirmed appointment, "Finalizar" returns to the clinic's home page.
+  const homeHref = b?.website || '/';
   const start = b ? new Date(b.scheduled_at) : null;
   const end = start ? new Date(start.getTime() + DURATION_MIN * 60000) : null;
   const title = `Cita${b?.clinic_name ? ' · ' + b.clinic_name : ''}`;
@@ -102,6 +104,12 @@ export function BookingPaymentReturnPage() {
             <div style={{ fontSize: 12, fontWeight: 700, color: INK_SOFT, letterSpacing: '.04em', textTransform: 'uppercase', marginBottom: 4 }}>Agrégala a tu calendario</div>
             <a href={googleUrl} target="_blank" rel="noreferrer" style={calBtn}><CalendarPlus size={16} /> Google Calendar</a>
             <button onClick={downloadIcs} style={calBtn}><Download size={16} /> Apple / Outlook (.ics)</button>
+            <p style={{ fontSize: 12, color: INK_FAINT, lineHeight: 1.5, margin: '18px 0 10px' }}>
+              Guarda tu comprobante de pago. Cuando termines, finaliza:
+            </p>
+            <a href={homeHref} style={{ ...calBtn, background: ACCENT, color: '#fff', border: 'none', marginTop: 0, fontFamily: DISPLAY, fontSize: 15 }}>
+              Finalizar
+            </a>
           </>
         ) : failed ? (
           <>
