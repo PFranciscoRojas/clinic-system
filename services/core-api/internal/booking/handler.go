@@ -316,7 +316,9 @@ func (h *Handler) confirm(ctx context.Context, bookingID, paymentID string) {
 		WHERE id = $1
 	`, bookingID, paymentID, apptID)
 
-	h.notifyConfirmed(ctx, orgID, bookingID)
+	// Fire-and-forget on its own context so a slow Resend call never delays the
+	// 200 the MercadoPago webhook is waiting for (which would trigger retries).
+	go h.notifyConfirmed(context.Background(), orgID, bookingID)
 }
 
 func (h *Handler) notifyConfirmed(ctx context.Context, orgID, bookingID string) {
