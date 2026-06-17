@@ -33,14 +33,16 @@ shell-db:
 	docker compose exec postgres psql -U $${DB_USER} -d $${DB_NAME}
 
 # ── Migraciones (imagen migrate/migrate; credenciales desde .env) ─────────────
+# Postgres no publica 5432 al host (hardening), así que el contenedor migrate
+# comparte la red de sghcp_postgres y llega por localhost:5432 dentro de su netns.
 migrate-up:
 	@set -a; . ./.env; set +a; \
-	docker run --rm -v $(CURDIR)/services/core-api/migrations:/migrations --network host migrate/migrate \
+	docker run --rm -v $(CURDIR)/services/core-api/migrations:/migrations --network container:sghcp_postgres migrate/migrate \
 		-path=/migrations/ -database "postgres://$$DB_USER:$$DB_PASSWORD@localhost:5432/$$DB_NAME?sslmode=disable" up
 
 migrate-down:
 	@set -a; . ./.env; set +a; \
-	docker run --rm -v $(CURDIR)/services/core-api/migrations:/migrations --network host migrate/migrate \
+	docker run --rm -v $(CURDIR)/services/core-api/migrations:/migrations --network container:sghcp_postgres migrate/migrate \
 		-path=/migrations/ -database "postgres://$$DB_USER:$$DB_PASSWORD@localhost:5432/$$DB_NAME?sslmode=disable" down 1
 
 migrate-create:
