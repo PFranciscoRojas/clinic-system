@@ -5,6 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { authApi } from '@/api/auth';
 import { ApiError } from '@/api/client';
 import { profilesApi, splitName, type Specialty } from '@/api/profiles';
+import { COUNTRIES, validatePhone } from '@/lib/phone';
 
 /* ── Animated blobs ──────────────────────────────────────────── */
 function Blobs() {
@@ -220,7 +221,9 @@ export function LoginPage() {
   const [specialtyId,  setSpecialtyId]  = useState('');
   const [specialties,  setSpecialties]  = useState<Specialty[]>([]);
   const [regNum,       setRegNum]       = useState('');
+  const [phoneCode,    setPhoneCode]    = useState('+57');
   const [phone,        setPhone]        = useState('');
+  const [phoneErr,     setPhoneErr]     = useState('');
 
   // The catalog needs an authenticated session — fetch it once the user
   // lands in onboarding (right after register).
@@ -322,7 +325,8 @@ export function LoginPage() {
     }
     if (!user) return;
     setPinErr(''); setSaving(true);
-    localStorage.setItem('sghcp_profile', JSON.stringify({ name, regNum, phone }));
+    const fullPhone = phone.trim() ? `${phoneCode} ${phone.trim()}` : '';
+    localStorage.setItem('sghcp_profile', JSON.stringify({ name, regNum, phone: fullPhone }));
     localStorage.setItem('sghcp_schedule', JSON.stringify({ activeDays, startHour, endHour, sessionLen }));
     // Server copy saved after the professional profile below (needs the row to exist).
     localStorage.setItem('sghcp_ai_prefs', JSON.stringify({ aiEnabled, soapStyle, reminders }));
@@ -346,7 +350,7 @@ export function LoginPage() {
           maternal_last_name: maternal,
           license_number: regNum.trim(),
           specialty_id: specialtyId,
-          phone: phone.trim(),
+          phone: fullPhone,
         });
       } catch { /* non-blocking — editable later in Settings */ }
       try {
@@ -648,7 +652,7 @@ export function LoginPage() {
                   {/* Step 0: Profile */}
                   {onbStep === 0 && (
                     <div className="anim-fade-up">
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+                      <div className="onb-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
                         <div style={{ gridColumn: '1/-1' }}>
                           <TField label="Nombre completo con título" value={name} onChange={setName} placeholder="Dra. / Dr. Nombre Apellido" icon={User} required />
                         </div>
@@ -673,7 +677,23 @@ export function LoginPage() {
                           </div>
                         </div>
                         <div style={{ gridColumn: '1/-1' }}>
-                          <TField label="Teléfono de contacto" value={phone} onChange={setPhone} placeholder="+57 300 000 0000" icon={Phone} />
+                          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--s700)', marginBottom: 6 }}>Teléfono de contacto</label>
+                          <div style={{
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            background: 'var(--s50)', border: `1.5px solid ${phoneErr ? 'var(--red)' : 'var(--s200)'}`,
+                            borderRadius: 11, padding: '9px 12px',
+                          }}>
+                            <Phone size={16} color="var(--s400)" style={{ flexShrink: 0 }} />
+                            <select value={phoneCode} onChange={e => { setPhoneCode(e.target.value); setPhoneErr(''); }}
+                              style={{ border: 'none', background: 'transparent', fontSize: 14, color: 'var(--s800)', outline: 'none', cursor: 'pointer', flexShrink: 0 }}>
+                              {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
+                            </select>
+                            <div style={{ width: 1, height: 20, background: 'var(--s200)', flexShrink: 0 }} />
+                            <input value={phone} onChange={e => { setPhone(e.target.value.replace(/[^\d]/g, '')); setPhoneErr(''); }}
+                              placeholder="Número de celular" inputMode="numeric" maxLength={11}
+                              style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 14, color: 'var(--s800)', minWidth: 0, outline: 'none' }} />
+                          </div>
+                          {phoneErr && <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 5, display: 'flex', alignItems: 'center', gap: 5 }}><AlertCircle size={12} />{phoneErr}</div>}
                         </div>
                       </div>
                     </div>
@@ -834,7 +854,14 @@ export function LoginPage() {
                       </button>
                     )}
                     {onbStep < ONBOARD_TOTAL - 1 ? (
-                      <button type="button" onClick={() => setOnbStep(s => s + 1)} style={{
+                      <button type="button" onClick={() => {
+                        // Phone is optional, but validate the format when provided.
+                        if (onbStep === 0 && phone.trim()) {
+                          const e = validatePhone(phoneCode, phone.trim());
+                          if (e) { setPhoneErr(e); return; }
+                        }
+                        setOnbStep(s => s + 1);
+                      }} style={{
                         flex: 1, padding: 12, borderRadius: 11, border: 'none',
                         background: 'linear-gradient(135deg,var(--teal),var(--teal-d))',
                         color: '#fff', fontSize: 14.5, fontWeight: 800,
