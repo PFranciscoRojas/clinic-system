@@ -1294,10 +1294,17 @@ function UsersSection() {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function SettingsPage() {
+  const { user } = useAuth();
   const [section, setSection] = useState<SectionId>('profile');
   const [dirty,   setDirty]   = useState(false);
   const [saving,  setSaving]  = useState(false);
   const [saved,   setSaved]   = useState(false);
+
+  // Interns and receptionists can't manage staff or edit clinical templates, so
+  // those sections aren't shown to them at all (the backend also gates them).
+  const roles = user?.roles ?? [];
+  const canManageOrg = roles.includes('CLINIC_ADMIN') || roles.includes('PROFESSIONAL');
+  const visibleSections = SECTIONS.filter(s => canManageOrg || (s.id !== 'users' && s.id !== 'templates'));
 
   const handleSave = (doSave: boolean) => {
     if (!doSave) { setDirty(false); return; }
@@ -1307,7 +1314,7 @@ export function SettingsPage() {
   };
 
   const markDirty = (v: boolean) => setDirty(v);
-  const activeSection = SECTIONS.find(s => s.id === section)!;
+  const activeSection = visibleSections.find(s => s.id === section) ?? visibleSections[0];
   const compact = useIsCompact();
 
   return (
@@ -1317,7 +1324,7 @@ export function SettingsPage() {
       {compact ? (
         <div style={{ background: '#fff', borderBottom: '1px solid var(--s200)', overflowX: 'auto', flexShrink: 0 }}>
           <nav style={{ display: 'flex', gap: 4, padding: '8px 10px', minWidth: 'max-content' }}>
-            {SECTIONS.map(item => {
+            {visibleSections.map(item => {
               const on = section === item.id;
               return (
                 <button
@@ -1340,7 +1347,7 @@ export function SettingsPage() {
           </div>
         </div>
         <nav style={{ flex: 1, overflow: 'auto', padding: '10px' }}>
-          {SECTIONS.map(item => {
+          {visibleSections.map(item => {
             const on = section === item.id;
             return (
               <button
