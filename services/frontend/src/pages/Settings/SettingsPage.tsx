@@ -4,7 +4,7 @@ import {
   FileText, Settings, CalendarDays, Send, AlertCircle,
   PenLine, Lock, Key, CheckCircle,
   Upload, Palette, Users, Trash2, Save,
-  Shield, LogOut, Plus,
+  Shield, LogOut, Plus, Receipt, Pencil, X,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
@@ -15,13 +15,14 @@ import { adminApi } from '@/api/admin';
 import { consentTemplatesApi, type ConsentType } from '@/api/clinicalRecords';
 import { orgApi } from '@/api/org';
 import { profilesApi, splitName, type Specialty } from '@/api/profiles';
+import { serviceRatesApi, type ServiceRate, type RateModality } from '@/api/serviceRates';
 import { ACCENT_COLORS, saveAccentColor } from '@/lib/theme';
 import { loadSchedule, persistSchedule, fetchScheduleFromServer } from '@/lib/schedule';
 import { useIsCompact } from '@/lib/useMediaQuery';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type SectionId = 'profile' | 'schedule' | 'notifications' | 'ai' | 'security' | 'templates' | 'users';
+type SectionId = 'profile' | 'schedule' | 'notifications' | 'ai' | 'security' | 'templates' | 'billing' | 'users';
 
 const SECTIONS: { id: SectionId; icon: React.ElementType; label: string; color?: string }[] = [
   { id: 'profile',       icon: UserRound,  label: 'Perfil profesional' },
@@ -30,6 +31,7 @@ const SECTIONS: { id: SectionId; icon: React.ElementType; label: string; color?:
   { id: 'ai',            icon: Sparkles,    label: 'Asistente IA',       color: '#f59e0b' },
   { id: 'security',      icon: ShieldCheck, label: 'Seguridad',          color: '#ef4444' },
   { id: 'templates',     icon: FileText,    label: 'Plantillas clínicas',color: '#8b5cf6' },
+  { id: 'billing',       icon: Receipt,     label: 'Tarifas',             color: '#10b981' },
   { id: 'users',         icon: Users,       label: 'Usuarios',            color: '#0ea5e9' },
 ];
 
@@ -1323,6 +1325,195 @@ function UsersSection() {
   );
 }
 
+// ── Billing / service-rate catalogue section ──────────────────────────────────
+
+const MODALITY_LABELS: Record<string, string> = {
+  IN_PERSON: 'Presencial',
+  VIRTUAL:   'Virtual',
+  HYBRID:    'Híbrida',
+};
+
+// formatMoney renders a decimal string ("80000.00") as a grouped amount without
+// the trailing ",00" when there are no cents — never parsing money as a float.
+function formatMoney(amount: string, currency: string): string {
+  const [intPart, fracRaw = ''] = amount.split('.');
+  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const frac = fracRaw.replace(/0+$/, '');
+  const sym = currency === 'COP' ? '$' : '';
+  return `${sym}${grouped}${frac ? ',' + frac : ''} ${currency}`;
+}
+
+const EMPTY_RATE = { name: '', description: '', amount: '', currency: 'COP', modality: '' as '' | RateModality };
+
+function RatesSection() {
+  const [rates,   setRates]   = useState<ServiceRate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadErr, setLoadErr] = useState('');
+
+  const [editing, setEditing] = useState<string | null>(null); // rate id, 'new', or null
+  const [form,    setForm]    = useState(EMPTY_RATE);
+  const [saving,  setSaving]  = useState(false);
+  const [formErr, setFormErr] = useState('');
+
+  const load = () => {
+    setLoading(true);
+    serviceRatesApi.list(true)
+      .then(setRates)
+      .catch(() => setLoadErr('No se pudieron cargar las tarifas.'))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+
+  const openNew = () => { setForm(EMPTY_RATE); setFormErr(''); setEditing('new'); };
+  const openEdit = (r: ServiceRate) => {
+    setForm({ name: r.name, description: r.description ?? '', amount: r.amount, currency: r.currency, modality: (r.modality ?? '') as '' | RateModality });
+    setFormErr(''); setEditing(r.id);
+  };
+  const cancel = () => { setEditing(null); setFormErr(''); };
+
+  const save = async () => {
+    setSaving(true); setFormErr('');
+    const payload = {
+      name: form.name.trim(),
+      description: form.description.trim(),
+      amount: form.amount.trim().replace(/\s/g, ''), // dot = decimal separator (see field hint)
+      currency: form.currency || 'COP',
+      modality: form.modality === '' ? null : form.modality,
+    };
+    try {
+      if (editing === 'new') await serviceRatesApi.create(payload);
+      else if (editing)      await serviceRatesApi.update(editing, payload);
+      setEditing(null);
+      load();
+    } catch (e) {
+      setFormErr(e instanceof Error && e.message ? e.message : 'No se pudo guardar la tarifa.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleActive = async (r: ServiceRate) => {
+    setRates(prev => prev.map(x => x.id === r.id ? { ...x, is_active: !x.is_active } : x));
+    try { await serviceRatesApi.setActive(r.id, !r.is_active); }
+    catch { load(); }
+  };
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14, padding: '12px 14px', background: '#ecfdf5', border: '1px solid #6ee7b7', borderRadius: 11, fontSize: 12.5, color: '#065f46', lineHeight: 1.55 }}>
+        <Receipt size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+        <span>Define los precios de tus servicios. Estas tarifas se usarán al generar facturas y comprobantes de pago. No constituyen facturación electrónica DIAN.</span>
+      </div>
+
+      <SectionCard title="Tarifario de servicios" icon={Receipt} color="#10b981">
+        {loading ? (
+          <div style={{ padding: '22px 0', display: 'flex', justifyContent: 'center' }}><Spinner /></div>
+        ) : loadErr ? (
+          <div style={{ padding: '16px 0', fontSize: 13, color: 'var(--red)' }}>{loadErr}</div>
+        ) : (
+          <div style={{ padding: '8px 0' }}>
+            {rates.length === 0 && editing !== 'new' && (
+              <div style={{ padding: '18px 0', fontSize: 13.5, color: 'var(--s500)', lineHeight: 1.6 }}>
+                Aún no tienes tarifas. Crea la primera para empezar a facturar tus sesiones.
+              </div>
+            )}
+
+            {rates.map(r => editing === r.id ? (
+              <RateForm key={r.id} form={form} setForm={setForm} onSave={save} onCancel={cancel} saving={saving} err={formErr} />
+            ) : (
+              <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--s100)', opacity: r.is_active ? 1 : 0.55 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--s800)' }}>{r.name}</span>
+                    {r.modality && <Badge label={MODALITY_LABELS[r.modality] ?? r.modality} color="#0369a1" bg="#e0f2fe" />}
+                    {!r.is_active && <Badge label="Inactiva" color="var(--s500)" bg="var(--s100)" />}
+                  </div>
+                  {r.description && <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>{r.description}</div>}
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--s800)', fontFamily: "'DM Mono', monospace", whiteSpace: 'nowrap' }}>
+                  {formatMoney(r.amount, r.currency)}
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <button onClick={() => openEdit(r)} title="Editar"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, border: '1.5px solid var(--s200)', background: '#fff', color: 'var(--s500)', cursor: 'pointer' }}>
+                    <Pencil size={14} />
+                  </button>
+                  <button onClick={() => toggleActive(r)} title={r.is_active ? 'Desactivar' : 'Activar'}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, border: '1.5px solid var(--s200)', background: '#fff', color: r.is_active ? 'var(--s500)' : '#10b981', cursor: 'pointer' }}>
+                    {r.is_active ? <X size={14} /> : <CheckCircle size={14} />}
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {editing === 'new' && (
+              <RateForm form={form} setForm={setForm} onSave={save} onCancel={cancel} saving={saving} err={formErr} />
+            )}
+
+            {editing !== 'new' && (
+              <button onClick={openNew} style={{
+                display: 'flex', alignItems: 'center', gap: 7, marginTop: 14, padding: '9px 18px', borderRadius: 9, border: 'none',
+                background: '#10b981', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              }}>
+                <Plus size={14} />Nueva tarifa
+              </button>
+            )}
+          </div>
+        )}
+      </SectionCard>
+    </>
+  );
+}
+
+function RateForm({ form, setForm, onSave, onCancel, saving, err }: {
+  form: typeof EMPTY_RATE; setForm: (f: typeof EMPTY_RATE) => void;
+  onSave: () => void; onCancel: () => void; saving: boolean; err: string;
+}) {
+  const upd = (patch: Partial<typeof EMPTY_RATE>) => setForm({ ...form, ...patch });
+  return (
+    <div style={{ padding: '14px 16px', margin: '8px 0', background: 'var(--s50)', borderRadius: 11, border: '1.5px solid var(--s200)' }}>
+      <FieldRow label="Nombre" sub="Ej: Sesión individual, Primera consulta">
+        <FInput value={form.name} onChange={v => upd({ name: v })} placeholder="Sesión individual" />
+      </FieldRow>
+      <FieldRow label="Descripción" sub="Opcional">
+        <FInput value={form.description} onChange={v => upd({ description: v })} placeholder="Detalle visible en la factura" />
+      </FieldRow>
+      <FieldRow label="Monto" sub="Sin puntos de mil; usa punto para decimales (ej: 80000)">
+        <FInput value={form.amount} onChange={v => upd({ amount: v })} placeholder="80000" mono />
+      </FieldRow>
+      <FieldRow label="Moneda">
+        <FSelect value={form.currency} onChange={v => upd({ currency: v })}>
+          <option value="COP">COP — Peso colombiano</option>
+          <option value="USD">USD — Dólar</option>
+          <option value="EUR">EUR — Euro</option>
+        </FSelect>
+      </FieldRow>
+      <FieldRow label="Modalidad" sub="Opcional — aplica a todas si se deja vacío">
+        <FSelect value={form.modality} onChange={v => upd({ modality: v as '' | RateModality })}>
+          <option value="">Todas las modalidades</option>
+          <option value="IN_PERSON">Presencial</option>
+          <option value="VIRTUAL">Virtual</option>
+          <option value="HYBRID">Híbrida</option>
+        </FSelect>
+      </FieldRow>
+      {err && <div style={{ fontSize: 12.5, color: 'var(--red)', padding: '8px 0 0', display: 'flex', alignItems: 'center', gap: 6 }}><AlertCircle size={13} />{err}</div>}
+      <div style={{ display: 'flex', gap: 8, paddingTop: 14 }}>
+        <button onClick={onSave} disabled={saving} style={{
+          display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none',
+          background: saving ? 'var(--s200)' : '#10b981', color: saving ? 'var(--s400)' : '#fff',
+          fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer',
+        }}>
+          {saving ? 'Guardando…' : <><Save size={14} />Guardar tarifa</>}
+        </button>
+        <button onClick={onCancel} disabled={saving} style={{
+          padding: '9px 18px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff',
+          color: 'var(--s600)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+        }}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function SettingsPage() {
@@ -1336,7 +1527,14 @@ export function SettingsPage() {
   // those sections aren't shown to them at all (the backend also gates them).
   const roles = user?.roles ?? [];
   const canManageOrg = roles.includes('CLINIC_ADMIN') || roles.includes('PROFESSIONAL');
-  const visibleSections = SECTIONS.filter(s => canManageOrg || (s.id !== 'users' && s.id !== 'templates'));
+  const isAdmin = roles.includes('CLINIC_ADMIN');
+  // Rate management needs billing:manage_rates (CLINIC_ADMIN); staff/templates
+  // need org management. The backend enforces all three regardless.
+  const visibleSections = SECTIONS.filter(s => {
+    if (s.id === 'billing') return isAdmin;
+    if (s.id === 'users' || s.id === 'templates') return canManageOrg;
+    return true;
+  });
 
   const handleSave = (doSave: boolean) => {
     if (!doSave) { setDirty(false); return; }
@@ -1429,6 +1627,7 @@ export function SettingsPage() {
             {section === 'ai'            && <AISection            setDirty={markDirty} />}
             {section === 'security'      && <SecuritySection      setDirty={markDirty} />}
             {section === 'templates'     && <ConsentTemplatesSection />}
+            {section === 'billing'       && <RatesSection />}
             {section === 'users'         && <UsersSection />}
           </div>
           <SaveBar dirty={dirty} saving={saving} saved={saved} onSave={handleSave} />
