@@ -253,6 +253,48 @@ func (r *Repository) AddPayment(ctx context.Context, p addPaymentParams) (rawPay
 	return pay, inv, nil
 }
 
+// InvoiceSummary holds the org-wide billing aggregates (money as decimal
+// strings, computed in SQL without decrypting anything).
+type InvoiceSummary struct {
+	Invoiced  string `json:"invoiced"`
+	Collected string `json:"collected"`
+	Pending   string `json:"pending"`
+	Currency  string `json:"currency"`
+	Count     int    `json:"count"`
+	Draft     int    `json:"draft"`
+	Issued    int    `json:"issued"`
+	Partial   int    `json:"partial"`
+	Paid      int    `json:"paid"`
+	Cancelled int    `json:"cancelled"`
+}
+
+// Summary aggregates the org's invoices: total invoiced and collected (excluding
+// cancelled), outstanding balance (issued + partial) and counts per status.
+// Single-currency assumption (Colombian clinics bill in COP): the reported
+// currency is that of the most recent invoice.
+func (r *Repository) Summary(ctx context.Context, orgID string) (InvoiceSummary, error) {
+	var s InvoiceSummary
+	err := r.q(ctx).QueryRow(ctx, `
+		SELECT
+			COALESCE(SUM(total_due)  FILTER (WHERE status <> 'CANCELLED'), 0)::text,
+			COALESCE(SUM(total_paid) FILTER (WHERE status <> 'CANCELLED'), 0)::text,
+			COALESCE(SUM(total_due - total_paid) FILTER (WHERE status IN ('ISSUED','PARTIAL')), 0)::text,
+			COUNT(*) FILTER (WHERE status <> 'CANCELLED'),
+			COUNT(*) FILTER (WHERE status = 'DRAFT'),
+			COUNT(*) FILTER (WHERE status = 'ISSUED'),
+			COUNT(*) FILTER (WHERE status = 'PARTIAL'),
+			COUNT(*) FILTER (WHERE status = 'PAID'),
+			COUNT(*) FILTER (WHERE status = 'CANCELLED'),
+			COALESCE((SELECT currency FROM invoices WHERE organization_id = $1 ORDER BY created_at DESC LIMIT 1), 'COP')
+		FROM invoices WHERE organization_id = $1
+	`, orgID).Scan(&s.Invoiced, &s.Collected, &s.Pending,
+		&s.Count, &s.Draft, &s.Issued, &s.Partial, &s.Paid, &s.Cancelled, &s.Currency)
+	if err != nil {
+		return InvoiceSummary{}, fmt.Errorf("invoice summary: %w", err)
+	}
+	return s, nil
+}
+
 // ListPayments returns an invoice's payments, oldest first.
 func (r *Repository) ListPayments(ctx context.Context, orgID, invoiceID string) ([]rawPayment, error) {
 	rows, err := r.q(ctx).Query(ctx, `

@@ -19,6 +19,7 @@ export interface Payment {
 export interface Invoice {
   id: string;
   patient_id: string;
+  patient_name?: string;
   appointment_id?: string | null;
   rate_id?: string | null;
   currency: string;
@@ -55,8 +56,24 @@ export interface RecordPaymentInput {
   paid_at?: string;
 }
 
+export interface InvoiceSummary {
+  invoiced: string;
+  collected: string;
+  pending: string;
+  currency: string;
+  count: number;
+  draft: number;
+  issued: number;
+  partial: number;
+  paid: number;
+  cancelled: number;
+}
+
 export const invoicesApi = {
   listByPatient: (patientId: string) => api.get<Invoice[]>(`/invoices?patient_id=${patientId}`),
+  listAll: (status?: string) =>
+    api.get<Invoice[]>(`/invoices?with_patient=true${status ? `&status=${status}` : ''}`),
+  summary: () => api.get<InvoiceSummary>('/invoices/summary'),
   get: (id: string) => api.get<Invoice>(`/invoices/${id}`),
   create: (input: CreateInvoiceInput) => api.post<Invoice>('/invoices', input),
   issue: (id: string, dueAt?: string) =>
