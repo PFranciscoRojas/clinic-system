@@ -60,6 +60,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Grace window for the session note: after "Finalizar sesión" the record form stays available until the note is written (next patient can be attended first); the note stores the real session date and the dashboard inbox lists "Nota de sesión pendiente" reminders
 
 ### Changed
+- The billing page's financial cards and the Semana/Mes/Año/Todo period selector now live at the module level (above the tabs), so they're always visible and the selector drives every tab: the Facturas list is filtered to invoices issued in the period (`GET /api/v1/invoices?period=…`) and the Resumen figures are scoped to it. The 12-month income chart is now horizontal (value along the X axis, months down the Y), stacked by channel
 - The billing page is now entirely real-data driven: the static demo dataset (and the recharts dependency it pulled into the bundle) was removed
 - Booking times shown to patients in 12-hour format (3:30 p.m.) instead of 24h; the appointment summary gained a "Volver y corregir" step back; the MercadoPago checkout item now names the date/time/modality; sidebar brain badge goes to the dashboard when expanded and acts as the open-menu toggle when collapsed
 - Public booking is no longer blocked by onboarding: the booking page resolves the clinic's professional by role and uses a default schedule until real hours are set, so a brand-new clinic can take bookings right after signup. The onboarding wizard is now skippable ("Omitir por ahora") and pre-fills the name from signup

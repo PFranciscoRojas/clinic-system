@@ -10,12 +10,32 @@ import {
   type BillingOverview, type BillingPeriod, type MonthBucket, type MethodStat,
 } from '@/api/invoices';
 
+const FILTERS: { id: string; label: string }[] = [
+  { id: '',          label: 'Todas'        },
+  { id: 'ISSUED',    label: 'Emitidas'     },
+  { id: 'PARTIAL',   label: 'Pago parcial' },
+  { id: 'PAID',      label: 'Pagadas'      },
+  { id: 'DRAFT',     label: 'Borradores'   },
+  { id: 'CANCELLED', label: 'Anuladas'     },
+];
+
 const PERIODS: { id: BillingPeriod; label: string; noun: string }[] = [
   { id: 'week',  label: 'Semana', noun: 'de la semana' },
   { id: 'month', label: 'Mes',    noun: 'del mes'      },
   { id: 'year',  label: 'Año',    noun: 'del año'      },
   { id: 'all',   label: 'Todo',   noun: 'totales'      },
 ];
+
+const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const monthShort = (m: string) => `${MES[parseInt(m.slice(5, 7), 10) - 1] ?? m} ${m.slice(2, 4)}`;
+const toCents = (s: string) => Math.round(parseFloat(s || '0') * 100);
+const fmtDate = (s?: string | null) => s ? new Date(s).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+
+function deltaPct(cur: string, prev: string): number | null {
+  const c = parseFloat(cur || '0'), p = parseFloat(prev || '0');
+  if (p <= 0) return null;
+  return Math.round(((c - p) / p) * 100);
+}
 
 function downloadCsv(filename: string, rows: (string | number)[][]) {
   const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -26,34 +46,58 @@ function downloadCsv(filename: string, rows: (string | number)[][]) {
   URL.revokeObjectURL(url);
 }
 
-const FILTERS: { id: string; label: string }[] = [
-  { id: '',          label: 'Todas'        },
-  { id: 'ISSUED',    label: 'Emitidas'     },
-  { id: 'PARTIAL',   label: 'Pago parcial' },
-  { id: 'PAID',      label: 'Pagadas'      },
-  { id: 'DRAFT',     label: 'Borradores'   },
-  { id: 'CANCELLED', label: 'Anuladas'     },
-];
-
-const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-const monthShort = (m: string) => MES[parseInt(m.slice(5, 7), 10) - 1] ?? m;
-const toCents = (s: string) => Math.round(parseFloat(s || '0') * 100);
-const fmtDate = (s?: string | null) => s ? new Date(s).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
-
-function deltaPct(cur: string, prev: string): number | null {
-  const c = parseFloat(cur || '0'), p = parseFloat(prev || '0');
-  if (p <= 0) return null;
-  return Math.round(((c - p) / p) * 100);
+// ── Module-level KPI cards (driven by the period selector) ────────────────────
+function KpiCards({ ov, period }: { ov?: BillingOverview; period: BillingPeriod }) {
+  const cur = ov?.currency ?? 'COP';
+  const noun = PERIODS.find(p => p.id === period)?.noun ?? '';
+  const delta = ov?.has_delta ? deltaPct(ov.income, ov.income_prev) : null;
+  const up = (delta ?? 0) >= 0;
+  return (
+    <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 20 }}>
+      <div style={{ flex: 1.4, minWidth: 260, background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, padding: '18px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 9, background: '#10b9811a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Wallet size={16} color="#10b981" /></div>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--s500)' }}>Ingresos {noun} (cobrado)</span>
+          {delta !== null && (
+            <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11.5, fontWeight: 700, color: up ? '#059669' : '#dc2626' }}>
+              {up ? <ArrowUp size={12} /> : <ArrowDown size={12} />}{Math.abs(delta)}%
+            </span>
+          )}
+        </div>
+        <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--s800)', fontFamily: "'DM Mono', monospace" }}>{formatMoney(ov?.income ?? '0', cur)}</div>
+        <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--s500)' }}><Globe size={13} color="#0ea5e9" /> Online <b style={{ color: 'var(--s700)' }}>{formatMoney(ov?.income_online ?? '0', cur)}</b></span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--s500)' }}><HandCoins size={13} color="#10b981" /> Directo <b style={{ color: 'var(--s700)' }}>{formatMoney(ov?.income_direct ?? '0', cur)}</b></span>
+        </div>
+      </div>
+      <div style={{ flex: 1, minWidth: 180, background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, padding: '18px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 9, background: '#f59e0b1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Clock size={16} color="#f59e0b" /></div>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--s500)' }}>Cartera</span>
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--s800)', fontFamily: "'DM Mono', monospace" }}>{formatMoney(ov?.pending ?? '0', cur)}</div>
+        <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 10 }}>{ov?.collected_pct ?? 0}% cobrado · facturado {formatMoney(ov?.invoiced ?? '0', cur)}</div>
+      </div>
+      <div style={{ flex: 1, minWidth: 180, background: '#fff', border: `1px solid ${Number(ov?.overdue ?? 0) > 0 ? '#fecaca' : 'var(--s200)'}`, borderRadius: 14, padding: '18px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 9, background: '#ef44441a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><AlertTriangle size={16} color="#ef4444" /></div>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--s500)' }}>Vencido</span>
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: Number(ov?.overdue ?? 0) > 0 ? '#b91c1c' : 'var(--s800)', fontFamily: "'DM Mono', monospace" }}>{formatMoney(ov?.overdue ?? '0', cur)}</div>
+        <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 10 }}>{ov?.overdue_count ?? 0} factura(s) vencida(s)</div>
+      </div>
+    </div>
+  );
 }
 
 // ── Facturas tab ──────────────────────────────────────────────────────────────
-function FacturasTab() {
+function FacturasTab({ period }: { period: BillingPeriod }) {
   const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState<Invoice | null>(null);
 
   const { data: invoices, isLoading, refetch } = useQuery({
-    queryKey: ['invoices-all', filter],
-    queryFn: () => invoicesApi.listAll(filter || undefined),
+    queryKey: ['invoices-all', filter, period],
+    queryFn: () => invoicesApi.listAll(filter || undefined, period),
   });
   const list = invoices ?? [];
 
@@ -93,7 +137,7 @@ function FacturasTab() {
         ) : list.length === 0 ? (
           <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--s400)' }}>
             <SearchX size={28} style={{ opacity: 0.5 }} />
-            <div style={{ fontSize: 13.5, marginTop: 10 }}>No hay facturas{filter ? ' con este estado' : ' todavía'}.</div>
+            <div style={{ fontSize: 13.5, marginTop: 10 }}>No hay facturas en este período/estado.</div>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -129,46 +173,44 @@ function FacturasTab() {
         )}
       </div>
 
-      {selected && (
-        <InvoiceDetailModal summary={selected} onClose={() => setSelected(null)} onChange={() => refetch()} />
-      )}
+      {selected && <InvoiceDetailModal summary={selected} onClose={() => setSelected(null)} onChange={() => refetch()} />}
     </div>
   );
 }
 
 // ── Resumen financiero tab ────────────────────────────────────────────────────
+// Horizontal bars: months down the Y axis, value along the X axis.
 function MonthlyChart({ data, currency }: { data: MonthBucket[]; currency: string }) {
   const totals = data.map(d => toCents(d.online) + toCents(d.direct));
   const max = Math.max(1, ...totals);
-  const H = 130;
+  const money = (c: number) => formatMoney((c / 100).toFixed(2), currency);
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: H }}>
-        {data.map(d => {
-          const on = toCents(d.online), dir = toCents(d.direct), tot = on + dir;
-          const h = Math.round((tot / max) * H);
-          const onH = tot > 0 ? Math.round((on / tot) * h) : 0;
-          const dirH = h - onH;
-          const money = (c: number) => formatMoney((c / 100).toFixed(2), currency);
-          return (
-            <div key={d.month} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: H }}
-              title={`${monthShort(d.month)} ${d.month.slice(0, 4)} — Total ${money(tot)}\nOnline ${money(on)} · Directo ${money(dir)}`}>
-              <div style={{ height: onH, background: '#0ea5e9', borderRadius: '4px 4px 0 0' }} />
-              <div style={{ height: dirH, background: '#10b981', borderRadius: onH === 0 ? '4px 4px 0 0' : 0 }} />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+      {data.map(d => {
+        const on = toCents(d.online), dir = toCents(d.direct), tot = on + dir;
+        const w = Math.round((tot / max) * 100);
+        const onPct = tot > 0 ? (on / tot) * 100 : 0;
+        return (
+          <div key={d.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}
+            title={`${monthShort(d.month)} — Total ${money(tot)}\nOnline ${money(on)} · Directo ${money(dir)}`}>
+            <span style={{ width: 42, fontSize: 11, color: 'var(--s500)', textAlign: 'right', flexShrink: 0 }}>{monthShort(d.month)}</span>
+            <div style={{ flex: 1, height: 16, background: 'var(--s100)', borderRadius: 5, overflow: 'hidden' }}>
+              <div style={{ width: `${w}%`, height: '100%', display: 'flex' }}>
+                <div style={{ width: `${onPct}%`, background: '#0ea5e9' }} />
+                <div style={{ flex: 1, background: '#10b981' }} />
+              </div>
             </div>
-          );
-        })}
-      </div>
-      <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-        {data.map(d => <div key={d.month} style={{ flex: 1, textAlign: 'center', fontSize: 10.5, color: 'var(--s400)' }}>{monthShort(d.month)}</div>)}
-      </div>
+            <span style={{ width: 96, fontSize: 11.5, color: 'var(--s600)', fontFamily: "'DM Mono', monospace", textAlign: 'right', flexShrink: 0 }}>{tot > 0 ? money(tot) : '—'}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 function MethodBreakdown({ methods, currency }: { methods: MethodStat[]; currency: string }) {
   if (!methods || methods.length === 0) {
-    return <div style={{ fontSize: 12.5, color: 'var(--s400)', padding: '8px 0' }}>Aún no hay pagos registrados. Cuando entren pagos por MercadoPago (tarjeta, PSE, Efecty, Nequi…) o registres pagos directos, verás el desglose aquí.</div>;
+    return <div style={{ fontSize: 12.5, color: 'var(--s400)', padding: '8px 0' }}>No hay pagos en este período. Cuando entren pagos por MercadoPago (tarjeta, PSE, Efecty, Nequi…) o registres pagos directos, verás el desglose aquí.</div>;
   }
   const total = methods.reduce((a, m) => a + toCents(m.amount), 0) || 1;
   return (
@@ -196,14 +238,8 @@ function MethodBreakdown({ methods, currency }: { methods: MethodStat[]; currenc
   );
 }
 
-function ResumenTab() {
-  const [period, setPeriod] = useState<BillingPeriod>('month');
-  const { data: ov } = useQuery<BillingOverview>({ queryKey: ['billing-overview', period], queryFn: () => invoicesApi.overview(period) });
+function ResumenTab({ ov }: { ov?: BillingOverview }) {
   const cur = ov?.currency ?? 'COP';
-  const noun = PERIODS.find(p => p.id === period)?.noun ?? '';
-  const delta = ov?.has_delta ? deltaPct(ov.income, ov.income_prev) : null;
-  const up = (delta ?? 0) >= 0;
-
   const [confirmRemind, setConfirmRemind] = useState(false);
   const [reminding, setReminding] = useState(false);
   const [remindMsg, setRemindMsg] = useState('');
@@ -228,24 +264,9 @@ function ResumenTab() {
 
   return (
     <div>
-      {/* Period selector + actions */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 4, background: 'var(--s100)', borderRadius: 9, padding: 3 }}>
-          {PERIODS.map(p => {
-            const on = period === p.id;
-            return (
-              <button key={p.id} onClick={() => setPeriod(p.id)} style={{
-                padding: '6px 14px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12.5,
-                fontWeight: on ? 700 : 500, background: on ? '#fff' : 'transparent', color: on ? 'var(--s800)' : 'var(--s500)',
-                boxShadow: on ? '0 1px 3px rgba(0,0,0,.1)' : 'none',
-              }}>{p.label}</button>
-            );
-          })}
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          <button onClick={exportReport} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff', color: 'var(--s600)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}><Download size={14} /> Exportar informe</button>
-          <button onClick={() => { setConfirmRemind(true); setRemindMsg(''); setRemindErr(''); }} disabled={reminding} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: 'none', background: reminding ? 'var(--s200)' : '#f59e0b', color: '#fff', fontSize: 12.5, fontWeight: 700, cursor: reminding ? 'wait' : 'pointer' }}><Send size={14} /> Enviar cobros pendientes</button>
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        <button onClick={exportReport} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff', color: 'var(--s600)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}><Download size={14} /> Exportar informe</button>
+        <button onClick={() => { setConfirmRemind(true); setRemindMsg(''); setRemindErr(''); }} disabled={reminding} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: 'none', background: reminding ? 'var(--s200)' : '#f59e0b', color: '#fff', fontSize: 12.5, fontWeight: 700, cursor: reminding ? 'wait' : 'pointer' }}><Send size={14} /> Enviar cobros pendientes</button>
       </div>
 
       {confirmRemind && (
@@ -259,42 +280,6 @@ function ResumenTab() {
       )}
       {remindMsg && <div style={{ fontSize: 12.5, color: '#065f46', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}><CheckCircle size={14} />{remindMsg}</div>}
       {remindErr && <div style={{ fontSize: 12.5, color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}><AlertCircle size={14} />{remindErr}</div>}
-
-      {/* KPIs */}
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16 }}>
-        <div style={{ flex: 1.4, minWidth: 260, background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, padding: '18px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 9, background: '#10b9811a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Wallet size={16} color="#10b981" /></div>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--s500)' }}>Ingresos {noun} (cobrado)</span>
-            {delta !== null && (
-              <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11.5, fontWeight: 700, color: up ? '#059669' : '#dc2626' }}>
-                {up ? <ArrowUp size={12} /> : <ArrowDown size={12} />}{Math.abs(delta)}%
-              </span>
-            )}
-          </div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--s800)', fontFamily: "'DM Mono', monospace" }}>{formatMoney(ov?.income ?? '0', cur)}</div>
-          <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--s500)' }}><Globe size={13} color="#0ea5e9" /> Online <b style={{ color: 'var(--s700)' }}>{formatMoney(ov?.income_online ?? '0', cur)}</b></span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--s500)' }}><HandCoins size={13} color="#10b981" /> Directo <b style={{ color: 'var(--s700)' }}>{formatMoney(ov?.income_direct ?? '0', cur)}</b></span>
-          </div>
-        </div>
-        <div style={{ flex: 1, minWidth: 180, background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, padding: '18px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 9, background: '#f59e0b1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Clock size={16} color="#f59e0b" /></div>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--s500)' }}>Cartera</span>
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--s800)', fontFamily: "'DM Mono', monospace" }}>{formatMoney(ov?.pending ?? '0', cur)}</div>
-          <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 10 }}>{ov?.collected_pct ?? 0}% cobrado · facturado {formatMoney(ov?.invoiced ?? '0', cur)}</div>
-        </div>
-        <div style={{ flex: 1, minWidth: 180, background: '#fff', border: `1px solid ${Number(ov?.overdue ?? 0) > 0 ? '#fecaca' : 'var(--s200)'}`, borderRadius: 14, padding: '18px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 9, background: '#ef44441a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><AlertTriangle size={16} color="#ef4444" /></div>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--s500)' }}>Vencido</span>
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: Number(ov?.overdue ?? 0) > 0 ? '#b91c1c' : 'var(--s800)', fontFamily: "'DM Mono', monospace" }}>{formatMoney(ov?.overdue ?? '0', cur)}</div>
-          <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 10 }}>{ov?.overdue_count ?? 0} factura(s) vencida(s)</div>
-        </div>
-      </div>
 
       {ov && (
         <div style={{ background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, padding: '18px 20px', marginBottom: 16 }}>
@@ -319,11 +304,15 @@ function ResumenTab() {
   );
 }
 
-// ── Page shell with tabs ──────────────────────────────────────────────────────
+// ── Page shell ────────────────────────────────────────────────────────────────
 type Tab = 'facturas' | 'resumen';
 
 export function BillingPage() {
   const [tab, setTab] = useState<Tab>('facturas');
+  const [period, setPeriod] = useState<BillingPeriod>('month');
+
+  const { data: ov } = useQuery<BillingOverview>({ queryKey: ['billing-overview', period], queryFn: () => invoicesApi.overview(period) });
+
   const TABS: { id: Tab; label: string; Icon: React.ElementType }[] = [
     { id: 'facturas', label: 'Facturas', Icon: FileText },
     { id: 'resumen',  label: 'Resumen financiero', Icon: BarChart3 },
@@ -331,10 +320,25 @@ export function BillingPage() {
 
   return (
     <div style={{ padding: '24px 28px', maxWidth: 1100, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <Receipt size={20} color="#10b981" />
         <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--s800)', margin: 0 }}>Facturación</h1>
+        {/* Module-level period selector — drives the cards and every tab */}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, background: 'var(--s100)', borderRadius: 9, padding: 3 }}>
+          {PERIODS.map(p => {
+            const on = period === p.id;
+            return (
+              <button key={p.id} onClick={() => setPeriod(p.id)} style={{
+                padding: '6px 14px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12.5,
+                fontWeight: on ? 700 : 500, background: on ? '#fff' : 'transparent', color: on ? 'var(--s800)' : 'var(--s500)',
+                boxShadow: on ? '0 1px 3px rgba(0,0,0,.1)' : 'none',
+              }}>{p.label}</button>
+            );
+          })}
+        </div>
       </div>
+
+      <KpiCards ov={ov} period={period} />
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--s200)' }}>
         {TABS.map(t => {
@@ -351,7 +355,7 @@ export function BillingPage() {
         })}
       </div>
 
-      {tab === 'facturas' ? <FacturasTab /> : <ResumenTab />}
+      {tab === 'facturas' ? <FacturasTab period={period} /> : <ResumenTab ov={ov} />}
 
       <p style={{ fontSize: 11.5, color: 'var(--s400)', marginTop: 16, lineHeight: 1.5 }}>
         Facturación interna del consultorio (comprobantes de pago). <b>Online</b> = pagos por MercadoPago; <b>Directo</b> = pagos registrados a mano. No constituye facturación electrónica DIAN.
