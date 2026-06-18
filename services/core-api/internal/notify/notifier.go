@@ -47,6 +47,15 @@ type InvoiceEmailDetails struct {
 	StatusLabel   string // Spanish status (e.g. "Pagada")
 }
 
+// PaymentReminderDetails carries the data for a pending-balance reminder email.
+type PaymentReminderDetails struct {
+	OrgID         string
+	PatientName   string
+	InvoiceNumber string
+	Balance       string // formatted outstanding balance
+	DueDate       string // optional, formatted; empty if none
+}
+
 // Notifier dispatches booking-lifecycle and consent emails.
 // Implementations must not block — callers fire them in goroutines.
 // Errors are logged internally; they never reach the HTTP response.
@@ -61,6 +70,8 @@ type Notifier interface {
 	AccountVerification(ctx context.Context, toEmail string, d VerificationDetails)
 	// InvoiceReceipt emails the patient their payment receipt with the PDF attached.
 	InvoiceReceipt(ctx context.Context, toEmail string, d InvoiceEmailDetails, pdf []byte) error
+	// PaymentReminder nudges a patient about a pending balance.
+	PaymentReminder(ctx context.Context, toEmail string, d PaymentReminderDetails) error
 }
 
 // NoopNotifier satisfies Notifier without sending anything.
@@ -76,5 +87,8 @@ func (NoopNotifier) ConsentSignLink(_ context.Context, _ string, _ ConsentLinkDe
 func (NoopNotifier) PasswordReset(_ context.Context, _ string, _ PasswordResetDetails)      {}
 func (NoopNotifier) AccountVerification(_ context.Context, _ string, _ VerificationDetails) {}
 func (NoopNotifier) InvoiceReceipt(_ context.Context, _ string, _ InvoiceEmailDetails, _ []byte) error {
+	return nil
+}
+func (NoopNotifier) PaymentReminder(_ context.Context, _ string, _ PaymentReminderDetails) error {
 	return nil
 }

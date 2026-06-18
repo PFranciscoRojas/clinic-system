@@ -12,46 +12,11 @@ import (
 // present in the binary's image.
 var colombia = time.FixedZone("COT", -5*3600)
 
-// PeriodStat is income in a period and the same-elapsed slice of the previous
-// one (for a fair "vs período anterior" delta).
-type PeriodStat struct {
-	Income string `json:"income"`
-	Prev   string `json:"prev"`
-}
-
 // MonthBucket is one month of income split by channel (decimal strings).
 type MonthBucket struct {
 	Month  string `json:"month"` // YYYY-MM
 	Online string `json:"online"`
 	Direct string `json:"direct"`
-}
-
-// BillingOverview is the clinic-wide financial picture: collected income unified
-// across both channels (MercadoPago bookings + manually recorded payments), the
-// invoice-side cartera, per-status counts and a 12-month series.
-type BillingOverview struct {
-	Currency string `json:"currency"`
-
-	IncomeTotal string `json:"income_total"` // online + direct, all-time collected
-	OnlineTotal string `json:"online_total"` // MercadoPago bookings (PAID)
-	DirectTotal string `json:"direct_total"` // manually recorded payments
-
-	Invoiced string `json:"invoiced"` // manual invoices billed (non-cancelled)
-	Pending  string `json:"pending"`  // manual outstanding (issued + partial)
-
-	Count        int `json:"count"`
-	Draft        int `json:"draft"`
-	Issued       int `json:"issued"`
-	Partial      int `json:"partial"`
-	Paid         int `json:"paid"`
-	Cancelled    int `json:"cancelled"`
-	BookingsPaid int `json:"bookings_paid"`
-
-	Week    PeriodStat    `json:"week"`
-	Month   PeriodStat    `json:"month"`
-	Year    PeriodStat    `json:"year"`
-	Monthly []MonthBucket `json:"monthly"`
-	Methods []MethodStat  `json:"methods"`
 }
 
 // MethodStat is collected income broken down by how it was paid.
@@ -62,77 +27,128 @@ type MethodStat struct {
 	Amount  string `json:"amount"`
 }
 
-// Overview composes the unified financial overview for the org.
-func (s *Service) Overview(ctx context.Context, orgID string) (BillingOverview, error) {
-	base, err := s.repo.Summary(ctx, orgID)
-	if err != nil {
-		return BillingOverview{}, err
-	}
-	online, direct, bookingsPaid, err := s.repo.IncomeTotals(ctx, orgID)
-	if err != nil {
-		return BillingOverview{}, err
-	}
+// BillingOverview is the clinic-wide financial picture for a selected period.
+// Income figures are scoped to the period; the cartera (pending/overdue) and the
+// collected ratio are point-in-time; the 12-month series is always the last 12.
+type BillingOverview struct {
+	Currency string `json:"currency"`
+	Period   string `json:"period"` // week | month | year | all
 
-	ov := BillingOverview{
-		Currency:     base.Currency,
-		OnlineTotal:  online,
-		DirectTotal:  direct,
-		IncomeTotal:  addMoney(online, direct),
-		Invoiced:     base.Invoiced,
-		Pending:      base.Pending,
-		Count:        base.Count,
-		Draft:        base.Draft,
-		Issued:       base.Issued,
-		Partial:      base.Partial,
-		Paid:         base.Paid,
-		Cancelled:    base.Cancelled,
-		BookingsPaid: bookingsPaid,
-	}
+	Income        string `json:"income"`        // collected in period (online + direct)
+	IncomeOnline  string `json:"income_online"` // MercadoPago, in period
+	IncomeDirect  string `json:"income_direct"` // manual payments, in period
+	IncomePrev    string `json:"income_prev"`   // same-elapsed previous period
+	HasDelta      bool   `json:"has_delta"`
+	PaymentsCount int    `json:"payments_count"`
 
-	now := time.Now().In(colombia)
+	// Point-in-time cartera.
+	Pending      string `json:"pending"`
+	Overdue      string `json:"overdue"`
+	OverdueCount int    `json:"overdue_count"`
+	Invoiced     string `json:"invoiced"`      // all-time, non-cancelled
+	Collected    string `json:"collected"`     // all-time invoice payments
+	CollectedPct int    `json:"collected_pct"` // collected / invoiced
+
+	Methods []MethodStat  `json:"methods"` // in period
+	Monthly []MonthBucket `json:"monthly"` // last 12 months
+}
+
+// periodRange resolves a period name into its [from, to) bounds and the matching
+// same-elapsed previous window (for deltas). "all" has no delta and spans
+// everything.
+func periodRange(period string, now time.Time) (from, to, prevFrom, prevTo time.Time, hasDelta bool) {
+	now = now.In(colombia)
 	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, colombia)
-	mondayOffset := (int(now.Weekday()) + 6) % 7 // Monday = 0
-	startWeek := day.AddDate(0, 0, -mondayOffset)
-	startMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, colombia)
-	startYear := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, colombia)
+	switch period {
+	case "week":
+		mo := (int(now.Weekday()) + 6) % 7 // Monday = 0
+		from = day.AddDate(0, 0, -mo)
+		to = now
+		prevFrom = from.AddDate(0, 0, -7)
+		prevTo = prevFrom.Add(now.Sub(from))
+		hasDelta = true
+	case "year":
+		from = time.Date(now.Year(), 1, 1, 0, 0, 0, 0, colombia)
+		to = now
+		prevFrom = from.AddDate(-1, 0, 0)
+		prevTo = prevFrom.Add(now.Sub(from))
+		hasDelta = true
+	case "all":
+		from = time.Time{}
+		to = now.AddDate(100, 0, 0)
+	default: // month
+		from = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, colombia)
+		to = now
+		prevFrom = from.AddDate(0, -1, 0)
+		prevTo = prevFrom.Add(now.Sub(from))
+		hasDelta = true
+	}
+	return
+}
 
-	if ov.Week, err = s.periodStat(ctx, orgID, startWeek, startWeek.AddDate(0, 0, -7), now); err != nil {
+// Overview composes the financial overview for the given period.
+func (s *Service) Overview(ctx context.Context, orgID, period string) (BillingOverview, error) {
+	switch period {
+	case "week", "month", "year", "all":
+	default:
+		period = "month"
+	}
+	from, to, pFrom, pTo, hasDelta := periodRange(period, time.Now())
+
+	online, direct, count, err := s.repo.IncomeByChannelBetween(ctx, orgID, from, to)
+	if err != nil {
 		return BillingOverview{}, err
 	}
-	if ov.Month, err = s.periodStat(ctx, orgID, startMonth, startMonth.AddDate(0, -1, 0), now); err != nil {
+	ov := BillingOverview{
+		Currency: "COP", Period: period,
+		Income: addMoney(online, direct), IncomeOnline: online, IncomeDirect: direct,
+		PaymentsCount: count, HasDelta: hasDelta,
+	}
+	if cur, err := s.repo.CurrencyHint(ctx, orgID); err == nil && cur != "" {
+		ov.Currency = cur
+	}
+	if hasDelta {
+		if ov.IncomePrev, err = s.repo.IncomeBetween(ctx, orgID, pFrom, pTo); err != nil {
+			return BillingOverview{}, err
+		}
+	}
+
+	cart, err := s.repo.Cartera(ctx, orgID)
+	if err != nil {
 		return BillingOverview{}, err
 	}
-	if ov.Year, err = s.periodStat(ctx, orgID, startYear, startYear.AddDate(-1, 0, 0), now); err != nil {
+	ov.Pending, ov.Overdue, ov.OverdueCount = cart.Pending, cart.Overdue, cart.OverdueCount
+	ov.Invoiced, ov.Collected = cart.Invoiced, cart.Collected
+	if iv := cents(cart.Invoiced); iv > 0 {
+		pct := cents(cart.Collected) * 100 / iv
+		if pct > 100 {
+			pct = 100
+		}
+		ov.CollectedPct = int(pct)
+	}
+
+	if ov.Methods, err = s.methodBreakdown(ctx, orgID, from, to); err != nil {
 		return BillingOverview{}, err
 	}
 
-	// 12 months ending in the current one.
-	since := startMonth.AddDate(0, -11, 0)
+	since := time.Date(time.Now().In(colombia).Year(), time.Now().In(colombia).Month(), 1, 0, 0, 0, 0, colombia).AddDate(0, -11, 0)
 	rows, err := s.repo.MonthlyIncome(ctx, orgID, since)
 	if err != nil {
 		return BillingOverview{}, err
 	}
 	ov.Monthly = fillMonths(since, rows)
-
-	if ov.Methods, err = s.methodBreakdown(ctx, orgID); err != nil {
-		return BillingOverview{}, err
-	}
 	return ov, nil
 }
 
-// methodBreakdown lists collected income by payment method across both channels:
-// online (MercadoPago, labeled from its reported type/method) and direct
-// (manually recorded payments, labeled from the method enum). Sorted by amount.
-func (s *Service) methodBreakdown(ctx context.Context, orgID string) ([]MethodStat, error) {
-	online, err := s.repo.OnlineMethods(ctx, orgID)
+func (s *Service) methodBreakdown(ctx context.Context, orgID string, from, to time.Time) ([]MethodStat, error) {
+	online, err := s.repo.OnlineMethods(ctx, orgID, from, to)
 	if err != nil {
 		return nil, err
 	}
-	direct, err := s.repo.DirectMethods(ctx, orgID)
+	direct, err := s.repo.DirectMethods(ctx, orgID, from, to)
 	if err != nil {
 		return nil, err
 	}
-
 	out := make([]MethodStat, 0, len(online)+len(direct))
 	for _, m := range online {
 		out = append(out, MethodStat{Label: mpMethodLabel(m.Type, m.Method), Channel: "online", Count: m.Count, Amount: m.Amount})
@@ -144,9 +160,6 @@ func (s *Service) methodBreakdown(ctx context.Context, orgID string) ([]MethodSt
 	return out, nil
 }
 
-// mpMethodLabel turns MercadoPago's payment_type_id / payment_method_id into a
-// Spanish label. The type is the coarse bucket; for vouchers and transfers the
-// brand (method) is more precise.
 func mpMethodLabel(ptype, pmethod string) string {
 	switch ptype {
 	case "credit_card":
@@ -180,22 +193,6 @@ func mpMethodLabel(ptype, pmethod string) string {
 	}
 }
 
-// periodStat returns income in [start, now) and in the same-length slice of the
-// previous period [prevStart, prevStart + (now-start)).
-func (s *Service) periodStat(ctx context.Context, orgID string, start, prevStart, now time.Time) (PeriodStat, error) {
-	cur, err := s.repo.IncomeBetween(ctx, orgID, start, now)
-	if err != nil {
-		return PeriodStat{}, err
-	}
-	prev, err := s.repo.IncomeBetween(ctx, orgID, prevStart, prevStart.Add(now.Sub(start)))
-	if err != nil {
-		return PeriodStat{}, err
-	}
-	return PeriodStat{Income: cur, Prev: prev}, nil
-}
-
-// fillMonths turns the sparse month→channel rows into a dense, ordered list of
-// 12 buckets starting at `since`, zero-filling gaps.
 func fillMonths(since time.Time, rows map[string]MonthBucket) []MonthBucket {
 	out := make([]MonthBucket, 0, 12)
 	m := time.Date(since.Year(), since.Month(), 1, 0, 0, 0, 0, colombia)
@@ -216,7 +213,6 @@ func fillMonths(since time.Time, rows map[string]MonthBucket) []MonthBucket {
 	return out
 }
 
-// addMoney sums two validated decimal strings via integer cents.
 func addMoney(a, b string) string {
 	v := cents(a) + cents(b)
 	neg := v < 0
@@ -232,19 +228,30 @@ func addMoney(a, b string) string {
 
 // ── repository ──────────────────────────────────────────────────────────────
 
-// IncomeTotals returns all-time online (paid MercadoPago bookings) and direct
-// (manually recorded payments) income, plus the count of paid bookings.
-func (r *Repository) IncomeTotals(ctx context.Context, orgID string) (online, direct string, bookingsPaid int, err error) {
+// CurrencyHint returns the currency of the most recent invoice (single-currency
+// assumption), defaulting to COP.
+func (r *Repository) CurrencyHint(ctx context.Context, orgID string) (string, error) {
+	var c string
+	err := r.q(ctx).QueryRow(ctx,
+		`SELECT COALESCE((SELECT currency FROM invoices WHERE organization_id = $1 ORDER BY created_at DESC LIMIT 1), 'COP')`,
+		orgID).Scan(&c)
+	return c, err
+}
+
+// IncomeByChannelBetween returns online (paid bookings) and direct (recorded
+// payments) income in [from, to), plus the total number of payment events.
+func (r *Repository) IncomeByChannelBetween(ctx context.Context, orgID string, from, to time.Time) (online, direct string, count int, err error) {
 	err = r.q(ctx).QueryRow(ctx, `
 		SELECT
-			(SELECT COALESCE(SUM(amount), 0)::numeric::text FROM bookings WHERE organization_id = $1 AND status = 'PAID'),
-			(SELECT COALESCE(SUM(amount), 0)::text          FROM payments WHERE organization_id = $1),
-			(SELECT COUNT(*)                                 FROM bookings WHERE organization_id = $1 AND status = 'PAID')
-	`, orgID).Scan(&online, &direct, &bookingsPaid)
+			(SELECT COALESCE(SUM(amount), 0)::numeric::text FROM bookings WHERE organization_id = $1 AND status = 'PAID' AND updated_at >= $2 AND updated_at < $3),
+			(SELECT COALESCE(SUM(amount), 0)::text          FROM payments WHERE organization_id = $1 AND paid_at    >= $2 AND paid_at    < $3),
+			(SELECT COUNT(*) FROM bookings WHERE organization_id = $1 AND status = 'PAID' AND updated_at >= $2 AND updated_at < $3)
+			+ (SELECT COUNT(*) FROM payments WHERE organization_id = $1 AND paid_at >= $2 AND paid_at < $3)
+	`, orgID, from, to).Scan(&online, &direct, &count)
 	if err != nil {
-		return "", "", 0, fmt.Errorf("income totals: %w", err)
+		return "", "", 0, fmt.Errorf("income by channel: %w", err)
 	}
-	return online, direct, bookingsPaid, nil
+	return online, direct, count, nil
 }
 
 // IncomeBetween sums collected income from both channels in [from, to).
@@ -262,6 +269,33 @@ func (r *Repository) IncomeBetween(ctx context.Context, orgID string, from, to t
 	return v, nil
 }
 
+type carteraRow struct {
+	Pending      string
+	Overdue      string
+	OverdueCount int
+	Invoiced     string
+	Collected    string
+}
+
+// Cartera returns the current outstanding balance, the overdue slice of it, and
+// the all-time invoiced/collected totals (non-cancelled).
+func (r *Repository) Cartera(ctx context.Context, orgID string) (carteraRow, error) {
+	var c carteraRow
+	err := r.q(ctx).QueryRow(ctx, `
+		SELECT
+			COALESCE(SUM(total_due - total_paid) FILTER (WHERE status IN ('ISSUED','PARTIAL')), 0)::text,
+			COALESCE(SUM(total_due - total_paid) FILTER (WHERE status IN ('ISSUED','PARTIAL') AND due_at IS NOT NULL AND due_at < NOW()), 0)::text,
+			COUNT(*) FILTER (WHERE status IN ('ISSUED','PARTIAL') AND due_at IS NOT NULL AND due_at < NOW()),
+			COALESCE(SUM(total_due)  FILTER (WHERE status <> 'CANCELLED'), 0)::text,
+			COALESCE(SUM(total_paid) FILTER (WHERE status <> 'CANCELLED'), 0)::text
+		FROM invoices WHERE organization_id = $1
+	`, orgID).Scan(&c.Pending, &c.Overdue, &c.OverdueCount, &c.Invoiced, &c.Collected)
+	if err != nil {
+		return carteraRow{}, fmt.Errorf("cartera: %w", err)
+	}
+	return c, nil
+}
+
 type rawOnlineMethod struct {
 	Type   string
 	Method string
@@ -275,13 +309,12 @@ type rawDirectMethod struct {
 	Amount string
 }
 
-// OnlineMethods groups paid MercadoPago bookings by their reported type/method.
-func (r *Repository) OnlineMethods(ctx context.Context, orgID string) ([]rawOnlineMethod, error) {
+func (r *Repository) OnlineMethods(ctx context.Context, orgID string, from, to time.Time) ([]rawOnlineMethod, error) {
 	rows, err := r.q(ctx).Query(ctx, `
 		SELECT COALESCE(mp_payment_type, ''), COALESCE(mp_payment_method, ''), COUNT(*), SUM(amount)::numeric::text
-		FROM bookings WHERE organization_id = $1 AND status = 'PAID'
+		FROM bookings WHERE organization_id = $1 AND status = 'PAID' AND updated_at >= $2 AND updated_at < $3
 		GROUP BY 1, 2
-	`, orgID)
+	`, orgID, from, to)
 	if err != nil {
 		return nil, fmt.Errorf("online methods: %w", err)
 	}
@@ -297,13 +330,12 @@ func (r *Repository) OnlineMethods(ctx context.Context, orgID string) ([]rawOnli
 	return out, rows.Err()
 }
 
-// DirectMethods groups manually recorded payments by their method enum.
-func (r *Repository) DirectMethods(ctx context.Context, orgID string) ([]rawDirectMethod, error) {
+func (r *Repository) DirectMethods(ctx context.Context, orgID string, from, to time.Time) ([]rawDirectMethod, error) {
 	rows, err := r.q(ctx).Query(ctx, `
 		SELECT payment_method, COUNT(*), SUM(amount)::text
-		FROM payments WHERE organization_id = $1
+		FROM payments WHERE organization_id = $1 AND paid_at >= $2 AND paid_at < $3
 		GROUP BY 1
-	`, orgID)
+	`, orgID, from, to)
 	if err != nil {
 		return nil, fmt.Errorf("direct methods: %w", err)
 	}
@@ -335,7 +367,6 @@ func (r *Repository) MonthlyIncome(ctx context.Context, orgID string, since time
 		return nil, fmt.Errorf("monthly income: %w", err)
 	}
 	defer rows.Close()
-
 	out := map[string]MonthBucket{}
 	for rows.Next() {
 		var month, src, amount string

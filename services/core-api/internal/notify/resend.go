@@ -162,6 +162,27 @@ func (n *ResendNotifier) InvoiceReceipt(ctx context.Context, to string, d Invoic
 	}})
 }
 
+// PaymentReminder nudges a patient about a pending balance.
+func (n *ResendNotifier) PaymentReminder(ctx context.Context, to string, d PaymentReminderDetails) error {
+	brand := n.brandFor(ctx, d.OrgID)
+	greeting := "Hola"
+	if d.PatientName != "" {
+		greeting = "Hola " + d.PatientName
+	}
+	due := ""
+	if d.DueDate != "" {
+		due = fmt.Sprintf(` (con vencimiento el %s)`, d.DueDate)
+	}
+	html := fmt.Sprintf(`<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#1f2937">`+
+		`<p style="font-size:11px;color:%s;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin:0 0 6px">%s</p>`+
+		`<h2 style="margin:0 0 12px;font-size:18px">Recordatorio de pago</h2>`+
+		`<p style="font-size:14px;line-height:1.6;margin:0 0 12px">%s, te recordamos que tienes un saldo pendiente de <strong>%s</strong> en la factura %s%s.</p>`+
+		`<p style="font-size:13px;color:#6b7280;line-height:1.6;margin:0 0 16px">Si ya realizaste el pago, por favor ignora este mensaje. Cualquier duda, escríbenos.</p>`+
+		`<p style="font-size:13px;color:#6b7280;margin:16px 0 0">%s</p></div>`,
+		brand.BrandColor, brand.PublicName, greeting, d.Balance, d.InvoiceNumber, due, brand.PublicName)
+	return n.send(ctx, to, "Recordatorio de pago "+d.InvoiceNumber+" · "+brand.PublicName, html)
+}
+
 func (n *ResendNotifier) send(ctx context.Context, to, subject, htmlBody string) error {
 	return n.sendWith(ctx, to, subject, htmlBody, nil)
 }

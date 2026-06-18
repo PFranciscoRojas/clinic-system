@@ -29,6 +29,7 @@ func (h *Handler) InvoiceRoutes() chi.Router {
 	r.With(middleware.RequirePermission("billing:create")).Post("/", h.createInvoice)
 	r.With(middleware.RequirePermission("billing:create")).Post("/{invoice_id}/issue", h.issueInvoice)
 	r.With(middleware.RequirePermission("billing:create")).Post("/{invoice_id}/cancel", h.cancelInvoice)
+	r.With(middleware.RequirePermission("billing:create")).Post("/send-reminders", h.sendReminders)
 	r.With(middleware.RequirePermission("billing:record_payment")).Post("/{invoice_id}/payments", h.recordPayment)
 	return r
 }
@@ -75,7 +76,7 @@ func (h *Handler) listInvoices(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
-	ov, err := h.svc.Overview(r.Context(), claims.OrganizationID)
+	ov, err := h.svc.Overview(r.Context(), claims.OrganizationID, r.URL.Query().Get("period"))
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "no se pudo calcular el resumen")
 		return
@@ -287,6 +288,63 @@ func joinNonEmpty(parts ...string) string {
 		out += p
 	}
 	return out
+}
+
+// POST /send-reminders — email a pending-balance reminder to every patient with
+// an outstanding (ISSUED/PARTIAL) invoice that has a registered email.
+func (h *Handler) sendReminders(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	claims := middleware.ClaimsFromContext(ctx)
+
+	pending, err := h.svc.ListPending(ctx, claims.OrganizationID)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "no se pudieron cargar las facturas pendientes")
+		return
+	}
+
+	emailByPatient := map[string]string{}
+	nameByPatient := map[string]string{}
+	sent, skipped := 0, 0
+	for _, inv := range pending {
+		email, ok := emailByPatient[inv.PatientID]
+		if !ok {
+			if p, err := h.patients.Get(ctx, claims.OrganizationID, inv.PatientID); err == nil {
+				email = p.Email
+				nameByPatient[inv.PatientID] = joinNonEmpty(p.FirstName, p.MiddleName, p.PaternalLastName, p.MaternalLastName)
+			}
+			emailByPatient[inv.PatientID] = email
+		}
+		if email == "" {
+			skipped++
+			continue
+		}
+		balance := balanceStr(inv)
+		due := ""
+		if inv.DueAt != nil {
+			due = inv.DueAt.In(colombia).Format("2006-01-02")
+		}
+		if err := h.notifier.PaymentReminder(ctx, email, notify.PaymentReminderDetails{
+			OrgID:         claims.OrganizationID,
+			PatientName:   nameByPatient[inv.PatientID],
+			InvoiceNumber: invoiceLabel(inv),
+			Balance:       formatMoney(balance, inv.Currency),
+			DueDate:       due,
+		}); err != nil {
+			skipped++
+			continue
+		}
+		sent++
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]int{"sent": sent, "skipped": skipped, "pending": len(pending)})
+}
+
+// balanceStr is the outstanding balance of an invoice as a decimal string.
+func balanceStr(inv Invoice) string {
+	v := cents(inv.TotalDue) - cents(inv.TotalPaid)
+	if v < 0 {
+		v = 0
+	}
+	return itoaCents(v)
 }
 
 func (h *Handler) recordPayment(w http.ResponseWriter, r *http.Request) {

@@ -1,14 +1,30 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Receipt, Wallet, Clock, SearchX, ArrowUp, ArrowDown, Globe, HandCoins, FileText, BarChart3 } from 'lucide-react';
+import { Receipt, Wallet, Clock, SearchX, ArrowUp, ArrowDown, Globe, HandCoins, FileText, BarChart3, AlertTriangle, Download, Send, CheckCircle, AlertCircle } from 'lucide-react';
 import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
 import { InvoiceDetailModal } from '@/components/billing/InvoiceDetailModal';
 import {
-  invoicesApi, formatMoney, invoiceLabel,
+  invoicesApi, formatMoney, balanceOf, invoiceLabel,
   INVOICE_STATUS_META, type Invoice, type InvoiceStatus,
-  type BillingOverview, type PeriodStat, type MonthBucket, type MethodStat,
+  type BillingOverview, type BillingPeriod, type MonthBucket, type MethodStat,
 } from '@/api/invoices';
+
+const PERIODS: { id: BillingPeriod; label: string; noun: string }[] = [
+  { id: 'week',  label: 'Semana', noun: 'de la semana' },
+  { id: 'month', label: 'Mes',    noun: 'del mes'      },
+  { id: 'year',  label: 'Año',    noun: 'del año'      },
+  { id: 'all',   label: 'Todo',   noun: 'totales'      },
+];
+
+function downloadCsv(filename: string, rows: (string | number)[][]) {
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
 
 const FILTERS: { id: string; label: string }[] = [
   { id: '',          label: 'Todas'        },
@@ -41,9 +57,20 @@ function FacturasTab() {
   });
   const list = invoices ?? [];
 
+  const exportCsv = () => {
+    downloadCsv(`facturas-${new Date().toISOString().slice(0, 10)}.csv`, [
+      ['N.º', 'Paciente', 'Servicio', 'Fecha', 'Total', 'Pagado', 'Saldo', 'Estado'],
+      ...list.map(inv => [
+        invoiceLabel(inv), inv.patient_name || '', inv.service || '',
+        fmtDate(inv.issued_at ?? inv.created_at), inv.total_due, inv.total_paid,
+        balanceOf(inv), INVOICE_STATUS_META[inv.status as InvoiceStatus].label,
+      ]),
+    ]);
+  };
+
   return (
     <div>
-      <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 14 }}>
         {FILTERS.map(f => {
           const on = filter === f.id;
           return (
@@ -53,6 +80,11 @@ function FacturasTab() {
             }}>{f.label}</button>
           );
         })}
+        <button onClick={exportCsv} disabled={list.length === 0} style={{
+          marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8,
+          border: '1.5px solid var(--s200)', background: '#fff', color: list.length ? 'var(--s600)' : 'var(--s300)',
+          fontSize: 12.5, fontWeight: 600, cursor: list.length ? 'pointer' : 'not-allowed',
+        }}><Download size={13} /> Exportar CSV</button>
       </div>
 
       <div style={{ background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, overflow: 'hidden' }}>
@@ -105,22 +137,6 @@ function FacturasTab() {
 }
 
 // ── Resumen financiero tab ────────────────────────────────────────────────────
-function PeriodTile({ label, stat, currency }: { label: string; stat?: PeriodStat; currency: string }) {
-  const d = stat ? deltaPct(stat.income, stat.prev) : null;
-  const up = (d ?? 0) >= 0;
-  return (
-    <div style={{ flex: 1, minWidth: 150, background: '#fff', border: '1px solid var(--s200)', borderRadius: 12, padding: '14px 16px' }}>
-      <div style={{ fontSize: 11.5, color: 'var(--s400)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</div>
-      <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--s800)', fontFamily: "'DM Mono', monospace", marginTop: 5 }}>{formatMoney(stat?.income ?? '0', currency)}</div>
-      {d !== null && (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: 5, fontSize: 11.5, fontWeight: 700, color: up ? '#059669' : '#dc2626' }}>
-          {up ? <ArrowUp size={12} /> : <ArrowDown size={12} />}{Math.abs(d)}% <span style={{ color: 'var(--s400)', fontWeight: 400 }}>vs. anterior</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function MonthlyChart({ data, currency }: { data: MonthBucket[]; currency: string }) {
   const totals = data.map(d => toCents(d.online) + toCents(d.direct));
   const max = Math.max(1, ...totals);
@@ -181,45 +197,103 @@ function MethodBreakdown({ methods, currency }: { methods: MethodStat[]; currenc
 }
 
 function ResumenTab() {
-  const { data: ov } = useQuery<BillingOverview>({ queryKey: ['billing-overview'], queryFn: () => invoicesApi.overview() });
+  const [period, setPeriod] = useState<BillingPeriod>('month');
+  const { data: ov } = useQuery<BillingOverview>({ queryKey: ['billing-overview', period], queryFn: () => invoicesApi.overview(period) });
   const cur = ov?.currency ?? 'COP';
-  // % collected of what was invoiced (manual invoices; direct_total == invoice payments).
-  const collectedPct = ov && parseFloat(ov.invoiced) > 0
-    ? Math.round(Math.min(1, parseFloat(ov.direct_total) / parseFloat(ov.invoiced)) * 100)
-    : null;
+  const noun = PERIODS.find(p => p.id === period)?.noun ?? '';
+  const delta = ov?.has_delta ? deltaPct(ov.income, ov.income_prev) : null;
+  const up = (delta ?? 0) >= 0;
+
+  const [confirmRemind, setConfirmRemind] = useState(false);
+  const [reminding, setReminding] = useState(false);
+  const [remindMsg, setRemindMsg] = useState('');
+  const [remindErr, setRemindErr] = useState('');
+
+  const sendReminders = async () => {
+    setReminding(true); setRemindMsg(''); setRemindErr(''); setConfirmRemind(false);
+    try {
+      const r = await invoicesApi.sendReminders();
+      setRemindMsg(`Recordatorios enviados: ${r.sent}${r.skipped ? ` · ${r.skipped} sin correo` : ''} (de ${r.pending} pendientes).`);
+    } catch (e) { setRemindErr(e instanceof Error && e.message ? e.message : 'No se pudieron enviar los recordatorios.'); }
+    finally { setReminding(false); }
+  };
+
+  const exportReport = () => {
+    if (!ov) return;
+    downloadCsv(`informe-ingresos-${new Date().toISOString().slice(0, 7)}.csv`, [
+      ['Mes', 'Online', 'Directo', 'Total'],
+      ...ov.monthly.map(m => [m.month, m.online, m.direct, (parseFloat(m.online || '0') + parseFloat(m.direct || '0')).toFixed(2)]),
+    ]);
+  };
 
   return (
     <div>
-      {/* Income KPIs */}
+      {/* Period selector + actions */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 4, background: 'var(--s100)', borderRadius: 9, padding: 3 }}>
+          {PERIODS.map(p => {
+            const on = period === p.id;
+            return (
+              <button key={p.id} onClick={() => setPeriod(p.id)} style={{
+                padding: '6px 14px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12.5,
+                fontWeight: on ? 700 : 500, background: on ? '#fff' : 'transparent', color: on ? 'var(--s800)' : 'var(--s500)',
+                boxShadow: on ? '0 1px 3px rgba(0,0,0,.1)' : 'none',
+              }}>{p.label}</button>
+            );
+          })}
+        </div>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <button onClick={exportReport} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff', color: 'var(--s600)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}><Download size={14} /> Exportar informe</button>
+          <button onClick={() => { setConfirmRemind(true); setRemindMsg(''); setRemindErr(''); }} disabled={reminding} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: 'none', background: reminding ? 'var(--s200)' : '#f59e0b', color: '#fff', fontSize: 12.5, fontWeight: 700, cursor: reminding ? 'wait' : 'pointer' }}><Send size={14} /> Enviar cobros pendientes</button>
+        </div>
+      </div>
+
+      {confirmRemind && (
+        <div style={{ padding: 14, background: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: 11, marginBottom: 16 }}>
+          <div style={{ fontSize: 13, color: '#92400e', marginBottom: 10 }}>Se enviará un recordatorio de pago por correo a cada paciente con saldo pendiente. ¿Continuar?</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={sendReminders} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 9, border: 'none', background: '#f59e0b', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}><Send size={14} /> Sí, enviar</button>
+            <button onClick={() => setConfirmRemind(false)} style={{ padding: '8px 16px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff', color: 'var(--s600)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+          </div>
+        </div>
+      )}
+      {remindMsg && <div style={{ fontSize: 12.5, color: '#065f46', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}><CheckCircle size={14} />{remindMsg}</div>}
+      {remindErr && <div style={{ fontSize: 12.5, color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}><AlertCircle size={14} />{remindErr}</div>}
+
+      {/* KPIs */}
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16 }}>
         <div style={{ flex: 1.4, minWidth: 260, background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, padding: '18px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
             <div style={{ width: 32, height: 32, borderRadius: 9, background: '#10b9811a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Wallet size={16} color="#10b981" /></div>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--s500)' }}>Ingresos totales (cobrado)</span>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--s500)' }}>Ingresos {noun} (cobrado)</span>
+            {delta !== null && (
+              <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11.5, fontWeight: 700, color: up ? '#059669' : '#dc2626' }}>
+                {up ? <ArrowUp size={12} /> : <ArrowDown size={12} />}{Math.abs(delta)}%
+              </span>
+            )}
           </div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--s800)', fontFamily: "'DM Mono', monospace" }}>{formatMoney(ov?.income_total ?? '0', cur)}</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--s800)', fontFamily: "'DM Mono', monospace" }}>{formatMoney(ov?.income ?? '0', cur)}</div>
           <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--s500)' }}><Globe size={13} color="#0ea5e9" /> Online <b style={{ color: 'var(--s700)' }}>{formatMoney(ov?.online_total ?? '0', cur)}</b></span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--s500)' }}><HandCoins size={13} color="#10b981" /> Directo <b style={{ color: 'var(--s700)' }}>{formatMoney(ov?.direct_total ?? '0', cur)}</b></span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--s500)' }}><Globe size={13} color="#0ea5e9" /> Online <b style={{ color: 'var(--s700)' }}>{formatMoney(ov?.income_online ?? '0', cur)}</b></span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--s500)' }}><HandCoins size={13} color="#10b981" /> Directo <b style={{ color: 'var(--s700)' }}>{formatMoney(ov?.income_direct ?? '0', cur)}</b></span>
           </div>
         </div>
-        <div style={{ flex: 1, minWidth: 200, background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, padding: '18px 20px' }}>
+        <div style={{ flex: 1, minWidth: 180, background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, padding: '18px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
             <div style={{ width: 32, height: 32, borderRadius: 9, background: '#f59e0b1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Clock size={16} color="#f59e0b" /></div>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--s500)' }}>Saldo pendiente (cartera)</span>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--s500)' }}>Cartera</span>
           </div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--s800)', fontFamily: "'DM Mono', monospace" }}>{formatMoney(ov?.pending ?? '0', cur)}</div>
-          <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 10 }}>
-            {(ov?.issued ?? 0) + (ov?.partial ?? 0)} por cobrar · facturado {formatMoney(ov?.invoiced ?? '0', cur)}{collectedPct !== null ? ` · ${collectedPct}% cobrado` : ''}
-          </div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--s800)', fontFamily: "'DM Mono', monospace" }}>{formatMoney(ov?.pending ?? '0', cur)}</div>
+          <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 10 }}>{ov?.collected_pct ?? 0}% cobrado · facturado {formatMoney(ov?.invoiced ?? '0', cur)}</div>
         </div>
-      </div>
-
-      {/* Period tiles */}
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16 }}>
-        <PeriodTile label="Esta semana" stat={ov?.week} currency={cur} />
-        <PeriodTile label="Este mes" stat={ov?.month} currency={cur} />
-        <PeriodTile label="Este año" stat={ov?.year} currency={cur} />
+        <div style={{ flex: 1, minWidth: 180, background: '#fff', border: `1px solid ${Number(ov?.overdue ?? 0) > 0 ? '#fecaca' : 'var(--s200)'}`, borderRadius: 14, padding: '18px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 9, background: '#ef44441a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><AlertTriangle size={16} color="#ef4444" /></div>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--s500)' }}>Vencido</span>
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: Number(ov?.overdue ?? 0) > 0 ? '#b91c1c' : 'var(--s800)', fontFamily: "'DM Mono', monospace" }}>{formatMoney(ov?.overdue ?? '0', cur)}</div>
+          <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 10 }}>{ov?.overdue_count ?? 0} factura(s) vencida(s)</div>
+        </div>
       </div>
 
       {ov && (
