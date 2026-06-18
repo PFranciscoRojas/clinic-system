@@ -37,6 +37,16 @@ type VerificationDetails struct {
 	Link string // one-time verification URL, expires within 24h
 }
 
+// InvoiceEmailDetails carries the data for emailing a patient their payment
+// receipt (the PDF travels separately as an attachment).
+type InvoiceEmailDetails struct {
+	OrgID         string // tenant whose branding stamps the email
+	PatientName   string
+	InvoiceNumber string // e.g. "F-000001"
+	Amount        string // already formatted (e.g. "$80.000 COP")
+	StatusLabel   string // Spanish status (e.g. "Pagada")
+}
+
 // Notifier dispatches booking-lifecycle and consent emails.
 // Implementations must not block — callers fire them in goroutines.
 // Errors are logged internally; they never reach the HTTP response.
@@ -49,6 +59,8 @@ type Notifier interface {
 	ConsentSignLink(ctx context.Context, toEmail string, d ConsentLinkDetails)
 	PasswordReset(ctx context.Context, toEmail string, d PasswordResetDetails)
 	AccountVerification(ctx context.Context, toEmail string, d VerificationDetails)
+	// InvoiceReceipt emails the patient their payment receipt with the PDF attached.
+	InvoiceReceipt(ctx context.Context, toEmail string, d InvoiceEmailDetails, pdf []byte) error
 }
 
 // NoopNotifier satisfies Notifier without sending anything.
@@ -63,3 +75,6 @@ func (NoopNotifier) AppointmentReminder(_ context.Context, _ BookingDetails, _ i
 func (NoopNotifier) ConsentSignLink(_ context.Context, _ string, _ ConsentLinkDetails)      {}
 func (NoopNotifier) PasswordReset(_ context.Context, _ string, _ PasswordResetDetails)      {}
 func (NoopNotifier) AccountVerification(_ context.Context, _ string, _ VerificationDetails) {}
+func (NoopNotifier) InvoiceReceipt(_ context.Context, _ string, _ InvoiceEmailDetails, _ []byte) error {
+	return nil
+}

@@ -35,6 +35,9 @@ type Invoice struct {
 	DueAt            *time.Time `json:"due_at,omitempty"`
 	CreatedAt        time.Time  `json:"created_at"`
 	Payments         []Payment  `json:"payments,omitempty"`
+	InvoiceNumber    *int       `json:"invoice_number,omitempty"`
+	Service          string     `json:"service,omitempty"`
+	ReceiptSentAt    *time.Time `json:"receipt_sent_at,omitempty"`
 }
 
 type Payment struct {
@@ -69,12 +72,17 @@ type PaymentInput struct {
 }
 
 func toInvoiceSummary(r rawInvoice) Invoice {
-	return Invoice{
+	inv := Invoice{
 		ID: r.ID, PatientID: r.PatientID, AppointmentID: r.AppointmentID, RateID: r.RateID,
 		Currency: r.Currency, Subtotal: r.Subtotal, Discount: r.Discount,
 		InsuranceCovered: r.InsuranceCovered, TotalDue: r.TotalDue, TotalPaid: r.TotalPaid,
 		Status: r.Status, IssuedAt: r.IssuedAt, DueAt: r.DueAt, CreatedAt: r.CreatedAt,
+		InvoiceNumber: r.InvoiceNumber, ReceiptSentAt: r.ReceiptSentAt,
 	}
+	if r.RateName != nil {
+		inv.Service = *r.RateName
+	}
+	return inv
 }
 
 func (s *Service) CreateInvoice(ctx context.Context, orgID, userID string, in InvoiceInput) (Invoice, error) {
@@ -184,6 +192,10 @@ func (s *Service) IssueInvoice(ctx context.Context, orgID, id string, dueAt *tim
 		return Invoice{}, err
 	}
 	return toInvoiceSummary(raw), nil
+}
+
+func (s *Service) MarkReceiptSent(ctx context.Context, orgID, id string) error {
+	return s.repo.MarkReceiptSent(ctx, orgID, id)
 }
 
 func (s *Service) CancelInvoice(ctx context.Context, orgID, id string) (Invoice, error) {
