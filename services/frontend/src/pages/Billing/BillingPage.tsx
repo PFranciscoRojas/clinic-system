@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Receipt, TrendingUp, Wallet, Clock, ChevronRight, SearchX } from 'lucide-react';
+import { Receipt, Wallet, Clock, ChevronRight, SearchX, ArrowUp, ArrowDown, Globe, HandCoins } from 'lucide-react';
 import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
 import {
   invoicesApi, formatMoney, balanceOf,
   INVOICE_STATUS_META, type Invoice, type InvoiceStatus,
+  type BillingOverview, type PeriodStat, type MonthBucket,
 } from '@/api/invoices';
 
 const FILTERS: { id: string; label: string }[] = [
@@ -18,22 +19,66 @@ const FILTERS: { id: string; label: string }[] = [
   { id: 'CANCELLED', label: 'Anuladas'   },
 ];
 
+const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const monthShort = (m: string) => MES[parseInt(m.slice(5, 7), 10) - 1] ?? m;
+const toCents = (s: string) => Math.round(parseFloat(s || '0') * 100);
+
 const fmtDate = (s?: string | null) =>
   s ? new Date(s).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
-function KpiCard({ Icon, label, value, sub, color }: {
-  Icon: React.ElementType; label: string; value: string; sub: string; color: string;
-}) {
+function deltaPct(cur: string, prev: string): number | null {
+  const c = parseFloat(cur || '0'), p = parseFloat(prev || '0');
+  if (p <= 0) return null;
+  return Math.round(((c - p) / p) * 100);
+}
+
+// ── Period tile (semana / mes / año) ──
+function PeriodTile({ label, stat, currency }: { label: string; stat?: PeriodStat; currency: string }) {
+  const d = stat ? deltaPct(stat.income, stat.prev) : null;
+  const up = (d ?? 0) >= 0;
   return (
-    <div style={{ flex: 1, minWidth: 200, background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, padding: '18px 20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
-        <div style={{ width: 32, height: 32, borderRadius: 9, background: color + '1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Icon size={16} color={color} />
-        </div>
-        <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--s500)' }}>{label}</span>
+    <div style={{ flex: 1, minWidth: 150, background: '#fff', border: '1px solid var(--s200)', borderRadius: 12, padding: '14px 16px' }}>
+      <div style={{ fontSize: 11.5, color: 'var(--s400)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</div>
+      <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--s800)', fontFamily: "'DM Mono', monospace", marginTop: 5 }}>
+        {formatMoney(stat?.income ?? '0', currency)}
       </div>
-      <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--s800)', fontFamily: "'DM Mono', monospace" }}>{value}</div>
-      <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 3 }}>{sub}</div>
+      {d !== null && (
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: 5, fontSize: 11.5, fontWeight: 700, color: up ? '#059669' : '#dc2626' }}>
+          {up ? <ArrowUp size={12} /> : <ArrowDown size={12} />}{Math.abs(d)}% <span style={{ color: 'var(--s400)', fontWeight: 400 }}>vs. anterior</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Monthly stacked bar chart (hand-drawn, no chart lib) ──
+function MonthlyChart({ data, currency }: { data: MonthBucket[]; currency: string }) {
+  const totals = data.map(d => toCents(d.online) + toCents(d.direct));
+  const max = Math.max(1, ...totals);
+  const H = 130;
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: H }}>
+        {data.map(d => {
+          const on = toCents(d.online), dir = toCents(d.direct), tot = on + dir;
+          const h = Math.round((tot / max) * H);
+          const onH = tot > 0 ? Math.round((on / tot) * h) : 0;
+          const dirH = h - onH;
+          const money = (c: number) => formatMoney((c / 100).toFixed(2), currency);
+          return (
+            <div key={d.month} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: H }}
+              title={`${monthShort(d.month)} ${d.month.slice(0, 4)} — Total ${money(tot)}\nOnline ${money(on)} · Directo ${money(dir)}`}>
+              <div style={{ height: onH, background: '#0ea5e9', borderRadius: '4px 4px 0 0' }} />
+              <div style={{ height: dirH, background: '#10b981', borderRadius: onH === 0 ? '4px 4px 0 0' : 0 }} />
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+        {data.map(d => (
+          <div key={d.month} style={{ flex: 1, textAlign: 'center', fontSize: 10.5, color: 'var(--s400)' }}>{monthShort(d.month)}</div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -42,13 +87,13 @@ export function BillingPage() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState('');
 
-  const { data: summary } = useQuery({ queryKey: ['invoice-summary'], queryFn: () => invoicesApi.summary() });
+  const { data: ov } = useQuery<BillingOverview>({ queryKey: ['billing-overview'], queryFn: () => invoicesApi.overview() });
   const { data: invoices, isLoading } = useQuery({
     queryKey: ['invoices-all', filter],
     queryFn: () => invoicesApi.listAll(filter || undefined),
   });
 
-  const cur = summary?.currency ?? 'COP';
+  const cur = ov?.currency ?? 'COP';
   const list = invoices ?? [];
 
   return (
@@ -58,21 +103,60 @@ export function BillingPage() {
         <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--s800)', margin: 0 }}>Facturación</h1>
       </div>
       <p style={{ fontSize: 13, color: 'var(--s500)', margin: '0 0 20px' }}>
-        Ingresos del consultorio a partir de las facturas reales. Las facturas y pagos se gestionan desde cada paciente.
+        Ingresos reales del consultorio, unificando pagos online (MercadoPago) y pagos directos registrados a mano.
       </p>
 
-      {/* KPIs */}
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 22 }}>
-        <KpiCard Icon={TrendingUp} color="#0ea5e9" label="Total facturado"
-          value={formatMoney(summary?.invoiced ?? '0', cur)}
-          sub={`${summary?.count ?? 0} factura${(summary?.count ?? 0) === 1 ? '' : 's'} (sin anuladas)`} />
-        <KpiCard Icon={Wallet} color="#10b981" label="Total cobrado"
-          value={formatMoney(summary?.collected ?? '0', cur)}
-          sub={`${summary?.paid ?? 0} pagada${(summary?.paid ?? 0) === 1 ? '' : 's'} · ${summary?.partial ?? 0} parcial${(summary?.partial ?? 0) === 1 ? '' : 'es'}`} />
-        <KpiCard Icon={Clock} color="#f59e0b" label="Saldo pendiente"
-          value={formatMoney(summary?.pending ?? '0', cur)}
-          sub={`${(summary?.issued ?? 0) + (summary?.partial ?? 0)} factura(s) por cobrar`} />
+      {/* Income KPIs */}
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div style={{ flex: 1.4, minWidth: 260, background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, padding: '18px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 9, background: '#10b9811a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Wallet size={16} color="#10b981" />
+            </div>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--s500)' }}>Ingresos totales (cobrado)</span>
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--s800)', fontFamily: "'DM Mono', monospace" }}>{formatMoney(ov?.income_total ?? '0', cur)}</div>
+          <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--s500)' }}>
+              <Globe size={13} color="#0ea5e9" /> Online <b style={{ color: 'var(--s700)' }}>{formatMoney(ov?.online_total ?? '0', cur)}</b>
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--s500)' }}>
+              <HandCoins size={13} color="#10b981" /> Directo <b style={{ color: 'var(--s700)' }}>{formatMoney(ov?.direct_total ?? '0', cur)}</b>
+            </span>
+          </div>
+        </div>
+        <div style={{ flex: 1, minWidth: 200, background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, padding: '18px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 9, background: '#f59e0b1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Clock size={16} color="#f59e0b" />
+            </div>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--s500)' }}>Saldo pendiente (cartera)</span>
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--s800)', fontFamily: "'DM Mono', monospace" }}>{formatMoney(ov?.pending ?? '0', cur)}</div>
+          <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 10 }}>{(ov?.issued ?? 0) + (ov?.partial ?? 0)} factura(s) por cobrar · facturado {formatMoney(ov?.invoiced ?? '0', cur)}</div>
+        </div>
       </div>
+
+      {/* Period tiles */}
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16 }}>
+        <PeriodTile label="Esta semana" stat={ov?.week} currency={cur} />
+        <PeriodTile label="Este mes" stat={ov?.month} currency={cur} />
+        <PeriodTile label="Este año" stat={ov?.year} currency={cur} />
+      </div>
+
+      {/* Monthly chart */}
+      {ov && (
+        <div style={{ background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, padding: '18px 20px', marginBottom: 22 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--s700)' }}>Ingresos últimos 12 meses</span>
+            <div style={{ display: 'flex', gap: 14, fontSize: 11.5, color: 'var(--s500)' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: '#0ea5e9' }} /> Online</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: '#10b981' }} /> Directo</span>
+            </div>
+          </div>
+          <MonthlyChart data={ov.monthly} currency={cur} />
+        </div>
+      )}
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 14 }}>
@@ -88,7 +172,7 @@ export function BillingPage() {
         })}
       </div>
 
-      {/* Table */}
+      {/* Invoice table */}
       <div style={{ background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, overflow: 'hidden' }}>
         {isLoading ? (
           <div style={{ padding: 48, display: 'flex', justifyContent: 'center' }}><Spinner /></div>
@@ -135,7 +219,8 @@ export function BillingPage() {
       </div>
 
       <p style={{ fontSize: 11.5, color: 'var(--s400)', marginTop: 14, lineHeight: 1.5 }}>
-        Facturación interna del consultorio (comprobantes de pago). No constituye facturación electrónica DIAN.
+        <b>Online</b> = reservas web pagadas por MercadoPago (confirmadas automáticamente). <b>Directo</b> = pagos que registras a mano (efectivo, transferencia, Nequi/Daviplata…).
+        La tabla lista las facturas internas por paciente; las reservas online cuentan en los ingresos pero no generan factura. Facturación interna — no es facturación electrónica DIAN.
       </p>
     </div>
   );

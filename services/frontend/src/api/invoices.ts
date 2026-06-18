@@ -56,24 +56,42 @@ export interface RecordPaymentInput {
   paid_at?: string;
 }
 
-export interface InvoiceSummary {
-  invoiced: string;
-  collected: string;
-  pending: string;
+export interface PeriodStat {
+  income: string;
+  prev: string;
+}
+
+export interface MonthBucket {
+  month: string; // YYYY-MM
+  online: string;
+  direct: string;
+}
+
+export interface BillingOverview {
   currency: string;
+  income_total: string;  // online + direct, collected
+  online_total: string;  // MercadoPago bookings
+  direct_total: string;  // manually recorded payments
+  invoiced: string;      // manual invoices billed
+  pending: string;       // manual outstanding (cartera)
   count: number;
   draft: number;
   issued: number;
   partial: number;
   paid: number;
   cancelled: number;
+  bookings_paid: number;
+  week: PeriodStat;
+  month: PeriodStat;
+  year: PeriodStat;
+  monthly: MonthBucket[];
 }
 
 export const invoicesApi = {
   listByPatient: (patientId: string) => api.get<Invoice[]>(`/invoices?patient_id=${patientId}`),
   listAll: (status?: string) =>
     api.get<Invoice[]>(`/invoices?with_patient=true${status ? `&status=${status}` : ''}`),
-  summary: () => api.get<InvoiceSummary>('/invoices/summary'),
+  overview: () => api.get<BillingOverview>('/invoices/overview'),
   get: (id: string) => api.get<Invoice>(`/invoices/${id}`),
   create: (input: CreateInvoiceInput) => api.post<Invoice>('/invoices', input),
   issue: (id: string, dueAt?: string) =>

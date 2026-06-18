@@ -19,7 +19,7 @@ import (
 // billing:create; recording a payment needs billing:record_payment.
 func (h *Handler) InvoiceRoutes() chi.Router {
 	r := chi.NewRouter()
-	r.With(middleware.RequirePermission("billing:reports")).Get("/summary", h.summary)
+	r.With(middleware.RequirePermission("billing:reports")).Get("/overview", h.overview)
 	r.With(middleware.RequirePermission("billing:read")).Get("/", h.listInvoices)
 	r.With(middleware.RequirePermission("billing:read")).Get("/{invoice_id}", h.getInvoice)
 	r.With(middleware.RequirePermission("billing:read")).Get("/{invoice_id}/receipt", h.receipt)
@@ -70,14 +70,14 @@ func (h *Handler) listInvoices(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, invoices)
 }
 
-func (h *Handler) summary(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
-	s, err := h.svc.Summary(r.Context(), claims.OrganizationID)
+	ov, err := h.svc.Overview(r.Context(), claims.OrganizationID)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "no se pudo calcular el resumen")
 		return
 	}
-	httputil.WriteJSON(w, http.StatusOK, s)
+	httputil.WriteJSON(w, http.StatusOK, ov)
 }
 
 func (h *Handler) getInvoice(w http.ResponseWriter, r *http.Request) {

@@ -130,10 +130,6 @@ func (s *Service) CreateInvoice(ctx context.Context, orgID, userID string, in In
 	return inv, nil
 }
 
-func (s *Service) Summary(ctx context.Context, orgID string) (InvoiceSummary, error) {
-	return s.repo.Summary(ctx, orgID)
-}
-
 func (s *Service) ListInvoices(ctx context.Context, orgID, patientID, status string) ([]Invoice, error) {
 	raws, err := s.repo.ListInvoices(ctx, orgID, patientID, strings.ToUpper(strings.TrimSpace(status)))
 	if err != nil {
