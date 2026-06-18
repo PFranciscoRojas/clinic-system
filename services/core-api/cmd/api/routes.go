@@ -22,6 +22,7 @@ import (
 	crrhandler "sghcp/core-api/internal/clinicalrecords/handler"
 	consentshandler "sghcp/core-api/internal/consents/handler"
 	diagnoseshandler "sghcp/core-api/internal/diagnoses/handler"
+	invoicinghandler "sghcp/core-api/internal/invoicing"
 	"sghcp/core-api/internal/notify"
 	"sghcp/core-api/internal/orgs"
 	patientshandler "sghcp/core-api/internal/patients/handler"
@@ -148,6 +149,9 @@ func (a *app) buildRouter() http.Handler {
 		r.Mount("/api/v1/patients/{patient_id}/ai", aisuggestionshandler.NewWithService(aiSugSvc).PatientRoutes())
 
 		r.Mount("/api/v1/booking-requests", bookingH.Routes())
+
+		// BC-6 internal billing — service-rate catalogue (invoices/payments next).
+		r.Mount("/api/v1/service-rates", invoicinghandler.New(a.pool).RateRoutes())
 
 		// Subscription checkout — allowlisted in SubscriptionGate so a lapsed
 		// tenant can still reach it to pay.

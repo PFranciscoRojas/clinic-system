@@ -10,6 +10,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- Service-rate catalogue (BC-6 internal billing): a new "Tarifas" section in Settings (CLINIC_ADMIN) lets the clinic define its service prices — name, amount, currency (COP default), optional modality — and activate/deactivate them without losing history. These rates will back invoices and payment receipts (no DIAN electronic invoicing). `GET/POST/PUT/PATCH /api/v1/service-rates`, gated by `billing:read` (view) and `billing:manage_rates` (manage)
 - AI clinical risk detection: a "señales de riesgo" banner on the patient profile and appointment page flags possible risk signals (suicidal/self-harm ideation, harm to others, severe deterioration) from the patient's history — graded none/low/moderate/high, with signals, rationale and a suggested action. It is decision support only (never replaces clinical judgment; "sin señales" never clears a patient) and is conservative by design. Refreshed automatically when a clinical record is approved, and runnable on demand. Reuses the `ai_suggestions` pipeline (new `risk_detection` kind)
 - AI pre-session recap: on the appointment page, "Generar recap" summarizes the patient's encrypted clinical history (process so far, last session, pending tasks, points to revisit, risk flags) before the session starts — the AI summarizes, the professional decides
 - AI-suggested treatment plan (CBT): "Sugerir con IA (TCC)" proposes a cognitive-behavioral plan from the patient's history (formulation + measurable goals) and pre-fills the new-plan form for the professional to review and edit before creating it
@@ -104,6 +105,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Billing and Evaluations hidden from navigation until their backends exist (code kept as design reference)
 
 ### Security
+- Per-tenant Row-Level Security extended to the BC-6 billing tables (`service_rates`, `invoices`, `payments`, `patient_billing_profiles`), which predated tenant isolation (migration 000024): activating the invoicing module can no longer expose another tenant's rows
 - Tenant isolation enforced in the database via Postgres Row-Level Security on the core clinical tables (patients, clinical records + addenda, appointments, treatment plans, diagnoses): every query is scoped to the caller's organization at the engine level, so even a query missing its explicit org filter cannot read or write another tenant's data. The app now connects as a dedicated non-superuser role (`sghcp_app`) for RLS to take effect; migrations still run as the owner
 - Password-reset link tokens and invite codes are now stored hashed (SHA-256) in Redis instead of in plaintext: a leaked snapshot can no longer be replayed to take over an account; the raw secret lives only in the email link / the code shared by the admin
 - Resetting or changing a password now invalidates every existing session: refresh tokens carry a per-user "password epoch" that is bumped on reset/change, so old refresh tokens stop working immediately (the access token keeps working until it expires, ~minutes)
