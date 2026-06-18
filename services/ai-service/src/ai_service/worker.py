@@ -10,7 +10,7 @@ import redis.asyncio as aioredis
 from ai_service.crypto import open_, seal
 from ai_service.transcription.whisper import transcribe_audio
 from ai_service.anonymization.ner import anonymize
-from ai_service.drafts.claude import generate_soap_draft
+from ai_service.drafts.claude import generate_clinical_draft
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +108,7 @@ class AIWorker:
         anonymized = anonymize(transcription)
 
         # 3. Generate the clinical-record sections via Claude API with anonymized text only
-        soap_draft = await generate_soap_draft(anonymized, record_type)
+        clinical_draft = await generate_clinical_draft(anonymized, record_type)
 
         # 4. Encrypt both outputs with the draft's DEK before storing
         assert self._db is not None
@@ -126,7 +126,7 @@ class AIWorker:
 
         dek = self._decrypt_dek(row["key_source"], bytes(row["encrypted_dek"]))
         transcription_enc = seal(dek, transcription.encode())
-        draft_content_enc = seal(dek, soap_draft.encode())
+        draft_content_enc = seal(dek, clinical_draft.encode())
 
         await self._db.execute(
             """

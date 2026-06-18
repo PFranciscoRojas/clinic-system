@@ -6,9 +6,9 @@ import "time"
 type RecordType string
 
 const (
-	RecordTypeInitial          RecordType = "INITIAL"
-	RecordTypeEvolution        RecordType = "EVOLUTION"
-	RecordTypeDischarge        RecordType = "DISCHARGE"
+	RecordTypeInitial           RecordType = "INITIAL"
+	RecordTypeEvolution         RecordType = "EVOLUTION"
+	RecordTypeDischarge         RecordType = "DISCHARGE"
 	RecordTypeInterconsultation RecordType = "INTERCONSULTATION"
 )
 
@@ -22,58 +22,50 @@ const (
 
 // ClinicalRecord is the fully decrypted domain entity.
 type ClinicalRecord struct {
-	ID                  string
-	OrganizationID      string
-	PatientID           string
-	ResponsibleStaffID  string
-	CreatedBy           string
-	AppointmentID       string
-	DEKID               string
-	RecordType          RecordType
-	SessionDate         time.Time
-	TemplateVersion     int16
-	Subjective          string
-	Objective           string
-	Assessment          string
-	Plan                string
-	Sections            map[string]any
-	RiskLevel           *string
-	DischargeReason     *string
-	Status              RecordStatus
-	ApprovedAt          *time.Time
-	RequiresCosign      bool
-	SupervisorID        string
+	ID                   string
+	OrganizationID       string
+	PatientID            string
+	ResponsibleStaffID   string
+	CreatedBy            string
+	AppointmentID        string
+	DEKID                string
+	RecordType           RecordType
+	SessionDate          time.Time
+	TemplateVersion      int16
+	Sections             map[string]any
+	RiskLevel            *string
+	DischargeReason      *string
+	Status               RecordStatus
+	ApprovedAt           *time.Time
+	RequiresCosign       bool
+	SupervisorID         string
 	SupervisorCosignedAt *time.Time
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
-// RawRecord is the DB representation — SOAP fields are still encrypted BYTEA.
+// RawRecord is the DB representation — the section payload is encrypted BYTEA.
 type RawRecord struct {
-	ID                  string
-	OrganizationID      string
-	PatientID           string
-	ResponsibleStaffID  string
-	CreatedBy           string
-	AppointmentID       string
-	DEKID               string
-	RecordType          RecordType
-	SessionDate         time.Time
-	TemplateVersion     int16
-	SubjectiveEnc       []byte
-	ObjectiveEnc        []byte
-	AssessmentEnc       []byte
-	PlanEnc             []byte
-	SectionsEnc         []byte
-	RiskLevel           *string
-	DischargeReason     *string
-	Status              RecordStatus
-	ApprovedAt          *time.Time
-	RequiresCosign      bool
-	SupervisorID        string
+	ID                   string
+	OrganizationID       string
+	PatientID            string
+	ResponsibleStaffID   string
+	CreatedBy            string
+	AppointmentID        string
+	DEKID                string
+	RecordType           RecordType
+	SessionDate          time.Time
+	TemplateVersion      int16
+	SectionsEnc          []byte
+	RiskLevel            *string
+	DischargeReason      *string
+	Status               RecordStatus
+	ApprovedAt           *time.Time
+	RequiresCosign       bool
+	SupervisorID         string
 	SupervisorCosignedAt *time.Time
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 // RecordMeta is the lightweight metadata returned by the list endpoint (no decryption).
@@ -93,7 +85,7 @@ type RecordMeta struct {
 	CreatedAt          time.Time
 }
 
-// CreateParams carries pre-encrypted SOAP and hashed content for the INSERT.
+// CreateParams carries the pre-encrypted section payload and hashed content for the INSERT.
 type CreateParams struct {
 	OrganizationID     string
 	PatientID          string
@@ -104,10 +96,6 @@ type CreateParams struct {
 	RecordType         RecordType
 	SessionDate        time.Time
 	TemplateVersion    int16
-	SubjectiveEnc      []byte
-	ObjectiveEnc       []byte
-	AssessmentEnc      []byte
-	PlanEnc            []byte
 	SectionsEnc        []byte
 	RiskLevel          *string
 	DischargeReason    *string
@@ -116,18 +104,14 @@ type CreateParams struct {
 	ContentHash        string
 }
 
-// UpdateParams carries re-encrypted SOAP for a PATCH on a DRAFT record.
+// UpdateParams carries the re-encrypted section payload for a PATCH on a DRAFT record.
 type UpdateParams struct {
-	ID             string
-	OrganizationID string
-	SubjectiveEnc  []byte
-	ObjectiveEnc   []byte
-	AssessmentEnc  []byte
-	PlanEnc        []byte
-	SectionsEnc    []byte
-	RiskLevel      *string
+	ID              string
+	OrganizationID  string
+	SectionsEnc     []byte
+	RiskLevel       *string
 	DischargeReason *string
-	ContentHash    string
+	ContentHash     string
 }
 
 // ProcessDates carries the latest INITIAL and DISCHARGE session dates for a

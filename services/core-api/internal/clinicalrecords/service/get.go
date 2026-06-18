@@ -19,50 +19,30 @@ func (s *Service) Get(ctx context.Context, orgID, recordID string) (*clinicalrec
 	}
 
 	rec := &clinicalrecords.ClinicalRecord{
-		ID:                  raw.ID,
-		TemplateVersion:     raw.TemplateVersion,
-		RiskLevel:           raw.RiskLevel,
-		DischargeReason:     raw.DischargeReason,
-		OrganizationID:      raw.OrganizationID,
-		PatientID:           raw.PatientID,
-		ResponsibleStaffID:  raw.ResponsibleStaffID,
-		CreatedBy:           raw.CreatedBy,
-		AppointmentID:       raw.AppointmentID,
-		DEKID:               raw.DEKID,
-		RecordType:          raw.RecordType,
-		SessionDate:         raw.SessionDate,
-		Status:              raw.Status,
-		ApprovedAt:          raw.ApprovedAt,
-		RequiresCosign:      raw.RequiresCosign,
-		SupervisorID:        raw.SupervisorID,
+		ID:                   raw.ID,
+		TemplateVersion:      raw.TemplateVersion,
+		RiskLevel:            raw.RiskLevel,
+		DischargeReason:      raw.DischargeReason,
+		OrganizationID:       raw.OrganizationID,
+		PatientID:            raw.PatientID,
+		ResponsibleStaffID:   raw.ResponsibleStaffID,
+		CreatedBy:            raw.CreatedBy,
+		AppointmentID:        raw.AppointmentID,
+		DEKID:                raw.DEKID,
+		RecordType:           raw.RecordType,
+		SessionDate:          raw.SessionDate,
+		Status:               raw.Status,
+		ApprovedAt:           raw.ApprovedAt,
+		RequiresCosign:       raw.RequiresCosign,
+		SupervisorID:         raw.SupervisorID,
 		SupervisorCosignedAt: raw.SupervisorCosignedAt,
-		CreatedAt:           raw.CreatedAt,
-		UpdatedAt:           raw.UpdatedAt,
+		CreatedAt:            raw.CreatedAt,
+		UpdatedAt:            raw.UpdatedAt,
 	}
 
-	if raw.TemplateVersion >= 2 {
-		if rec.Sections, err = openSections(dek, raw.SectionsEnc); err != nil {
-			return nil, fmt.Errorf("decrypt sections: %w", err)
-		}
-		return rec, nil
+	if rec.Sections, err = openSections(dek, raw.SectionsEnc); err != nil {
+		return nil, fmt.Errorf("decrypt sections: %w", err)
 	}
-
-	type field struct {
-		dst  *string
-		src  []byte
-		name string
-	}
-	for _, f := range []field{
-		{&rec.Subjective, raw.SubjectiveEnc, "subjective"},
-		{&rec.Objective, raw.ObjectiveEnc, "objective"},
-		{&rec.Assessment, raw.AssessmentEnc, "assessment"},
-		{&rec.Plan, raw.PlanEnc, "plan"},
-	} {
-		if *f.dst, err = openField(dek, f.src); err != nil {
-			return nil, fmt.Errorf("decrypt %s: %w", f.name, err)
-		}
-	}
-
 	return rec, nil
 }
 

@@ -18,18 +18,14 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	patientID := chi.URLParam(r, "patient_id")
 
 	var body struct {
-		ResponsibleStaffID string `json:"responsible_staff_id"`
-		AppointmentID      string `json:"appointment_id"`
-		RecordType         string `json:"record_type"`
-		SessionDate        string `json:"session_date"` // "2006-01-02"
-		Subjective         string `json:"subjective"`
-		Objective          string `json:"objective"`
-		Assessment         string `json:"assessment"`
-		Plan               string `json:"plan"`
+		ResponsibleStaffID string         `json:"responsible_staff_id"`
+		AppointmentID      string         `json:"appointment_id"`
+		RecordType         string         `json:"record_type"`
+		SessionDate        string         `json:"session_date"` // "2006-01-02"
 		Sections           map[string]any `json:"sections"`
-		RiskLevel          string `json:"risk_level"`
-		DischargeReason    string `json:"discharge_reason"`
-		SupervisorID       string `json:"supervisor_id"`
+		RiskLevel          string         `json:"risk_level"`
+		DischargeReason    string         `json:"discharge_reason"`
+		SupervisorID       string         `json:"supervisor_id"`
 	}
 	if err := httputil.DecodeJSON(r, &body); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid JSON")
@@ -63,10 +59,6 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		AppointmentID:      body.AppointmentID,
 		RecordType:         clinicalrecords.RecordType(body.RecordType),
 		SessionDate:        sessionDate,
-		Subjective:         body.Subjective,
-		Objective:          body.Objective,
-		Assessment:         body.Assessment,
-		Plan:               body.Plan,
 		Sections:           body.Sections,
 		RiskLevel:          clinicalrecords.RiskLevel(body.RiskLevel),
 		DischargeReason:    clinicalrecords.DischargeReason(body.DischargeReason),
@@ -87,13 +79,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	recordID := chi.URLParam(r, "id")
 
 	var body struct {
-		Subjective string `json:"subjective"`
-		Objective  string `json:"objective"`
-		Assessment string `json:"assessment"`
-		Plan       string `json:"plan"`
 		Sections        map[string]any `json:"sections"`
-		RiskLevel       string `json:"risk_level"`
-		DischargeReason string `json:"discharge_reason"`
+		RiskLevel       string         `json:"risk_level"`
+		DischargeReason string         `json:"discharge_reason"`
 	}
 	if err := httputil.DecodeJSON(r, &body); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid JSON")
@@ -101,12 +89,8 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.Update(r.Context(), crrsvc.UpdateInput{
-		ID:             recordID,
-		OrganizationID: claims.OrganizationID,
-		Subjective:     body.Subjective,
-		Objective:      body.Objective,
-		Assessment:     body.Assessment,
-		Plan:           body.Plan,
+		ID:              recordID,
+		OrganizationID:  claims.OrganizationID,
 		Sections:        body.Sections,
 		RiskLevel:       clinicalrecords.RiskLevel(body.RiskLevel),
 		DischargeReason: clinicalrecords.DischargeReason(body.DischargeReason),

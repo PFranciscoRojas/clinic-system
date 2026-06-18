@@ -19,57 +19,10 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) error {
 	if raw.Status != clinicalrecords.StatusDraft {
 		return clinicalrecords.ErrNotDraft
 	}
-
-	// A record keeps the template it was created with: v2 records take a
-	// sections payload, v1 records take SOAP fields — never mixed.
-	if raw.TemplateVersion >= 2 {
-		if in.Sections == nil {
-			return clinicalrecords.ErrTemplateMismatch
-		}
-		return s.updateV2(ctx, raw, in)
+	if in.Sections == nil {
+		return clinicalrecords.ErrInvalidInput
 	}
-	if in.Sections != nil {
-		return clinicalrecords.ErrTemplateMismatch
-	}
-
-	dek, err := s.loadDEK(ctx, raw.DEKID)
-	if err != nil {
-		return fmt.Errorf("load record DEK: %w", err)
-	}
-
-	type field struct {
-		name  string
-		value string
-		dest  *[]byte
-	}
-	var (
-		subjectiveEnc []byte
-		objectiveEnc  []byte
-		assessmentEnc []byte
-		planEnc       []byte
-	)
-	for _, f := range []field{
-		{"subjective", in.Subjective, &subjectiveEnc},
-		{"objective", in.Objective, &objectiveEnc},
-		{"assessment", in.Assessment, &assessmentEnc},
-		{"plan", in.Plan, &planEnc},
-	} {
-		enc, err := sealField(dek, f.value)
-		if err != nil {
-			return fmt.Errorf("encrypt %s: %w", f.name, err)
-		}
-		*f.dest = enc
-	}
-
-	return s.repo.Update(ctx, clinicalrecords.UpdateParams{
-		ID:             in.ID,
-		OrganizationID: in.OrganizationID,
-		SubjectiveEnc:  subjectiveEnc,
-		ObjectiveEnc:   objectiveEnc,
-		AssessmentEnc:  assessmentEnc,
-		PlanEnc:        planEnc,
-		ContentHash:    contentHash(in.Subjective, in.Objective, in.Assessment, in.Plan),
-	})
+	return s.updateV2(ctx, raw, in)
 }
 
 func (s *Service) updateV2(ctx context.Context, raw *clinicalrecords.RawRecord, in UpdateInput) error {

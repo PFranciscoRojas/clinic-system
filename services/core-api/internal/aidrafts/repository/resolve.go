@@ -2,10 +2,7 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"fmt"
-
-	"github.com/jackc/pgx/v5"
 
 	"sghcp/core-api/internal/aidrafts"
 )
@@ -28,17 +25,4 @@ func (r *Repository) Resolve(ctx context.Context, orgID, draftID, clinicalRecord
 		return aidrafts.ErrNotFound
 	}
 	return nil
-}
-
-// GetDecryptedSOAP fetches and decrypts draft_content_enc for a DRAFT_READY draft.
-// Returns the JSON string as stored by the AI worker.
-func (r *Repository) GetDecryptedSOAP(ctx context.Context, orgID, draftID string) (*aidrafts.AIDraft, error) {
-	draft, err := r.FindByID(ctx, orgID, draftID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, aidrafts.ErrNotFound
-		}
-		return nil, err
-	}
-	return draft, nil
 }

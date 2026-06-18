@@ -9,7 +9,7 @@ export interface AIDraft {
   status: DraftStatus;
   ai_model_version: string;
   whisper_model: string;
-  /** New drafts: { record_type, sections: {...} }. Legacy drafts: flat SOAP keys. */
+  /** Draft shape: { record_type, sections: {...} }. */
   draft_content_plain?: Record<string, unknown> | null;
   /** Whisper transcription — always available once processed, even if sections are empty. */
   transcription?: string;
@@ -21,10 +21,6 @@ export interface AIDraft {
 
 export interface ApproveDraftInput {
   sections?: Record<string, string>;
-  subjective?: string;
-  objective?: string;
-  assessment?: string;
-  plan?: string;
   session_date?: string;
   record_type?: string;
   appointment_id?: string;

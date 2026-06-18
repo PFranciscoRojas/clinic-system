@@ -247,7 +247,7 @@ export function LoginPage() {
 
   // Onboarding — step 2: AI
   const [aiEnabled,    setAiEnabled]    = useState(true);
-  const [soapStyle,    setSoapStyle]    = useState('structured');
+  const [noteStyle,    setNoteStyle]    = useState('structured');
   const [reminders,    setReminders]    = useState(true);
 
   // Onboarding — step 3: PIN
@@ -329,7 +329,7 @@ export function LoginPage() {
     localStorage.setItem('sghcp_profile', JSON.stringify({ name, regNum, phone: fullPhone }));
     localStorage.setItem('sghcp_schedule', JSON.stringify({ activeDays, startHour, endHour, sessionLen }));
     // Server copy saved after the professional profile below (needs the row to exist).
-    localStorage.setItem('sghcp_ai_prefs', JSON.stringify({ aiEnabled, soapStyle, reminders }));
+    localStorage.setItem('sghcp_ai_prefs', JSON.stringify({ aiEnabled, noteStyle, reminders }));
     localStorage.setItem(`sghcp_pin_${user.user_id}`, pin);
     localStorage.setItem(`sghcp_onboarding_done_${user.user_id}`, 'true');
     try { await authApi.onboardingComplete(); } catch { /* non-blocking — backfill covers old users */ }
@@ -770,9 +770,9 @@ export function LoginPage() {
                             { id: 'narrative',  label: 'Narrativo',             desc: 'Redacción fluida, como nota clínica convencional.' },
                             { id: 'bullet',     label: 'Listas con viñetas',    desc: 'Puntos concisos, rápido de revisar.' },
                           ].map(opt => {
-                            const sel = soapStyle === opt.id;
+                            const sel = noteStyle === opt.id;
                             return (
-                              <button key={opt.id} type="button" onClick={() => setSoapStyle(opt.id)} style={{
+                              <button key={opt.id} type="button" onClick={() => setNoteStyle(opt.id)} style={{
                                 display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px', width: '100%',
                                 borderRadius: 10, border: `1.5px solid ${sel ? 'var(--teal)' : 'var(--s200)'}`,
                                 background: sel ? 'var(--teal-l)' : '#fff', textAlign: 'left', transition: 'all .12s', cursor: 'pointer', marginBottom: 8,

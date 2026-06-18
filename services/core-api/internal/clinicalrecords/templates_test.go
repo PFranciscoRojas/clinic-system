@@ -79,7 +79,7 @@ func TestValidateTemplateV2(t *testing.T) {
 		{
 			name:     "unknown section key rejected",
 			rt:       RecordTypeEvolution,
-			sections: map[string]any{"session_development": "x", "plan_tasks": "y", "subjective": "soap leftover"},
+			sections: map[string]any{"session_development": "x", "plan_tasks": "y", "not_a_real_section": "leftover"},
 			risk:     RiskNone,
 			wantErr:  ErrInvalidInput,
 		},
