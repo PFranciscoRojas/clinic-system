@@ -10,6 +10,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- AI pre-session recap: on the appointment page, "Generar recap" summarizes the patient's encrypted clinical history (process so far, last session, pending tasks, points to revisit, risk flags) before the session starts — the AI summarizes, the professional decides
+- AI-suggested treatment plan (CBT): "Sugerir con IA (TCC)" proposes a cognitive-behavioral plan from the patient's history (formulation + measurable goals) and pre-fills the new-plan form for the professional to review and edit before creating it
+- Both run on a new generic `ai_suggestions` pipeline (migration 000023): the history is decrypted, anonymized and sent to Claude, and the result is sealed with a per-suggestion key — same privacy guarantees as the clinical draft
 - Add-to-calendar after a paid booking: the confirmation page polls the booking status and, once paid, shows the appointment with Google Calendar and Apple/Outlook (.ics) buttons (`GET /api/v1/public/pay/status`)
 - Signup now asks whether the owner practices: "Sí, yo atiendo" grants the bookable PROFESSIONAL role and shows onboarding; "No, solo administro" creates a manager-only admin (CLINIC_ADMIN) who skips onboarding and invites the practitioners
 - Online payment for public bookings (MercadoPago): after picking a slot and entering their details, the patient sees a summary (date, time, modality, price) and pays through MercadoPago's hosted checkout; the slot is held for 15 minutes during checkout, and a payment webhook auto-confirms the booking — creating the appointment in the professional's agenda and emailing both patient and professional. New `bookings` table (migration 000020); price set by `BOOKING_SESSION_PRICE`
