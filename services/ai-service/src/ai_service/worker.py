@@ -13,7 +13,11 @@ from ai_service.crypto import open_, seal
 from ai_service.transcription.whisper import transcribe_audio
 from ai_service.anonymization.ner import anonymize
 from ai_service.drafts.claude import generate_clinical_draft
-from ai_service.suggestions.claude import generate_recap, generate_treatment_plan
+from ai_service.suggestions.claude import (
+    generate_recap,
+    generate_treatment_plan,
+    generate_risk_assessment,
+)
 from ai_service.suggestions.history import render_history
 
 logger = logging.getLogger(__name__)
@@ -86,7 +90,7 @@ class AIWorker:
 
     async def _handle(self, message_id: str, fields: dict[str, Any]) -> None:
         kind = fields.get("kind")
-        if kind in ("recap", "treatment_plan"):
+        if kind in ("recap", "treatment_plan", "risk_detection"):
             await self._handle_suggestion(message_id, kind, fields)
             return
         await self._handle_draft(message_id, fields)
@@ -240,6 +244,8 @@ class AIWorker:
 
         if kind == "recap":
             content = await generate_recap(anonymized)
+        elif kind == "risk_detection":
+            content = await generate_risk_assessment(anonymized)
         else:
             content = await generate_treatment_plan(anonymized)
 

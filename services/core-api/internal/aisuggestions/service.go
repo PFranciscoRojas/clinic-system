@@ -16,7 +16,7 @@ const (
 )
 
 // validKinds are the suggestion kinds the worker knows how to generate.
-var validKinds = map[string]bool{"recap": true, "treatment_plan": true}
+var validKinds = map[string]bool{"recap": true, "treatment_plan": true, "risk_detection": true}
 
 func ValidKind(kind string) bool { return validKinds[kind] }
 

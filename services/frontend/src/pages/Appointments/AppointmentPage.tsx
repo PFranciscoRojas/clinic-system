@@ -17,6 +17,7 @@ import { ConsentViewModal } from '@/components/consents/ConsentViewModal';
 import { UnifiedConsentSignModal } from '@/components/consents/UnifiedConsentSignModal';
 import { RecordForm } from '@/components/clinical/RecordForm';
 import { RecapCard } from '@/components/clinical/RecapCard';
+import { RiskBanner } from '@/components/clinical/RiskBanner';
 import { aiDraftsApi } from '@/api/aiDrafts';
 import { useAuth } from '@/context/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
@@ -785,9 +786,10 @@ export function AppointmentPage() {
         )}
       </div>
 
-      {/* ── Recap pre-sesión (IA) — solo con paciente registrado e historia ── */}
+      {/* ── Señales de riesgo (IA) + Recap pre-sesión — con paciente registrado ── */}
       {!isGuest && appt.patient_id && (
-        <div style={{ marginBottom: 20 }}>
+        <div style={{ marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <RiskBanner patientId={appt.patient_id} />
           <RecapCard patientId={appt.patient_id} />
         </div>
       )}
