@@ -65,11 +65,6 @@ export interface RecordPaymentInput {
   paid_at?: string;
 }
 
-export interface PeriodStat {
-  income: string;
-  prev: string;
-}
-
 export interface MonthBucket {
   month: string; // YYYY-MM
   online: string;
@@ -83,32 +78,33 @@ export interface MethodStat {
   amount: string;
 }
 
+export type BillingPeriod = 'week' | 'month' | 'year' | 'all';
+
 export interface BillingOverview {
   currency: string;
-  income_total: string;  // online + direct, collected
-  online_total: string;  // MercadoPago bookings
-  direct_total: string;  // manually recorded payments
-  invoiced: string;      // manual invoices billed
-  pending: string;       // manual outstanding (cartera)
-  count: number;
-  draft: number;
-  issued: number;
-  partial: number;
-  paid: number;
-  cancelled: number;
-  bookings_paid: number;
-  week: PeriodStat;
-  month: PeriodStat;
-  year: PeriodStat;
-  monthly: MonthBucket[];
-  methods: MethodStat[];
+  period: BillingPeriod;
+  income: string;         // collected in period (online + direct)
+  income_online: string;
+  income_direct: string;
+  income_prev: string;    // same-elapsed previous period
+  has_delta: boolean;
+  payments_count: number;
+  pending: string;        // current outstanding (cartera)
+  overdue: string;        // overdue slice of cartera
+  overdue_count: number;
+  invoiced: string;       // all-time invoiced (non-cancelled)
+  collected: string;      // all-time collected
+  collected_pct: number;
+  methods: MethodStat[];  // in period
+  monthly: MonthBucket[]; // last 12 months
 }
 
 export const invoicesApi = {
   listByPatient: (patientId: string) => api.get<Invoice[]>(`/invoices?patient_id=${patientId}`),
   listAll: (status?: string) =>
     api.get<Invoice[]>(`/invoices?with_patient=true${status ? `&status=${status}` : ''}`),
-  overview: () => api.get<BillingOverview>('/invoices/overview'),
+  overview: (period: BillingPeriod = 'month') => api.get<BillingOverview>(`/invoices/overview?period=${period}`),
+  sendReminders: () => api.post<{ sent: number; skipped: number; pending: number }>('/invoices/send-reminders', {}),
   get: (id: string) => api.get<Invoice>(`/invoices/${id}`),
   create: (input: CreateInvoiceInput) => api.post<Invoice>('/invoices', input),
   issue: (id: string, dueAt?: string) =>

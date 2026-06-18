@@ -194,6 +194,19 @@ func (s *Service) IssueInvoice(ctx context.Context, orgID, id string, dueAt *tim
 	return toInvoiceSummary(raw), nil
 }
 
+// ListPending returns invoices with an outstanding balance (summaries only).
+func (s *Service) ListPending(ctx context.Context, orgID string) ([]Invoice, error) {
+	raws, err := s.repo.ListPending(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Invoice, len(raws))
+	for i, r := range raws {
+		out[i] = toInvoiceSummary(r)
+	}
+	return out, nil
+}
+
 func (s *Service) MarkReceiptSent(ctx context.Context, orgID, id string) error {
 	return s.repo.MarkReceiptSent(ctx, orgID, id)
 }
