@@ -65,8 +65,8 @@ export interface RecordPaymentInput {
   paid_at?: string;
 }
 
-export interface MonthBucket {
-  month: string; // YYYY-MM
+export interface SeriesPoint {
+  label: string;
   online: string;
   direct: string;
 }
@@ -78,7 +78,7 @@ export interface MethodStat {
   amount: string;
 }
 
-export type BillingPeriod = 'week' | 'month' | 'year' | 'all';
+export type BillingPeriod = 'week' | 'month' | 'quarter' | 'year' | 'all';
 
 export interface BillingOverview {
   currency: string;
@@ -96,7 +96,7 @@ export interface BillingOverview {
   collected: string;      // all-time collected
   collected_pct: number;
   methods: MethodStat[];  // in period
-  monthly: MonthBucket[]; // last 12 months
+  series: SeriesPoint[];  // income bucketed for the period
 }
 
 export interface PatientBalance {

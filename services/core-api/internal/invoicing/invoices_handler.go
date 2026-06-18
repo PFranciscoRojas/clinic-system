@@ -50,7 +50,7 @@ func parseTime(s string) (*time.Time, bool) {
 // periodBounds maps a period name to a [from, to) window, or nils for "all"/none.
 func periodBounds(period string) (from, to *time.Time) {
 	switch period {
-	case "week", "month", "year":
+	case "week", "month", "quarter", "year":
 		f, t, _, _, _ := periodRange(period, time.Now())
 		return &f, &t
 	default:

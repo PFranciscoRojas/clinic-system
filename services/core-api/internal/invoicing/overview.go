@@ -12,9 +12,10 @@ import (
 // present in the binary's image.
 var colombia = time.FixedZone("COT", -5*3600)
 
-// MonthBucket is one month of income split by channel (decimal strings).
-type MonthBucket struct {
-	Month  string `json:"month"` // YYYY-MM
+// SeriesPoint is one time bucket of income split by channel (decimal strings).
+// The bucket granularity (day/week/month/year) follows the selected period.
+type SeriesPoint struct {
+	Label  string `json:"label"`
 	Online string `json:"online"`
 	Direct string `json:"direct"`
 }
@@ -50,7 +51,7 @@ type BillingOverview struct {
 	CollectedPct int    `json:"collected_pct"` // collected / invoiced
 
 	Methods []MethodStat  `json:"methods"` // in period
-	Monthly []MonthBucket `json:"monthly"` // last 12 months
+	Series  []SeriesPoint `json:"series"`  // income bucketed for the period
 }
 
 // periodRange resolves a period name into its [from, to) bounds and the matching
@@ -65,6 +66,12 @@ func periodRange(period string, now time.Time) (from, to, prevFrom, prevTo time.
 		from = day.AddDate(0, 0, -mo)
 		to = now
 		prevFrom = from.AddDate(0, 0, -7)
+		prevTo = prevFrom.Add(now.Sub(from))
+		hasDelta = true
+	case "quarter":
+		from = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, colombia).AddDate(0, -2, 0)
+		to = now
+		prevFrom = from.AddDate(0, -3, 0)
 		prevTo = prevFrom.Add(now.Sub(from))
 		hasDelta = true
 	case "year":
@@ -89,7 +96,7 @@ func periodRange(period string, now time.Time) (from, to, prevFrom, prevTo time.
 // Overview composes the financial overview for the given period.
 func (s *Service) Overview(ctx context.Context, orgID, period string) (BillingOverview, error) {
 	switch period {
-	case "week", "month", "year", "all":
+	case "week", "month", "quarter", "year", "all":
 	default:
 		period = "month"
 	}
@@ -131,13 +138,49 @@ func (s *Service) Overview(ctx context.Context, orgID, period string) (BillingOv
 		return BillingOverview{}, err
 	}
 
-	since := time.Date(time.Now().In(colombia).Year(), time.Now().In(colombia).Month(), 1, 0, 0, 0, 0, colombia).AddDate(0, -11, 0)
-	rows, err := s.repo.MonthlyIncome(ctx, orgID, since)
+	cFrom, cTo, gran := chartSpec(period, time.Now())
+	if period == "all" {
+		if earliest, err := s.repo.EarliestActivity(ctx, orgID); err == nil && !earliest.IsZero() {
+			cFrom = truncGran(earliest, "year")
+		}
+	}
+	srows, err := s.repo.SeriesBetween(ctx, orgID, cFrom, cTo, gran)
 	if err != nil {
 		return BillingOverview{}, err
 	}
-	ov.Monthly = fillMonths(since, rows)
+	ov.Series = buildSeries(cFrom, cTo, gran, period, srows)
 	return ov, nil
+}
+
+// chartSpec maps a period to the chart's [from, to) window and bucket
+// granularity: week→days, month→days, quarter→weeks, year→months, all→years.
+func chartSpec(period string, now time.Time) (from, to time.Time, gran string) {
+	now = now.In(colombia)
+	som := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, colombia)
+	switch period {
+	case "week":
+		mo := (int(now.Weekday()) + 6) % 7
+		from = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, colombia).AddDate(0, 0, -mo)
+		to = from.AddDate(0, 0, 7)
+		gran = "day"
+	case "quarter":
+		from = som.AddDate(0, -2, 0)
+		to = som.AddDate(0, 1, 0)
+		gran = "week"
+	case "year":
+		from = time.Date(now.Year(), 1, 1, 0, 0, 0, 0, colombia)
+		to = from.AddDate(1, 0, 0)
+		gran = "month"
+	case "all":
+		from = time.Date(now.Year(), 1, 1, 0, 0, 0, 0, colombia)
+		to = from.AddDate(1, 0, 0)
+		gran = "year"
+	default: // month
+		from = som
+		to = som.AddDate(0, 1, 0)
+		gran = "day"
+	}
+	return
 }
 
 func (s *Service) methodBreakdown(ctx context.Context, orgID string, from, to time.Time) ([]MethodStat, error) {
@@ -193,24 +236,86 @@ func mpMethodLabel(ptype, pmethod string) string {
 	}
 }
 
-func fillMonths(since time.Time, rows map[string]MonthBucket) []MonthBucket {
-	out := make([]MonthBucket, 0, 12)
-	m := time.Date(since.Year(), since.Month(), 1, 0, 0, 0, 0, colombia)
-	for i := 0; i < 12; i++ {
-		key := m.Format("2006-01")
-		b := MonthBucket{Month: key, Online: "0", Direct: "0"}
-		if got, ok := rows[key]; ok {
-			if got.Online != "" {
-				b.Online = got.Online
+var diasES = []string{"Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"}
+var mesesES = []string{"ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"}
+
+// buildSeries generates the dense bucket sequence over [from, to) at the given
+// granularity, zero-filling gaps and labelling each bucket for the X axis.
+func buildSeries(from, to time.Time, gran, period string, rows map[string]channelSum) []SeriesPoint {
+	t := truncGran(from, gran)
+	out := []SeriesPoint{}
+	guard := 0
+	for t.Before(to) && guard < 400 {
+		guard++
+		key := keyGran(t, gran)
+		p := SeriesPoint{Label: labelGran(t, gran, period), Online: "0", Direct: "0"}
+		if s, ok := rows[key]; ok {
+			if s.Online != "" {
+				p.Online = s.Online
 			}
-			if got.Direct != "" {
-				b.Direct = got.Direct
+			if s.Direct != "" {
+				p.Direct = s.Direct
 			}
 		}
-		out = append(out, b)
-		m = m.AddDate(0, 1, 0)
+		out = append(out, p)
+		t = stepGran(t, gran)
 	}
 	return out
+}
+
+func truncGran(t time.Time, gran string) time.Time {
+	t = t.In(colombia)
+	switch gran {
+	case "week":
+		mo := (int(t.Weekday()) + 6) % 7
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, colombia).AddDate(0, 0, -mo)
+	case "month":
+		return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, colombia)
+	case "year":
+		return time.Date(t.Year(), 1, 1, 0, 0, 0, 0, colombia)
+	default: // day
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, colombia)
+	}
+}
+
+func stepGran(t time.Time, gran string) time.Time {
+	switch gran {
+	case "week":
+		return t.AddDate(0, 0, 7)
+	case "month":
+		return t.AddDate(0, 1, 0)
+	case "year":
+		return t.AddDate(1, 0, 0)
+	default:
+		return t.AddDate(0, 0, 1)
+	}
+}
+
+func keyGran(t time.Time, gran string) string {
+	switch gran {
+	case "month":
+		return t.Format("2006-01")
+	case "year":
+		return t.Format("2006")
+	default: // day, week (week keyed by its Monday date)
+		return t.Format("2006-01-02")
+	}
+}
+
+func labelGran(t time.Time, gran, period string) string {
+	switch gran {
+	case "week":
+		return t.Format("02/01")
+	case "month":
+		return mesesES[int(t.Month())-1]
+	case "year":
+		return t.Format("2006")
+	default: // day
+		if period == "week" {
+			return diasES[(int(t.Weekday())+6)%7]
+		}
+		return itoa(int64(t.Day()))
+	}
 }
 
 func addMoney(a, b string) string {
@@ -481,36 +586,61 @@ func (r *Repository) DirectMethods(ctx context.Context, orgID string, from, to t
 	return out, rows.Err()
 }
 
-// MonthlyIncome buckets income by calendar month (Colombia time) and channel,
-// from `since` onward, keyed by YYYY-MM.
-func (r *Repository) MonthlyIncome(ctx context.Context, orgID string, since time.Time) (map[string]MonthBucket, error) {
+type channelSum struct{ Online, Direct string }
+
+// granFormat maps a bucket granularity to its to_char pattern (week is keyed by
+// its truncated Monday date, like day).
+var granFormat = map[string]string{"day": "YYYY-MM-DD", "week": "YYYY-MM-DD", "month": "YYYY-MM", "year": "YYYY"}
+
+// SeriesBetween buckets income by the given granularity (Colombia time) and
+// channel over [from, to), keyed by the bucket's to_char.
+func (r *Repository) SeriesBetween(ctx context.Context, orgID string, from, to time.Time, gran string) (map[string]channelSum, error) {
+	fmtStr, ok := granFormat[gran]
+	if !ok {
+		fmtStr, gran = "YYYY-MM", "month"
+	}
 	rows, err := r.q(ctx).Query(ctx, `
-		SELECT to_char(date_trunc('month', ts AT TIME ZONE 'America/Bogota'), 'YYYY-MM') AS m, src, SUM(amt)::text
+		SELECT to_char(date_trunc($4, ts AT TIME ZONE 'America/Bogota'), $5) AS k, src, SUM(amt)::text
 		FROM (
-			SELECT paid_at    AS ts, amount::numeric AS amt, 'd' AS src FROM payments WHERE organization_id = $1 AND paid_at    >= $2
+			SELECT paid_at    AS ts, amount::numeric AS amt, 'd' AS src FROM payments WHERE organization_id = $1 AND paid_at    >= $2 AND paid_at    < $3
 			UNION ALL
-			SELECT updated_at AS ts, amount::numeric AS amt, 'o' AS src FROM bookings WHERE organization_id = $1 AND status = 'PAID' AND updated_at >= $2
+			SELECT updated_at AS ts, amount::numeric AS amt, 'o' AS src FROM bookings WHERE organization_id = $1 AND status = 'PAID' AND updated_at >= $2 AND updated_at < $3
 		) x
 		GROUP BY 1, 2
-	`, orgID, since)
+	`, orgID, from, to, gran, fmtStr)
 	if err != nil {
-		return nil, fmt.Errorf("monthly income: %w", err)
+		return nil, fmt.Errorf("series income: %w", err)
 	}
 	defer rows.Close()
-	out := map[string]MonthBucket{}
+	out := map[string]channelSum{}
 	for rows.Next() {
-		var month, src, amount string
-		if err := rows.Scan(&month, &src, &amount); err != nil {
-			return nil, fmt.Errorf("scan monthly income: %w", err)
+		var key, src, amount string
+		if err := rows.Scan(&key, &src, &amount); err != nil {
+			return nil, fmt.Errorf("scan series income: %w", err)
 		}
-		b := out[month]
-		b.Month = month
+		s := out[key]
 		if src == "o" {
-			b.Online = amount
+			s.Online = amount
 		} else {
-			b.Direct = amount
+			s.Direct = amount
 		}
-		out[month] = b
+		out[key] = s
 	}
 	return out, rows.Err()
+}
+
+// EarliestActivity returns the earliest payment/booking timestamp, or zero time
+// when there is none — used to bound the "all" chart by year.
+func (r *Repository) EarliestActivity(ctx context.Context, orgID string) (time.Time, error) {
+	var t *time.Time
+	err := r.q(ctx).QueryRow(ctx, `
+		SELECT LEAST(
+			(SELECT MIN(paid_at)    FROM payments WHERE organization_id = $1),
+			(SELECT MIN(updated_at) FROM bookings WHERE organization_id = $1 AND status = 'PAID')
+		)
+	`, orgID).Scan(&t)
+	if err != nil || t == nil {
+		return time.Time{}, err
+	}
+	return *t, nil
 }
