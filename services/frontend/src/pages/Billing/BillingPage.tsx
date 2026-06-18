@@ -8,7 +8,7 @@ import { InvoiceDetailModal } from '@/components/billing/InvoiceDetailModal';
 import {
   invoicesApi, formatMoney, balanceOf, invoiceLabel,
   INVOICE_STATUS_META, type Invoice, type InvoiceStatus,
-  type BillingOverview, type BillingPeriod, type MonthBucket, type MethodStat,
+  type BillingOverview, type BillingPeriod, type SeriesPoint, type MethodStat,
 } from '@/api/invoices';
 
 const FILTERS: { id: string; label: string }[] = [
@@ -20,15 +20,14 @@ const FILTERS: { id: string; label: string }[] = [
   { id: 'CANCELLED', label: 'Anuladas'     },
 ];
 
-const PERIODS: { id: BillingPeriod; label: string; noun: string }[] = [
-  { id: 'week',  label: 'Semana', noun: 'de la semana' },
-  { id: 'month', label: 'Mes',    noun: 'del mes'      },
-  { id: 'year',  label: 'Año',    noun: 'del año'      },
-  { id: 'all',   label: 'Todo',   noun: 'totales'      },
+const PERIODS: { id: BillingPeriod; label: string; noun: string; chart: string }[] = [
+  { id: 'week',    label: 'Semana',  noun: 'de la semana',   chart: 'esta semana (por día)' },
+  { id: 'month',   label: 'Mes',     noun: 'del mes',        chart: 'este mes (por día)' },
+  { id: 'quarter', label: '3 meses', noun: 'del trimestre',  chart: 'últimos 3 meses (por semana)' },
+  { id: 'year',    label: 'Año',     noun: 'del año',        chart: 'este año (por mes)' },
+  { id: 'all',     label: 'Todo',    noun: 'totales',        chart: 'histórico (por año)' },
 ];
 
-const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-const monthShort = (m: string) => `${MES[parseInt(m.slice(5, 7), 10) - 1] ?? m} ${m.slice(2, 4)}`;
 const toCents = (s: string) => Math.round(parseFloat(s || '0') * 100);
 const fmtDate = (s?: string | null) => s ? new Date(s).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
@@ -180,31 +179,39 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
 }
 
 // ── Resumen financiero tab ────────────────────────────────────────────────────
-// Horizontal bars: months down the Y axis, value along the X axis.
-function MonthlyChart({ data, currency }: { data: MonthBucket[]; currency: string }) {
+// Vertical bars: value up the Y axis, time buckets along the X axis. Buckets and
+// their labels (días/semanas/meses/años) come from the backend per the period.
+function IncomeChart({ data, currency }: { data: SeriesPoint[]; currency: string }) {
   const totals = data.map(d => toCents(d.online) + toCents(d.direct));
   const max = Math.max(1, ...totals);
   const money = (c: number) => formatMoney((c / 100).toFixed(2), currency);
+  const H = 150;
+  // Thin out X labels when there are many buckets (e.g. days of a month).
+  const step = data.length > 16 ? Math.ceil(data.length / 12) : 1;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-      {data.map(d => {
-        const on = toCents(d.online), dir = toCents(d.direct), tot = on + dir;
-        const w = Math.round((tot / max) * 100);
-        const onPct = tot > 0 ? (on / tot) * 100 : 0;
-        return (
-          <div key={d.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}
-            title={`${monthShort(d.month)} — Total ${money(tot)}\nOnline ${money(on)} · Directo ${money(dir)}`}>
-            <span style={{ width: 42, fontSize: 11, color: 'var(--s500)', textAlign: 'right', flexShrink: 0 }}>{monthShort(d.month)}</span>
-            <div style={{ flex: 1, height: 16, background: 'var(--s100)', borderRadius: 5, overflow: 'hidden' }}>
-              <div style={{ width: `${w}%`, height: '100%', display: 'flex' }}>
-                <div style={{ width: `${onPct}%`, background: '#0ea5e9' }} />
-                <div style={{ flex: 1, background: '#10b981' }} />
-              </div>
+    <div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: data.length > 20 ? 2 : 5, height: H }}>
+        {data.map((d, i) => {
+          const on = toCents(d.online), dir = toCents(d.direct), tot = on + dir;
+          const h = Math.round((tot / max) * (H - 6));
+          const dirH = tot > 0 ? Math.round((dir / tot) * h) : 0;
+          const onH = h - dirH;
+          return (
+            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: H, minWidth: 0 }}
+              title={`${d.label} — Total ${money(tot)}\nOnline ${money(on)} · Directo ${money(dir)}`}>
+              <div style={{ height: onH, background: '#0ea5e9', borderRadius: '3px 3px 0 0' }} />
+              <div style={{ height: dirH, background: '#10b981', borderRadius: onH === 0 ? '3px 3px 0 0' : 0 }} />
             </div>
-            <span style={{ width: 96, fontSize: 11.5, color: 'var(--s600)', fontFamily: "'DM Mono', monospace", textAlign: 'right', flexShrink: 0 }}>{tot > 0 ? money(tot) : '—'}</span>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', gap: data.length > 20 ? 2 : 5, marginTop: 6 }}>
+        {data.map((d, i) => (
+          <div key={i} style={{ flex: 1, textAlign: 'center', fontSize: 10, color: 'var(--s400)', minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
+            {i % step === 0 ? d.label : ''}
           </div>
-        );
-      })}
+        ))}
+      </div>
     </div>
   );
 }
@@ -257,11 +264,13 @@ function ResumenTab({ ov }: { ov?: BillingOverview }) {
 
   const exportReport = () => {
     if (!ov) return;
-    downloadCsv(`informe-ingresos-${new Date().toISOString().slice(0, 7)}.csv`, [
-      ['Mes', 'Online', 'Directo', 'Total'],
-      ...ov.monthly.map(m => [m.month, m.online, m.direct, (parseFloat(m.online || '0') + parseFloat(m.direct || '0')).toFixed(2)]),
+    downloadCsv(`informe-ingresos-${new Date().toISOString().slice(0, 10)}.csv`, [
+      ['Período', 'Online', 'Directo', 'Total'],
+      ...ov.series.map(s => [s.label, s.online, s.direct, (parseFloat(s.online || '0') + parseFloat(s.direct || '0')).toFixed(2)]),
     ]);
   };
+
+  const chartLabel = PERIODS.find(p => p.id === ov?.period)?.chart ?? '';
 
   return (
     <div>
@@ -285,13 +294,13 @@ function ResumenTab({ ov }: { ov?: BillingOverview }) {
       {ov && (
         <div style={{ background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, padding: '18px 20px', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--s700)' }}>Ingresos últimos 12 meses</span>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--s700)' }}>Ingresos — {chartLabel}</span>
             <div style={{ display: 'flex', gap: 14, fontSize: 11.5, color: 'var(--s500)' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: '#0ea5e9' }} /> Online</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: '#10b981' }} /> Directo</span>
             </div>
           </div>
-          <MonthlyChart data={ov.monthly} currency={cur} />
+          <IncomeChart data={ov.series} currency={cur} />
         </div>
       )}
 
