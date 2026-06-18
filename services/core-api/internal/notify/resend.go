@@ -3,6 +3,7 @@ package notify
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -135,13 +136,47 @@ func (n *ResendNotifier) AccountVerification(ctx context.Context, toEmail string
 	}
 }
 
+// InvoiceReceipt emails the patient their payment receipt with the PDF attached.
+func (n *ResendNotifier) InvoiceReceipt(ctx context.Context, to string, d InvoiceEmailDetails, pdf []byte) error {
+	brand := n.brandFor(ctx, d.OrgID)
+	greeting := "Hola"
+	if d.PatientName != "" {
+		greeting = "Hola " + d.PatientName
+	}
+	html := fmt.Sprintf(`<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#1f2937">`+
+		`<p style="font-size:11px;color:%s;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin:0 0 6px">%s</p>`+
+		`<h2 style="margin:0 0 12px;font-size:18px">Comprobante de pago %s</h2>`+
+		`<p style="font-size:14px;line-height:1.6;margin:0 0 12px">%s, adjuntamos el comprobante de tu pago por <strong>%s</strong> (estado: %s).</p>`+
+		`<p style="font-size:13px;color:#6b7280;line-height:1.6;margin:0 0 16px">El detalle está en el PDF adjunto. Este documento es un comprobante interno de pago y no constituye factura electrónica DIAN.</p>`+
+		`<p style="font-size:13px;color:#6b7280;margin:16px 0 0">%s</p></div>`,
+		brand.BrandColor, brand.PublicName, d.InvoiceNumber, greeting, d.Amount, d.StatusLabel, brand.PublicName)
+
+	filename := "comprobante.pdf"
+	if d.InvoiceNumber != "" {
+		filename = "comprobante-" + d.InvoiceNumber + ".pdf"
+	}
+	subject := "Tu comprobante de pago " + d.InvoiceNumber + " · " + brand.PublicName
+	return n.sendWith(ctx, to, subject, html, []map[string]any{{
+		"filename": filename,
+		"content":  base64.StdEncoding.EncodeToString(pdf),
+	}})
+}
+
 func (n *ResendNotifier) send(ctx context.Context, to, subject, htmlBody string) error {
-	payload, err := json.Marshal(map[string]any{
+	return n.sendWith(ctx, to, subject, htmlBody, nil)
+}
+
+func (n *ResendNotifier) sendWith(ctx context.Context, to, subject, htmlBody string, attachments []map[string]any) error {
+	body := map[string]any{
 		"from":    n.from,
 		"to":      []string{to},
 		"subject": subject,
 		"html":    htmlBody,
-	})
+	}
+	if len(attachments) > 0 {
+		body["attachments"] = attachments
+	}
+	payload, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}

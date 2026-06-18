@@ -151,7 +151,7 @@ func (a *app) buildRouter() http.Handler {
 		r.Mount("/api/v1/booking-requests", bookingH.Routes())
 
 		// BC-6 internal billing — service-rate catalogue + patient invoices/payments.
-		invoicingH := invoicinghandler.New(a.pool, a.km)
+		invoicingH := invoicinghandler.New(a.pool, a.km, notifier)
 		r.Mount("/api/v1/service-rates", invoicingH.RateRoutes())
 		r.Mount("/api/v1/invoices", invoicingH.InvoiceRoutes())
 

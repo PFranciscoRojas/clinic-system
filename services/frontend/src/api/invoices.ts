@@ -34,6 +34,15 @@ export interface Invoice {
   due_at?: string | null;
   created_at: string;
   payments?: Payment[];
+  invoice_number?: number | null;
+  service?: string;
+  receipt_sent_at?: string | null;
+}
+
+/** Human consecutive label (F-000001) or the short id for a draft. */
+export function invoiceLabel(inv: Pick<Invoice, 'invoice_number' | 'id'>): string {
+  if (inv.invoice_number != null) return `F-${String(inv.invoice_number).padStart(6, '0')}`;
+  return inv.id.slice(0, 8).toUpperCase();
 }
 
 export interface CreateInvoiceInput {
@@ -107,6 +116,7 @@ export const invoicesApi = {
   cancel: (id: string) => api.post<Invoice>(`/invoices/${id}/cancel`, {}),
   recordPayment: (id: string, input: RecordPaymentInput) =>
     api.post<Invoice>(`/invoices/${id}/payments`, input),
+  send: (id: string) => api.post<{ sent: boolean; email?: string }>(`/invoices/${id}/send`, {}),
   downloadReceipt: async (id: string): Promise<Blob> => {
     const res = await fetch(`/api/v1/invoices/${id}/receipt`, {
       method: 'GET',

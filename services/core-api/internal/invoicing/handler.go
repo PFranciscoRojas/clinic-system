@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"sghcp/core-api/internal/notify"
 	"sghcp/core-api/internal/patients"
 	patsrepo "sghcp/core-api/internal/patients/repository"
 	patssvc "sghcp/core-api/internal/patients/service"
@@ -24,13 +25,15 @@ type patientGetter interface {
 type Handler struct {
 	svc      *Service
 	patients patientGetter
+	notifier notify.Notifier
 	pool     *pgxpool.Pool
 }
 
-func New(db *pgxpool.Pool, km *crypto.KeyManager) *Handler {
+func New(db *pgxpool.Pool, km *crypto.KeyManager, notifier notify.Notifier) *Handler {
 	return &Handler{
 		svc:      NewService(NewRepository(db), km),
 		patients: patssvc.New(patsrepo.New(db), km),
+		notifier: notifier,
 		pool:     db,
 	}
 }

@@ -1,6 +1,7 @@
 package invoicing
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"sghcp/core-api/internal/notify"
 	"sghcp/core-api/internal/shared/dbctx"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
@@ -23,6 +25,7 @@ func (h *Handler) InvoiceRoutes() chi.Router {
 	r.With(middleware.RequirePermission("billing:read")).Get("/", h.listInvoices)
 	r.With(middleware.RequirePermission("billing:read")).Get("/{invoice_id}", h.getInvoice)
 	r.With(middleware.RequirePermission("billing:read")).Get("/{invoice_id}/receipt", h.receipt)
+	r.With(middleware.RequirePermission("billing:read")).Post("/{invoice_id}/send", h.sendReceipt)
 	r.With(middleware.RequirePermission("billing:create")).Post("/", h.createInvoice)
 	r.With(middleware.RequirePermission("billing:create")).Post("/{invoice_id}/issue", h.issueInvoice)
 	r.With(middleware.RequirePermission("billing:create")).Post("/{invoice_id}/cancel", h.cancelInvoice)
@@ -155,39 +158,95 @@ func (h *Handler) cancelInvoice(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, inv)
 }
 
-// GET /{invoice_id}/receipt — a printable payment receipt PDF (comprobante de
-// pago, not a DIAN electronic invoice).
-func (h *Handler) receipt(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	claims := middleware.ClaimsFromContext(ctx)
-	invoiceID := chi.URLParam(r, "invoice_id")
+// patientReceipt bundles a rendered receipt PDF with the patient identity it
+// was built for, so both the download and the email path can reuse it.
+type patientReceipt struct {
+	PDF         []byte
+	Invoice     Invoice
+	PatientName string
+	Email       string
+}
 
-	inv, err := h.svc.GetInvoice(ctx, claims.OrganizationID, invoiceID)
+func (h *Handler) buildReceipt(ctx context.Context, orgID, invoiceID string) (patientReceipt, error) {
+	inv, err := h.svc.GetInvoice(ctx, orgID, invoiceID)
 	if err != nil {
-		h.writeErr(w, err)
-		return
+		return patientReceipt{}, err
 	}
-
-	name, doc := "", ""
-	if p, err := h.patients.Get(ctx, claims.OrganizationID, inv.PatientID); err == nil {
+	name, doc, email := "", "", ""
+	if p, err := h.patients.Get(ctx, orgID, inv.PatientID); err == nil {
 		name = joinNonEmpty(p.FirstName, p.MiddleName, p.PaternalLastName, p.MaternalLastName)
 		doc = p.DocumentNumber
+		email = p.Email
 	}
-
-	w.Header().Set("Content-Type", "application/pdf")
-	w.Header().Set("Content-Disposition",
-		fmt.Sprintf(`attachment; filename="comprobante-%s.pdf"`, shortID(inv.ID)))
-
-	if err := RenderReceipt(w, ReceiptData{
-		Org:         h.orgLetterhead(ctx, claims.OrganizationID),
+	var buf bytes.Buffer
+	if err := RenderReceipt(&buf, ReceiptData{
+		Org:         h.orgLetterhead(ctx, orgID),
 		PatientName: name,
 		PatientDoc:  doc,
 		Invoice:     inv,
 		GeneratedAt: time.Now(),
 	}); err != nil {
-		// Headers already sent — nothing useful to return.
+		return patientReceipt{}, err
+	}
+	return patientReceipt{PDF: buf.Bytes(), Invoice: inv, PatientName: name, Email: email}, nil
+}
+
+// invoiceLabel renders the human consecutive number (F-000001) or, for a draft
+// without one, the short id.
+func invoiceLabel(inv Invoice) string {
+	if inv.InvoiceNumber != nil {
+		return fmt.Sprintf("F-%06d", *inv.InvoiceNumber)
+	}
+	return shortID(inv.ID)
+}
+
+// GET /{invoice_id}/receipt — a printable payment receipt PDF (comprobante de
+// pago, not a DIAN electronic invoice).
+func (h *Handler) receipt(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	claims := middleware.ClaimsFromContext(ctx)
+
+	rc, err := h.buildReceipt(ctx, claims.OrganizationID, chi.URLParam(r, "invoice_id"))
+	if err != nil {
+		h.writeErr(w, err)
 		return
 	}
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition",
+		fmt.Sprintf(`attachment; filename="comprobante-%s.pdf"`, invoiceLabel(rc.Invoice)))
+	_, _ = w.Write(rc.PDF)
+}
+
+// POST /{invoice_id}/send — email the receipt PDF to the patient.
+func (h *Handler) sendReceipt(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	claims := middleware.ClaimsFromContext(ctx)
+
+	rc, err := h.buildReceipt(ctx, claims.OrganizationID, chi.URLParam(r, "invoice_id"))
+	if err != nil {
+		h.writeErr(w, err)
+		return
+	}
+	if rc.Email == "" {
+		httputil.WriteError(w, http.StatusUnprocessableEntity, "el paciente no tiene correo registrado")
+		return
+	}
+	if err := h.notifier.InvoiceReceipt(ctx, rc.Email, notify.InvoiceEmailDetails{
+		OrgID:         claims.OrganizationID,
+		PatientName:   rc.PatientName,
+		InvoiceNumber: invoiceLabel(rc.Invoice),
+		Amount:        formatMoney(rc.Invoice.TotalDue, rc.Invoice.Currency),
+		StatusLabel:   statusES(rc.Invoice.Status),
+	}, rc.PDF); err != nil {
+		httputil.WriteError(w, http.StatusBadGateway, "no se pudo enviar el correo")
+		return
+	}
+	if err := h.svc.MarkReceiptSent(ctx, claims.OrganizationID, rc.Invoice.ID); err != nil {
+		// The email already went out; the timestamp is best-effort.
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{"sent": true})
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"sent": true, "email": rc.Email})
 }
 
 // orgLetterhead reads the clinic identification (name, NIT, contact) for the

@@ -36,17 +36,25 @@ type rawInvoice struct {
 	IssuedAt         *time.Time
 	DueAt            *time.Time
 	CreatedAt        time.Time
+	InvoiceNumber    *int
+	ReceiptSentAt    *time.Time
+	RateName         *string
 }
 
+// invoiceColumns is selected by every read and RETURNing query. rate name comes
+// from a correlated subquery so it works in RETURNING too (no join needed).
 const invoiceColumns = `id, patient_id, appointment_id, rate_id, dek_id, currency,
 	subtotal::text, discount::text, insurance_covered::text, total_due::text, total_paid::text,
-	status, notes_enc, issued_at, due_at, created_at`
+	status, notes_enc, issued_at, due_at, created_at,
+	invoice_number, receipt_sent_at,
+	(SELECT sr.name FROM service_rates sr WHERE sr.id = invoices.rate_id)`
 
 func scanInvoice(row pgx.Row) (rawInvoice, error) {
 	var i rawInvoice
 	err := row.Scan(&i.ID, &i.PatientID, &i.AppointmentID, &i.RateID, &i.DEKID, &i.Currency,
 		&i.Subtotal, &i.Discount, &i.InsuranceCovered, &i.TotalDue, &i.TotalPaid,
-		&i.Status, &i.NotesEnc, &i.IssuedAt, &i.DueAt, &i.CreatedAt)
+		&i.Status, &i.NotesEnc, &i.IssuedAt, &i.DueAt, &i.CreatedAt,
+		&i.InvoiceNumber, &i.ReceiptSentAt, &i.RateName)
 	return i, err
 }
 
@@ -129,16 +137,34 @@ func (r *Repository) GetInvoice(ctx context.Context, orgID, id string) (rawInvoi
 	return inv, nil
 }
 
-// IssueInvoice transitions a DRAFT invoice to ISSUED, stamping issued_at and an
-// optional due date.
+// IssueInvoice transitions a DRAFT invoice to ISSUED, stamping issued_at, an
+// optional due date and the next per-org consecutive number. A transaction-level
+// advisory lock per org serializes numbering so two concurrent issues can't take
+// the same number.
 func (r *Repository) IssueInvoice(ctx context.Context, orgID, id string, dueAt *time.Time) (rawInvoice, error) {
-	row := r.q(ctx).QueryRow(ctx, `
+	tx, err := r.q(ctx).Begin(ctx)
+	if err != nil {
+		return rawInvoice{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1)::bigint)`, orgID); err != nil {
+		return rawInvoice{}, fmt.Errorf("lock numbering: %w", err)
+	}
+	var next int
+	if err := tx.QueryRow(ctx,
+		`SELECT COALESCE(MAX(invoice_number), 0) + 1 FROM invoices WHERE organization_id = $1`, orgID,
+	).Scan(&next); err != nil {
+		return rawInvoice{}, fmt.Errorf("next invoice number: %w", err)
+	}
+
+	row := tx.QueryRow(ctx, `
 		UPDATE invoices
-		SET status = 'ISSUED', issued_at = NOW(),
-		    due_at = COALESCE($3, due_at), updated_at = NOW()
+		SET status = 'ISSUED', issued_at = NOW(), invoice_number = $3,
+		    due_at = COALESCE($4, due_at), updated_at = NOW()
 		WHERE organization_id = $1 AND id = $2 AND status = 'DRAFT'
 		RETURNING `+invoiceColumns,
-		orgID, id, dueAt)
+		orgID, id, next, dueAt)
 	inv, err := scanInvoice(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return rawInvoice{}, ErrNotDraft
@@ -146,7 +172,21 @@ func (r *Repository) IssueInvoice(ctx context.Context, orgID, id string, dueAt *
 	if err != nil {
 		return rawInvoice{}, fmt.Errorf("issue invoice: %w", err)
 	}
+	if err := tx.Commit(ctx); err != nil {
+		return rawInvoice{}, fmt.Errorf("commit: %w", err)
+	}
 	return inv, nil
+}
+
+// MarkReceiptSent stamps when the receipt was last emailed to the patient.
+func (r *Repository) MarkReceiptSent(ctx context.Context, orgID, id string) error {
+	_, err := r.q(ctx).Exec(ctx,
+		`UPDATE invoices SET receipt_sent_at = NOW(), updated_at = NOW() WHERE organization_id = $1 AND id = $2`,
+		orgID, id)
+	if err != nil {
+		return fmt.Errorf("mark receipt sent: %w", err)
+	}
+	return nil
 }
 
 // CancelInvoice marks an invoice CANCELLED. A fully paid invoice cannot be
