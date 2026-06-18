@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Receipt, Wallet, Clock, SearchX, ArrowUp, ArrowDown, Globe, HandCoins, FileText, BarChart3, AlertTriangle, Download, Send, CheckCircle, AlertCircle } from 'lucide-react';
+import { Receipt, Wallet, Clock, SearchX, ArrowUp, ArrowDown, Globe, HandCoins, FileText, BarChart3, AlertTriangle, Download, Send, CheckCircle, AlertCircle, Users } from 'lucide-react';
 import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
 import { InvoiceDetailModal } from '@/components/billing/InvoiceDetailModal';
@@ -304,8 +305,66 @@ function ResumenTab({ ov }: { ov?: BillingOverview }) {
   );
 }
 
+// ── Balance por paciente tab ──────────────────────────────────────────────────
+function PacientesTab({ period }: { period: BillingPeriod }) {
+  const navigate = useNavigate();
+  const { data, isLoading } = useQuery({
+    queryKey: ['patients-balance', period],
+    queryFn: () => invoicesApi.patientsBalance(period),
+  });
+  const list = data ?? [];
+
+  return (
+    <div style={{ background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, overflow: 'hidden' }}>
+      {isLoading ? (
+        <div style={{ padding: 48, display: 'flex', justifyContent: 'center' }}><Spinner /></div>
+      ) : list.length === 0 ? (
+        <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--s400)' }}>
+          <SearchX size={28} style={{ opacity: 0.5 }} />
+          <div style={{ fontSize: 13.5, marginTop: 10 }}>No hay actividad de pacientes en este período.</div>
+        </div>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr style={{ background: 'var(--s50)', textAlign: 'left', color: 'var(--s500)', fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '.03em' }}>
+              <th style={{ padding: '11px 16px', fontWeight: 700 }}>Paciente</th>
+              <th style={{ padding: '11px 16px', fontWeight: 700, textAlign: 'center' }}>Sesiones</th>
+              <th style={{ padding: '11px 16px', fontWeight: 700, textAlign: 'right' }}>Facturado</th>
+              <th style={{ padding: '11px 16px', fontWeight: 700, textAlign: 'right' }}>Cobrado</th>
+              <th style={{ padding: '11px 16px', fontWeight: 700, textAlign: 'right' }}>Pendiente</th>
+              <th style={{ padding: '11px 16px', fontWeight: 700, width: 140 }}>% pagado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.map(p => (
+              <tr key={p.patient_id} onClick={() => navigate(`/patients/${p.patient_id}`)}
+                style={{ borderTop: '1px solid var(--s100)', cursor: 'pointer' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--s50)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <td style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--s800)' }}>{p.name || '—'}</td>
+                <td style={{ padding: '12px 16px', textAlign: 'center', color: 'var(--s600)' }}>{p.sessions}</td>
+                <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: 'var(--s700)' }}>{formatMoney(p.invoiced, 'COP')}</td>
+                <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#065f46' }}>{formatMoney(p.collected, 'COP')}</td>
+                <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: "'DM Mono', monospace", fontWeight: 700, color: Number(p.pending) > 0 ? '#b45309' : 'var(--s400)' }}>{formatMoney(p.pending, 'COP')}</td>
+                <td style={{ padding: '12px 16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ flex: 1, height: 6, background: 'var(--s100)', borderRadius: 99, overflow: 'hidden' }}>
+                      <div style={{ width: `${p.paid_pct}%`, height: '100%', background: p.paid_pct >= 100 ? '#10b981' : p.paid_pct > 0 ? '#f59e0b' : 'var(--s200)', borderRadius: 99 }} />
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--s600)', minWidth: 32, textAlign: 'right' }}>{p.paid_pct}%</span>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 // ── Page shell ────────────────────────────────────────────────────────────────
-type Tab = 'facturas' | 'resumen';
+type Tab = 'facturas' | 'resumen' | 'pacientes';
 
 export function BillingPage() {
   const [tab, setTab] = useState<Tab>('facturas');
@@ -314,8 +373,9 @@ export function BillingPage() {
   const { data: ov } = useQuery<BillingOverview>({ queryKey: ['billing-overview', period], queryFn: () => invoicesApi.overview(period) });
 
   const TABS: { id: Tab; label: string; Icon: React.ElementType }[] = [
-    { id: 'facturas', label: 'Facturas', Icon: FileText },
-    { id: 'resumen',  label: 'Resumen financiero', Icon: BarChart3 },
+    { id: 'facturas',  label: 'Facturas', Icon: FileText },
+    { id: 'resumen',   label: 'Resumen financiero', Icon: BarChart3 },
+    { id: 'pacientes', label: 'Balance por paciente', Icon: Users },
   ];
 
   return (
@@ -355,7 +415,9 @@ export function BillingPage() {
         })}
       </div>
 
-      {tab === 'facturas' ? <FacturasTab period={period} /> : <ResumenTab ov={ov} />}
+      {tab === 'facturas' && <FacturasTab period={period} />}
+      {tab === 'resumen' && <ResumenTab ov={ov} />}
+      {tab === 'pacientes' && <PacientesTab period={period} />}
 
       <p style={{ fontSize: 11.5, color: 'var(--s400)', marginTop: 16, lineHeight: 1.5 }}>
         Facturación interna del consultorio (comprobantes de pago). <b>Online</b> = pagos por MercadoPago; <b>Directo</b> = pagos registrados a mano. No constituye facturación electrónica DIAN.

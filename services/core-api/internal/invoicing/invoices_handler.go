@@ -22,6 +22,7 @@ import (
 func (h *Handler) InvoiceRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.With(middleware.RequirePermission("billing:reports")).Get("/overview", h.overview)
+	r.With(middleware.RequirePermission("billing:reports")).Get("/patients-balance", h.patientsBalance)
 	r.With(middleware.RequirePermission("billing:read")).Get("/", h.listInvoices)
 	r.With(middleware.RequirePermission("billing:read")).Get("/{invoice_id}", h.getInvoice)
 	r.With(middleware.RequirePermission("billing:read")).Get("/{invoice_id}/receipt", h.receipt)
@@ -84,6 +85,24 @@ func (h *Handler) listInvoices(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	httputil.WriteJSON(w, http.StatusOK, invoices)
+}
+
+func (h *Handler) patientsBalance(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	claims := middleware.ClaimsFromContext(ctx)
+	from, to := periodBounds(r.URL.Query().Get("period"))
+
+	rows, err := h.svc.PatientsBalance(ctx, claims.OrganizationID, from, to)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "no se pudo calcular el balance por paciente")
+		return
+	}
+	for i := range rows {
+		if p, err := h.patients.Get(ctx, claims.OrganizationID, rows[i].PatientID); err == nil {
+			rows[i].Name = joinNonEmpty(p.FirstName, p.MiddleName, p.PaternalLastName, p.MaternalLastName)
+		}
+	}
+	httputil.WriteJSON(w, http.StatusOK, rows)
 }
 
 func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
