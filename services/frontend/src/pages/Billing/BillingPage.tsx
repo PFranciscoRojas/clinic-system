@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import {
   invoicesApi, formatMoney, balanceOf,
   INVOICE_STATUS_META, type Invoice, type InvoiceStatus,
-  type BillingOverview, type PeriodStat, type MonthBucket,
+  type BillingOverview, type PeriodStat, type MonthBucket, type MethodStat,
 } from '@/api/invoices';
 
 const FILTERS: { id: string; label: string }[] = [
@@ -79,6 +79,42 @@ function MonthlyChart({ data, currency }: { data: MonthBucket[]; currency: strin
           <div key={d.month} style={{ flex: 1, textAlign: 'center', fontSize: 10.5, color: 'var(--s400)' }}>{monthShort(d.month)}</div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ── Payment-method breakdown (online MercadoPago + direct) ──
+function MethodBreakdown({ methods, currency }: { methods: MethodStat[]; currency: string }) {
+  if (!methods || methods.length === 0) {
+    return (
+      <div style={{ fontSize: 12.5, color: 'var(--s400)', padding: '8px 0' }}>
+        Aún no hay pagos registrados. Cuando entren pagos por MercadoPago (tarjeta, PSE, Efecty, Nequi…) o registres pagos directos, verás el desglose aquí.
+      </div>
+    );
+  }
+  const max = Math.max(1, ...methods.map(m => toCents(m.amount)));
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {methods.map((m, i) => {
+        const online = m.channel === 'online';
+        const w = Math.round((toCents(m.amount) / max) * 100);
+        return (
+          <div key={i}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{ width: 7, height: 7, borderRadius: 99, background: online ? '#0ea5e9' : '#10b981', flexShrink: 0 }} />
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s800)', flex: 1 }}>{m.label}</span>
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: online ? '#0369a1' : '#065f46', background: online ? '#e0f2fe' : '#d1fae5', borderRadius: 6, padding: '1px 6px' }}>
+                {online ? 'Online' : 'Directo'}
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--s400)', minWidth: 64, textAlign: 'right' }}>{m.count} pago{m.count === 1 ? '' : 's'}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--s700)', fontFamily: "'DM Mono', monospace", minWidth: 96, textAlign: 'right' }}>{formatMoney(m.amount, currency)}</span>
+            </div>
+            <div style={{ height: 5, background: 'var(--s100)', borderRadius: 99, overflow: 'hidden' }}>
+              <div style={{ width: `${w}%`, height: '100%', background: online ? '#0ea5e9' : '#10b981', borderRadius: 99 }} />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -155,6 +191,14 @@ export function BillingPage() {
             </div>
           </div>
           <MonthlyChart data={ov.monthly} currency={cur} />
+        </div>
+      )}
+
+      {/* Payment-method breakdown */}
+      {ov && (
+        <div style={{ background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, padding: '18px 20px', marginBottom: 22 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--s700)', marginBottom: 14 }}>Medios de pago</div>
+          <MethodBreakdown methods={ov.methods} currency={cur} />
         </div>
       )}
 

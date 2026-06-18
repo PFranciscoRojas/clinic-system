@@ -269,7 +269,7 @@ func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
 	}
 	switch pay.Status {
 	case "approved":
-		h.confirm(ctx, pay.ExternalReference, id)
+		h.confirm(ctx, pay.ExternalReference, id, pay.PaymentTypeID, pay.PaymentMethodID)
 	case "rejected", "cancelled", "refunded", "charged_back":
 		// Free the held slot immediately so it can be booked again.
 		_, _ = h.pool.Exec(ctx,
@@ -278,7 +278,9 @@ func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
 }
 
 // confirm creates the appointment for a paid booking (idempotent on status).
-func (h *Handler) confirm(ctx context.Context, bookingID, paymentID string) {
+// paymentType/paymentMethod are MercadoPago's reported channel detail (may be
+// empty) and are recorded for the income-by-method breakdown.
+func (h *Handler) confirm(ctx context.Context, bookingID, paymentID, paymentType, paymentMethod string) {
 	var orgID, staffID, guest, modality string
 	var scheduledAt time.Time
 	var durationMin int
@@ -317,9 +319,12 @@ func (h *Handler) confirm(ctx context.Context, bookingID, paymentID string) {
 	}
 
 	_, _ = h.pool.Exec(ctx, `
-		UPDATE bookings SET status = 'PAID', mp_payment_id = $2, appointment_id = $3, updated_at = NOW()
+		UPDATE bookings
+		SET status = 'PAID', mp_payment_id = $2, appointment_id = $3,
+		    mp_payment_type = NULLIF($4, ''), mp_payment_method = NULLIF($5, ''),
+		    updated_at = NOW()
 		WHERE id = $1
-	`, bookingID, paymentID, apptID)
+	`, bookingID, paymentID, apptID, paymentType, paymentMethod)
 
 	// Fire-and-forget on its own context so a slow Resend call never delays the
 	// 200 the MercadoPago webhook is waiting for (which would trigger retries).

@@ -67,6 +67,13 @@ export interface MonthBucket {
   direct: string;
 }
 
+export interface MethodStat {
+  label: string;
+  channel: 'online' | 'direct';
+  count: number;
+  amount: string;
+}
+
 export interface BillingOverview {
   currency: string;
   income_total: string;  // online + direct, collected
@@ -85,6 +92,7 @@ export interface BillingOverview {
   month: PeriodStat;
   year: PeriodStat;
   monthly: MonthBucket[];
+  methods: MethodStat[];
 }
 
 export const invoicesApi = {

@@ -3,6 +3,7 @@ package invoicing
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 )
 
@@ -50,6 +51,15 @@ type BillingOverview struct {
 	Month   PeriodStat    `json:"month"`
 	Year    PeriodStat    `json:"year"`
 	Monthly []MonthBucket `json:"monthly"`
+	Methods []MethodStat  `json:"methods"`
+}
+
+// MethodStat is collected income broken down by how it was paid.
+type MethodStat struct {
+	Label   string `json:"label"`
+	Channel string `json:"channel"` // "online" | "direct"
+	Count   int    `json:"count"`
+	Amount  string `json:"amount"`
 }
 
 // Overview composes the unified financial overview for the org.
@@ -103,7 +113,71 @@ func (s *Service) Overview(ctx context.Context, orgID string) (BillingOverview, 
 		return BillingOverview{}, err
 	}
 	ov.Monthly = fillMonths(since, rows)
+
+	if ov.Methods, err = s.methodBreakdown(ctx, orgID); err != nil {
+		return BillingOverview{}, err
+	}
 	return ov, nil
+}
+
+// methodBreakdown lists collected income by payment method across both channels:
+// online (MercadoPago, labeled from its reported type/method) and direct
+// (manually recorded payments, labeled from the method enum). Sorted by amount.
+func (s *Service) methodBreakdown(ctx context.Context, orgID string) ([]MethodStat, error) {
+	online, err := s.repo.OnlineMethods(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	direct, err := s.repo.DirectMethods(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]MethodStat, 0, len(online)+len(direct))
+	for _, m := range online {
+		out = append(out, MethodStat{Label: mpMethodLabel(m.Type, m.Method), Channel: "online", Count: m.Count, Amount: m.Amount})
+	}
+	for _, m := range direct {
+		out = append(out, MethodStat{Label: methodES(m.Method), Channel: "direct", Count: m.Count, Amount: m.Amount})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return cents(out[i].Amount) > cents(out[j].Amount) })
+	return out, nil
+}
+
+// mpMethodLabel turns MercadoPago's payment_type_id / payment_method_id into a
+// Spanish label. The type is the coarse bucket; for vouchers and transfers the
+// brand (method) is more precise.
+func mpMethodLabel(ptype, pmethod string) string {
+	switch ptype {
+	case "credit_card":
+		return "Tarjeta de crédito"
+	case "debit_card":
+		return "Tarjeta débito"
+	case "account_money":
+		return "Dinero en MercadoPago"
+	case "prepaid_card":
+		return "Tarjeta prepago"
+	case "atm":
+		return "Cajero / corresponsal"
+	case "bank_transfer":
+		if pmethod == "pse" {
+			return "PSE"
+		}
+		return "Transferencia bancaria"
+	case "ticket":
+		switch pmethod {
+		case "efecty":
+			return "Efecty"
+		case "baloto":
+			return "Baloto"
+		default:
+			return "Efectivo en punto"
+		}
+	case "":
+		return "Online (sin detalle)"
+	default:
+		return ptype
+	}
 }
 
 // periodStat returns income in [start, now) and in the same-length slice of the
@@ -186,6 +260,63 @@ func (r *Repository) IncomeBetween(ctx context.Context, orgID string, from, to t
 		return "", fmt.Errorf("income between: %w", err)
 	}
 	return v, nil
+}
+
+type rawOnlineMethod struct {
+	Type   string
+	Method string
+	Count  int
+	Amount string
+}
+
+type rawDirectMethod struct {
+	Method string
+	Count  int
+	Amount string
+}
+
+// OnlineMethods groups paid MercadoPago bookings by their reported type/method.
+func (r *Repository) OnlineMethods(ctx context.Context, orgID string) ([]rawOnlineMethod, error) {
+	rows, err := r.q(ctx).Query(ctx, `
+		SELECT COALESCE(mp_payment_type, ''), COALESCE(mp_payment_method, ''), COUNT(*), SUM(amount)::numeric::text
+		FROM bookings WHERE organization_id = $1 AND status = 'PAID'
+		GROUP BY 1, 2
+	`, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("online methods: %w", err)
+	}
+	defer rows.Close()
+	out := []rawOnlineMethod{}
+	for rows.Next() {
+		var m rawOnlineMethod
+		if err := rows.Scan(&m.Type, &m.Method, &m.Count, &m.Amount); err != nil {
+			return nil, fmt.Errorf("scan online method: %w", err)
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// DirectMethods groups manually recorded payments by their method enum.
+func (r *Repository) DirectMethods(ctx context.Context, orgID string) ([]rawDirectMethod, error) {
+	rows, err := r.q(ctx).Query(ctx, `
+		SELECT payment_method, COUNT(*), SUM(amount)::text
+		FROM payments WHERE organization_id = $1
+		GROUP BY 1
+	`, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("direct methods: %w", err)
+	}
+	defer rows.Close()
+	out := []rawDirectMethod{}
+	for rows.Next() {
+		var m rawDirectMethod
+		if err := rows.Scan(&m.Method, &m.Count, &m.Amount); err != nil {
+			return nil, fmt.Errorf("scan direct method: %w", err)
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
 }
 
 // MonthlyIncome buckets income by calendar month (Colombia time) and channel,

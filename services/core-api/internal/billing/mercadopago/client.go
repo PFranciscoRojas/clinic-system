@@ -156,6 +156,11 @@ type Payment struct {
 	ID                int64  `json:"id"`
 	Status            string `json:"status"` // approved | rejected | ...
 	ExternalReference string `json:"external_reference"`
+	// How the payment was made. PaymentTypeID is the coarse category
+	// (credit_card | debit_card | ticket | bank_transfer | account_money | atm);
+	// PaymentMethodID is the brand (visa | pse | efecty | nequi | …).
+	PaymentTypeID   string `json:"payment_type_id"`
+	PaymentMethodID string `json:"payment_method_id"`
 }
 
 // GetPayment fetches a payment by id (from an authorized-payment webhook).
