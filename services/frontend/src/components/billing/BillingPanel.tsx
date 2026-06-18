@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Receipt, Plus, ChevronDown, ChevronRight, AlertCircle, CheckCircle, Ban } from 'lucide-react';
+import { Receipt, Plus, ChevronDown, ChevronRight, AlertCircle, CheckCircle, Ban, Download } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
@@ -109,6 +109,21 @@ function InvoiceCard({ invoice, canPay, canCreate, onChange }: {
     finally { setBusy(false); }
   };
 
+  const downloadReceipt = async () => {
+    setBusy(true); setErr('');
+    try {
+      const blob = await invoicesApi.downloadReceipt(invoice.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `comprobante-${invoice.id.slice(0, 8)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setErr(e instanceof Error && e.message ? e.message : 'No se pudo descargar el comprobante.');
+    } finally { setBusy(false); }
+  };
+
   return (
     <div style={{ border: '1px solid var(--s200)', borderRadius: 12, background: '#fff', overflow: 'hidden' }}>
       <button onClick={toggle} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '14px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left' }}>
@@ -173,6 +188,11 @@ function InvoiceCard({ invoice, canPay, canCreate, onChange }: {
               {payable && canPay && (
                 <button style={btn('#10b981')} onClick={() => setPaying(true)}>
                   <Plus size={14} /> Registrar pago
+                </button>
+              )}
+              {Number(invoice.total_paid) > 0 && (
+                <button disabled={busy} style={ghostBtn} onClick={downloadReceipt}>
+                  <Download size={14} /> Comprobante
                 </button>
               )}
               {invoice.status !== 'PAID' && invoice.status !== 'CANCELLED' && canCreate && (

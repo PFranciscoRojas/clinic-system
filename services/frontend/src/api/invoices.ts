@@ -64,6 +64,14 @@ export const invoicesApi = {
   cancel: (id: string) => api.post<Invoice>(`/invoices/${id}/cancel`, {}),
   recordPayment: (id: string, input: RecordPaymentInput) =>
     api.post<Invoice>(`/invoices/${id}/payments`, input),
+  downloadReceipt: async (id: string): Promise<Blob> => {
+    const res = await fetch(`/api/v1/invoices/${id}/receipt`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` },
+    });
+    if (!res.ok) throw new Error('No se pudo generar el comprobante');
+    return res.blob();
+  },
 };
 
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
