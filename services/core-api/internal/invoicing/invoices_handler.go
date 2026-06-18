@@ -19,6 +19,7 @@ import (
 // billing:create; recording a payment needs billing:record_payment.
 func (h *Handler) InvoiceRoutes() chi.Router {
 	r := chi.NewRouter()
+	r.With(middleware.RequirePermission("billing:reports")).Get("/summary", h.summary)
 	r.With(middleware.RequirePermission("billing:read")).Get("/", h.listInvoices)
 	r.With(middleware.RequirePermission("billing:read")).Get("/{invoice_id}", h.getInvoice)
 	r.With(middleware.RequirePermission("billing:read")).Get("/{invoice_id}/receipt", h.receipt)
@@ -42,14 +43,41 @@ func parseTime(s string) (*time.Time, bool) {
 }
 
 func (h *Handler) listInvoices(w http.ResponseWriter, r *http.Request) {
-	claims := middleware.ClaimsFromContext(r.Context())
+	ctx := r.Context()
+	claims := middleware.ClaimsFromContext(ctx)
 	q := r.URL.Query()
-	invoices, err := h.svc.ListInvoices(r.Context(), claims.OrganizationID, q.Get("patient_id"), q.Get("status"))
+	invoices, err := h.svc.ListInvoices(ctx, claims.OrganizationID, q.Get("patient_id"), q.Get("status"))
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "no se pudieron cargar las facturas")
 		return
 	}
+	// The org-wide view needs each invoice's patient name. Resolve distinct
+	// patients once (names are encrypted per-patient, so this decrypts on read).
+	if q.Get("with_patient") == "true" {
+		names := map[string]string{}
+		for i := range invoices {
+			pid := invoices[i].PatientID
+			name, ok := names[pid]
+			if !ok {
+				if p, err := h.patients.Get(ctx, claims.OrganizationID, pid); err == nil {
+					name = joinNonEmpty(p.FirstName, p.MiddleName, p.PaternalLastName, p.MaternalLastName)
+				}
+				names[pid] = name
+			}
+			invoices[i].PatientName = name
+		}
+	}
 	httputil.WriteJSON(w, http.StatusOK, invoices)
+}
+
+func (h *Handler) summary(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	s, err := h.svc.Summary(r.Context(), claims.OrganizationID)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "no se pudo calcular el resumen")
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, s)
 }
 
 func (h *Handler) getInvoice(w http.ResponseWriter, r *http.Request) {

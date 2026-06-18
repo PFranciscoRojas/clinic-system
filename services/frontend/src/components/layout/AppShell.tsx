@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   CalendarDays, Users, Settings,
   Brain, Search, Plus, ChevronDown, Lock, LogOut, Menu,
-  UserCircle, Calendar, X, Globe, Clock, Building2,
+  UserCircle, Calendar, X, Globe, Clock, Building2, Receipt,
   PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -13,8 +13,8 @@ import { patientsApi, type Patient } from '@/api/patients';
 import { startCheckout } from '@/api/billing';
 import { profilesApi } from '@/api/profiles';
 
-// Facturación hidden until the real billing backend exists (mock-only today);
-// Evaluaciones postponed by decision 2026-06-09 — both tracked in the backlog.
+// Facturación is shown to CLINIC_ADMIN (billing:reports) — see the conditional
+// nav entry below. Evaluaciones postponed by decision 2026-06-09 (backlog).
 const NAV = [
   { to: '/',                  label: 'Agenda',          Icon: CalendarDays,  perm: 'appointments:read', badge: null },
   { to: '/patients',          label: 'Pacientes',        Icon: Users,         perm: 'patients:read',     badge: null },
@@ -236,6 +236,22 @@ export function AppShell({ children }: Props) {
                 </Link>
               );
             })}
+            {user?.permissions?.includes('billing:reports') && (() => {
+              const active = location.pathname.startsWith('/billing');
+              return (
+                <Link to="/billing" title={showCollapsed ? 'Facturación' : undefined} onClick={() => setMobileNavOpen(false)} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  justifyContent: showCollapsed ? 'center' : 'flex-start',
+                  padding: showCollapsed ? '12px 0' : '10px 12px', borderRadius: 8, marginBottom: 2,
+                  background: active ? 'rgba(255,255,255,.18)' : 'transparent',
+                  color: active ? '#fff' : 'rgba(255,255,255,.65)',
+                  fontSize: 13.5, fontWeight: active ? 600 : 400,
+                }}>
+                  <Receipt size={showCollapsed ? 18 : 16} color={active ? '#fff' : 'rgba(255,255,255,.65)'} />
+                  {!showCollapsed && <span style={{ flex: 1 }}>Facturación</span>}
+                </Link>
+              );
+            })()}
             {user?.roles?.includes('SYSTEM_ADMIN') && (() => {
               const active = location.pathname.startsWith('/admin');
               return (

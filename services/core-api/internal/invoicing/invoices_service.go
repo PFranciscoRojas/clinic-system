@@ -20,6 +20,7 @@ var validPaymentMethods = map[string]bool{
 type Invoice struct {
 	ID               string     `json:"id"`
 	PatientID        string     `json:"patient_id"`
+	PatientName      string     `json:"patient_name,omitempty"`
 	AppointmentID    *string    `json:"appointment_id,omitempty"`
 	RateID           *string    `json:"rate_id,omitempty"`
 	Currency         string     `json:"currency"`
@@ -127,6 +128,10 @@ func (s *Service) CreateInvoice(ctx context.Context, orgID, userID string, in In
 	inv.Notes = notes
 	inv.Payments = []Payment{}
 	return inv, nil
+}
+
+func (s *Service) Summary(ctx context.Context, orgID string) (InvoiceSummary, error) {
+	return s.repo.Summary(ctx, orgID)
 }
 
 func (s *Service) ListInvoices(ctx context.Context, orgID, patientID, status string) ([]Invoice, error) {
