@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Target, Plus, X, ChevronDown, ChevronUp, CheckCircle2 } from 'lucide-react';
+import { Target, Plus, X, ChevronDown, ChevronUp, CheckCircle2, Sparkles } from 'lucide-react';
 import {
   treatmentPlansApi,
   type TreatmentPlan,
@@ -8,6 +8,7 @@ import {
   type GoalStatus,
   type PlanStatus,
 } from '@/api/treatmentPlans';
+import { aiSuggestionsApi, type TreatmentPlanContent } from '@/api/aiSuggestions';
 import { Spinner } from '@/components/ui/Spinner';
 
 const GOAL_CFG: Record<GoalStatus, { label: string; color: string; bg: string }> = {
@@ -78,12 +79,42 @@ export function TreatmentPlanPanel({ patientId }: { patientId: string }) {
   );
 }
 
+// Polls the latest treatment_plan suggestion until it leaves the in-progress
+// states. ~90s ceiling so a stuck worker doesn't hang the UI forever.
+async function pollPlanSuggestion(patientId: string): Promise<TreatmentPlanContent> {
+  for (let i = 0; i < 30; i++) {
+    const s = await aiSuggestionsApi.latest<TreatmentPlanContent>(patientId, 'treatment_plan');
+    if (s.status === 'READY') return s.content ?? { title: null, formulation: null, goals: [] };
+    if (s.status === 'FAILED') throw new Error(s.error || 'falló la sugerencia');
+    await new Promise(r => setTimeout(r, 3000));
+  }
+  throw new Error('la sugerencia tardó demasiado');
+}
+
 function NewPlanCard({ patientId, onCreated, onError }: { patientId: string; onCreated: () => void; onError: (e: string) => void }) {
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState('');
   const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [goals, setGoals] = useState<string[]>(['']);
   const [saving, setSaving] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const [formulation, setFormulation] = useState('');
+
+  const handleSuggest = async () => {
+    setSuggesting(true); setCreating(true); onError('');
+    try {
+      await aiSuggestionsApi.request(patientId, 'treatment_plan');
+      const content = await pollPlanSuggestion(patientId);
+      if (content.title) setTitle(content.title);
+      setFormulation(content.formulation ?? '');
+      const descs = content.goals.map(g => g.description).filter(Boolean);
+      if (descs.length) setGoals(descs);
+    } catch {
+      onError('No se pudo generar la sugerencia de IA. Puedes crear el plan manualmente.');
+    } finally {
+      setSuggesting(false);
+    }
+  };
 
   const handleCreate = async () => {
     if (!title.trim()) { onError('El plan necesita un título.'); return; }
@@ -106,13 +137,26 @@ function NewPlanCard({ patientId, onCreated, onError }: { patientId: string; onC
         <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 14, color: 'var(--s800)' }}>
           <Target size={15} color="var(--teal)" /> Plan terapéutico
         </span>
-        <button
-          onClick={() => setCreating(c => !c)}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', background: creating ? 'var(--s100)' : 'var(--teal)', color: creating ? 'var(--s700)' : '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
-        >
-          {creating ? <X size={12} /> : <Plus size={12} />}
-          {creating ? 'Cancelar' : 'Iniciar plan'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {!creating && (
+            <button
+              onClick={handleSuggest}
+              disabled={suggesting}
+              title="Propuesta de plan TCC generada por IA — revísala y edítala antes de crear"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', background: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', borderRadius: 7, cursor: suggesting ? 'wait' : 'pointer', fontSize: 12, fontWeight: 600 }}
+            >
+              {suggesting ? <Spinner size={12} color="#7c3aed" /> : <Sparkles size={12} />}
+              Sugerir con IA (TCC)
+            </button>
+          )}
+          <button
+            onClick={() => setCreating(c => !c)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', background: creating ? 'var(--s100)' : 'var(--teal)', color: creating ? 'var(--s700)' : '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+          >
+            {creating ? <X size={12} /> : <Plus size={12} />}
+            {creating ? 'Cancelar' : 'Iniciar plan'}
+          </button>
+        </div>
       </div>
 
       {!creating ? (
@@ -122,6 +166,21 @@ function NewPlanCard({ patientId, onCreated, onError }: { patientId: string; onC
         </div>
       ) : (
         <div style={{ padding: '16px 20px', background: 'var(--s50)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {suggesting && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#f5f3ff', border: '1px solid #ede9fe', borderRadius: 9 }}>
+              <Spinner size={16} color="#7c3aed" />
+              <span style={{ fontSize: 12.5, color: 'var(--s700)' }}>La IA está proponiendo un plan TCC a partir de la historia…</span>
+            </div>
+          )}
+          {formulation && !suggesting && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 14px', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 9 }}>
+              <Sparkles size={14} color="#7c3aed" style={{ flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <p style={{ margin: '0 0 2px', fontSize: 11.5, fontWeight: 700, color: '#6d28d9' }}>Formulación TCC sugerida (revisa y edita)</p>
+                <p style={{ margin: 0, fontSize: 12.5, color: 'var(--s700)', lineHeight: 1.5 }}>{formulation}</p>
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ flex: 2, minWidth: 220 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--s600)', display: 'block', marginBottom: 5 }}>Título del plan</label>

@@ -16,6 +16,7 @@ import { clinicalRecordsApi, consentsApi, type RecordMeta } from '@/api/clinical
 import { ConsentViewModal } from '@/components/consents/ConsentViewModal';
 import { UnifiedConsentSignModal } from '@/components/consents/UnifiedConsentSignModal';
 import { RecordForm } from '@/components/clinical/RecordForm';
+import { RecapCard } from '@/components/clinical/RecapCard';
 import { aiDraftsApi } from '@/api/aiDrafts';
 import { useAuth } from '@/context/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
@@ -783,6 +784,13 @@ export function AppointmentPage() {
           </div>
         )}
       </div>
+
+      {/* ── Recap pre-sesión (IA) — solo con paciente registrado e historia ── */}
+      {!isGuest && appt.patient_id && (
+        <div style={{ marginBottom: 20 }}>
+          <RecapCard patientId={appt.patient_id} />
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: compactLayout ? '1fr' : '1fr 1fr', gap: 20 }}>
 

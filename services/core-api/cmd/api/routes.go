@@ -12,6 +12,7 @@ import (
 
 	adminhandler "sghcp/core-api/internal/admin/handler"
 	aidraftshandler "sghcp/core-api/internal/aidrafts/handler"
+	aisuggestionshandler "sghcp/core-api/internal/aisuggestions"
 	apptshandler "sghcp/core-api/internal/appointments/handler"
 	authhandler "sghcp/core-api/internal/auth/handler"
 	availabilityhandler "sghcp/core-api/internal/availability"
@@ -139,6 +140,8 @@ func (a *app) buildRouter() http.Handler {
 		aiDrafts := aidraftshandler.New(a.pool, a.km, a.rdb, a.cfg.AudioDir)
 		r.Mount("/api/v1/ai-drafts", aiDrafts.Routes())
 		r.Method(http.MethodPost, "/api/v1/appointments/{appointment_id}/audio", aiDrafts.AppointmentAudioRoute())
+
+		r.Mount("/api/v1/patients/{patient_id}/ai", aisuggestionshandler.New(a.pool, a.km, a.rdb).PatientRoutes())
 
 		r.Mount("/api/v1/booking-requests", bookingH.Routes())
 

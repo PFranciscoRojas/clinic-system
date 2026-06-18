@@ -1,5 +1,7 @@
 import asyncio
 import binascii
+import hashlib
+import json
 import logging
 import os
 from typing import Any
@@ -11,6 +13,8 @@ from ai_service.crypto import open_, seal
 from ai_service.transcription.whisper import transcribe_audio
 from ai_service.anonymization.ner import anonymize
 from ai_service.drafts.claude import generate_clinical_draft
+from ai_service.suggestions.claude import generate_recap, generate_treatment_plan
+from ai_service.suggestions.history import render_history
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +85,13 @@ class AIWorker:
                 await asyncio.sleep(5)
 
     async def _handle(self, message_id: str, fields: dict[str, Any]) -> None:
+        kind = fields.get("kind")
+        if kind in ("recap", "treatment_plan"):
+            await self._handle_suggestion(message_id, kind, fields)
+            return
+        await self._handle_draft(message_id, fields)
+
+    async def _handle_draft(self, message_id: str, fields: dict[str, Any]) -> None:
         draft_id = fields.get("draft_id")
         audio_path = fields.get("audio_path")
         record_type = fields.get("record_type") or "EVOLUTION"
@@ -98,6 +109,26 @@ class AIWorker:
         except Exception as exc:
             logger.error("draft processing failed", extra={"draft_id": draft_id, "err": str(exc)})
             await self._set_error(draft_id, str(exc))
+            # Do NOT ack — message stays in PEL for retry or manual inspection
+
+    async def _handle_suggestion(self, message_id: str, kind: str, fields: dict[str, Any]) -> None:
+        suggestion_id = fields.get("suggestion_id")
+        patient_id = fields.get("patient_id")
+        org_id = fields.get("org_id")
+
+        if not suggestion_id or not patient_id or not org_id:
+            logger.warning("ai_suggestion job missing fields", extra={"message_id": message_id, "fields": list(fields.keys())})
+            await self._ack(message_id)
+            return
+
+        logger.info("processing ai suggestion", extra={"suggestion_id": suggestion_id, "kind": kind})
+        try:
+            await self._set_suggestion_status(suggestion_id, "PROCESSING")
+            await self._process_suggestion(suggestion_id, org_id, patient_id, kind)
+            await self._ack(message_id)
+        except Exception as exc:
+            logger.error("suggestion processing failed", extra={"suggestion_id": suggestion_id, "err": str(exc)})
+            await self._set_suggestion_error(suggestion_id, str(exc))
             # Do NOT ack — message stays in PEL for retry or manual inspection
 
     async def _process_draft(self, draft_id: str, audio_path: str, record_type: str) -> None:
@@ -140,6 +171,101 @@ class AIWorker:
             draft_id,
             transcription_enc,
             draft_content_enc,
+        )
+
+    async def _process_suggestion(self, suggestion_id: str, org_id: str, patient_id: str, kind: str) -> None:
+        assert self._db is not None
+
+        # 1. Resolve the suggestion's own DEK (used to seal the result).
+        sug = await self._db.fetchrow(
+            """
+            SELECT k.encrypted_dek, k.key_source
+            FROM ai_suggestions s
+            JOIN encryption_keys k ON k.id = s.dek_id
+            WHERE s.id = $1
+            """,
+            suggestion_id,
+        )
+        if sug is None:
+            raise RuntimeError(f"ai_suggestion {suggestion_id} not found")
+        out_dek = self._decrypt_dek(sug["key_source"], bytes(sug["encrypted_dek"]))
+
+        # 2. Read and decrypt the patient's approved clinical records (oldest → newest).
+        #    The worker connects as the admin role (bypasses RLS), so it filters by
+        #    org + patient explicitly.
+        rec_rows = await self._db.fetch(
+            """
+            SELECT r.record_type, r.session_date, r.sections_enc,
+                   k.encrypted_dek, k.key_source
+            FROM clinical_records r
+            JOIN encryption_keys k ON k.id = r.dek_id
+            WHERE r.organization_id = $1 AND r.patient_id = $2 AND r.status = 'APPROVED'
+            ORDER BY r.session_date ASC, r.created_at ASC
+            """,
+            org_id, patient_id,
+        )
+        records: list[dict[str, Any]] = []
+        for row in rec_rows:
+            sections: dict[str, Any] = {}
+            if row["sections_enc"] is not None:
+                rec_dek = self._decrypt_dek(row["key_source"], bytes(row["encrypted_dek"]))
+                try:
+                    sections = json.loads(open_(rec_dek, bytes(row["sections_enc"])).decode())
+                except (ValueError, json.JSONDecodeError) as exc:
+                    logger.warning("skipping unreadable record sections", extra={"err": str(exc)})
+                    sections = {}
+            records.append({
+                "record_type": row["record_type"],
+                "session_date": row["session_date"],
+                "sections": sections,
+            })
+
+        # 3. Diagnoses (ICD-10 codes are catalog references, not PII).
+        diag_rows = await self._db.fetch(
+            """
+            SELECT d.icd10_code AS code, c.description, d.status::text AS status
+            FROM patient_diagnoses d
+            JOIN icd10_codes c ON c.code = d.icd10_code
+            WHERE d.organization_id = $1 AND d.patient_id = $2
+            ORDER BY d.diagnosed_at ASC
+            """,
+            org_id, patient_id,
+        )
+        diagnoses = [dict(r) for r in diag_rows]
+
+        # 4. Assemble → anonymize (strip any residual PII) → Claude.
+        history = render_history(records, diagnoses)
+        source_hash = hashlib.sha256(history.encode()).hexdigest()
+        anonymized = anonymize(history)
+
+        if kind == "recap":
+            content = await generate_recap(anonymized)
+        else:
+            content = await generate_treatment_plan(anonymized)
+
+        # 5. Seal the result with the suggestion's DEK and mark it READY.
+        content_enc = seal(out_dek, content.encode())
+        await self._db.execute(
+            """
+            UPDATE ai_suggestions
+            SET content_enc = $2, source_hash = $3, status = 'READY', updated_at = NOW()
+            WHERE id = $1
+            """,
+            suggestion_id, content_enc, source_hash,
+        )
+
+    async def _set_suggestion_status(self, suggestion_id: str, status: str) -> None:
+        assert self._db is not None
+        await self._db.execute(
+            "UPDATE ai_suggestions SET status = $2, updated_at = NOW() WHERE id = $1",
+            suggestion_id, status,
+        )
+
+    async def _set_suggestion_error(self, suggestion_id: str, message: str) -> None:
+        assert self._db is not None
+        await self._db.execute(
+            "UPDATE ai_suggestions SET status = 'FAILED', error = $2, updated_at = NOW() WHERE id = $1",
+            suggestion_id, message,
         )
 
     def _decrypt_dek(self, key_source: str, encrypted_dek: bytes) -> bytes:
