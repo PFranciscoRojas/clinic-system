@@ -1,11 +1,15 @@
 package invoicing
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
+	"sghcp/core-api/internal/shared/dbctx"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
 )
@@ -17,6 +21,7 @@ func (h *Handler) InvoiceRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.With(middleware.RequirePermission("billing:read")).Get("/", h.listInvoices)
 	r.With(middleware.RequirePermission("billing:read")).Get("/{invoice_id}", h.getInvoice)
+	r.With(middleware.RequirePermission("billing:read")).Get("/{invoice_id}/receipt", h.receipt)
 	r.With(middleware.RequirePermission("billing:create")).Post("/", h.createInvoice)
 	r.With(middleware.RequirePermission("billing:create")).Post("/{invoice_id}/issue", h.issueInvoice)
 	r.With(middleware.RequirePermission("billing:create")).Post("/{invoice_id}/cancel", h.cancelInvoice)
@@ -120,6 +125,81 @@ func (h *Handler) cancelInvoice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, inv)
+}
+
+// GET /{invoice_id}/receipt — a printable payment receipt PDF (comprobante de
+// pago, not a DIAN electronic invoice).
+func (h *Handler) receipt(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	claims := middleware.ClaimsFromContext(ctx)
+	invoiceID := chi.URLParam(r, "invoice_id")
+
+	inv, err := h.svc.GetInvoice(ctx, claims.OrganizationID, invoiceID)
+	if err != nil {
+		h.writeErr(w, err)
+		return
+	}
+
+	name, doc := "", ""
+	if p, err := h.patients.Get(ctx, claims.OrganizationID, inv.PatientID); err == nil {
+		name = joinNonEmpty(p.FirstName, p.MiddleName, p.PaternalLastName, p.MaternalLastName)
+		doc = p.DocumentNumber
+	}
+
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition",
+		fmt.Sprintf(`attachment; filename="comprobante-%s.pdf"`, shortID(inv.ID)))
+
+	if err := RenderReceipt(w, ReceiptData{
+		Org:         h.orgLetterhead(ctx, claims.OrganizationID),
+		PatientName: name,
+		PatientDoc:  doc,
+		Invoice:     inv,
+		GeneratedAt: time.Now(),
+	}); err != nil {
+		// Headers already sent — nothing useful to return.
+		return
+	}
+}
+
+// orgLetterhead reads the clinic identification (name, NIT, contact) for the
+// receipt header from organizations.settings, like the clinical PDF exporter.
+func (h *Handler) orgLetterhead(ctx context.Context, orgID string) OrgLetterhead {
+	var name, nit string
+	var settingsRaw []byte
+	if err := dbctx.From(ctx, h.pool).QueryRow(ctx,
+		`SELECT name, COALESCE(nit, ''), settings FROM organizations WHERE id = $1`, orgID,
+	).Scan(&name, &nit, &settingsRaw); err != nil {
+		return OrgLetterhead{Name: name}
+	}
+	lh := OrgLetterhead{Name: name, NIT: nit}
+	var settings map[string]any
+	if json.Unmarshal(settingsRaw, &settings) == nil {
+		if v, ok := settings["address"].(string); ok {
+			lh.Address = v
+		}
+		if v, ok := settings["phone"].(string); ok {
+			lh.Phone = v
+		}
+		if v, ok := settings["email"].(string); ok {
+			lh.Email = v
+		}
+	}
+	return lh
+}
+
+func joinNonEmpty(parts ...string) string {
+	out := ""
+	for _, p := range parts {
+		if p == "" {
+			continue
+		}
+		if out != "" {
+			out += " "
+		}
+		out += p
+	}
+	return out
 }
 
 func (h *Handler) recordPayment(w http.ResponseWriter, r *http.Request) {

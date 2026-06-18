@@ -1,23 +1,38 @@
 package invoicing
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"sghcp/core-api/internal/patients"
+	patsrepo "sghcp/core-api/internal/patients/repository"
+	patssvc "sghcp/core-api/internal/patients/service"
 	"sghcp/core-api/internal/shared/crypto"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
 )
 
+// patientGetter resolves a patient's decrypted identity for the receipt header.
+type patientGetter interface {
+	Get(ctx context.Context, orgID, patientID string) (*patients.Patient, error)
+}
+
 type Handler struct {
-	svc *Service
+	svc      *Service
+	patients patientGetter
+	pool     *pgxpool.Pool
 }
 
 func New(db *pgxpool.Pool, km *crypto.KeyManager) *Handler {
-	return &Handler{svc: NewService(NewRepository(db), km)}
+	return &Handler{
+		svc:      NewService(NewRepository(db), km),
+		patients: patssvc.New(patsrepo.New(db), km),
+		pool:     db,
+	}
 }
 
 // RateRoutes is mounted at /api/v1/service-rates (JWT + tenant scope applied by
