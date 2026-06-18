@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"sghcp/core-api/internal/shared/crypto"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
 )
@@ -15,8 +16,8 @@ type Handler struct {
 	svc *Service
 }
 
-func New(db *pgxpool.Pool) *Handler {
-	return &Handler{svc: NewService(NewRepository(db))}
+func New(db *pgxpool.Pool, km *crypto.KeyManager) *Handler {
+	return &Handler{svc: NewService(NewRepository(db), km)}
 }
 
 // RateRoutes is mounted at /api/v1/service-rates (JWT + tenant scope applied by
@@ -112,7 +113,11 @@ func (h *Handler) setActive(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) writeErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrNotFound):
-		httputil.WriteError(w, http.StatusNotFound, "tarifa no encontrada")
+		httputil.WriteError(w, http.StatusNotFound, "recurso no encontrado")
+	case errors.Is(err, ErrNotPayable):
+		httputil.WriteError(w, http.StatusConflict, "la factura no admite esta operación en su estado actual")
+	case errors.Is(err, ErrNotDraft):
+		httputil.WriteError(w, http.StatusConflict, "la factura ya no es un borrador")
 	case errors.Is(err, ErrInvalidInput):
 		httputil.WriteError(w, http.StatusBadRequest, err.Error())
 	default:

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"sghcp/core-api/internal/shared/crypto"
 )
 
 // amountPattern accepts a plain decimal with up to two fraction digits. Money is
@@ -15,9 +17,12 @@ var validModalities = map[string]bool{"IN_PERSON": true, "VIRTUAL": true, "HYBRI
 
 type Service struct {
 	repo *Repository
+	km   *crypto.KeyManager
 }
 
-func NewService(repo *Repository) *Service { return &Service{repo: repo} }
+func NewService(repo *Repository, km *crypto.KeyManager) *Service {
+	return &Service{repo: repo, km: km}
+}
 
 func (s *Service) List(ctx context.Context, orgID string, includeInactive bool) ([]Rate, error) {
 	return s.repo.List(ctx, orgID, includeInactive)

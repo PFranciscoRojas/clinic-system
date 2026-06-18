@@ -5,8 +5,9 @@ import {
   ArrowLeft, Phone, Mail, Calendar, FileText,
   Clock, AlertCircle,
   CreditCard, MapPin, Video, FileCheck, Cake, Stethoscope, AlertTriangle,
-  Pencil, Target,
+  Pencil, Target, Receipt,
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 import { EditPatientModal } from '@/components/patients/EditPatientModal';
 import { LateSessionModal } from '@/components/appointments/LateSessionModal';
 import { patientsApi } from '@/api/patients';
@@ -23,10 +24,11 @@ import { DiagnosesPanel } from '@/components/clinical/DiagnosesPanel';
 import { TreatmentPlanPanel } from '@/components/clinical/TreatmentPlanPanel';
 import { RiskBanner } from '@/components/clinical/RiskBanner';
 import { riskMeta } from '@/components/clinical/constants';
+import { BillingPanel } from '@/components/billing/BillingPanel';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Tab = 'historial' | 'plan' | 'consentimientos';
+type Tab = 'historial' | 'plan' | 'consentimientos' | 'facturacion';
 
 type AppointmentStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
 
@@ -475,6 +477,8 @@ export function PatientProfilePage() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const canSeeBilling = (user?.permissions ?? []).includes('billing:read');
   const [tab, setTab] = useState<Tab>('historial');
   const [editOpen, setEditOpen] = useState(false);
   const [lateOpen, setLateOpen] = useState(false);
@@ -558,6 +562,7 @@ export function PatientProfilePage() {
     { id: 'historial',       label: 'Historial de consultas', Icon: Clock      },
     { id: 'plan',            label: 'Plan terapéutico',        Icon: Target     },
     { id: 'consentimientos', label: 'Consentimientos',         Icon: FileCheck  },
+    ...(canSeeBilling ? [{ id: 'facturacion' as Tab, label: 'Facturación', Icon: Receipt }] : []),
   ];
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -714,6 +719,7 @@ export function PatientProfilePage() {
         {tab === 'historial'       && <HistorialTab appointments={appointments} records={records} navigate={navigate} patientId={id!} />}
         {tab === 'plan'            && <TreatmentPlanPanel patientId={id!} />}
         {tab === 'consentimientos' && <ConsentimientosTab patientId={id!} />}
+        {tab === 'facturacion'     && <BillingPanel patientId={id!} />}
       </div>
 
       {editOpen && patient && (

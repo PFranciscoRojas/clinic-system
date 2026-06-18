@@ -150,8 +150,10 @@ func (a *app) buildRouter() http.Handler {
 
 		r.Mount("/api/v1/booking-requests", bookingH.Routes())
 
-		// BC-6 internal billing — service-rate catalogue (invoices/payments next).
-		r.Mount("/api/v1/service-rates", invoicinghandler.New(a.pool).RateRoutes())
+		// BC-6 internal billing — service-rate catalogue + patient invoices/payments.
+		invoicingH := invoicinghandler.New(a.pool, a.km)
+		r.Mount("/api/v1/service-rates", invoicingH.RateRoutes())
+		r.Mount("/api/v1/invoices", invoicingH.InvoiceRoutes())
 
 		// Subscription checkout — allowlisted in SubscriptionGate so a lapsed
 		// tenant can still reach it to pay.
