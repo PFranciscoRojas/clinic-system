@@ -99,8 +99,20 @@ export interface BillingOverview {
   monthly: MonthBucket[]; // last 12 months
 }
 
+export interface PatientBalance {
+  patient_id: string;
+  name: string;
+  sessions: number;
+  invoiced: string;
+  collected: string;
+  pending: string;
+  paid_pct: number;
+}
+
 export const invoicesApi = {
   listByPatient: (patientId: string) => api.get<Invoice[]>(`/invoices?patient_id=${patientId}`),
+  patientsBalance: (period: BillingPeriod = 'all') =>
+    api.get<PatientBalance[]>(`/invoices/patients-balance${period && period !== 'all' ? `?period=${period}` : ''}`),
   listAll: (status?: string, period?: BillingPeriod) =>
     api.get<Invoice[]>(`/invoices?with_patient=true${status ? `&status=${status}` : ''}${period && period !== 'all' ? `&period=${period}` : ''}`),
   overview: (period: BillingPeriod = 'month') => api.get<BillingOverview>(`/invoices/overview?period=${period}`),

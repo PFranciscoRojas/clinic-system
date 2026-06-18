@@ -226,7 +226,137 @@ func addMoney(a, b string) string {
 	return s
 }
 
+// PatientBalance is one patient's billing relationship in the selected window.
+type PatientBalance struct {
+	PatientID string `json:"patient_id"`
+	Name      string `json:"name"`
+	Sessions  int    `json:"sessions"`
+	Invoiced  string `json:"invoiced"`
+	Collected string `json:"collected"`
+	Pending   string `json:"pending"`
+	PaidPct   int    `json:"paid_pct"`
+}
+
+// PatientsBalance aggregates, per patient, the sessions and billing totals in
+// [from, to) (nil bounds = all-time). Names are resolved by the caller. Sorted
+// by outstanding balance, then invoiced, descending.
+func (s *Service) PatientsBalance(ctx context.Context, orgID string, from, to *time.Time) ([]PatientBalance, error) {
+	aggs, err := s.repo.PatientsInvoiceAgg(ctx, orgID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	sessions, err := s.repo.PatientsSessionCount(ctx, orgID, from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	byID := map[string]*PatientBalance{}
+	order := []string{}
+	get := func(id string) *PatientBalance {
+		if b, ok := byID[id]; ok {
+			return b
+		}
+		b := &PatientBalance{PatientID: id, Invoiced: "0", Collected: "0", Pending: "0"}
+		byID[id] = b
+		order = append(order, id)
+		return b
+	}
+	for _, a := range aggs {
+		b := get(a.PatientID)
+		b.Invoiced, b.Collected = a.Invoiced, a.Collected
+		b.Pending = itoaCents(maxZero(cents(a.Invoiced) - cents(a.Collected)))
+		if iv := cents(a.Invoiced); iv > 0 {
+			pct := cents(a.Collected) * 100 / iv
+			if pct > 100 {
+				pct = 100
+			}
+			b.PaidPct = int(pct)
+		}
+	}
+	for id, n := range sessions {
+		get(id).Sessions = n
+	}
+
+	out := make([]PatientBalance, 0, len(order))
+	for _, id := range order {
+		out = append(out, *byID[id])
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if pi, pj := cents(out[i].Pending), cents(out[j].Pending); pi != pj {
+			return pi > pj
+		}
+		return cents(out[i].Invoiced) > cents(out[j].Invoiced)
+	})
+	return out, nil
+}
+
+func maxZero(v int64) int64 {
+	if v < 0 {
+		return 0
+	}
+	return v
+}
+
 // ── repository ──────────────────────────────────────────────────────────────
+
+type patientAgg struct {
+	PatientID string
+	Invoiced  string
+	Collected string
+}
+
+// PatientsInvoiceAgg sums invoiced/collected per patient over non-cancelled
+// invoices issued in [from, to) (nil bounds disable the window).
+func (r *Repository) PatientsInvoiceAgg(ctx context.Context, orgID string, from, to *time.Time) ([]patientAgg, error) {
+	rows, err := r.q(ctx).Query(ctx, `
+		SELECT patient_id::text, SUM(total_due)::text, SUM(total_paid)::text
+		FROM invoices
+		WHERE organization_id = $1 AND status <> 'CANCELLED'
+		  AND ($2::timestamptz IS NULL OR COALESCE(issued_at, created_at) >= $2)
+		  AND ($3::timestamptz IS NULL OR COALESCE(issued_at, created_at) <  $3)
+		GROUP BY patient_id
+	`, orgID, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("patients invoice agg: %w", err)
+	}
+	defer rows.Close()
+	out := []patientAgg{}
+	for rows.Next() {
+		var a patientAgg
+		if err := rows.Scan(&a.PatientID, &a.Invoiced, &a.Collected); err != nil {
+			return nil, fmt.Errorf("scan patient agg: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// PatientsSessionCount counts non-cancelled sessions per patient in [from, to).
+func (r *Repository) PatientsSessionCount(ctx context.Context, orgID string, from, to *time.Time) (map[string]int, error) {
+	rows, err := r.q(ctx).Query(ctx, `
+		SELECT patient_id::text, COUNT(*)
+		FROM appointments
+		WHERE organization_id = $1 AND patient_id IS NOT NULL
+		  AND status IN ('SCHEDULED','CONFIRMED','COMPLETED')
+		  AND ($2::timestamptz IS NULL OR scheduled_at >= $2)
+		  AND ($3::timestamptz IS NULL OR scheduled_at <  $3)
+		GROUP BY patient_id
+	`, orgID, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("patients session count: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var id string
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, fmt.Errorf("scan session count: %w", err)
+		}
+		out[id] = n
+	}
+	return out, rows.Err()
+}
 
 // CurrencyHint returns the currency of the most recent invoice (single-currency
 // assumption), defaulting to COP.
