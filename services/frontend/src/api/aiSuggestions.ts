@@ -1,7 +1,17 @@
 import { api } from './client';
 
-export type SuggestionKind = 'recap' | 'treatment_plan';
+export type SuggestionKind = 'recap' | 'treatment_plan' | 'risk_detection';
 export type SuggestionStatus = 'NONE' | 'PENDING' | 'PROCESSING' | 'READY' | 'FAILED';
+
+export type RiskLevel = 'none' | 'low' | 'moderate' | 'high';
+
+/** Risk-detection content shape (kind = 'risk_detection'). */
+export interface RiskAssessmentContent {
+  level: RiskLevel;
+  signals: string[];
+  rationale: string | null;
+  recommendation: string | null;
+}
 
 /** Recap content shape (kind = 'recap'). */
 export interface RecapContent {

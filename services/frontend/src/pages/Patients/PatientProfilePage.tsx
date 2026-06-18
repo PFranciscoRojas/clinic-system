@@ -21,6 +21,7 @@ import { UnifiedConsentSignModal } from '@/components/consents/UnifiedConsentSig
 import { ConsentViewModal } from '@/components/consents/ConsentViewModal';
 import { DiagnosesPanel } from '@/components/clinical/DiagnosesPanel';
 import { TreatmentPlanPanel } from '@/components/clinical/TreatmentPlanPanel';
+import { RiskBanner } from '@/components/clinical/RiskBanner';
 import { riskMeta } from '@/components/clinical/constants';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -661,6 +662,11 @@ export function PatientProfilePage() {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* ── Señales de riesgo (IA) — apoyo a la decisión, siempre visible ──── */}
+        <div style={{ marginBottom: 20 }}>
+          <RiskBanner patientId={patient.id} />
         </div>
 
         {/* ── Consent warning (Ley 1581 / Ley 1090) ─────────────────────────── */}

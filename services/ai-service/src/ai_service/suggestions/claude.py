@@ -63,6 +63,66 @@ Formato de respuesta — un objeto JSON con estas claves:
 }"""
 
 
+# ── Risk detection ─────────────────────────────────────────────────────────────
+# Flags risk signals (suicidal/self-harm ideation, harm to others, severe
+# deterioration) so the professional doesn't miss them across sessions. It is
+# DECISION SUPPORT ONLY — it never replaces clinical judgment, and a "none"
+# result is never a clearance. Conservative by design: when in doubt, escalate.
+
+_RISK_SYSTEM = """Eres un asistente clínico de apoyo a la decisión en psicología. Tu tarea es
+revisar la historia clínica y señalar POSIBLES SEÑALES DE RIESGO para que el profesional
+no las pase por alto. NO eres un evaluador de riesgo definitivo ni reemplazas el juicio clínico.
+
+REGLAS ESTRICTAS:
+1. Solo señalas lo que esté respaldado por la historia; no inventes ni infieras de más.
+2. El texto ya fue anonimizado: nunca incluyas nombres, documentos ni datos de contacto.
+3. Sé CONSERVADOR: ante duda razonable, eleva el nivel — es preferible una falsa alarma
+   que omitir una señal. Un nivel "none" NUNCA significa que el paciente esté fuera de riesgo,
+   solo que la historia no muestra señales explícitas.
+4. Considera: ideación o conducta suicida, autolesión, riesgo hacia terceros, deterioro grave,
+   consumo de sustancias en escalada, desesperanza marcada, planes o medios.
+5. Responde ÚNICAMENTE con el objeto JSON, sin texto adicional ni marcas de formato.
+
+Formato de respuesta — un objeto JSON con estas claves:
+{
+  "level": "none" | "low" | "moderate" | "high",
+  "signals": ["string", "..."],   // señales concretas detectadas en la historia (vacío si ninguna)
+  "rationale": "string | null — por qué ese nivel, citando lo observado (sin PII).",
+  "recommendation": "string | null — sugerencia de actuación para el profesional (p. ej. evaluar riesgo suicida en sesión, activar protocolo, contactar red de apoyo)."
+}"""
+
+
+async def generate_risk_assessment(anonymized_history: str) -> str:
+    """Return a risk-signal assessment as a JSON string. Input is already anonymized."""
+    if not anonymized_history.strip():
+        return json.dumps(
+            {"level": "none", "signals": [], "rationale": None, "recommendation": None},
+            ensure_ascii=False,
+        )
+
+    logger.info("generating risk assessment", extra={"chars": len(anonymized_history)})
+    message = await _client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1536,
+        system=_RISK_SYSTEM,
+        messages=[{"role": "user", "content": f"Historia clínica:\n\n{anonymized_history}"}],
+    )
+    parsed = _extract_json(message.content[0].text)
+
+    level = parsed.get("level")
+    if level not in ("none", "low", "moderate", "high"):
+        # Fail safe: an unparseable/odd answer must not read as "no risk".
+        level = "moderate"
+    out = {
+        "level": level,
+        "signals": [s.strip() for s in parsed.get("signals", []) if isinstance(s, str) and s.strip()],
+        "rationale": _clean_str(parsed.get("rationale")),
+        "recommendation": _clean_str(parsed.get("recommendation")),
+    }
+    logger.info("risk assessment generated", extra={"input_tokens": message.usage.input_tokens, "level": level})
+    return json.dumps(out, ensure_ascii=False)
+
+
 async def generate_recap(anonymized_history: str) -> str:
     """Return a pre-session recap as a JSON string. Input is already anonymized."""
     if not anonymized_history.strip():

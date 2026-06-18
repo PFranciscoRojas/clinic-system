@@ -114,7 +114,11 @@ func (a *app) buildRouter() http.Handler {
 		r.Mount("/api/v1/patients", patientshandler.New(a.pool, a.km).Routes())
 		r.Mount("/api/v1/appointments", apptshandler.New(a.pool).Routes())
 
-		crr := crrhandler.New(a.pool, a.km)
+		// Shared so approving a clinical record can refresh the patient's AI
+		// risk read through the same enqueue path the on-demand routes use.
+		aiSugSvc := aisuggestionshandler.NewService(aisuggestionshandler.NewRepository(a.pool), a.km, a.rdb)
+
+		crr := crrhandler.New(a.pool, a.km, aiSugSvc)
 		r.Mount("/api/v1/patients/{patient_id}/records", crr.PatientRoutes())
 		r.Mount("/api/v1/clinical-records", crr.Routes())
 
@@ -141,7 +145,7 @@ func (a *app) buildRouter() http.Handler {
 		r.Mount("/api/v1/ai-drafts", aiDrafts.Routes())
 		r.Method(http.MethodPost, "/api/v1/appointments/{appointment_id}/audio", aiDrafts.AppointmentAudioRoute())
 
-		r.Mount("/api/v1/patients/{patient_id}/ai", aisuggestionshandler.New(a.pool, a.km, a.rdb).PatientRoutes())
+		r.Mount("/api/v1/patients/{patient_id}/ai", aisuggestionshandler.NewWithService(aiSugSvc).PatientRoutes())
 
 		r.Mount("/api/v1/booking-requests", bookingH.Routes())
 

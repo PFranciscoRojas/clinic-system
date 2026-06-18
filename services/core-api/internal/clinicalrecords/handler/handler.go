@@ -15,6 +15,12 @@ import (
 	"sghcp/core-api/internal/shared/dbctx"
 )
 
+// riskEnqueuer enqueues an AI suggestion job (satisfied by aisuggestions.Service).
+// Optional — when nil, approving a record simply skips the risk refresh.
+type riskEnqueuer interface {
+	Request(ctx context.Context, orgID, patientID, kind string) (string, error)
+}
+
 type Handler struct {
 	svc      svcPort
 	patients patientGetterPort
@@ -22,13 +28,16 @@ type Handler struct {
 	db       *pgxpool.Pool
 	km       *crypto.KeyManager
 	audit    *audit.Writer
+	risk     riskEnqueuer
 }
 
 // q returns the request-scoped tenant querier (RLS-scoped) for the direct
 // SQL the PDF exporter runs, falling back to the pool.
 func (h *Handler) q(ctx context.Context) dbctx.Querier { return dbctx.From(ctx, h.db) }
 
-func New(db *pgxpool.Pool, km *crypto.KeyManager) *Handler {
+// New builds the handler. risk may be nil (e.g. in tests) — when set, approving
+// a clinical record triggers an AI risk-detection refresh for the patient.
+func New(db *pgxpool.Pool, km *crypto.KeyManager, risk riskEnqueuer) *Handler {
 	crrRepo := crrrepo.New(db)
 	patsRepo := patsrepo.New(db)
 	return &Handler{
@@ -38,5 +47,6 @@ func New(db *pgxpool.Pool, km *crypto.KeyManager) *Handler {
 		db:       db,
 		km:       km,
 		audit:    audit.New(db),
+		risk:     risk,
 	}
 }

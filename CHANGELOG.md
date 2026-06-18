@@ -10,6 +10,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- AI clinical risk detection: a "señales de riesgo" banner on the patient profile and appointment page flags possible risk signals (suicidal/self-harm ideation, harm to others, severe deterioration) from the patient's history — graded none/low/moderate/high, with signals, rationale and a suggested action. It is decision support only (never replaces clinical judgment; "sin señales" never clears a patient) and is conservative by design. Refreshed automatically when a clinical record is approved, and runnable on demand. Reuses the `ai_suggestions` pipeline (new `risk_detection` kind)
 - AI pre-session recap: on the appointment page, "Generar recap" summarizes the patient's encrypted clinical history (process so far, last session, pending tasks, points to revisit, risk flags) before the session starts — the AI summarizes, the professional decides
 - AI-suggested treatment plan (CBT): "Sugerir con IA (TCC)" proposes a cognitive-behavioral plan from the patient's history (formulation + measurable goals) and pre-fills the new-plan form for the professional to review and edit before creating it
 - Both run on a new generic `ai_suggestions` pipeline (migration 000023): the history is decrypted, anonymized and sent to Claude, and the result is sealed with a per-suggestion key — same privacy guarantees as the clinical draft

@@ -21,6 +21,12 @@ func New(db *pgxpool.Pool, km *crypto.KeyManager, rdb *redis.Client) *Handler {
 	return &Handler{svc: NewService(NewRepository(db), km, rdb)}
 }
 
+// NewWithService wraps an already-built service, so the same instance can be
+// shared (e.g. with the clinical-records handler for risk-detection enqueues).
+func NewWithService(svc *Service) *Handler {
+	return &Handler{svc: svc}
+}
+
 // PatientRoutes is mounted at /api/v1/patients/{patient_id}/ai (JWT + tenant
 // scope applied by the parent group).
 func (h *Handler) PatientRoutes() chi.Router {

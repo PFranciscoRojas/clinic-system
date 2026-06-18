@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -107,11 +108,21 @@ func (h *Handler) approve(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	recordID := chi.URLParam(r, "id")
 
-	if err := h.svc.Approve(r.Context(), claims.OrganizationID, recordID, claims.Roles); err != nil {
+	patientID, err := h.svc.Approve(r.Context(), claims.OrganizationID, recordID, claims.Roles)
+	if err != nil {
 		writeErr(w, err)
 		return
 	}
 	h.audit.Record(r, "CLINICAL_RECORD_APPROVE", "clinical_record", recordID)
+
+	// Refresh the AI risk read now that the history includes this record. Best
+	// effort: a failed enqueue must never block the approval. Runs on the
+	// request's tenant-scoped connection, so it stays before the response.
+	if h.risk != nil && patientID != "" {
+		if _, err := h.risk.Request(r.Context(), claims.OrganizationID, patientID, "risk_detection"); err != nil {
+			slog.WarnContext(r.Context(), "risk-detection enqueue failed", "patient_id", patientID, "err", err)
+		}
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
