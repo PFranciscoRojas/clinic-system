@@ -101,8 +101,8 @@ export interface BillingOverview {
 
 export const invoicesApi = {
   listByPatient: (patientId: string) => api.get<Invoice[]>(`/invoices?patient_id=${patientId}`),
-  listAll: (status?: string) =>
-    api.get<Invoice[]>(`/invoices?with_patient=true${status ? `&status=${status}` : ''}`),
+  listAll: (status?: string, period?: BillingPeriod) =>
+    api.get<Invoice[]>(`/invoices?with_patient=true${status ? `&status=${status}` : ''}${period && period !== 'all' ? `&period=${period}` : ''}`),
   overview: (period: BillingPeriod = 'month') => api.get<BillingOverview>(`/invoices/overview?period=${period}`),
   sendReminders: () => api.post<{ sent: number; skipped: number; pending: number }>('/invoices/send-reminders', {}),
   get: (id: string) => api.get<Invoice>(`/invoices/${id}`),

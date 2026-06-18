@@ -46,11 +46,23 @@ func parseTime(s string) (*time.Time, bool) {
 	return &t, true
 }
 
+// periodBounds maps a period name to a [from, to) window, or nils for "all"/none.
+func periodBounds(period string) (from, to *time.Time) {
+	switch period {
+	case "week", "month", "year":
+		f, t, _, _, _ := periodRange(period, time.Now())
+		return &f, &t
+	default:
+		return nil, nil
+	}
+}
+
 func (h *Handler) listInvoices(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	claims := middleware.ClaimsFromContext(ctx)
 	q := r.URL.Query()
-	invoices, err := h.svc.ListInvoices(ctx, claims.OrganizationID, q.Get("patient_id"), q.Get("status"))
+	from, to := periodBounds(q.Get("period"))
+	invoices, err := h.svc.ListInvoices(ctx, claims.OrganizationID, q.Get("patient_id"), q.Get("status"), from, to)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "no se pudieron cargar las facturas")
 		return
