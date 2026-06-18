@@ -26,22 +26,18 @@ func (r *Repository) Create(ctx context.Context, p clinicalrecords.CreateParams)
 		INSERT INTO clinical_records (
 			organization_id, patient_id, responsible_staff_id, created_by,
 			appointment_id, dek_id, record_type, session_date,
-			subjective_enc, objective_enc, assessment_enc, plan_enc,
 			requires_cosign, supervisor_id, content_hash,
 			template_version, sections_enc, risk_level, discharge_reason
 		) VALUES (
 			$1, $2, $3, $4,
 			$5, $6, $7, $8,
-			$9, $10, $11, $12,
-			$13, $14, $15,
-			$16, $17, $18, $19
+			$9, $10, $11,
+			$12, $13, $14, $15
 		)
 		RETURNING id
 	`,
 		p.OrganizationID, p.PatientID, p.ResponsibleStaffID, p.CreatedBy,
 		nullableString(p.AppointmentID), p.DEKID, p.RecordType, p.SessionDate,
-		nullableBytes(p.SubjectiveEnc), nullableBytes(p.ObjectiveEnc),
-		nullableBytes(p.AssessmentEnc), nullableBytes(p.PlanEnc),
 		p.RequiresCosign, nullableString(p.SupervisorID), nullableString(p.ContentHash),
 		templateVersionOrDefault(p.TemplateVersion), nullableBytes(p.SectionsEnc),
 		p.RiskLevel, p.DischargeReason,
@@ -52,10 +48,10 @@ func (r *Repository) Create(ctx context.Context, p clinicalrecords.CreateParams)
 	return id, nil
 }
 
-// templateVersionOrDefault keeps legacy SOAP inserts at version 1.
+// templateVersionOrDefault keeps records at the current section format (v2).
 func templateVersionOrDefault(v int16) int16 {
 	if v == 0 {
-		return 1
+		return 2
 	}
 	return v
 }

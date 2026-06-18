@@ -15,16 +15,9 @@ import (
 
 // draftContent is the shape stored in ai_drafts.draft_content_enc by the AI
 // worker: the clinical-record sections for the session's record type.
-// Legacy drafts stored flat SOAP keys instead — both are accepted.
 type draftContent struct {
 	RecordType string            `json:"record_type"`
 	Sections   map[string]string `json:"sections"`
-
-	// Legacy v1 SOAP shape
-	Subjective string `json:"subjective"`
-	Objective  string `json:"objective"`
-	Assessment string `json:"assessment"`
-	Plan       string `json:"plan"`
 }
 
 // POST /api/v1/ai-drafts/{id}/approve
@@ -59,12 +52,6 @@ func (h *Handler) approveDraft(w http.ResponseWriter, r *http.Request) {
 		RecordType    string            `json:"record_type"`
 		AppointmentID string            `json:"appointment_id"`
 		RiskLevel     string            `json:"risk_level"`
-
-		// Legacy SOAP edits
-		Subjective string `json:"subjective"`
-		Objective  string `json:"objective"`
-		Assessment string `json:"assessment"`
-		Plan       string `json:"plan"`
 	}
 	// Body is optional — silently ignore decode errors.
 	_ = httputil.DecodeJSON(r, &body)
@@ -115,25 +102,6 @@ func (h *Handler) approveDraft(w http.ResponseWriter, r *http.Request) {
 				in.Sections[k] = v
 			}
 		}
-	} else {
-		// Legacy SOAP draft, possibly edited field by field
-		soap := stored
-		if body.Subjective != "" {
-			soap.Subjective = body.Subjective
-		}
-		if body.Objective != "" {
-			soap.Objective = body.Objective
-		}
-		if body.Assessment != "" {
-			soap.Assessment = body.Assessment
-		}
-		if body.Plan != "" {
-			soap.Plan = body.Plan
-		}
-		in.Subjective = soap.Subjective
-		in.Objective = soap.Objective
-		in.Assessment = soap.Assessment
-		in.Plan = soap.Plan
 	}
 
 	recordID, err := h.crr.Create(r.Context(), in)

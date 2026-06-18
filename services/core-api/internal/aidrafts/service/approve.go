@@ -9,7 +9,7 @@ import (
 )
 
 // DecryptDraftContent decrypts and returns the draft_content_enc JSON string for a DRAFT_READY draft.
-// The AI worker stores the SOAP output as JSON: {"subjective":"...","objective":"...","assessment":"...","plan":"..."}.
+// The AI worker stores it as {"record_type": ..., "sections": {...}, "suggested_icd10": ...}.
 func (s *Service) DecryptDraftContent(ctx context.Context, orgID, draftID string) (*aidrafts.AIDraft, string, error) {
 	draft, err := s.repo.FindByID(ctx, orgID, draftID)
 	if err != nil {

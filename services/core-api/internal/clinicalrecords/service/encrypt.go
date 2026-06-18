@@ -47,14 +47,6 @@ func openField(dek, ciphertext []byte) (string, error) {
 	return string(b), nil
 }
 
-// contentHash computes a SHA-256 fingerprint of the concatenated SOAP plaintext.
-// Stored alongside the encrypted fields to detect tampering without decrypting.
-func contentHash(subjective, objective, assessment, plan string) string {
-	h := sha256.New()
-	h.Write([]byte(subjective + "|" + objective + "|" + assessment + "|" + plan))
-	return fmt.Sprintf("%x", h.Sum(nil))
-}
-
 // sealSections marshals the section map once and encrypts the JSON; the
 // marshaled bytes are also returned so the caller can hash exactly what
 // was stored.

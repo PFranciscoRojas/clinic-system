@@ -61,7 +61,7 @@ def _schema_for(record_type: str) -> tuple[str, dict[str, str]]:
     return rt, _SECTION_SCHEMAS[rt]
 
 
-async def generate_soap_draft(anonymized_transcription: str, record_type: str = "EVOLUTION") -> str:
+async def generate_clinical_draft(anonymized_transcription: str, record_type: str = "EVOLUTION") -> str:
     """Send anonymized transcription to Claude and return the draft as a JSON string.
 
     The input has already been processed by anonymize() — no PII should reach here.

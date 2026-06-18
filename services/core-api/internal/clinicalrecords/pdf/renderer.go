@@ -264,11 +264,7 @@ func Render(w io.Writer, in RenderInput) error {
 
 	// ── 4. Clinical content ───────────────────────────────────────────────
 	nextSection("Contenido clínico")
-	if in.Record.TemplateVersion >= 2 {
-		renderSectionsV2(doc, tr, in.Record)
-	} else {
-		renderSOAPV1(doc, tr, in.Record)
-	}
+	renderSectionsV2(doc, tr, in.Record)
 
 	// ── 5. Active diagnoses ───────────────────────────────────────────────
 	if len(in.Diagnoses) > 0 {
@@ -422,24 +418,6 @@ func writeSectionHeader(doc *fpdf.Fpdf, tr func(string) string, title string) {
 	doc.SetFont("Helvetica", "B", 10)
 	doc.SetFillColor(240, 253, 250)
 	doc.CellFormat(0, 6.5, tr(title), "B", 1, "", true, 0, "")
-}
-
-func renderSOAPV1(doc *fpdf.Fpdf, tr func(string) string, rec *clinicalrecords.ClinicalRecord) {
-	sections := []struct{ title, content string }{
-		{"Relato del paciente", rec.Subjective},
-		{"Observación clínica", rec.Objective},
-		{"Análisis", rec.Assessment},
-		{"Plan", rec.Plan},
-	}
-	for _, sec := range sections {
-		if strings.TrimSpace(sec.content) == "" {
-			continue
-		}
-		writeSectionHeader(doc, tr, sec.title)
-		doc.SetFont("Helvetica", "", 9.5)
-		doc.MultiCell(0, 5, tr(sec.content), "1", "L", false)
-		doc.Ln(2)
-	}
 }
 
 func renderSectionsV2(doc *fpdf.Fpdf, tr func(string) string, rec *clinicalrecords.ClinicalRecord) {

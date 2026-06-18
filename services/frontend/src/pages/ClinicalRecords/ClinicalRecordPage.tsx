@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, FileText, CheckCircle2, AlertTriangle,
-  Edit3, Save, ChevronDown, ChevronUp, Shield, Download, Plus, X, PenLine,
+  Edit3, Save, Shield, Download, Plus, X, PenLine,
 } from 'lucide-react';
 import { clinicalRecordsApi, type ClinicalRecord, type MentalExamEntry, type Addendum } from '@/api/clinicalRecords';
 import { useAuth } from '@/context/AuthContext';
@@ -12,14 +12,6 @@ import { Badge } from '@/components/ui/Badge';
 import { RecordSectionsForm, recordToDraft, draftToPayload, validateDraft, type ClinicalDraft } from '@/components/clinical/RecordSectionsForm';
 import { TEMPLATE_SECTIONS, MENTAL_EXAM_DOMAINS, RECORD_TYPE_LABELS, DISCHARGE_REASONS, riskMeta } from '@/components/clinical/constants';
 
-// Legacy v1 records (pre-template era) store four fixed sections.
-const LEGACY_SECTIONS = [
-  { key: 'subjective' as const, label: 'Relato del paciente', description: 'Lo que reporta el paciente en sus propias palabras.' },
-  { key: 'objective'  as const, label: 'Observación clínica', description: 'Observaciones clínicas, comportamiento y apariencia.' },
-  { key: 'assessment' as const, label: 'Análisis',            description: 'Análisis clínico y avance terapéutico.' },
-  { key: 'plan'       as const, label: 'Plan',                description: 'Intervenciones, tareas y próximos pasos.' },
-];
-
 export function ClinicalRecordPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -27,8 +19,6 @@ export function ClinicalRecordPage() {
   const queryClient = useQueryClient();
 
   const [editing, setEditing] = useState(false);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set(['subjective']));
-  const [soapEdit, setSoapEdit] = useState<Partial<ClinicalRecord>>({});
   const [draft, setDraft] = useState<ClinicalDraft | null>(null);
   const [saving, setSaving] = useState(false);
   const [approving, setApproving] = useState(false);
@@ -42,30 +32,23 @@ export function ClinicalRecordPage() {
     enabled: !!id,
   });
 
-  const toggle = (key: string) =>
-    setExpanded(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s; });
-
-  const isV2 = (record?.template_version ?? 1) >= 2;
-
   const startEditing = () => {
-    if (record && isV2) {
+    if (record) {
       setDraft(recordToDraft(record.sections, record.risk_level, record.discharge_reason));
     }
     setEditing(true);
   };
 
   const handleSave = async () => {
-    if (!id || !record) return;
+    if (!id || !record || !draft) return;
     setErr('');
-    if (isV2 && draft) {
-      const validation = validateDraft(record.record_type, draft);
-      if (validation) { setErr(validation); return; }
-    }
+    const validation = validateDraft(record.record_type, draft);
+    if (validation) { setErr(validation); return; }
     setSaving(true);
     try {
-      await clinicalRecordsApi.update(id, isV2 && draft ? draftToPayload(record.record_type, draft) : soapEdit);
+      await clinicalRecordsApi.update(id, draftToPayload(record.record_type, draft));
       queryClient.invalidateQueries({ queryKey: ['clinical-record', id] });
-      setEditing(false); setSoapEdit({}); setDraft(null);
+      setEditing(false); setDraft(null);
     } catch { setErr('Error al guardar. Intenta de nuevo.'); }
     finally { setSaving(false); }
   };
@@ -119,7 +102,6 @@ export function ClinicalRecordPage() {
   const isIntern = user?.roles?.includes('INTERN') ?? false;
   const isSupervisor = record.supervisor_id === user?.user_id;
   const needsCosign = record.requires_cosign && !record.supervisor_cosigned_at;
-  const getSoap = (key: keyof typeof soapEdit) => soapEdit[key] as string ?? record[key] ?? '';
   const risk = riskMeta(record.risk_level);
   const dischargeLabel = DISCHARGE_REASONS.find(r => r.value === record.discharge_reason)?.label;
 
@@ -181,49 +163,13 @@ export function ClinicalRecordPage() {
         )}
       </div>
 
-      {/* Content — template v2 sections or legacy v1 sections */}
-      {isV2 ? (
-        editing && draft ? (
-          <div style={{ marginBottom: 24 }}>
-            <RecordSectionsForm recordType={record.record_type} value={draft} onChange={setDraft} />
-          </div>
-        ) : (
-          <V2RecordView record={record} />
-        )
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-          {LEGACY_SECTIONS.map(({ key, label, description }) => {
-            const isOpen = expanded.has(key);
-            return (
-              <div key={key} className="card" style={{ overflow: 'hidden', padding: 0 }}>
-                <button onClick={() => toggle(key)} style={{ width: '100%', padding: '16px 20px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', textAlign: 'left' }}>
-                  <div>
-                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>{label}</p>
-                    {!isOpen && <p style={{ margin: 0, fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>{description}</p>}
-                  </div>
-                  {isOpen ? <ChevronUp size={16} color="var(--s400)" /> : <ChevronDown size={16} color="var(--s400)" />}
-                </button>
-                {isOpen && (
-                  <div style={{ padding: '0 20px 20px', borderTop: '1px solid var(--s100)' }}>
-                    <p style={{ fontSize: 12, color: 'var(--s400)', margin: '12px 0 10px', fontStyle: 'italic' }}>{description}</p>
-                    {editing && isDraft ? (
-                      <textarea
-                        value={getSoap(key)}
-                        onChange={e => setSoapEdit(p => ({ ...p, [key]: e.target.value }))}
-                        rows={6}
-                        style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: '1.5px solid var(--teal)', fontSize: 14, color: 'var(--s700)', resize: 'vertical', background: '#fff', boxSizing: 'border-box', lineHeight: 1.7 }}
-                      />
-                    ) : (
-                      <p style={{ margin: 0, fontSize: 14, color: 'var(--s700)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
-                        {getSoap(key) || <em style={{ color: 'var(--s300)' }}>Sin contenido</em>}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+      {/* Content — clinical-record sections */}
+      {editing && draft ? (
+        <div style={{ marginBottom: 24 }}>
+          <RecordSectionsForm recordType={record.record_type} value={draft} onChange={setDraft} />
         </div>
+      ) : (
+        <V2RecordView record={record} />
       )}
 
       {err && (
@@ -238,7 +184,7 @@ export function ClinicalRecordPage() {
         <div style={{ display: 'flex', gap: 12 }}>
           {editing ? (
             <>
-              <button onClick={() => { setSoapEdit({}); setDraft(null); setEditing(false); }} style={{ flex: 1, padding: 13, borderRadius: 11, background: 'var(--s100)', color: 'var(--s700)', border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 600 }}>
+              <button onClick={() => { setDraft(null); setEditing(false); }} style={{ flex: 1, padding: 13, borderRadius: 11, background: 'var(--s100)', color: 'var(--s700)', border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 600 }}>
                 Descartar
               </button>
               <button onClick={handleSave} disabled={saving} style={{ flex: 1, padding: 13, borderRadius: 11, background: '#6366f1', color: '#fff', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: saving ? 0.7 : 1 }}>

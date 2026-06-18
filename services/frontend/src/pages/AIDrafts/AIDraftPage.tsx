@@ -20,19 +20,6 @@ const STATUS_CONFIG: Record<DraftStatus, { label: string; color: string; bg: str
   ERROR:        { label: 'Error',          color: '#991b1b', bg: '#fee2e2', Icon: AlertTriangle },
 };
 
-interface DraftSection {
-  key: 'subjective' | 'objective' | 'assessment' | 'plan';
-  label: string;
-  description: string;
-}
-
-// Legacy drafts (v1 pipeline) stored four fixed SOAP sections.
-const DRAFT_SECTIONS: DraftSection[] = [
-  { key: 'subjective', label: 'Relato del paciente', description: 'Lo que reporta el paciente: síntomas, sentimientos, preocupaciones en sus propias palabras.' },
-  { key: 'objective',  label: 'Observación clínica', description: 'Observaciones clínicas: comportamiento, afecto, apariencia, pruebas aplicadas.' },
-  { key: 'assessment', label: 'Análisis',            description: 'Análisis clínico, diagnóstico diferencial, avance terapéutico.' },
-  { key: 'plan',       label: 'Plan',                description: 'Intervenciones, tareas, próximos pasos, ajustes al tratamiento.' },
-];
 
 export function AIDraftPage() {
   const { id } = useParams<{ id: string }>();
@@ -47,7 +34,7 @@ export function AIDraftPage() {
   const [editing, setEditing] = useState(false);
   // All sections start open — collapsing is the exception
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [soapEdit, setSoapEdit] = useState<Record<string, string>>({});
+  const [draftEdit, setDraftEdit] = useState<Record<string, string>>({});
   const [approving, setApproving] = useState(false);
   const [approveErr, setApproveErr] = useState('');
   const [createdRecordId, setCreatedRecordId] = useState('');
@@ -86,24 +73,15 @@ export function AIDraftPage() {
     try {
       const finalSections: Record<string, string> = {};
       for (const def of sectionDefs) {
-        const v = (soapEdit[def.key] ?? baseContent[def.key] ?? '').trim();
+        const v = (draftEdit[def.key] ?? baseContent[def.key] ?? '').trim();
         if (v) finalSections[def.key] = v;
       }
-      const res = await aiDraftsApi.approve(id, isStructured
-        ? {
-            sections: finalSections,
-            record_type: recordType,
-            session_date: qsSessionDate || undefined,
-            appointment_id: qsAppointmentId || undefined,
-          }
-        : {
-            subjective:  finalSections['subjective'],
-            objective:   finalSections['objective'],
-            assessment:  finalSections['assessment'],
-            plan:        finalSections['plan'],
-            session_date: qsSessionDate || undefined,
-            appointment_id: qsAppointmentId || undefined,
-          });
+      const res = await aiDraftsApi.approve(id, {
+        sections: finalSections,
+        record_type: recordType,
+        session_date: qsSessionDate || undefined,
+        appointment_id: qsAppointmentId || undefined,
+      });
       setCreatedRecordId(res.clinical_record_id);
       // Assign the confirmed diagnosis (if any) to the new record
       if (icd10?.code && draft?.patient_id) {
@@ -148,19 +126,15 @@ export function AIDraftPage() {
   const isReady = draft.status === 'DRAFT_READY';
 
   const contentRaw = draft.draft_content_plain as Record<string, unknown> | null;
-  // New drafts carry the clinical-record sections; legacy drafts are flat SOAP.
-  const isStructured = !!contentRaw && typeof contentRaw.sections === 'object' && contentRaw.sections !== null;
+  // Drafts carry the clinical-record sections for the record type.
   const recordType = (typeOverride || qsRecordType || (contentRaw?.record_type as string) || 'EVOLUTION') as keyof typeof TEMPLATE_SECTIONS;
   const transcription = (draft.transcription ?? '').trim();
-  const baseContent: Record<string, string> = isStructured
-    ? (contentRaw!.sections as Record<string, string>)
-    : ((contentRaw ?? {}) as Record<string, string>);
-  const sectionDefs: { key: string; label: string; description: string }[] = isStructured
-    ? (TEMPLATE_SECTIONS[recordType] ?? TEMPLATE_SECTIONS.EVOLUTION).map((d: SectionDef) => ({ key: d.key, label: d.label, description: d.placeholder }))
-    : DRAFT_SECTIONS;
+  const baseContent: Record<string, string> = (contentRaw?.sections as Record<string, string>) ?? {};
+  const sectionDefs: { key: string; label: string; description: string }[] =
+    (TEMPLATE_SECTIONS[recordType] ?? TEMPLATE_SECTIONS.EVOLUTION).map((d: SectionDef) => ({ key: d.key, label: d.label, description: d.placeholder }));
   const content = contentRaw; // truthiness gate for the render below
 
-  const getSoap = (key: string) => soapEdit[key] ?? baseContent[key] ?? '';
+  const getDraftField = (key: string) => draftEdit[key] ?? baseContent[key] ?? '';
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto' }}>
@@ -184,7 +158,7 @@ export function AIDraftPage() {
               <Badge label={statusCfg.label} color={statusCfg.color} bg={statusCfg.bg} />
             </div>
             <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
-              {isReady && isStructured ? (
+              {isReady ? (
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--s400)', marginBottom: 3 }}>Tipo de registro</div>
                   <select
@@ -257,7 +231,7 @@ export function AIDraftPage() {
 
           {/* Empty draft: the audio was transcribed but had no clinical content
               to structure (e.g. a test recording). Make that explicit. */}
-          {sectionDefs.every(({ key }) => !getSoap(key).trim()) && (
+          {sectionDefs.every(({ key }) => !getDraftField(key).trim()) && (
             <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
               <AlertTriangle size={15} color="#d97706" style={{ flexShrink: 0, marginTop: 1 }} />
               <span style={{ fontSize: 12.5, color: '#92400e', lineHeight: 1.6 }}>
@@ -311,8 +285,8 @@ export function AIDraftPage() {
                       <p style={{ fontSize: 12, color: 'var(--s400)', margin: '12px 0 10px', fontStyle: 'italic' }}>{description}</p>
                       {editing ? (
                         <textarea
-                          value={getSoap(key)}
-                          onChange={e => setSoapEdit(prev => ({ ...prev, [key]: e.target.value }))}
+                          value={getDraftField(key)}
+                          onChange={e => setDraftEdit(prev => ({ ...prev, [key]: e.target.value }))}
                           rows={6}
                           style={{
                             width: '100%', padding: '12px 14px', borderRadius: 10,
@@ -323,7 +297,7 @@ export function AIDraftPage() {
                         />
                       ) : (
                         <p style={{ margin: 0, fontSize: 14, color: 'var(--s700)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
-                          {getSoap(key) || <em style={{ color: 'var(--s300)' }}>Sin contenido</em>}
+                          {getDraftField(key) || <em style={{ color: 'var(--s300)' }}>Sin contenido</em>}
                         </p>
                       )}
                     </div>
@@ -348,7 +322,7 @@ export function AIDraftPage() {
               {editing ? (
                 <>
                   <button
-                    onClick={() => { setSoapEdit({}); setEditing(false); }}
+                    onClick={() => { setDraftEdit({}); setEditing(false); }}
                     style={{ flex: 1, padding: 13, borderRadius: 11, background: 'var(--s100)', color: 'var(--s700)', border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 600 }}
                   >
                     Descartar cambios

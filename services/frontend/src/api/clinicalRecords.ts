@@ -21,10 +21,6 @@ export interface ClinicalRecord {
   sections?: RecordSections;
   risk_level?: RiskLevel;
   discharge_reason?: DischargeReason;
-  subjective: string;
-  objective: string;
-  assessment: string;
-  plan: string;
   status: RecordStatus;
   approved_at?: string;
   requires_cosign: boolean;
@@ -67,10 +63,6 @@ export interface CreateRecordInput {
   appointment_id?: string;
   record_type: RecordType;
   session_date: string;
-  subjective?: string;
-  objective?: string;
-  assessment?: string;
-  plan?: string;
   sections?: RecordSections;
   risk_level?: RiskLevel;
   discharge_reason?: DischargeReason;
@@ -78,10 +70,6 @@ export interface CreateRecordInput {
 }
 
 export interface UpdateRecordInput {
-  subjective?: string;
-  objective?: string;
-  assessment?: string;
-  plan?: string;
   sections?: RecordSections;
   risk_level?: RiskLevel;
   discharge_reason?: DischargeReason;

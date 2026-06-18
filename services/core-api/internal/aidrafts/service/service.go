@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	aiStream      = "ai_jobs"
-	aiModelVer    = "claude-sonnet-4-6"
-	whisperModel  = "base"
+	aiStream     = "ai_jobs"
+	aiModelVer   = "claude-sonnet-4-6"
+	whisperModel = "base"
 )
 
 type Service struct {
