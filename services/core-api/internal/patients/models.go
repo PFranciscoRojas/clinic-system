@@ -18,6 +18,9 @@ type Patient struct {
 	Address          string
 	BirthDate        time.Time
 	Gender           string
+	EmergencyContactName         string
+	EmergencyContactPhone        string
+	EmergencyContactRelationship string
 	IsActive         bool
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
@@ -38,6 +41,7 @@ type RawPatient struct {
 	PhoneEnc             []byte
 	EmailEnc             []byte
 	AddressEnc           []byte
+	EmergencyContactEnc  []byte
 	BirthDate            time.Time
 	Gender               string
 	IsActive             bool
@@ -61,6 +65,7 @@ type CreateParams struct {
 	PhoneEnc             []byte
 	EmailEnc             []byte
 	AddressEnc           []byte
+	EmergencyContactEnc  []byte
 	BirthDate            time.Time
 	Gender               string
 }
@@ -78,6 +83,7 @@ type UpdateParams struct {
 	PhoneEnc             []byte
 	EmailEnc             []byte
 	AddressEnc           []byte
+	EmergencyContactEnc  []byte
 	Gender               string
 	DocumentTypeCode     string
 	DocumentNumberEnc    []byte

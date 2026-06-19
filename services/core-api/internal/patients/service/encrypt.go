@@ -2,11 +2,52 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"sghcp/core-api/internal/patients"
 	"sghcp/core-api/internal/shared/crypto"
 )
+
+// emergencyContact is the JSON shape stored, encrypted, in emergency_contact_enc.
+type emergencyContact struct {
+	Name         string `json:"name,omitempty"`
+	Phone        string `json:"phone,omitempty"`
+	Relationship string `json:"relationship,omitempty"`
+}
+
+// sealEmergencyContact JSON-encodes and encrypts the emergency contact, or
+// returns nil (SQL NULL) when all fields are empty.
+func sealEmergencyContact(dek []byte, name, phone, relationship string) ([]byte, error) {
+	if name == "" && phone == "" && relationship == "" {
+		return nil, nil
+	}
+	raw, err := json.Marshal(emergencyContact{Name: name, Phone: phone, Relationship: relationship})
+	if err != nil {
+		return nil, fmt.Errorf("marshal emergency contact: %w", err)
+	}
+	return crypto.Seal(dek, raw)
+}
+
+// openEmergencyContact decrypts and decodes the emergency contact blob into the
+// patient's fields; a nil blob leaves them empty.
+func openEmergencyContact(dek, ciphertext []byte, p *patients.Patient) error {
+	if len(ciphertext) == 0 {
+		return nil
+	}
+	raw, err := crypto.Open(dek, ciphertext)
+	if err != nil {
+		return fmt.Errorf("decrypt emergency contact: %w", err)
+	}
+	var ec emergencyContact
+	if err := json.Unmarshal(raw, &ec); err != nil {
+		return fmt.Errorf("parse emergency contact: %w", err)
+	}
+	p.EmergencyContactName = ec.Name
+	p.EmergencyContactPhone = ec.Phone
+	p.EmergencyContactRelationship = ec.Relationship
+	return nil
+}
 
 // plainPII groups all encryptable PII string fields for batch processing.
 // Adding a new PII field means one edit here and one in sealAll — nowhere else.
@@ -132,6 +173,9 @@ func decryptRaw(dek []byte, r *patients.RawPatient) (*patients.Patient, error) {
 		if *f.dst, err = openField(dek, f.src); err != nil {
 			return nil, fmt.Errorf("decrypt %s: %w", f.name, err)
 		}
+	}
+	if err := openEmergencyContact(dek, r.EmergencyContactEnc, p); err != nil {
+		return nil, err
 	}
 	return p, nil
 }

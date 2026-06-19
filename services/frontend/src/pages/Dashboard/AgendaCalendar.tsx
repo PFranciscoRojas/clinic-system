@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronLeft, ChevronRight, Plus, CalendarDays,
   Video, MapPin, Clock, User, X, Mic, LayoutGrid, List, Wallet,
+  CalendarClock, AlertTriangle,
 } from 'lucide-react';
 import { appointmentsApi, type Appointment } from '@/api/appointments';
 import { patientsApi, type Patient } from '@/api/patients';
@@ -279,26 +280,78 @@ function AppBlock({ appt, onClick }: { appt: Appointment; onClick: (a: Appointme
 
 function DetailPanel({ appt, panelRef, onClose }: { appt: Appointment; panelRef: React.RefObject<HTMLDivElement>; onClose: () => void }) {
   const navigate = useNavigate();
+  const qc       = useQueryClient();
+  const { user } = useAuth();
   const { data: patient } = usePatient(appt.patient_id);
-  const mc = MC[appt.modality] ?? MC.IN_PERSON;
-  const inProg = isInProgress(appt);
-  const done   = appt.status === 'COMPLETED';
+  const mc          = MC[appt.modality] ?? MC.IN_PERSON;
+  const inProg      = isInProgress(appt);
+  const done        = appt.status === 'COMPLETED';
+  const isScheduled = appt.status === 'SCHEDULED';
 
-  const name = patient ? pName(patient) : appt.guest_name || `Paciente #${appt.patient_id.slice(-4)}`;
-  const abbr = patient ? initials(pName(patient)) : '?';
-  const t0   = fmtHHMM(appt.scheduled_at);
-  const t1   = endHHMM(appt);
+  const [mode, setMode]                   = useState<'none' | 'cancel' | 'reagendar'>('none');
+  const [cancelReason, setCancelReason]   = useState('');
+  const [cancelling,   setCancelling]     = useState(false);
+  const [reagendarDate, setReagendarDate] = useState('');
+  const [reagendarTime, setReagendarTime] = useState(() => fmtHHMM(appt.scheduled_at));
+  const [reagendaring, setReagendaring]   = useState(false);
+  const [actionErr,    setActionErr]      = useState('');
+
+  const name    = patient ? pName(patient) : appt.guest_name || `Paciente #${appt.patient_id.slice(-4)}`;
+  const abbr    = patient ? initials(pName(patient)) : '?';
+  const t0      = fmtHHMM(appt.scheduled_at);
+  const t1      = endHHMM(appt);
   const dateStr = new Date(appt.scheduled_at).toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
 
   let statusLabel = 'Confirmada', statusColor = '#3b82f6', statusBg = '#eff6ff';
-  if (done)                                    { statusLabel = 'Completada'; statusColor = '#10b981'; statusBg = '#ecfdf5'; }
-  if (inProg)                                  { statusLabel = 'En curso';   statusColor = mc.color;  statusBg = mc.bg; }
-  if (isPastAppt(appt) && !done)               { statusLabel = 'Pendiente';  statusColor = '#f59e0b'; statusBg = '#fffbeb'; }
-  if (appt.status === 'CANCELLED')             { statusLabel = 'Cancelada';  statusColor = '#ef4444'; statusBg = '#fee2e2'; }
+  if (done)                        { statusLabel = 'Completada'; statusColor = '#10b981'; statusBg = '#ecfdf5'; }
+  if (inProg)                      { statusLabel = 'En curso';   statusColor = mc.color;  statusBg = mc.bg; }
+  if (isPastAppt(appt) && !done)   { statusLabel = 'Pendiente';  statusColor = '#f59e0b'; statusBg = '#fffbeb'; }
+  if (appt.status === 'CANCELLED') { statusLabel = 'Cancelada';  statusColor = '#ef4444'; statusBg = '#fee2e2'; }
+
+  const tzOff = () => {
+    const off = new Date().getTimezoneOffset();
+    const sign = off <= 0 ? '+' : '-'; const abs = Math.abs(off);
+    return `${sign}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
+  };
+
+  const handleCancel = async () => {
+    if (!cancelReason.trim()) return;
+    setCancelling(true); setActionErr('');
+    try {
+      await appointmentsApi.cancel(appt.id, cancelReason.trim());
+      qc.invalidateQueries({ queryKey: ['cal-range'] });
+      onClose();
+    } catch {
+      setActionErr('No se pudo cancelar. Intenta de nuevo.');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const handleReagendar = async () => {
+    if (!reagendarDate || !reagendarTime) return;
+    setReagendaring(true); setActionErr('');
+    try {
+      const { id: newId } = await appointmentsApi.create({
+        patient_id:   appt.patient_id || undefined,
+        guest_name:   !appt.patient_id ? (appt.guest_name ?? undefined) : undefined,
+        staff_id:     user!.user_id,
+        scheduled_at: `${reagendarDate}T${reagendarTime}:00${tzOff()}`,
+        duration_min: appt.duration_min,
+        modality:     appt.modality,
+      });
+      await appointmentsApi.cancel(appt.id, 'Reagendado');
+      qc.invalidateQueries({ queryKey: ['cal-range'] });
+      navigate(`/appointments/${newId}`);
+    } catch {
+      setActionErr('No se pudo reagendar. Intenta de nuevo.');
+      setReagendaring(false);
+    }
+  };
 
   return (
     <div ref={panelRef} className="anim-scale-in" style={{
-      position: 'absolute', top: 12, right: 12, width: 280, maxWidth: 'calc(100vw - 24px)', zIndex: 50,
+      position: 'absolute', top: 12, right: 12, width: 300, maxWidth: 'calc(100vw - 24px)', zIndex: 50,
       background: '#fff', borderRadius: 16,
       border: '1px solid var(--s200)',
       boxShadow: '0 8px 32px rgba(0,0,0,0.14)',
@@ -338,7 +391,7 @@ function DetailPanel({ appt, panelRef, onClose }: { appt: Appointment; panelRef:
         </div>
       </div>
 
-      {/* Actions — the appointment page is the hub (start, cancel, record) */}
+      {/* Actions */}
       <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <button
           onClick={() => navigate(`/appointments/${appt.id}`)}
@@ -356,6 +409,77 @@ function DetailPanel({ appt, panelRef, onClose }: { appt: Appointment; panelRef:
           >
             <User size={13} /> Ver perfil del paciente
           </button>
+        )}
+
+        {/* Cancel + Reagendar — only for SCHEDULED appointments */}
+        {isScheduled && (
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              onClick={() => { setMode(m => m === 'cancel' ? 'none' : 'cancel'); setActionErr(''); }}
+              style={{ flex: 1, padding: '7px 10px', border: '1.5px solid #fca5a5', borderRadius: 9, background: mode === 'cancel' ? '#fee2e2' : '#fff', cursor: 'pointer', fontSize: 12, color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontWeight: 600 }}
+            >
+              <X size={12} /> Cancelar
+            </button>
+            <button
+              onClick={() => { setMode(m => m === 'reagendar' ? 'none' : 'reagendar'); setActionErr(''); }}
+              style={{ flex: 1, padding: '7px 10px', border: '1.5px solid #c7d2fe', borderRadius: 9, background: mode === 'reagendar' ? '#eef2ff' : '#fff', cursor: 'pointer', fontSize: 12, color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontWeight: 600 }}
+            >
+              <CalendarClock size={12} /> Reagendar
+            </button>
+          </div>
+        )}
+
+        {/* Cancel form */}
+        {mode === 'cancel' && (
+          <div>
+            <input
+              value={cancelReason}
+              onChange={e => setCancelReason(e.target.value)}
+              placeholder="Motivo de cancelación…"
+              style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1.5px solid var(--s200)', fontSize: 12.5, boxSizing: 'border-box', marginBottom: 6 }}
+            />
+            <button
+              onClick={handleCancel}
+              disabled={!cancelReason.trim() || cancelling}
+              style={{ width: '100%', padding: '8px 0', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, cursor: !cancelReason.trim() ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, opacity: !cancelReason.trim() ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+            >
+              {cancelling ? <Spinner size={13} color="#fff" /> : null} Confirmar cancelación
+            </button>
+          </div>
+        )}
+
+        {/* Reagendar form */}
+        {mode === 'reagendar' && (
+          <div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+              <input
+                type="date"
+                value={reagendarDate}
+                min={todayISO()}
+                onChange={e => setReagendarDate(e.target.value)}
+                style={{ flex: 1, padding: '7px 8px', borderRadius: 8, border: '1.5px solid var(--s200)', fontSize: 12.5 }}
+              />
+              <input
+                type="time"
+                value={reagendarTime}
+                onChange={e => setReagendarTime(e.target.value)}
+                style={{ width: 90, padding: '7px 8px', borderRadius: 8, border: '1.5px solid var(--s200)', fontSize: 12.5 }}
+              />
+            </div>
+            <button
+              onClick={handleReagendar}
+              disabled={!reagendarDate || !reagendarTime || reagendaring}
+              style={{ width: '100%', padding: '8px 0', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, cursor: !reagendarDate || !reagendarTime ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, opacity: !reagendarDate || !reagendarTime ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+            >
+              {reagendaring ? <Spinner size={13} color="#fff" /> : <CalendarClock size={13} />} Confirmar reagenda
+            </button>
+          </div>
+        )}
+
+        {actionErr && (
+          <p style={{ margin: 0, fontSize: 11.5, color: '#dc2626', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <AlertTriangle size={11} /> {actionErr}
+          </p>
         )}
       </div>
     </div>

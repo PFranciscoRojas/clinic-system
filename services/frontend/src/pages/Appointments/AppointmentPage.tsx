@@ -5,6 +5,7 @@ import {
   ArrowLeft, Calendar, Clock, MapPin, Video, User,
   Play, CheckCircle2, AlertTriangle, Brain, FileText,
   Mic, Upload, X, Phone, CreditCard, Cake, UserPlus, Wallet,
+  CalendarClock,
 } from 'lucide-react';
 import { appointmentsApi, type AppointmentStatus } from '@/api/appointments';
 import { patientsApi, type Patient } from '@/api/patients';
@@ -306,6 +307,11 @@ export function AppointmentPage() {
   const [statusErr, setStatusErr] = useState('');
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
+  const [reagendarOpen, setReagendarOpen] = useState(false);
+  const [reagendarDate, setReagendarDate] = useState('');
+  const [reagendarTime, setReagendarTime] = useState('');
+  const [reagendaring, setReagendaring] = useState(false);
+  const [reagendarErr, setReagendarErr] = useState('');
   const [showRecordForm, setShowRecordForm] = useState(false);
   // When true, the edit modal is open and closing it after saving starts the session
   const [completeDataOpen, setCompleteDataOpen] = useState(false);
@@ -489,6 +495,33 @@ export function AppointmentPage() {
     setDraftId(newDraftId);
   };
 
+  const tzOffset = () => {
+    const off = new Date().getTimezoneOffset();
+    const sign = off <= 0 ? '+' : '-';
+    const abs = Math.abs(off);
+    return `${sign}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
+  };
+
+  const handleReagendar = async () => {
+    if (!reagendarDate || !reagendarTime) return;
+    setReagendaring(true); setReagendarErr('');
+    try {
+      const { id: newId } = await appointmentsApi.create({
+        patient_id:   appt!.patient_id || undefined,
+        guest_name:   isGuest ? (appt!.guest_name ?? undefined) : undefined,
+        staff_id:     user!.user_id,
+        scheduled_at: `${reagendarDate}T${reagendarTime}:00${tzOffset()}`,
+        duration_min: appt!.duration_min,
+        modality:     appt!.modality,
+      });
+      await appointmentsApi.cancel(id!, 'Reagendado');
+      navigate(`/appointments/${newId}`);
+    } catch {
+      setReagendarErr('No se pudo reagendar. Intenta de nuevo.');
+      setReagendaring(false);
+    }
+  };
+
   const handleRecordSaved = async () => {
     // The session note closes the appointment lifecycle: once the clinical
     // record exists the appointment is done — no manual step, and the cancel
@@ -554,82 +587,91 @@ export function AppointmentPage() {
 
       {/* ── Header card ─────────────────────────────────────────────────────── */}
       <div className="card" style={{ padding: 24, marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
 
-          {/* Patient avatar */}
-          <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'linear-gradient(135deg, var(--teal), var(--teal-d))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
-            {patientInitials}
-          </div>
-
-          <div style={{ flex: 1, minWidth: 0 }}>
-            {/* Name + status */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
-              <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: 'var(--s800)' }}>{patientName}</h1>
-              <Badge label={statusCfg.label} color={statusCfg.color} bg={statusCfg.bg} />
-              {isGuest && <Badge label="Reserva — sin paciente" color="#92400e" bg="#fef3c7" />}
-              {appt.paid && <Badge label="Pagada" color="#3e6b4e" bg="#e8f2ec" />}
+        {/* ── Bloque 1: Datos del sujeto ──────────────────────────────────────── */}
+        <div style={{ paddingBottom: 16, borderBottom: '1px solid var(--s100)', marginBottom: 16 }}>
+          <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Datos del sujeto</p>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'linear-gradient(135deg, var(--teal), var(--teal-d))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
+              {patientInitials}
             </div>
-
-            {/* Appointment info chips */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-              <InfoChip icon={<Calendar size={13} />} text={date} />
-              <InfoChip icon={<Clock size={13} />} text={`${time} · ${appt.duration_min} min`} />
-              <InfoChip
-                icon={isVirtual ? <Video size={13} /> : <MapPin size={13} />}
-                text={MODALITY_LABEL[appt.modality] ?? appt.modality}
-                color={isVirtual ? '#6366f1' : undefined}
-              />
-              {user && <InfoChip icon={<User size={13} />} text={user.display_name ?? user.email ?? 'Terapeuta'} />}
-              {appt.paid && (
-                <InfoChip
-                  icon={<Wallet size={13} />}
-                  text={`$${(appt.paid_amount ?? 0).toLocaleString('es-CO')} ${appt.paid_currency || 'COP'}${appt.payment_ref ? ` · MP #${appt.payment_ref}` : ''}`}
-                  color="#3e6b4e"
-                />
-              )}
-              {/* Patient key data — what Marcela needs at hand during the session */}
-              {patient && patientAge !== null && <InfoChip icon={<Cake size={13} />} text={`${patientAge} años`} />}
-              {patient?.document_number && <InfoChip icon={<CreditCard size={13} />} text={`${patient.document_type_code ?? ''} ${patient.document_number}`.trim()} />}
-              {patient?.phone && <InfoChip icon={<Phone size={13} />} text={patient.phone} />}
-              {/* Consent coverage — every active consent, each one viewable */}
-              {isGuest ? null : activeConsents.length > 0 ? (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 7, background: '#d1fae5', color: '#065f46' }}>
-                  <CheckCircle2 size={13} /> Consentimientos:
-                  {activeConsents.map(c => (
-                    <button
-                      key={c.id}
-                      onClick={() => setViewConsentId(c.id)}
-                      title={`Firmado el ${c.signed_at} — ver documento`}
-                      style={{ border: 'none', background: 'none', color: '#065f46', cursor: 'pointer', fontSize: 12, fontWeight: 700, textDecoration: 'underline', padding: 0 }}
-                    >
-                      {CONSENT_SHORT[c.consent_type] ?? c.consent_type}
-                    </button>
-                  ))}
-                </span>
-              ) : (
-                <button
-                  onClick={() => setSignConsentOpen(true)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 7, background: '#fef3c7', color: '#92400e', border: 'none', cursor: 'pointer' }}
-                >
-                  <AlertTriangle size={13} /> Sin consentimiento — firmar aquí
-                </button>
-              )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+                <h1 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'var(--s800)' }}>{patientName}</h1>
+                <Badge label={statusCfg.label} color={statusCfg.color} bg={statusCfg.bg} />
+                {isGuest && <Badge label="Reserva — sin paciente" color="#92400e" bg="#fef3c7" />}
+                {appt.paid && <Badge label="Pagada" color="#3e6b4e" bg="#e8f2ec" />}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {patient && patientAge !== null && <InfoChip icon={<Cake size={13} />} text={`${patientAge} años`} />}
+                {patient?.document_number && <InfoChip icon={<CreditCard size={13} />} text={`${patient.document_type_code ?? ''} ${patient.document_number}`.trim()} />}
+                {patient?.phone && <InfoChip icon={<Phone size={13} />} text={patient.phone} />}
+              </div>
             </div>
+            {!isGuest && (
+              <button
+                onClick={() => navigate(`/patients/${appt.patient_id}`)}
+                style={{ padding: '7px 13px', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}
+              >
+                <User size={12} /> Ver perfil
+              </button>
+            )}
           </div>
-
-          {/* Patient profile link */}
-          {!isGuest && (
-            <button
-              onClick={() => navigate(`/patients/${appt.patient_id}`)}
-              style={{ padding: '8px 14px', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}
-            >
-              <User size={13} /> Ver perfil
-            </button>
-          )}
         </div>
 
+        {/* ── Bloque 2: Datos de la cita ──────────────────────────────────────── */}
+        <div style={{ paddingBottom: 16, borderBottom: '1px solid var(--s100)', marginBottom: 16 }}>
+          <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Datos de la cita</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <InfoChip icon={<Calendar size={13} />} text={date} />
+            <InfoChip icon={<Clock size={13} />} text={`${time} · ${appt.duration_min} min`} />
+            <InfoChip
+              icon={isVirtual ? <Video size={13} /> : <MapPin size={13} />}
+              text={MODALITY_LABEL[appt.modality] ?? appt.modality}
+              color={isVirtual ? '#6366f1' : undefined}
+            />
+            {user && <InfoChip icon={<User size={13} />} text={user.display_name ?? user.email ?? 'Terapeuta'} />}
+            {appt.paid && (
+              <InfoChip
+                icon={<Wallet size={13} />}
+                text={`$${(appt.paid_amount ?? 0).toLocaleString('es-CO')} ${appt.paid_currency || 'COP'}${appt.payment_ref ? ` · MP #${appt.payment_ref}` : ''}`}
+                color="#3e6b4e"
+              />
+            )}
+          </div>
+        </div>
+
+        {/* ── Bloque 3: Consentimiento ─────────────────────────────────────────── */}
+        {!isGuest && (
+          <div style={{ paddingBottom: 16, borderBottom: '1px solid var(--s100)', marginBottom: 16 }}>
+            <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Consentimiento</p>
+            {activeConsents.length > 0 ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, background: '#d1fae5', color: '#065f46' }}>
+                <CheckCircle2 size={13} /> Firmados:
+                {activeConsents.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => setViewConsentId(c.id)}
+                    title={`Firmado el ${c.signed_at} — ver documento`}
+                    style={{ border: 'none', background: 'none', color: '#065f46', cursor: 'pointer', fontSize: 12, fontWeight: 700, textDecoration: 'underline', padding: 0 }}
+                  >
+                    {CONSENT_SHORT[c.consent_type] ?? c.consent_type}
+                  </button>
+                ))}
+              </span>
+            ) : (
+              <button
+                onClick={() => setSignConsentOpen(true)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, background: '#fef3c7', color: '#92400e', border: 'none', cursor: 'pointer' }}
+              >
+                <AlertTriangle size={13} /> Sin consentimiento — firmar aquí
+              </button>
+            )}
+          </div>
+        )}
+
         {statusErr && (
-          <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#fee2e2', borderRadius: 8 }}>
+          <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#fee2e2', borderRadius: 8 }}>
             <AlertTriangle size={14} color="#dc2626" />
             <span style={{ fontSize: 13, color: '#991b1b' }}>{statusErr}</span>
           </div>
@@ -637,7 +679,7 @@ export function AppointmentPage() {
 
         {/* ── Guest reservation: associate the patient before anything else ──── */}
         {isActive && isGuest && (
-          <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--s100)' }}>
+          <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid var(--s100)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
               <UserPlus size={15} color="#92400e" />
               <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>Asociar paciente</span>
@@ -652,7 +694,7 @@ export function AppointmentPage() {
                   <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--s700)', lineHeight: 1.5 }}>
                     ¿Asociar esta cita a <b>{[pendingAssign.first_name, pendingAssign.paternal_last_name].filter(Boolean).join(' ')}</b>
                     {pendingAssign.document_number ? ` (${pendingAssign.document_type_code} ${pendingAssign.document_number})` : ''}?
-                    La reserva a nombre de “{appt.guest_name}” quedará a su nombre.
+                    La reserva a nombre de "{appt.guest_name}" quedará a su nombre.
                   </p>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button
@@ -693,9 +735,9 @@ export function AppointmentPage() {
           </div>
         )}
 
-        {/* ── Status action bar ──────────────────────────────────────────────── */}
+        {/* ── Bloque 4: Acciones ──────────────────────────────────────────────── */}
         {isActive && (
-          <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--s100)', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             {isScheduled && (
               <button
                 onClick={() => {
@@ -741,15 +783,21 @@ export function AppointmentPage() {
                 Finalizar sesión
               </button>
             )}
-            {/* Once the session started the encounter happened — it can no
-                longer be cancelled, only finished (backend enforces it too) */}
             {isScheduled && linkedRecords.length === 0 && (
-              <button
-              onClick={() => setCancelOpen(v => !v)}
-              style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', background: '#fff', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: 9, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
-            >
-              <X size={14} /> Cancelar cita
-            </button>
+              <>
+                <button
+                  onClick={() => { setCancelOpen(v => !v); setReagendarOpen(false); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', background: '#fff', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: 9, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
+                >
+                  <X size={14} /> Cancelar
+                </button>
+                <button
+                  onClick={() => { setReagendarOpen(v => !v); setCancelOpen(false); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', background: '#fff', color: '#6366f1', border: '1.5px solid #c7d2fe', borderRadius: 9, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
+                >
+                  <CalendarClock size={14} /> Reagendar
+                </button>
+              </>
             )}
           </div>
         )}
@@ -782,6 +830,50 @@ export function AppointmentPage() {
             <button onClick={() => { setCancelOpen(false); setCancelReason(''); }} style={{ padding: '9px 14px', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
               Cerrar
             </button>
+          </div>
+        )}
+
+        {/* Reagendar form */}
+        {reagendarOpen && (
+          <div style={{ marginTop: 14, padding: '14px 16px', background: '#eef2ff', border: '1.5px solid #c7d2fe', borderRadius: 10 }}>
+            <p style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 700, color: '#312e81' }}>Nueva fecha y hora</p>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--s600)', display: 'block', marginBottom: 4 }}>Fecha</label>
+                <input
+                  type="date"
+                  value={reagendarDate}
+                  min={todayISO}
+                  onChange={e => setReagendarDate(e.target.value)}
+                  style={{ padding: '8px 11px', borderRadius: 8, border: '1.5px solid var(--s200)', fontSize: 13 }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--s600)', display: 'block', marginBottom: 4 }}>Hora</label>
+                <input
+                  type="time"
+                  value={reagendarTime}
+                  onChange={e => setReagendarTime(e.target.value)}
+                  style={{ padding: '8px 11px', borderRadius: 8, border: '1.5px solid var(--s200)', fontSize: 13 }}
+                />
+              </div>
+              <button
+                onClick={handleReagendar}
+                disabled={!reagendarDate || !reagendarTime || reagendaring}
+                style={{ padding: '9px 18px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, cursor: !reagendarDate || !reagendarTime ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, opacity: !reagendarDate || !reagendarTime ? 0.5 : 1 }}
+              >
+                {reagendaring ? <Spinner size={13} color="#fff" /> : <CalendarClock size={13} />}
+                Confirmar
+              </button>
+              <button onClick={() => { setReagendarOpen(false); setReagendarErr(''); }} style={{ padding: '9px 14px', background: '#fff', color: 'var(--s600)', border: '1.5px solid var(--s200)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
+                Cerrar
+              </button>
+            </div>
+            {reagendarErr && (
+              <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                <AlertTriangle size={12} /> {reagendarErr}
+              </p>
+            )}
           </div>
         )}
       </div>

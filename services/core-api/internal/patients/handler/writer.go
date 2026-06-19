@@ -28,6 +28,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Address          string `json:"address"`
 		BirthDate        string `json:"birth_date"` // "2006-01-02"
 		Gender           string `json:"gender"`
+		EmergencyContactName         string `json:"emergency_contact_name"`
+		EmergencyContactPhone        string `json:"emergency_contact_phone"`
+		EmergencyContactRelationship string `json:"emergency_contact_relationship"`
 	}
 	if err := httputil.DecodeJSON(r, &body); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid JSON")
@@ -53,6 +56,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Address:          body.Address,
 		BirthDate:        birthDate,
 		Gender:           body.Gender,
+		EmergencyContactName:         body.EmergencyContactName,
+		EmergencyContactPhone:        body.EmergencyContactPhone,
+		EmergencyContactRelationship: body.EmergencyContactRelationship,
 	})
 	if err != nil {
 		writeErr(w, err)
@@ -78,6 +84,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		Address          string `json:"address"`
 		BirthDate        string `json:"birth_date"`
 		Gender           string `json:"gender"`
+		EmergencyContactName         string `json:"emergency_contact_name"`
+		EmergencyContactPhone        string `json:"emergency_contact_phone"`
+		EmergencyContactRelationship string `json:"emergency_contact_relationship"`
 	}
 	if err := httputil.DecodeJSON(r, &body); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid JSON")
@@ -108,6 +117,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		Address:          body.Address,
 		BirthDate:        birthDate,
 		Gender:           body.Gender,
+		EmergencyContactName:         body.EmergencyContactName,
+		EmergencyContactPhone:        body.EmergencyContactPhone,
+		EmergencyContactRelationship: body.EmergencyContactRelationship,
 	}); err != nil {
 		writeErr(w, err)
 		return

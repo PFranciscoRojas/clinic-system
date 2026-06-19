@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { Pencil, Lock, X, AlertCircle } from 'lucide-react';
+import { Pencil, Lock, X, AlertCircle, HeartPulse } from 'lucide-react';
 import { patientsApi, type Patient } from '@/api/patients';
 import { validateBirthDate } from '@/lib/age';
 import { BirthDateField } from './BirthDateField';
@@ -47,6 +47,9 @@ export function EditPatientModal({ patient, onClose, onSaved, requiredContext }:
   const [address,  setAddress]  = useState(patient.address ?? '');
   const [birthDate, setBirthDate] = useState(patient.birth_date ?? '');
   const [gender,   setGender]   = useState(patient.gender ?? '');
+  const [ecName,     setEcName]     = useState(patient.emergency_contact_name ?? '');
+  const [ecRelation, setEcRelation] = useState(patient.emergency_contact_relationship ?? '');
+  const [ecPhone,    setEcPhone]    = useState(patient.emergency_contact_phone ?? '');
   const [apiError, setApiError] = useState('');
 
   // Plausibility first (a half-typed year gives ages like 2025), then adult-only doc check
@@ -60,17 +63,20 @@ export function EditPatientModal({ patient, onClose, onSaved, requiredContext }:
 
   const mutation = useMutation({
     mutationFn: () => patientsApi.update(patient.id, {
-      document_type_code: docType     || undefined,
-      document_number:    docNumber   || undefined,
-      first_name:         firstName,
-      middle_name:        middleName  || undefined,
-      paternal_last_name: paternalLn,
-      maternal_last_name: maternalLn  || undefined,
-      phone:              phone       || undefined,
-      email:              email       || undefined,
-      address:            address     || undefined,
-      birth_date:         birthDate   || undefined,
-      gender:             gender      || undefined,
+      document_type_code:              docType     || undefined,
+      document_number:                 docNumber   || undefined,
+      first_name:                      firstName,
+      middle_name:                     middleName  || undefined,
+      paternal_last_name:              paternalLn,
+      maternal_last_name:              maternalLn  || undefined,
+      phone:                           phone       || undefined,
+      email:                           email       || undefined,
+      address:                         address     || undefined,
+      birth_date:                      birthDate   || undefined,
+      gender:                          gender      || undefined,
+      emergency_contact_name:          ecName      || undefined,
+      emergency_contact_phone:         ecPhone     || undefined,
+      emergency_contact_relationship:  ecRelation  || undefined,
     }),
     onSuccess: () => { onSaved(); onClose(); },
     onError:   () => setApiError('No se pudo guardar. Intenta de nuevo.'),
@@ -197,6 +203,37 @@ export function EditPatientModal({ patient, onClose, onSaved, requiredContext }:
               <div style={{ gridColumn: '1 / -1' }}>
                 {iLabel('Dirección')}
                 <input style={iStyle} value={address} onChange={e => setAddress(e.target.value)} />
+              </div>
+            </div>
+          </div>
+
+          {/* Contacto de emergencia */}
+          <div>
+            <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 700, color: 'var(--s500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><HeartPulse size={12} />Contacto de emergencia</span>
+              <span style={{ fontSize: 11, fontWeight: 400, textTransform: 'none', color: 'var(--s400)', marginLeft: 6 }}>(opcional)</span>
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ gridColumn: '1 / -1' }}>
+                {iLabel('Nombre')}
+                <input style={iStyle} value={ecName} onChange={e => setEcName(e.target.value)} placeholder="Nombre completo" />
+              </div>
+              <div>
+                {iLabel('Teléfono')}
+                <input style={iStyle} value={ecPhone} onChange={e => setEcPhone(e.target.value)} placeholder="+57 300 000 0000" />
+              </div>
+              <div>
+                {iLabel('Parentesco')}
+                <select style={iStyle} value={ecRelation} onChange={e => setEcRelation(e.target.value)}>
+                  <option value="">— Sin especificar —</option>
+                  <option value="Padre">Padre</option>
+                  <option value="Madre">Madre</option>
+                  <option value="Cónyuge">Cónyuge</option>
+                  <option value="Hermano/a">Hermano/a</option>
+                  <option value="Hijo/a">Hijo/a</option>
+                  <option value="Amigo/a">Amigo/a</option>
+                  <option value="Otro">Otro</option>
+                </select>
               </div>
             </div>
           </div>

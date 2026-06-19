@@ -170,6 +170,7 @@ export function NewPatientPage() {
   const [notes,       setNotes]       = useState('');
   const [ecName,      setEcName]      = useState('');
   const [ecPhone,     setEcPhone]     = useState('');
+  const [ecRelation,  setEcRelation]  = useState('');
 
   // Per-field errors (set on submit attempt)
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -237,6 +238,7 @@ export function NewPatientPage() {
       notes:               notes.trim()       || undefined,
       emergency_contact_name:  ecName.trim()  || undefined,
       emergency_contact_phone: ecPhone.trim() || undefined,
+      emergency_contact_relationship: ecRelation.trim() || undefined,
     });
   };
 
@@ -400,6 +402,23 @@ export function NewPatientPage() {
           <SectionHeader icon={HeartPulse} title="Contacto de emergencia" />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <Field label="Nombre" value={ecName} onChange={setEcName} placeholder="María García" />
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--s700)', marginBottom: 6 }}>Parentesco</label>
+              <select
+                value={ecRelation}
+                onChange={e => setEcRelation(e.target.value)}
+                style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1.5px solid var(--s200)', fontSize: 14, color: 'var(--s800)', background: '#fff', cursor: 'pointer', outline: 'none' }}
+              >
+                <option value="">— Sin especificar —</option>
+                <option value="Padre">Padre</option>
+                <option value="Madre">Madre</option>
+                <option value="Cónyuge">Cónyuge</option>
+                <option value="Hermano/a">Hermano/a</option>
+                <option value="Hijo/a">Hijo/a</option>
+                <option value="Amigo/a">Amigo/a</option>
+                <option value="Otro">Otro</option>
+              </select>
+            </div>
             <Field
               label="Teléfono"
               value={ecPhone}
