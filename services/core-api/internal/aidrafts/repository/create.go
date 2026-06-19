@@ -5,11 +5,12 @@ import (
 	"fmt"
 
 	"sghcp/core-api/internal/aidrafts"
+	"sghcp/core-api/internal/shared/dbctx"
 )
 
 func (r *Repository) CreateEncKey(ctx context.Context, encryptedDEK []byte, keySource string) (string, error) {
 	var id string
-	err := r.db.QueryRow(ctx,
+	err := dbctx.From(ctx, r.db).QueryRow(ctx,
 		`INSERT INTO encryption_keys (encrypted_dek, key_source) VALUES ($1, $2) RETURNING id`,
 		encryptedDEK, keySource,
 	).Scan(&id)
@@ -28,7 +29,7 @@ func (r *Repository) Create(ctx context.Context, p aidrafts.CreateParams) (strin
 		RETURNING id`
 
 	var id string
-	err := r.db.QueryRow(ctx, q,
+	err := dbctx.From(ctx, r.db).QueryRow(ctx, q,
 		p.OrganizationID,
 		p.PatientID,
 		p.RequestedBy,
