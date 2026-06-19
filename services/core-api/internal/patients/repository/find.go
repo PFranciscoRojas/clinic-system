@@ -17,7 +17,8 @@ func (r *Repository) FindByID(ctx context.Context, orgID, patientID string) (*pa
 		       first_name_enc, middle_name_enc,
 		       paternal_last_name_enc, maternal_last_name_enc,
 		       document_number_enc, phone_enc, email_enc, address_enc,
-		       birth_date, gender, is_active, created_at, updated_at
+		       birth_date, gender, is_active, created_at, updated_at,
+		       emergency_contact_enc
 		FROM patients
 		WHERE id = $1 AND organization_id = $2 AND is_active = TRUE
 	`, patientID, orgID)
@@ -44,7 +45,8 @@ func (r *Repository) List(ctx context.Context, orgID string, limit, offset int) 
 		       first_name_enc, middle_name_enc,
 		       paternal_last_name_enc, maternal_last_name_enc,
 		       document_number_enc, phone_enc, email_enc, address_enc,
-		       birth_date, gender, is_active, created_at, updated_at
+		       birth_date, gender, is_active, created_at, updated_at,
+		       emergency_contact_enc
 		FROM patients
 		WHERE organization_id = $1 AND is_active = TRUE
 		ORDER BY created_at DESC
@@ -74,7 +76,8 @@ func (r *Repository) Search(ctx context.Context, orgID string, f patients.Search
 		       first_name_enc, middle_name_enc,
 		       paternal_last_name_enc, maternal_last_name_enc,
 		       document_number_enc, phone_enc, email_enc, address_enc,
-		       birth_date, gender, is_active, created_at, updated_at
+		       birth_date, gender, is_active, created_at, updated_at,
+		       emergency_contact_enc
 		FROM patients
 		WHERE organization_id = $1 AND is_active = TRUE
 	`
@@ -125,6 +128,7 @@ func scanPatient(row interface {
 		&p.PaternalLastNameEnc, &p.MaternalLastNameEnc,
 		&p.DocumentNumberEnc, &p.PhoneEnc, &p.EmailEnc, &p.AddressEnc,
 		&birthDate, &gender, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
+		&p.EmergencyContactEnc,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, patients.ErrNotFound

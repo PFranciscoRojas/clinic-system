@@ -36,7 +36,7 @@ func (r *Repository) Create(ctx context.Context, p patients.CreateParams) (strin
 			paternal_last_name_hash, full_name_search_hash,
 			document_number_enc, doc_search_hash,
 			phone_enc, email_enc, address_enc,
-			birth_date, gender
+			birth_date, gender, emergency_contact_enc
 		) VALUES (
 			$1, $2, $3,
 			$4, $5,
@@ -44,7 +44,7 @@ func (r *Repository) Create(ctx context.Context, p patients.CreateParams) (strin
 			$8, $9,
 			$10, $11,
 			$12, $13, $14,
-			$15, $16
+			$15, $16, $17
 		)
 		RETURNING id
 	`,
@@ -54,7 +54,7 @@ func (r *Repository) Create(ctx context.Context, p patients.CreateParams) (strin
 		p.PaternalLastNameHash, p.FullNameSearchHash,
 		nullableBytes(p.DocumentNumberEnc), nullableString(p.DocSearchHash),
 		nullableBytes(p.PhoneEnc), nullableBytes(p.EmailEnc), nullableBytes(p.AddressEnc),
-		nullableDate(p.BirthDate), nullableString(p.Gender),
+		nullableDate(p.BirthDate), nullableString(p.Gender), nullableBytes(p.EmergencyContactEnc),
 	).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("insert patient: %w", err)

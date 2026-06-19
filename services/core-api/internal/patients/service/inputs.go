@@ -16,6 +16,9 @@ type CreateInput struct {
 	Address          string
 	BirthDate        time.Time
 	Gender           string // free-text per Decreto 1227/2015
+	EmergencyContactName         string
+	EmergencyContactPhone        string
+	EmergencyContactRelationship string
 }
 
 // UpdateInput carries plain-text fields for a full patient update.
@@ -33,6 +36,9 @@ type UpdateInput struct {
 	Address          string
 	BirthDate        time.Time
 	Gender           string
+	EmergencyContactName         string
+	EmergencyContactPhone        string
+	EmergencyContactRelationship string
 }
 
 // SearchInput holds plain-text search terms; exactly one filter field must be set.

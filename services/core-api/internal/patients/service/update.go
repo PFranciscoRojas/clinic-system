@@ -48,6 +48,11 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) error {
 		docHash = hash.Normalize(in.DocumentNumber)
 	}
 
+	ecEnc, err := sealEmergencyContact(dek, in.EmergencyContactName, in.EmergencyContactPhone, in.EmergencyContactRelationship)
+	if err != nil {
+		return err
+	}
+
 	fullName := in.FirstName + " " + in.PaternalLastName
 	if in.MaternalLastName != "" {
 		fullName += " " + in.MaternalLastName
@@ -65,6 +70,7 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) error {
 		PhoneEnc:             sealed.PhoneEnc,
 		EmailEnc:             sealed.EmailEnc,
 		AddressEnc:           sealed.AddressEnc,
+		EmergencyContactEnc:  ecEnc,
 		Gender:               in.Gender,
 		DocumentTypeCode:     in.DocumentTypeCode,
 		DocumentNumberEnc:    docEnc,

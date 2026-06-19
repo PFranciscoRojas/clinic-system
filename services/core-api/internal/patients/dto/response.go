@@ -17,6 +17,9 @@ type PatientResponse struct {
 	Address          string `json:"address,omitempty"`
 	BirthDate        string `json:"birth_date"`
 	Gender           string `json:"gender,omitempty"`
+	EmergencyContactName         string `json:"emergency_contact_name,omitempty"`
+	EmergencyContactPhone        string `json:"emergency_contact_phone,omitempty"`
+	EmergencyContactRelationship string `json:"emergency_contact_relationship,omitempty"`
 	IsActive         bool   `json:"is_active"`
 }
 
@@ -35,6 +38,9 @@ func ToResponse(p *patients.Patient) PatientResponse {
 		Address:          p.Address,
 		BirthDate:        p.BirthDate.Format("2006-01-02"),
 		Gender:           p.Gender,
+		EmergencyContactName:         p.EmergencyContactName,
+		EmergencyContactPhone:        p.EmergencyContactPhone,
+		EmergencyContactRelationship: p.EmergencyContactRelationship,
 		IsActive:         p.IsActive,
 	}
 }

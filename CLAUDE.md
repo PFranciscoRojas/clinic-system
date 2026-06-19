@@ -1,186 +1,79 @@
-# CLAUDE.md
+# SGHCP — clinic-system
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+**Sistema de Gestión de Historias Clínicas Psicológicas** — SaaS multi-tenant de psicología (Colombia-first), en producción (VPS Hetzner 87.99.137.79). Diferenciador: historia clínica cifrada + Whisper local + cumplimiento legal colombiano. Objetivo: USD 20–40/mes por profesional.
 
-## Proyecto
+# Reglas Estrictas de Código (OVERRIDE cualquier default)
 
-**SGHCP — Sistema de Gestión de Historias Clínicas Psicológicas**
+1. **Idioma:** Todo artefacto técnico en **inglés** — código, SQL (tablas/columnas/ENUMs), commits, ramas, comentarios en código. La documentación (`docs/`) y conversaciones en español.
+2. **Multi-tenant:** Toda interacción con BD usa RLS vía `TenantScope`; rol `sghcp_app` NOSUPERUSER. Sin excepciones.
+3. **Dinero:** Todo cálculo financiero en PostgreSQL usando `NUMERIC`. Nunca floats.
+4. **PII y datos clínicos:** Nombres, DNI, teléfono, SOAP son `BYTEA [AEA]` cifrados con DEK por paciente (AES-256-GCM + `MASTER_KEY`). Búsqueda solo por hash SHA-256. Nunca `LIKE` sobre cifrado.
+5. **IA clínica:** El LLM recibe texto anonimizado. Whisper corre local (audio nunca sale). Los borradores IA (`ai_drafts`) son inmutables — el profesional aprueba explícitamente. La IA sugiere; el humano decide.
 
-Sistema de información clínico para psicología en Colombia. Maneja datos de salud mental — la categoría de mayor sensibilidad bajo la Ley 1581/2012. Toda decisión técnica tiene implicaciones legales directas.
+# Arquitectura
 
-**Marco legal vinculante:**
-- Ley 1581/2012 — protección de datos personales (habeas data)
-- Resolución 1995/1999 — historia clínica: retención mínima 15 años, integridad, confidencialidad
-- Ley 23/1981 — secreto profesional médico
-- Ley 1273/2009 — delitos informáticos (el proveedor cloud no exonera al responsable del dato)
-- Decreto 1227/2015 — identidad de género (razón por la que `gender` es TEXT libre, no ENUM)
+**Stack:** Go 1.21+ (chi, sqlc, golang-jwt v5, golang-migrate) · React TypeScript (TanStack Query, lucide-react) · PostgreSQL 16 · Python (Whisper + Claude `claude-sonnet-4-6`) · Redis Streams · Docker Compose · Caddy
 
-## Idioma del código (REGLA ESTRICTA)
+**6 Bounded Contexts:**
 
-Todo artefacto técnico se escribe en **inglés**:
-- Código fuente (variables, funciones, tipos, constantes, structs, clases)
-- SQL — nombres de tablas, columnas, índices, constraints, ENUMs y valores de seed
-- Nombres de archivos y carpetas de código fuente
-- Mensajes de commit y nombres de ramas
-- Comentarios en el código (el `why`, no el `what`)
-- Configuración (claves de JSONB, nombres de flags en `features`, códigos de permisos)
-
-La documentación de arquitectura (`docs/`), los ADRs y las conversaciones con el usuario permanecen en **español**.
-
-## Metodología de trabajo (REGLA ESTRICTA)
-
-El usuario trabaja en fases iterativas. **Al completar una fase, detenerse y esperar confirmación explícita antes de continuar.** La confirmación es "Aprobado, siguiente paso" o equivalente.
-
-## Estado actual (2026-06)
-
-**El proyecto evolucionó de "sistema a medida para una psicóloga" a un VERTICAL SaaS multi-tenant de psicología (Colombia-first), en producción.** Las fases 1-5 de diseño original están completas; lo que se construye hoy son olas de producto.
-
-- **Fases 1-5 (diseño, scaffolding, core backend, motor IA, frontend)** — ✅ completas y en producción en el VPS.
-- **Ola 2 — producto SaaS vendible** — ✅ completa: multi-tenancy con **RLS por tenant** (rol `sghcp_app` NOSUPERUSER), signup self-serve + verificación de email, onboarding + trial, gating de suscripción (402 al expirar), **cobro por MercadoPago** (suscripción del consultorio).
-- **Ola Booking — agendamiento público de pacientes con pago** — ✅ en producción: página hospedada `/book/:slug`, disponibilidad real server-side, **pago único por MercadoPago** que auto-confirma la cita, recordatorios por email (24h/2h), pago visible en la agenda.
-- **Ola 3 (en curso) — foso de IA**: Recap pre-sesión (resumen de la historia antes de cada cita) + plan terapéutico sugerido por IA. La IA SUGIERE, el humano decide (misma regla que el borrador clínico + CIE-10).
-
-> **Fuente viva del estado y las decisiones:** el documento de contexto `contexto-integracion-booking.md` (repo `claude-skills`, también en `~/.claude/commands/`) se actualiza en cada bloque vía `/actualizar-contexto`. Consúltalo para el estado exacto (PRs, migraciones, pendientes, credenciales). Este CLAUDE.md cubre reglas e invariantes estables; el contexto cubre el día a día.
-
-**Objetivo de negocio:** producto vendible (no consultoría). Banda de precio ~USD 20-40/mes por profesional, bootstrap Colombia-first → Andina → resto hispano. El foso = historia clínica cifrada + privacidad verificable (Whisper local) + cumplimiento colombiano, no la IA en sí.
-
-## Stack tecnológico (ADRs aprobados)
-
-| Capa | Tecnología | ADR |
+| BC | Dominio | Tablas clave |
 |---|---|---|
-| Backend core | Go 1.21+ con `chi`, `sqlc`, `golang-jwt/jwt v5`, `golang-migrate` | ADR-001 |
-| Cifrado | AES-256-GCM + env var `MASTER_KEY` (Bootstrap) → AWS KMS (Cloud) | ADR-002 |
-| Base de datos | PostgreSQL 16, Docker en VPS (Bootstrap) → RDS Multi-AZ (Cloud) | ADR-002/003 |
-| Infraestructura | VPS Hetzner CX21 · Docker Compose · Caddy (Bootstrap) | ADR-003 |
-| Almacenamiento | Sistema de archivos local `/data/audio/` · Backblaze B2 para backups | ADR-003 |
-| IA — transcripción | Whisper (local, open-source) — el audio nunca sale de la infraestructura | ADR-004 |
-| IA — extracción | Claude API (`claude-sonnet-4-6`) sobre texto anonimizado | ADR-004 |
-| Cola de trabajo IA | Redis Streams (dev y Bootstrap) | ADR-004 |
-| Frontend | React + TypeScript (PWA con modo offline) · servido por Caddy (Bootstrap) | ADR-005 |
-| Observabilidad | OpenTelemetry + logs Docker + Prometheus/Grafana (Bootstrap) | — |
+| BC-1 | Org & Auth | `organizations`, `users`, `roles`, `permissions`, `user_roles` |
+| BC-2 | Staff & Perfiles | `professional_profiles` |
+| BC-3 | Pacientes | `patients`, `encryption_keys`, `patient_staff_rel` |
+| BC-4 | Agenda | `appointments` |
+| BC-5 | Clínico | `clinical_records`, `consents`, `ai_drafts` |
+| BC-6 | Facturación | `invoices`, `payments`, `billing_rates` |
 
-## Arquitectura: Bounded Contexts
-
-El sistema tiene 5 dominios que pueden separarse en microservicios sin reescribir lógica. Las FK que cruzan dominios están marcadas `[SOFT_FK]` en el schema.
+# Layout del repo (rutas clave)
 
 ```
-BC-1: Organización & Auth   → organizations, users, roles, permissions, user_roles, supervision_rel
-BC-2: Staff & Perfiles      → professional_profiles
-BC-3: Pacientes             → patients, encryption_keys, patient_staff_rel
-BC-4: Agenda                → appointments
-BC-5: Clínico               → clinical_records, consents, ai_drafts
-Transversal                 → audit_log, domain_events (outbox)
+services/
+  core-api/
+    internal/<bc>/{handler,service,repository,dto}/  ← Go: un subdir por BC
+    migrations/                                       ← 000NNN_<name>.{up,down}.sql
+  frontend/
+    src/
+      pages/<Section>/          ← una carpeta por sección UI
+      components/<section>/     ← componentes reutilizables por sección
+      api/                      ← funciones de llamada HTTP (patients.ts, appointments.ts…)
+      lib/                      ← helpers (age.ts, auth.ts…)
+  ai-service/                   ← Python: Whisper + jobs Redis
 ```
 
-Ver diagrama completo en `docs/architecture/C4-architecture.md`.
+**Mapa conceptual → archivo** (para no buscar innecesariamente):
 
-## Seguridad — restricciones no negociables
-
-**Cifrado:**
-- Campos PII de pacientes son `BYTEA [AEA]`: `first_name_enc`, `paternal_last_name_enc`, `document_number_enc`, `phone_enc`, `email_enc`, campos SOAP de `clinical_records`, etc.
-- Búsqueda sobre PII: solo por hash SHA-256 (`paternal_last_name_hash`, `doc_search_hash`). Nunca `LIKE` ni full-text sobre campos cifrados.
-- El DEK por paciente vive cifrado en `encryption_keys.encrypted_dek`. En Bootstrap lo descifra `MASTER_KEY` (var de entorno). `key_source` indica qué clave maestra protege cada DEK.
-
-**Auditoría:**
-- `audit_log` es append-only. El rol de BD de la aplicación tiene `INSERT, SELECT` — sin `UPDATE` ni `DELETE`.
-- Cada operación importante escribe en `domain_events` en la misma transacción (outbox pattern).
-
-**IA:**
-- El audio nunca sale de la infraestructura propia (Whisper local).
-- El LLM (Claude API) recibe solo texto anonimizado — sin nombres, sin documentos.
-- Los borradores de IA (`ai_drafts`) son inmutables. El profesional edita en un formulario separado y aprueba explícitamente.
-- Un practicante (INTERN) nunca puede aprobar un registro clínico — solo co-firma el supervisor y aprueba el PROFESSIONAL.
-
-**Permisos de BD:**
-- `app_user`: SELECT/INSERT/UPDATE/DELETE en tablas transaccionales.
-- `app_user`: INSERT/SELECT en `audit_log`.
-- `app_user`: SELECT en `document_types`, `specialties`.
-- `app_user`: SELECT/INSERT en `encryption_keys` (rotación la hace el servicio KMS).
-
-## Modelo de datos — puntos clave
-
-- Los nombres de pacientes tienen 4 campos separados: `first_name_enc`, `middle_name_enc`, `paternal_last_name_enc`, `maternal_last_name_enc`. Refleja el estándar de la cédula colombiana y permite ordenar por apellido e integrarse con RIPS/ADRES.
-- `document_types` es tabla de referencia separada — no CHECK constraint — para añadir nuevos tipos (PPT, PEP) sin migración de schema.
-- `patient_staff_rel` es M:N con `relation_type` ENUM (`PRIMARY_THERAPIST`, `INTERN_TRAINEE`, etc.). No hay `professional_id` en `patients`.
-- `clinical_records` tiene `responsible_staff_id` (el terapeuta) y `created_by` (quien redactó — puede ser practicante). Si `requires_cosign = TRUE`, el supervisor debe co-firmar antes de que el registro pueda pasar a `APPROVED`.
-- `organizations.features JSONB` controla qué módulos están activos por clínica. Añadir inventario = INSERT en `permissions` + UPDATE en `features`. Sin deploy.
-
-Schema completo en `docs/data-models/schema.md`.
-
-## Variables ciegas de seguridad (antes del go-live)
-
-Ver `docs/security/blind-variables.md`. Los puntos críticos:
-- DPIA (Data Protection Impact Assessment) requerido antes de producción.
-- Plan de respuesta a incidentes con notificación a la SIC en 72h.
-- Nunca usar datos reales de pacientes en entornos dev/staging — usar generador sintético con Faker.
-- Backups cifrados (GPG) en Backblaze B2 con política de retención de 15 años (Bootstrap). En Cloud: S3 Glacier con Object Lock (WORM).
-
-## Versioning — SemVer (REGLA ESTRICTA)
-
-Este proyecto sigue [Semantic Versioning 2.0.0](https://semver.org/): `MAJOR.MINOR.PATCH`
-
-**Regla de cada dígito:**
-- `PATCH` — bug fix que no cambia la API pública (`0.1.1`, `0.1.2`)
-- `MINOR` — nueva funcionalidad retrocompatible, equivale a completar una fase (`0.2.0`)
-- `MAJOR` — cambio que rompe compatibilidad con clientes existentes (`1.0.0`)
-
-**Hoja de ruta de versiones:**
-
-| Versión | Hito |
+| Concepto | Archivo(s) |
 |---|---|
-| `0.1.0`–`0.4.0` | Fases 1-5 — diseño, core backend, motor IA, frontend ✅ |
-| `0.5.0` | Historia clínica psychology-native + consentimientos + plan + PDF export ✅ (tag publicado 2026-06-10) |
-| (post-0.5) | Ola 2 SaaS (multi-tenant RLS + cobro + signup) y Ola Booking (agendamiento+pago) ✅ en producción |
-| `1.0.0` | Primera clínica real en producción con pacientes (go-live de Marcela) ← **pendiente** (faltan: token MP de producción, precio real, política reembolso, `ALLOW_DATA_RESET=false`) |
+| Formulario nuevo paciente | `pages/Patients/NewPatientPage.tsx` |
+| Modal editar paciente | `components/patients/EditPatientModal.tsx` |
+| Página de la cita | `pages/Appointments/AppointmentPage.tsx` |
+| Calendario / agenda | `pages/Dashboard/AgendaCalendar.tsx` |
+| Facturación UI | `pages/Invoicing/` |
+| BC-3 backend | `core-api/internal/patients/{handler,service,repository}` |
+| BC-4 backend | `core-api/internal/appointments/{handler,service,repository}` |
+| BC-6 backend | `core-api/internal/billing/{handler,service,repository}` |
+| Migración nueva | `core-api/migrations/000NNN_<name>.up.sql` |
 
-**Proceso de release:**
-1. Merge del PR a `main`
-2. Actualizar `[Unreleased]` en `CHANGELOG.md` con la nueva versión y fecha
-3. Crear tag en git: `git tag v0.2.0 && git push origin v0.2.0`
+# Protocolo Operativo
 
-**CHANGELOG rules (`CHANGELOG.md`):**
-- Always written in **English** — same rule as source code
-- Every entry goes under `[Unreleased]` until the PR is merged
-- On release, `[Unreleased]` becomes `[X.Y.Z] — YYYY-MM-DD · description`
-- Valid sections: `Added`, `Changed`, `Fixed`, `Removed`, `Security`
-- One line per change — user-facing and concrete, not implementation detail
+- **Fail-closed** por defecto.
+- **Respuestas tersas:** solo el código modificado, sin preámbulos.
+- **Lee bajo demanda** (no siempre al inicio):
+  - `docs/ai/ACTIVE_TASK.md` → léelo cuando el usuario diga "continúa" o "¿qué sigue?"; contiene el checklist de pendientes o la sugerencia de siguiente paso (lo escribe `/actualizar-contexto` al cerrar cada sesión)
+  - `docs/project/STATUS.md` → estado actual, roadmap, bloqueantes, VPS
+  - `docs/ai/BACKLOG.md` → ideas y tareas pendientes
+  - `docs/history/CHANGELOG.md` → historial compactado
 
-## Branching model — Libflow adaptado (REGLA ESTRICTA)
+# Ramas (Libflow adaptado)
 
-Este proyecto usa una variante de Libflow ajustada para aplicaciones (no librerías).
+`main` protegido (solo PR aprobado) · `feature/*` · `enhancement/*` · `fix/*` · `hotfix/*`
 
-**Ramas estables — protegidas en GitHub, nunca push directo:**
-- `main` — producción. Solo acepta merges via PR aprobado.
+Commits: `tipo(scope): descripción` — tipos: `feat`, `fix`, `test`, `refactor`, `chore`, `enhancement` — scope = BC: `auth`, `patients`, `agenda`, `billing`, `clinical`, `db`, etc.
 
-**Ramas de trabajo — se crean y eliminan por tarea:**
-- `feature/*` — nueva funcionalidad (ej. `feature/auth-login`)
-- `enhancement/*` — mejora a algo ya existente (ej. `enhancement/patient-search-index`)
-- `fix/*` — bug encontrado en desarrollo (ej. `fix/migration-generated-column`)
-- `hotfix/*` — bug urgente en producción, merge inmediato (ej. `hotfix/jwt-expiry`)
+# Comandos de Usuario (Skills)
 
-**Flujo obligatorio:**
-1. Partir siempre de `main` actualizado: `git checkout main && git pull`
-2. Crear rama con prefijo correcto
-3. Commits atómicos con convención: `tipo(scope): descripción`
-   - tipos: `feat`, `fix`, `test`, `refactor`, `chore`
-   - scope = bounded context: `auth`, `patients`, `crypto`, `infra`, etc.
-   - ejemplo: `feat(auth): implement login endpoint with bcrypt + JWT`
-4. Abrir PR a `main` cuando la rama está lista
-5. Borrar la rama tras el merge
+Si el usuario escribe exactamente estos comandos, ejecuta la acción de forma robótica, sin saludos ni preámbulos:
 
-**Reglas de calidad:**
-- Cada PR resuelve exactamente una cosa
-- `main` siempre compila y los tests pasan
-- Sin commits de "WIP" o "fix typo" sueltos — squash antes del PR si es necesario
-
-## Documentación de referencia
-
-| Documento | Contenido |
-|---|---|
-| `docs/architecture/ADR-001-backend-language.md` | Go vs Java — justificación y librerías seleccionadas |
-| `docs/architecture/ADR-002-database-encryption.md` | Estrategia TDE + AEA + KMS, campos cifrados |
-| `docs/architecture/ADR-003-cloud-vs-local.md` | VPS Bootstrap ($6/mes), Caddy, pg_dump+B2, ruta de migración a AWS |
-| `docs/architecture/ADR-004-ai-microservice.md` | Flujo Audio→Whisper→LLM→Aprobación, por qué Whisper local |
-| `docs/architecture/C4-architecture.md` | Diagramas C4 por nivel, bounded contexts, módulos futuros |
-| `docs/data-models/schema.md` | Schema completo con ENUMs, tablas de referencia, DER, RBAC |
-| `docs/security/blind-variables.md` | 10 riesgos legales/operativos identificados con prioridad |
+- `save_state`: Checkpoint de emergencia mid-sesión (antes de un `/clear` forzado). Sobrescribe `docs/ai/ACTIVE_TASK.md` con: 1) Descripción de la tarea (máx 2 líneas), 2) Checklist de ítems — marca ✅ los completados y ⬜ los pendientes con el archivo exacto a tocar, 3) Último archivo modificado y su estado (compila/falla), 4) Próximo paso exacto tras el reinicio. Responde solo "Estado guardado". (Al cerrar sesión limpiamente usar `/actualizar-contexto`, que también escribe ACTIVE_TASK.md.)
+- `backlog [texto]`: Analiza el texto y añádelo a `docs/ai/BACKLOG.md` bajo la categoría correcta (creándola si no existe). Bullet point con fecha de hoy. Responde "Idea registrada" y retoma la conversación.
