@@ -4,8 +4,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Calendar, Clock, MapPin, Video, User,
   Play, CheckCircle2, AlertTriangle, Brain, FileText,
-  Mic, Upload, X, Phone, CreditCard, Cake, UserPlus, Wallet,
-  CalendarClock,
+  Mic, MicOff, Upload, X, Phone, CreditCard, Cake, UserPlus, Wallet,
+  CalendarClock, Pause, RotateCcw,
 } from 'lucide-react';
 import { appointmentsApi, type AppointmentStatus } from '@/api/appointments';
 import { patientsApi, type Patient } from '@/api/patients';
@@ -246,7 +246,7 @@ function SessionTimer({ startedAt, durationMin }: { startedAt: string; durationM
 // Recording indicator with a live mic-level meter: five bars that react to
 // the actual audio coming in, so the professional can confirm the mic is
 // capturing — not just that recording "started".
-function RecChip({ startMs, analyser }: { startMs: number; analyser: AnalyserNode | null }) {
+function RecChip({ startMs, analyser, paused }: { startMs: number; analyser: AnalyserNode | null; paused: boolean }) {
   const [now, setNow] = useState(() => Date.now());
   const [level, setLevel] = useState(0);
 
@@ -278,18 +278,22 @@ function RecChip({ startMs, analyser }: { startMs: number; analyser: AnalyserNod
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 9, padding: '8px 14px',
-      borderRadius: 9, fontSize: 13, fontWeight: 700, background: '#fee2e2',
-      border: '1.5px solid #fca5a5', color: '#991b1b',
+      borderRadius: 9, fontSize: 13, fontWeight: 700,
+      background: paused ? '#fef3c7' : '#fee2e2',
+      border: `1.5px solid ${paused ? '#fcd34d' : '#fca5a5'}`,
+      color: paused ? '#92400e' : '#991b1b',
     }}>
-      <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#dc2626', animation: 'pulse 1.5s infinite' }} />
-      <span style={{ display: 'inline-flex', alignItems: 'flex-end', gap: 2, height: 16 }}>
-        {bars.map((thr, i) => {
-          const active = level > thr;
-          const h = active ? 4 + Math.round(level * 12) : 3;
-          return <span key={i} style={{ width: 3, height: h, borderRadius: 2, background: active ? '#dc2626' : '#fca5a5', transition: 'height .08s, background .08s' }} />;
-        })}
-      </span>
-      Grabando · {mmss}
+      <span style={{ width: 9, height: 9, borderRadius: '50%', background: paused ? '#d97706' : '#dc2626', animation: paused ? undefined : 'pulse 1.5s infinite' }} />
+      {!paused && (
+        <span style={{ display: 'inline-flex', alignItems: 'flex-end', gap: 2, height: 16 }}>
+          {bars.map((thr, i) => {
+            const active = level > thr;
+            const h = active ? 4 + Math.round(level * 12) : 3;
+            return <span key={i} style={{ width: 3, height: h, borderRadius: 2, background: active ? '#dc2626' : '#fca5a5', transition: 'height .08s, background .08s' }} />;
+          })}
+        </span>
+      )}
+      {paused ? `En pausa · ${mmss}` : `Grabando · ${mmss}`}
     </span>
   );
 }
@@ -339,8 +343,10 @@ export function AppointmentPage() {
   const chunksRef = useRef<Blob[]>([]);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const [recording, setRecording] = useState(false);
+  const [recPaused, setRecPaused] = useState(false);
   const [recStart, setRecStart] = useState(0);
   const [recNote, setRecNote] = useState('');
+  const [micError, setMicError] = useState('');
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   // true between "Finalizar sesión" and the draft appearing — drives the
   // "procesando grabación" feedback instead of the upload dropzone
@@ -354,6 +360,7 @@ export function AppointmentPage() {
 
   const startRecording = async () => {
     if (mediaRef.current) return;
+    setMicError('');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
@@ -375,11 +382,35 @@ export function AppointmentPage() {
       } catch { /* meter is best-effort */ }
 
       setRecording(true);
+      setRecPaused(false);
       setRecStart(Date.now());
       setRecNote('');
-    } catch {
-      setRecNote('Sin acceso al micrófono — la sesión no se está grabando. Puedes subir un audio manualmente.');
+    } catch (err: unknown) {
+      const name = err instanceof Error ? err.name : '';
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setMicError('El navegador bloqueó el micrófono. Haz clic en el ícono 🔒 en la barra de direcciones → "Permitir micrófono", luego usa el botón Reintentar.');
+      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        setMicError('No se detectó ningún micrófono. Conecta uno e intenta de nuevo con el botón Reintentar.');
+      } else if (name === 'SecurityError') {
+        setMicError('El navegador requiere HTTPS para acceder al micrófono. Asegúrate de estar en https://...');
+      } else {
+        setMicError('No se pudo acceder al micrófono. Puedes subir el audio manualmente al finalizar la sesión.');
+      }
     }
+  };
+
+  const pauseRecording = () => {
+    const rec = mediaRef.current;
+    if (!rec || rec.state !== 'recording') return;
+    rec.pause();
+    setRecPaused(true);
+  };
+
+  const resumeRecording = () => {
+    const rec = mediaRef.current;
+    if (!rec || rec.state !== 'paused') return;
+    rec.resume();
+    setRecPaused(false);
   };
 
   const stopRecording = (): Promise<File | null> => new Promise(resolve => {
@@ -455,8 +486,10 @@ export function AppointmentPage() {
   const recordingConsent = activeConsents.some(c => c.consent_type === 'RECORDING');
 
   const handleStartSession = async () => {
-    await handleStatusChange('IN_PROGRESS');
+    // Request mic permission before the session starts so the browser dialog
+    // appears while the professional can still react — not mid-session.
     if (recordingConsent) await startRecording();
+    await handleStatusChange('IN_PROGRESS');
   };
 
   const handleFinishSession = async () => {
@@ -763,13 +796,30 @@ export function AppointmentPage() {
               </button>
             )}
             {isInProgress && <SessionTimer startedAt={appt.started_at ?? appt.scheduled_at} durationMin={appt.duration_min} />}
-            {isInProgress && recording && <RecChip startMs={recStart} analyser={analyser} />}
+            {isInProgress && recording && <RecChip startMs={recStart} analyser={analyser} paused={recPaused} />}
+            {isInProgress && recordingConsent && recording && !recPaused && (
+              <button
+                onClick={pauseRecording}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: '#92400e', border: '1.5px solid #fcd34d', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+              >
+                <Pause size={13} /> Pausar
+              </button>
+            )}
+            {isInProgress && recordingConsent && recording && recPaused && (
+              <button
+                onClick={resumeRecording}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+              >
+                <Mic size={13} /> Reanudar
+              </button>
+            )}
             {isInProgress && recordingConsent && !recording && (
               <button
                 onClick={startRecording}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: micError ? '#fff' : '#fff', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
               >
-                <Mic size={13} /> Grabar
+                {micError ? <RotateCcw size={13} /> : <Mic size={13} />}
+                {micError ? 'Reintentar' : 'Grabar'}
               </button>
             )}
             {isInProgress && (
@@ -805,6 +855,16 @@ export function AppointmentPage() {
         {recNote && (
           <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, fontSize: 12.5, color: '#92400e' }}>
             <AlertTriangle size={13} /> {recNote}
+          </div>
+        )}
+
+        {micError && (
+          <div style={{ marginTop: 12, display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 9, fontSize: 13, color: '#9a3412' }}>
+            <MicOff size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: '0 0 4px', fontWeight: 700 }}>Sin acceso al micrófono — la sesión no se está grabando</p>
+              <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5 }}>{micError}</p>
+            </div>
           </div>
         )}
 
