@@ -23,6 +23,7 @@ import { aiDraftsApi } from '@/api/aiDrafts';
 import { useAuth } from '@/context/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
+import { SlotPicker } from '@/components/appointments/SlotPicker';
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
@@ -307,11 +308,9 @@ export function AppointmentPage() {
   const [statusErr, setStatusErr] = useState('');
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
-  const [reagendarOpen, setReagendarOpen] = useState(false);
-  const [reagendarDate, setReagendarDate] = useState('');
-  const [reagendarTime, setReagendarTime] = useState('');
-  const [reagendaring, setReagendaring] = useState(false);
-  const [reagendarErr, setReagendarErr] = useState('');
+  const [reagendarOpen,  setReagendarOpen]  = useState(false);
+  const [reagendaring,   setReagendaring]   = useState(false);
+  const [reagendarErr,   setReagendarErr]   = useState('');
   const [showRecordForm, setShowRecordForm] = useState(false);
   // When true, the edit modal is open and closing it after saving starts the session
   const [completeDataOpen, setCompleteDataOpen] = useState(false);
@@ -502,15 +501,14 @@ export function AppointmentPage() {
     return `${sign}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
   };
 
-  const handleReagendar = async () => {
-    if (!reagendarDate || !reagendarTime) return;
+  const handleReagendar = async (date: string, time: string) => {
     setReagendaring(true); setReagendarErr('');
     try {
       const { id: newId } = await appointmentsApi.create({
         patient_id:   appt!.patient_id || undefined,
         guest_name:   isGuest ? (appt!.guest_name ?? undefined) : undefined,
         staff_id:     user!.user_id,
-        scheduled_at: `${reagendarDate}T${reagendarTime}:00${tzOffset()}`,
+        scheduled_at: `${date}T${time}:00${tzOffset()}`,
         duration_min: appt!.duration_min,
         modality:     appt!.modality,
       });
@@ -737,7 +735,18 @@ export function AppointmentPage() {
 
         {/* ── Bloque 4: Acciones ──────────────────────────────────────────────── */}
         {isActive && (
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <>
+            {isScheduled && !canStartSession && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 9, marginTop: 16, marginBottom: 4, fontSize: 13, color: '#92400e' }}>
+                <AlertTriangle size={14} style={{ flexShrink: 0 }} />
+                {isFutureDay
+                  ? `La sesión se puede iniciar el día de la cita (${date}).`
+                  : isGuest
+                  ? 'Asocia el paciente para poder iniciar la sesión.'
+                  : 'El paciente debe firmar el consentimiento de tratamiento antes de iniciar.'}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             {isScheduled && (
               <button
                 onClick={() => {
@@ -752,16 +761,6 @@ export function AppointmentPage() {
                 {statusLoading ? <Spinner size={15} color="#fff" /> : <Play size={15} />}
                 Iniciar sesión
               </button>
-            )}
-            {isScheduled && !canStartSession && (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: '#92400e' }}>
-                <AlertTriangle size={13} />
-                {isFutureDay
-                  ? `La sesión se puede iniciar el día de la cita (${date}).`
-                  : isGuest
-                  ? 'Asocia el paciente para poder iniciar la sesión.'
-                  : 'El paciente debe firmar el consentimiento de tratamiento antes de iniciar.'}
-              </span>
             )}
             {isInProgress && <SessionTimer startedAt={appt.started_at ?? appt.scheduled_at} durationMin={appt.duration_min} />}
             {isInProgress && recording && <RecChip startMs={recStart} analyser={analyser} />}
@@ -799,7 +798,8 @@ export function AppointmentPage() {
                 </button>
               </>
             )}
-          </div>
+            </div>
+          </>
         )}
 
         {recNote && (
@@ -833,48 +833,14 @@ export function AppointmentPage() {
           </div>
         )}
 
-        {/* Reagendar form */}
         {reagendarOpen && (
-          <div style={{ marginTop: 14, padding: '14px 16px', background: '#eef2ff', border: '1.5px solid #c7d2fe', borderRadius: 10 }}>
-            <p style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 700, color: '#312e81' }}>Nueva fecha y hora</p>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--s600)', display: 'block', marginBottom: 4 }}>Fecha</label>
-                <input
-                  type="date"
-                  value={reagendarDate}
-                  min={todayISO}
-                  onChange={e => setReagendarDate(e.target.value)}
-                  style={{ padding: '8px 11px', borderRadius: 8, border: '1.5px solid var(--s200)', fontSize: 13 }}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--s600)', display: 'block', marginBottom: 4 }}>Hora</label>
-                <input
-                  type="time"
-                  value={reagendarTime}
-                  onChange={e => setReagendarTime(e.target.value)}
-                  style={{ padding: '8px 11px', borderRadius: 8, border: '1.5px solid var(--s200)', fontSize: 13 }}
-                />
-              </div>
-              <button
-                onClick={handleReagendar}
-                disabled={!reagendarDate || !reagendarTime || reagendaring}
-                style={{ padding: '9px 18px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, cursor: !reagendarDate || !reagendarTime ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, opacity: !reagendarDate || !reagendarTime ? 0.5 : 1 }}
-              >
-                {reagendaring ? <Spinner size={13} color="#fff" /> : <CalendarClock size={13} />}
-                Confirmar
-              </button>
-              <button onClick={() => { setReagendarOpen(false); setReagendarErr(''); }} style={{ padding: '9px 14px', background: '#fff', color: 'var(--s600)', border: '1.5px solid var(--s200)', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
-                Cerrar
-              </button>
-            </div>
-            {reagendarErr && (
-              <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                <AlertTriangle size={12} /> {reagendarErr}
-              </p>
-            )}
-          </div>
+          <SlotPicker
+            modality={appt.modality}
+            onConfirm={handleReagendar}
+            onClose={() => { setReagendarOpen(false); setReagendarErr(''); }}
+            confirming={reagendaring}
+            error={reagendarErr}
+          />
         )}
       </div>
 

@@ -11,6 +11,7 @@ import { patientsApi, type Patient } from '@/api/patients';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
 import { useIsCompact, useIsMobile } from '@/lib/useMediaQuery';
+import { SlotPicker } from '@/components/appointments/SlotPicker';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -291,8 +292,6 @@ function DetailPanel({ appt, panelRef, onClose }: { appt: Appointment; panelRef:
   const [mode, setMode]                   = useState<'none' | 'cancel' | 'reagendar'>('none');
   const [cancelReason, setCancelReason]   = useState('');
   const [cancelling,   setCancelling]     = useState(false);
-  const [reagendarDate, setReagendarDate] = useState('');
-  const [reagendarTime, setReagendarTime] = useState(() => fmtHHMM(appt.scheduled_at));
   const [reagendaring, setReagendaring]   = useState(false);
   const [actionErr,    setActionErr]      = useState('');
 
@@ -328,21 +327,20 @@ function DetailPanel({ appt, panelRef, onClose }: { appt: Appointment; panelRef:
     }
   };
 
-  const handleReagendar = async () => {
-    if (!reagendarDate || !reagendarTime) return;
+  const handleReagendar = async (date: string, time: string) => {
     setReagendaring(true); setActionErr('');
     try {
-      const { id: newId } = await appointmentsApi.create({
+      await appointmentsApi.create({
         patient_id:   appt.patient_id || undefined,
         guest_name:   !appt.patient_id ? (appt.guest_name ?? undefined) : undefined,
         staff_id:     user!.user_id,
-        scheduled_at: `${reagendarDate}T${reagendarTime}:00${tzOff()}`,
+        scheduled_at: `${date}T${time}:00${tzOff()}`,
         duration_min: appt.duration_min,
         modality:     appt.modality,
       });
       await appointmentsApi.cancel(appt.id, 'Reagendado');
       qc.invalidateQueries({ queryKey: ['cal-range'] });
-      navigate(`/appointments/${newId}`);
+      onClose();
     } catch {
       setActionErr('No se pudo reagendar. Intenta de nuevo.');
       setReagendaring(false);
@@ -448,32 +446,14 @@ function DetailPanel({ appt, panelRef, onClose }: { appt: Appointment; panelRef:
           </div>
         )}
 
-        {/* Reagendar form */}
         {mode === 'reagendar' && (
-          <div>
-            <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-              <input
-                type="date"
-                value={reagendarDate}
-                min={todayISO()}
-                onChange={e => setReagendarDate(e.target.value)}
-                style={{ flex: 1, padding: '7px 8px', borderRadius: 8, border: '1.5px solid var(--s200)', fontSize: 12.5 }}
-              />
-              <input
-                type="time"
-                value={reagendarTime}
-                onChange={e => setReagendarTime(e.target.value)}
-                style={{ width: 90, padding: '7px 8px', borderRadius: 8, border: '1.5px solid var(--s200)', fontSize: 12.5 }}
-              />
-            </div>
-            <button
-              onClick={handleReagendar}
-              disabled={!reagendarDate || !reagendarTime || reagendaring}
-              style={{ width: '100%', padding: '8px 0', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, cursor: !reagendarDate || !reagendarTime ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, opacity: !reagendarDate || !reagendarTime ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-            >
-              {reagendaring ? <Spinner size={13} color="#fff" /> : <CalendarClock size={13} />} Confirmar reagenda
-            </button>
-          </div>
+          <SlotPicker
+            modality={appt.modality}
+            onConfirm={handleReagendar}
+            onClose={() => { setMode('none'); setActionErr(''); }}
+            confirming={reagendaring}
+            error={actionErr}
+          />
         )}
 
         {actionErr && (

@@ -60,6 +60,25 @@ func (r *Repository) ResolveBySlug(ctx context.Context, slug string) (*Professio
 	return &p, nil
 }
 
+// ResolveByOrgAndStaff loads the professional's working-hours config from the
+// org and staff IDs available in JWT claims — bypasses the slug lookup used by
+// the public booking endpoint.
+func (r *Repository) ResolveByOrgAndStaff(ctx context.Context, orgID, staffID string) (*Professional, error) {
+	p := &Professional{OrgID: orgID, StaffID: staffID}
+	var wh []byte
+	err := r.pool.QueryRow(ctx,
+		`SELECT COALESCE(working_hours, '{}'::jsonb) FROM professional_profiles WHERE user_id = $1`,
+		staffID,
+	).Scan(&wh)
+	if errors.Is(err, pgx.ErrNoRows) {
+		wh = []byte("{}")
+	} else if err != nil {
+		return nil, fmt.Errorf("load working hours: %w", err)
+	}
+	p.WorkingHours = wh
+	return p, nil
+}
+
 // OrgPublicInfo is the public-facing identity a booking page shows.
 type OrgPublicInfo struct {
 	PublicName string `json:"public_name"`
