@@ -504,7 +504,7 @@ export function AppointmentPage() {
   const handleReagendar = async (date: string, time: string) => {
     setReagendaring(true); setReagendarErr('');
     try {
-      const { id: newId } = await appointmentsApi.create({
+      await appointmentsApi.create({
         patient_id:   appt!.patient_id || undefined,
         guest_name:   isGuest ? (appt!.guest_name ?? undefined) : undefined,
         staff_id:     user!.user_id,
@@ -513,7 +513,7 @@ export function AppointmentPage() {
         modality:     appt!.modality,
       });
       await appointmentsApi.cancel(id!, 'Reagendado');
-      navigate(`/appointments/${newId}`);
+      navigate('/');
     } catch {
       setReagendarErr('No se pudo reagendar. Intenta de nuevo.');
       setReagendaring(false);

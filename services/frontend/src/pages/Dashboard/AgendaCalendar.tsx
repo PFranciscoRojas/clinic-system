@@ -762,6 +762,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
     const map: Record<string, Appointment[]> = {};
     for (const d of rangeDays) map[d] = [];
     for (const a of appts) {
+      if (a.status === 'CANCELLED') continue;
       const ld = localDateOf(a.scheduled_at);
       if (map[ld]) map[ld].push(a);
     }
