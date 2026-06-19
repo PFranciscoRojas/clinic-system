@@ -115,6 +115,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Mock Settings sections: "Plan y facturación" (fictitious SaaS plan), "Integraciones" (fake connect buttons), mock note templates, fictitious active-sessions device list, dead 2FA toggles, raw permission-code list in the profile
 - Billing and Evaluations hidden from navigation until their backends exist (code kept as design reference)
 
+### Fixed
+- Signing a consent in office returned 500 (and the consent list looked empty). `consents`, `ai_drafts` and `patient_assessments` had RLS enabled since the initial schema but never got a policy; once the app moved to the non-owner `sghcp_app` role (RLS/MT2), "RLS enabled + no policy" became default-deny for them — reads returned nothing and writes failed. Migration 000027 gives them the same `tenant_isolation` policy as the other tenant tables, restoring consent signing, AI-draft access and assessments
+
 ### Security
 - Per-tenant Row-Level Security extended to the BC-6 billing tables (`service_rates`, `invoices`, `payments`, `patient_billing_profiles`), which predated tenant isolation (migration 000024): activating the invoicing module can no longer expose another tenant's rows
 - Tenant isolation enforced in the database via Postgres Row-Level Security on the core clinical tables (patients, clinical records + addenda, appointments, treatment plans, diagnoses): every query is scoped to the caller's organization at the engine level, so even a query missing its explicit org filter cannot read or write another tenant's data. The app now connects as a dedicated non-superuser role (`sghcp_app`) for RLS to take effect; migrations still run as the owner
