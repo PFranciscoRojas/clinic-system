@@ -6,11 +6,13 @@
 
 ## 2026-06-19
 
-- Lote A (formulario paciente): scroll-to-error en validación, select tipo documento, parentesco en contacto emergencia, labels "Primer/Segundo apellido" — `NewPatientPage.tsx` y `EditPatientModal.tsx` (#92).
-- Lote B (página cita): reorganización en bloques Datos del sujeto / Datos de la cita / Consentimiento / Acciones + botón Reagendar — `AppointmentPage.tsx`.
+- Lote A (formulario paciente): scroll-to-error en validación, select tipo documento, parentesco en contacto emergencia, labels "Primer/Segundo apellido" — `NewPatientPage.tsx` y `EditPatientModal.tsx` (#92–#93).
+- Lote B (página cita): reorganización en 4 bloques + banner de advertencia encima de los botones de acción — `AppointmentPage.tsx`.
 - Lote C (calendario): cancel + reagendar inline desde popup del calendario — `AgendaCalendar.tsx`.
-- Reestructuración del contenedor de contexto: CLAUDE.md → mapa operativo conciso; STATUS.md → estado vivo canónico (overwrite); CHANGELOG.md creado; skill `actualizar-contexto` reescrita; `.claudeignore` eliminado (inerte); `QUEUE.,d` renombrado a `QUEUE.md`.
-- Skill `actualizar-contexto` mejorada: captura ideas del BACKLOG mid-conversación + escribe ACTIVE_TASK.md al cierre (checklist si hay pendientes, sugerencia si todo completo). `save_state` redefinido como checkpoint de emergencia mid-sesión. Flujo de retoma documentado.
+- fecha nacimiento + teléfono obligatorios en formulario nuevo paciente (#94).
+- SlotPicker: endpoint privado `GET /api/v1/me/availability` (JWT, usa orgID+staffID del token); componente visual de franjas disponibles — días scrolleables + chips de hora; integrado en AppointmentPage y AgendaCalendar (#95).
+- fix(reagendar): citas CANCELLED ocultas del timeline del calendario; después de reagendar desde la página de cita navega al Dashboard en vez de a la nueva cita (#96).
+- Reestructuración del contenedor de contexto: STATUS.md canónico, CHANGELOG.md, skill `actualizar-contexto` mejorada.
 
 ---
 

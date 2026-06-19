@@ -20,11 +20,12 @@
 
 ### Últimos PRs (semana 2026-06-19)
 
-- `#92` enhancement(patients): new-patient form UX — scroll to error, doc dropdown, surname labels, parentesco emergencia
+- `#96` fix(agenda,appointments): ocultar citas CANCELLED del calendario + navegar a home al reagendar desde cita
+- `#95` feat(agenda,appointments): SlotPicker para reagendar — endpoint privado `/me/availability` + componente visual de franjas disponibles
+- `#94` fix(patients): fecha nacimiento + teléfono obligatorios en formulario nuevo paciente
+- `#93` enhancement(patients,agenda,appointments): Lote A-C — contacto emergencia, bloques cita, acciones inline agenda
+- `#92` enhancement(patients): new-patient form UX — scroll to error, select tipo doc, labels apellidos
 - `#91` hotfix(db): tenant_isolation policy en consents/ai_drafts/patient_assessments
-- `#90` fix(invoicing): income chart sigue el período + ejes verticales + opción 3 meses
-- `#88–#89` feat/enhancement(invoicing): cards módulo, filtro período, balance-por-paciente
-- `#80–#87` feat(billing): BC-6 completo — migraciones `000024`/`000025`/`000026`
 
 ---
 
