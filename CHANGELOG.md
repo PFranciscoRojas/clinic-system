@@ -116,6 +116,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Billing and Evaluations hidden from navigation until their backends exist (code kept as design reference)
 
 ### Fixed
+- New-patient form: when a required field (document number, birth date…) blocks the save, the page now scrolls to and focuses the first field with the error, instead of looking like nothing happened. Document type is a dropdown (default Cédula de Ciudadanía) instead of a wide button row, and the surname labels read "Primer apellido / Segundo apellido" (matching the edit modal)
 - Signing a consent in office returned 500 (and the consent list looked empty). `consents`, `ai_drafts` and `patient_assessments` had RLS enabled since the initial schema but never got a policy; once the app moved to the non-owner `sghcp_app` role (RLS/MT2), "RLS enabled + no policy" became default-deny for them — reads returned nothing and writes failed. Migration 000027 gives them the same `tenant_isolation` policy as the other tenant tables, restoring consent signing, AI-draft access and assessments
 
 ### Security

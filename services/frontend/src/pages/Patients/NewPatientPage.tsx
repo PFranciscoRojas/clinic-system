@@ -83,14 +83,15 @@ interface FieldProps {
   icon?: React.ElementType;
   max?: string;
   min?: string;
+  id?: string;
 }
 
-function Field({ label, value, onChange, placeholder, type = 'text', required, error, hint, icon: Icon, max, min }: FieldProps) {
+function Field({ label, value, onChange, placeholder, type = 'text', required, error, hint, icon: Icon, max, min, id }: FieldProps) {
   const [focused, setFocused] = useState(false);
   const hasError = !!error;
 
   return (
-    <div>
+    <div id={id}>
       <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: hasError ? 'var(--red)' : 'var(--s700)', marginBottom: 6 }}>
         {label}{required && <span style={{ color: 'var(--red)', marginLeft: 3 }}>*</span>}
       </label>
@@ -155,7 +156,7 @@ export function NewPatientPage() {
   const [searchParams] = useSearchParams();
   const returnAppointmentId = searchParams.get('appointment_id');
 
-  const [docTypeCode, setDocTypeCode] = useState('');
+  const [docTypeCode, setDocTypeCode] = useState('CC');
   const [docNumber,   setDocNumber]   = useState('');
   const [firstName,   setFirstName]   = useState('');
   const [middleName,  setMiddleName]  = useState('');
@@ -201,14 +202,25 @@ export function NewPatientPage() {
     if (!docNumber.trim())     newErrors.docNumber = 'El número de documento es requerido.';
     else if (docNumErr)        newErrors.docNumber = docNumErr;
     if (!firstName.trim())     newErrors.firstName = 'El primer nombre es requerido.';
-    if (!pLastName.trim())     newErrors.pLastName = 'El apellido paterno es requerido.';
+    if (!pLastName.trim())     newErrors.pLastName = 'El primer apellido es requerido.';
     // BirthDateField only emits complete dates, so a partial date is impossible.
     if (ageError)              newErrors.birthDate = ageError;
     if (phoneError)            newErrors.phone     = phoneError;
     if (emailError)            newErrors.email     = emailError;
 
     setErrors(newErrors);
-    if (Object.keys(newErrors).length > 0) return;
+    if (Object.keys(newErrors).length > 0) {
+      // Take the user to the first field with an error — a blocked save must
+      // never look like nothing happened.
+      const ORDER = ['docType', 'docNumber', 'firstName', 'pLastName', 'birthDate', 'phone', 'email'];
+      const firstKey = ORDER.find(k => newErrors[k]);
+      if (firstKey) {
+        const el = firstKey === 'birthDate' ? birthWrapRef.current : document.getElementById(`fld-${firstKey}`);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        (el?.querySelector('input, select') as HTMLElement | null)?.focus?.();
+      }
+      return;
+    }
 
     create({
       document_type_code:  docTypeCode,
@@ -265,29 +277,23 @@ export function NewPatientPage() {
         <div style={cardStyle}>
           <SectionHeader icon={CreditCard} title="Identificación" />
 
-          <div style={{ marginBottom: 18 }}>
+          <div id="fld-docType" style={{ marginBottom: 18 }}>
             <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: errors.docType ? 'var(--red)' : 'var(--s700)', marginBottom: 8 }}>
               Tipo de documento <span style={{ color: 'var(--red)' }}>*</span>
             </label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <select
+              value={docTypeCode}
+              onChange={e => { setDocTypeCode(e.target.value); setErrors(er => ({ ...er, docType: '' })); }}
+              style={{
+                width: '100%', padding: '10px 14px', borderRadius: 10,
+                border: `1.5px solid ${errors.docType ? 'var(--red)' : 'var(--s200)'}`,
+                fontSize: 14, color: 'var(--s800)', background: '#fff', cursor: 'pointer', outline: 'none',
+              }}
+            >
               {DOCUMENT_TYPES.map(dt => (
-                <button
-                  key={dt.code}
-                  type="button"
-                  onClick={() => { setDocTypeCode(dt.code); setErrors(e => ({ ...e, docType: '' })); }}
-                  style={{
-                    padding: '7px 14px', borderRadius: 8, fontSize: 12.5, cursor: 'pointer', transition: 'all .1s',
-                    border: `1.5px solid ${docTypeCode === dt.code ? 'var(--teal)' : 'var(--s200)'}`,
-                    background: docTypeCode === dt.code ? 'var(--teal-l)' : '#fff',
-                    color: docTypeCode === dt.code ? 'var(--teal-d)' : 'var(--s600)',
-                    fontWeight: docTypeCode === dt.code ? 700 : 400,
-                  }}
-                >
-                  <span style={{ fontWeight: 700 }}>{dt.code}</span>
-                  <span style={{ color: 'var(--s500)', marginLeft: 4 }}>— {dt.name}</span>
-                </button>
+                <option key={dt.code} value={dt.code}>{dt.code} — {dt.name}</option>
               ))}
-            </div>
+            </select>
             {errors.docType && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 11, color: 'var(--red)' }}>
                 <AlertCircle size={11} />{errors.docType}
@@ -296,6 +302,7 @@ export function NewPatientPage() {
           </div>
 
           <Field
+            id="fld-docNumber"
             label="Número de documento"
             value={docNumber}
             onChange={v => { setDocNumber(v); setErrors(e => ({ ...e, docNumber: '' })); }}
@@ -310,10 +317,10 @@ export function NewPatientPage() {
         <div style={cardStyle}>
           <SectionHeader icon={User} title="Nombre completo" />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <Field label="Primer nombre" value={firstName} onChange={v => { setFirstName(v); setErrors(e => ({ ...e, firstName: '' })); }} placeholder="Juan" required error={errors.firstName} />
+            <Field id="fld-firstName" label="Primer nombre" value={firstName} onChange={v => { setFirstName(v); setErrors(e => ({ ...e, firstName: '' })); }} placeholder="Juan" required error={errors.firstName} />
             <Field label="Segundo nombre" value={middleName} onChange={setMiddleName} placeholder="Carlos (opcional)" />
-            <Field label="Apellido paterno" value={pLastName} onChange={v => { setPLastName(v); setErrors(e => ({ ...e, pLastName: '' })); }} placeholder="Pérez" required error={errors.pLastName} />
-            <Field label="Apellido materno" value={mLastName} onChange={setMLastName} placeholder="García (opcional)" />
+            <Field id="fld-pLastName" label="Primer apellido" value={pLastName} onChange={v => { setPLastName(v); setErrors(e => ({ ...e, pLastName: '' })); }} placeholder="Pérez" required error={errors.pLastName} />
+            <Field label="Segundo apellido" value={mLastName} onChange={setMLastName} placeholder="García (opcional)" />
           </div>
         </div>
 
@@ -322,6 +329,7 @@ export function NewPatientPage() {
           <SectionHeader icon={Phone} title="Contacto y datos personales" />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <Field
+              id="fld-email"
               label="Correo electrónico"
               value={email}
               onChange={v => { setEmail(v); setErrors(e => ({ ...e, email: '' })); }}
@@ -331,6 +339,7 @@ export function NewPatientPage() {
               error={errors.email}
             />
             <Field
+              id="fld-phone"
               label="Teléfono"
               value={phone}
               onChange={v => { setPhone(v); setErrors(e => ({ ...e, phone: '' })); }}
