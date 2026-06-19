@@ -8,12 +8,13 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"sghcp/core-api/internal/aidrafts"
+	"sghcp/core-api/internal/shared/dbctx"
 )
 
 func (r *Repository) FindByID(ctx context.Context, orgID, draftID string) (*aidrafts.AIDraft, error) {
 	var d aidrafts.AIDraft
 	var clinicalRecordID, resolvedBy, errorMessage *string
-	err := r.db.QueryRow(ctx, `
+	err := dbctx.From(ctx, r.db).QueryRow(ctx, `
 		SELECT id, organization_id, clinical_record_id, patient_id,
 		       requested_by, dek_id, audio_path_enc, transcription_enc,
 		       draft_content_enc, ai_model_version, whisper_model,
@@ -48,7 +49,7 @@ func (r *Repository) FindByID(ctx context.Context, orgID, draftID string) (*aidr
 
 func (r *Repository) FindEncKey(ctx context.Context, dekID string) (*aidrafts.EncKeyRow, error) {
 	var k aidrafts.EncKeyRow
-	err := r.db.QueryRow(ctx,
+	err := dbctx.From(ctx, r.db).QueryRow(ctx,
 		`SELECT id, encrypted_dek, key_source FROM encryption_keys WHERE id = $1`,
 		dekID,
 	).Scan(&k.ID, &k.EncryptedDEK, &k.KeySource)
