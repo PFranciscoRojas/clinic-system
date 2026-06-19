@@ -11,7 +11,7 @@
         X-Content-Type-Options nosniff
         X-Frame-Options DENY
         Referrer-Policy strict-origin-when-cross-origin
-        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        Permissions-Policy "camera=(), microphone=(self), geolocation=()"
         # CSP: scripts only from us (the built bundle has no inline JS); inline
         # styles allowed because the React UI uses style={} attributes; fonts
         # from Google Fonts; images include data: (base64 avatars/.ics); the API
