@@ -194,3 +194,63 @@ func contains(xs []string, v string) bool {
 	}
 	return false
 }
+
+// AvailabilityForStaff computes free slots for the authenticated professional,
+// identified by orgID + staffID from JWT claims instead of a public slug.
+// Mirrors Availability() but skips the slug→org resolution step.
+func (s *Service) AvailabilityForStaff(ctx context.Context, orgID, staffID, modality, fromDate, toDate string) ([]DayAvailability, error) {
+	prof, err := s.repo.ResolveByOrgAndStaff(ctx, orgID, staffID)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := defaultSchedule()
+	if len(prof.WorkingHours) > 0 {
+		var parsed scheduleConfig
+		if json.Unmarshal(prof.WorkingHours, &parsed) == nil && parsed.StartHour != "" {
+			cfg = parsed
+		}
+	}
+
+	from, err := time.ParseInLocation("2006-01-02", fromDate, bogota)
+	if err != nil {
+		return nil, err
+	}
+	to, err := time.ParseInLocation("2006-01-02", toDate, bogota)
+	if err != nil {
+		return nil, err
+	}
+	today := time.Now().In(bogota).Truncate(24 * time.Hour)
+	if from.Before(today) {
+		from = today
+	}
+	if to.Before(from) {
+		return []DayAvailability{}, nil
+	}
+	if to.Sub(from) > 60*24*time.Hour {
+		to = from.Add(60 * 24 * time.Hour)
+	}
+
+	busy, err := s.repo.BusyAppointments(ctx, orgID, staffID, from.UTC(), to.AddDate(0, 0, 1).UTC())
+	if err != nil {
+		return nil, err
+	}
+	holds, err := s.repo.BusyHolds(ctx, staffID, from.UTC(), to.AddDate(0, 0, 1).UTC())
+	if err != nil {
+		return nil, err
+	}
+	busy = append(busy, holds...)
+
+	now := time.Now()
+	out := []DayAvailability{}
+	for d := from; !d.After(to); d = d.AddDate(0, 0, 1) {
+		if !contains(cfg.ActiveDays, dayLabels[int(d.Weekday())]) {
+			continue
+		}
+		slots := s.daySlots(d, cfg, busy, now, modality)
+		if len(slots) > 0 {
+			out = append(out, DayAvailability{Date: d.Format("2006-01-02"), Slots: slots})
+		}
+	}
+	return out, nil
+}

@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"sghcp/core-api/internal/shared/httputil"
+	"sghcp/core-api/internal/shared/middleware"
 )
 
 type Handler struct {
@@ -77,6 +78,37 @@ func (h *Handler) availability(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusNotFound, "organización no encontrada")
 		return
 	}
+	if err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "parámetros inválidos")
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"days": days})
+}
+
+// PrivateRoutes is mounted at /api/v1/me/availability — valid JWT required.
+// Returns the authenticated professional's free slots using the same schedule
+// and busy-window logic as the public booking endpoint.
+func (h *Handler) PrivateRoutes() chi.Router {
+	r := chi.NewRouter()
+	r.Get("/", h.privateAvailability)
+	return r
+}
+
+func (h *Handler) privateAvailability(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	q := r.URL.Query()
+	from := q.Get("from")
+	to := q.Get("to")
+	now := time.Now().In(bogota)
+	if from == "" {
+		from = now.Format("2006-01-02")
+	}
+	if to == "" {
+		to = now.AddDate(0, 0, 30).Format("2006-01-02")
+	}
+	modality := q.Get("modality")
+
+	days, err := h.svc.AvailabilityForStaff(r.Context(), claims.OrganizationID, claims.UserID, modality, from, to)
 	if err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "parámetros inválidos")
 		return

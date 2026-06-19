@@ -141,6 +141,7 @@ func (a *app) buildRouter() http.Handler {
 		profH := profileshandler.New(a.pool, a.km)
 		r.Mount("/api/v1/specialties", profH.SpecialtyRoutes())
 		r.Mount("/api/v1/me/professional-profile", profH.Routes())
+			r.Mount("/api/v1/me/availability", availabilityH.PrivateRoutes())
 
 		aiDrafts := aidraftshandler.New(a.pool, a.km, a.rdb, a.cfg.AudioDir)
 		r.Mount("/api/v1/ai-drafts", aiDrafts.Routes())

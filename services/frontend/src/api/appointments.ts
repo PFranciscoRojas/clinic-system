@@ -74,4 +74,9 @@ export const appointmentsApi = {
     if (recordType) form.append('record_type', recordType);
     return api.upload<{ draft_id: string }>(`/appointments/${appointmentId}/audio`, form);
   },
+
+  availability: (from: string, to: string, modality: string) =>
+    api.get<{ days: { date: string; slots: string[] }[] }>(
+      `/me/availability?from=${from}&to=${to}&modality=${modality}`
+    ),
 };
