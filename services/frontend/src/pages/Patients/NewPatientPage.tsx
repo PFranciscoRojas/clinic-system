@@ -204,9 +204,11 @@ export function NewPatientPage() {
     else if (docNumErr)        newErrors.docNumber = docNumErr;
     if (!firstName.trim())     newErrors.firstName = 'El primer nombre es requerido.';
     if (!pLastName.trim())     newErrors.pLastName = 'El primer apellido es requerido.';
+    if (!birthDate)            newErrors.birthDate = 'La fecha de nacimiento es requerida.';
     // BirthDateField only emits complete dates, so a partial date is impossible.
-    if (ageError)              newErrors.birthDate = ageError;
-    if (phoneError)            newErrors.phone     = phoneError;
+    else if (ageError)         newErrors.birthDate = ageError;
+    if (!phone.trim())         newErrors.phone     = 'El teléfono es requerido.';
+    else if (phoneError)       newErrors.phone     = phoneError;
     if (emailError)            newErrors.email     = emailError;
 
     setErrors(newErrors);
@@ -231,8 +233,8 @@ export function NewPatientPage() {
       paternal_last_name:  pLastName.trim(),
       maternal_last_name:  mLastName.trim()   || undefined,
       email:               email.trim()       || undefined,
-      phone:               phone.trim()       || undefined,
-      birth_date:          birthDate          || undefined,
+      phone:               phone.trim(),
+      birth_date:          birthDate,
       gender:              gender.trim()      || undefined,
       address:             address.trim()     || undefined,
       notes:               notes.trim()       || undefined,
@@ -347,14 +349,15 @@ export function NewPatientPage() {
               onChange={v => { setPhone(v); setErrors(e => ({ ...e, phone: '' })); }}
               icon={Phone}
               placeholder="3001234567"
+              required
               error={errors.phone}
               hint="10 dígitos. Celular empieza en 3."
             />
 
             {/* Birth date + age preview */}
             <div ref={birthWrapRef}>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--s700)', marginBottom: 6 }}>
-                Fecha de nacimiento
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: errors.birthDate ? 'var(--red)' : 'var(--s700)', marginBottom: 6 }}>
+                Fecha de nacimiento<span style={{ color: 'var(--red)', marginLeft: 3 }}>*</span>
               </label>
               <BirthDateField
                 value={birthDate}
