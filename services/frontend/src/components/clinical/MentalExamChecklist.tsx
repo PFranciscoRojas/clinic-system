@@ -123,8 +123,8 @@ export function MentalExamChecklist({ value, onChange, disabled }: Props) {
       <Chips
         label="• Porte y Actitud"
         options={PORTE_OPTIONS}
-        selected={value.porte}
-        onToggle={k => set({ porte: toggle(value.porte, k) })}
+        selected={value.porte ?? []}
+        onToggle={k => set({ porte: toggle(value.porte ?? [], k) })}
         disabled={disabled}
       />
 
@@ -158,13 +158,13 @@ export function MentalExamChecklist({ value, onChange, disabled }: Props) {
         {value.orientacion === 'desorientado' && (
           <div style={{ display: 'flex', gap: 6, paddingLeft: 8 }}>
             {(['tiempo', 'espacio', 'persona'] as const).map(area => {
-              const active = value.orientacion_areas.includes(area);
+              const active = (value.orientacion_areas ?? []).includes(area);
               return (
                 <button
                   key={area}
                   type="button"
                   disabled={disabled}
-                  onClick={() => set({ orientacion_areas: toggle(value.orientacion_areas, area) })}
+                  onClick={() => set({ orientacion_areas: toggle(value.orientacion_areas ?? [], area) })}
                   style={{
                     padding: '4px 10px', borderRadius: 14, fontSize: 12, fontWeight: 500,
                     cursor: disabled ? 'default' : 'pointer',
@@ -185,8 +185,8 @@ export function MentalExamChecklist({ value, onChange, disabled }: Props) {
       <Chips
         label="• Afecto"
         options={AFECTO_OPTIONS}
-        selected={value.afecto}
-        onToggle={k => set({ afecto: toggle(value.afecto, k) })}
+        selected={value.afecto ?? []}
+        onToggle={k => set({ afecto: toggle(value.afecto ?? [], k) })}
         disabled={disabled}
       />
 
@@ -194,8 +194,8 @@ export function MentalExamChecklist({ value, onChange, disabled }: Props) {
       <Chips
         label="• Pensamiento"
         options={PENSAMIENTO_OPTIONS}
-        selected={value.pensamiento}
-        onToggle={k => set({ pensamiento: toggle(value.pensamiento, k) })}
+        selected={value.pensamiento ?? []}
+        onToggle={k => set({ pensamiento: toggle(value.pensamiento ?? [], k) })}
         disabled={disabled}
       />
 

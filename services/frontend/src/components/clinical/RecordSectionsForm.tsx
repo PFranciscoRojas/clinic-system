@@ -155,7 +155,7 @@ export function recordToDraft(sections: RecordSections | undefined, risk?: RiskL
       } else if (k === 'clinical_formulation' && typeof v === 'object' && !Array.isArray(v)) {
         d.clinicalFormulation = v as unknown as Formulation5FData;
       } else if (k === 'functional_analysis' && typeof v === 'object' && !Array.isArray(v)) {
-        d.functionalAnalysis = v as unknown as FunctionalAnalysisData;
+        d.functionalAnalysis = { ...defaultFunctionalAnalysis(), ...(v as Partial<FunctionalAnalysisData>) };
       } else if (k === 'achievement_indicators' && Array.isArray(v)) {
         d.achievementIndicators = v as string[];
       } else if (k === 'techniques' && Array.isArray(v)) {

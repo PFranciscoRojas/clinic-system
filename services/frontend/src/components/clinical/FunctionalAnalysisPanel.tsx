@@ -109,9 +109,9 @@ export function FunctionalAnalysisPanel({ value, onChange, disabled }: Props) {
         </p>
         <CheckGroup
           options={PHYSIOLOGICAL_RESPONSE_OPTIONS}
-          selected={value.physiological_response}
-          other={value.physiological_other}
-          onToggle={k => set({ physiological_response: toggle(value.physiological_response, k) })}
+          selected={value.physiological_response ?? []}
+          other={value.physiological_other ?? ''}
+          onToggle={k => set({ physiological_response: toggle(value.physiological_response ?? [], k) })}
           onOther={v => set({ physiological_other: v })}
           otherPlaceholder="Otra…"
           disabled={disabled}
@@ -125,9 +125,9 @@ export function FunctionalAnalysisPanel({ value, onChange, disabled }: Props) {
         </p>
         <CheckGroup
           options={MOTOR_RESPONSE_OPTIONS}
-          selected={value.motor_response}
-          other={value.motor_other}
-          onToggle={k => set({ motor_response: toggle(value.motor_response, k) })}
+          selected={value.motor_response ?? []}
+          other={value.motor_other ?? ''}
+          onToggle={k => set({ motor_response: toggle(value.motor_response ?? [], k) })}
           onOther={v => set({ motor_other: v })}
           otherPlaceholder="Otra…"
           disabled={disabled}
@@ -141,9 +141,9 @@ export function FunctionalAnalysisPanel({ value, onChange, disabled }: Props) {
         </p>
         <CheckGroup
           options={CONSEQUENCE_OPTIONS}
-          selected={value.consequences}
-          other={value.consequences_other}
-          onToggle={k => set({ consequences: toggle(value.consequences, k) })}
+          selected={value.consequences ?? []}
+          other={value.consequences_other ?? ''}
+          onToggle={k => set({ consequences: toggle(value.consequences ?? [], k) })}
           onOther={v => set({ consequences_other: v })}
           otherPlaceholder="Otra…"
           disabled={disabled}
