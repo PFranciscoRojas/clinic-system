@@ -257,9 +257,10 @@ export const REFERRAL_DESTINATIONS: { key: string; label: string }[] = [
 export interface FunctionalityData {
   level: string;
   referral_destination: string;
+  referral_destination_other: string;
 }
 export function defaultFunctionality(): FunctionalityData {
-  return { level: '', referral_destination: '' };
+  return { level: '', referral_destination: '', referral_destination_other: '' };
 }
 
 // ── Formato 2: Functional analysis (triple system) ────────────────────────────
@@ -378,11 +379,11 @@ export const RISK_LEVELS: { value: RiskLevel; label: string; color: string; bg: 
 
 export const riskMeta = (value?: string) => RISK_LEVELS.find(r => r.value === value);
 
-export const DISCHARGE_REASONS: { value: DischargeReason; label: string }[] = [
-  { value: 'THERAPEUTIC_DISCHARGE', label: 'Alta terapéutica' },
-  { value: 'DROPOUT', label: 'Deserción' },
-  { value: 'REFERRAL', label: 'Remisión' },
-  { value: 'MUTUAL_AGREEMENT', label: 'Mutuo acuerdo' },
+export const DISCHARGE_REASONS: { value: DischargeReason; label: string; description: string }[] = [
+  { value: 'THERAPEUTIC_DISCHARGE', label: 'Alta Terapéutica', description: 'Cumplimiento satisfactorio de la totalidad de los objetivos.' },
+  { value: 'DROPOUT', label: 'Deserción / Abandono', description: 'Inasistencia injustificada a sesiones consecutivas.' },
+  { value: 'MUTUAL_AGREEMENT', label: 'Retiro Voluntario', description: 'El paciente solicita suspender el proceso de forma unilateral.' },
+  { value: 'REFERRAL', label: 'Remisión / Derivación Externa', description: 'Se traslada el caso a otra especialidad.' },
 ];
 
 export const MENTAL_EXAM_DOMAINS: { key: string; label: string }[] = [
