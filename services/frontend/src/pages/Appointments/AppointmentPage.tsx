@@ -204,8 +204,9 @@ const WARN_MINUTES = 10;
 // pressed (started_at) — not from the scheduled slot.
 function SessionTimer({ startedAt, durationMin }: { startedAt: string; durationMin: number }) {
   const [now, setNow] = useState(() => Date.now());
+  const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 10_000);
+    const t = setInterval(() => setNow(Date.now()), 1_000);
     return () => clearInterval(t);
   }, []);
 
@@ -231,7 +232,7 @@ function SessionTimer({ startedAt, durationMin }: { startedAt: string; durationM
       display: 'inline-flex', alignItems: 'center', gap: 7,
       padding: '8px 14px', borderRadius: 9, fontSize: 13, fontWeight: 700,
       background: bg, border: `1.5px solid ${border}`, color,
-      animation: warn || over ? 'pulse 2s infinite' : undefined,
+      animation: (warn || over) && !prefersReducedMotion ? 'pulse 2s infinite' : undefined,
     }}>
       <Clock size={14} />
       {over
@@ -248,6 +249,7 @@ function SessionTimer({ startedAt, durationMin }: { startedAt: string; durationM
 // capturing — not just that recording "started".
 function RecChip({ startMs, analyser, paused }: { startMs: number; analyser: AnalyserNode | null; paused: boolean }) {
   const [now, setNow] = useState(() => Date.now());
+  const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const [level, setLevel] = useState(0);
 
   useEffect(() => {
@@ -283,7 +285,7 @@ function RecChip({ startMs, analyser, paused }: { startMs: number; analyser: Ana
       border: `1.5px solid ${paused ? '#fcd34d' : '#fca5a5'}`,
       color: paused ? '#92400e' : '#991b1b',
     }}>
-      <span style={{ width: 9, height: 9, borderRadius: '50%', background: paused ? '#d97706' : '#dc2626', animation: paused ? undefined : 'pulse 1.5s infinite' }} />
+      <span style={{ width: 9, height: 9, borderRadius: '50%', background: paused ? '#d97706' : '#dc2626', animation: (!paused && !prefersReducedMotion) ? 'pulse 1.5s infinite' : undefined }} />
       {!paused && (
         <span style={{ display: 'inline-flex', alignItems: 'flex-end', gap: 2, height: 16 }}>
           {bars.map((thr, i) => {
@@ -388,7 +390,7 @@ export function AppointmentPage() {
     } catch (err: unknown) {
       const name = err instanceof Error ? err.name : '';
       if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
-        setMicError('El navegador bloqueó el micrófono. Haz clic en el ícono 🔒 en la barra de direcciones → "Permitir micrófono", luego usa el botón Reintentar.');
+        setMicError('El navegador bloqueó el micrófono. En la barra de direcciones, busca el ícono de seguridad y selecciona "Permitir micrófono", luego usa el botón Reintentar.');
       } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
         setMicError('No se detectó ningún micrófono. Conecta uno e intenta de nuevo con el botón Reintentar.');
       } else if (name === 'SecurityError') {
@@ -612,7 +614,7 @@ export function AppointmentPage() {
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: compactLayout ? '16px 12px' : '24px 24px 40px' }}>
       {/* Back */}
-      <button onClick={() => navigate(-1)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s500)', fontSize: 14, marginBottom: 24, padding: 0 }}>
+      <button onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s500)', fontSize: 14, marginBottom: 24, padding: '10px 8px 10px 0', minHeight: 44 }}>
         <ArrowLeft size={16} /> Volver
       </button>
 
@@ -702,7 +704,7 @@ export function AppointmentPage() {
         )}
 
         {statusErr && (
-          <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#fee2e2', borderRadius: 8 }}>
+          <div role="alert" style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#fee2e2', borderRadius: 8 }}>
             <AlertTriangle size={14} color="#dc2626" />
             <span style={{ fontSize: 13, color: '#991b1b' }}>{statusErr}</span>
           </div>
@@ -853,13 +855,13 @@ export function AppointmentPage() {
         )}
 
         {recNote && (
-          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, fontSize: 12.5, color: '#92400e' }}>
+          <div role="alert" style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, fontSize: 12.5, color: '#92400e' }}>
             <AlertTriangle size={13} /> {recNote}
           </div>
         )}
 
         {micError && (
-          <div style={{ marginTop: 12, display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 9, fontSize: 13, color: '#9a3412' }}>
+          <div role="alert" style={{ marginTop: 12, display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 9, fontSize: 13, color: '#9a3412' }}>
             <MicOff size={15} style={{ flexShrink: 0, marginTop: 1 }} />
             <div style={{ flex: 1 }}>
               <p style={{ margin: '0 0 4px', fontWeight: 700 }}>Sin acceso al micrófono — la sesión no se está grabando</p>
@@ -872,8 +874,9 @@ export function AppointmentPage() {
         {cancelOpen && (
           <div style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'flex-end' }}>
             <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--s600)', display: 'block', marginBottom: 4 }}>Motivo de cancelación</label>
+              <label htmlFor="cancel-reason" style={{ fontSize: 12, fontWeight: 600, color: 'var(--s600)', display: 'block', marginBottom: 4 }}>Motivo de cancelación</label>
               <input
+                id="cancel-reason"
                 value={cancelReason}
                 onChange={e => setCancelReason(e.target.value)}
                 placeholder="Ej. Paciente no pudo asistir por emergencia…"
@@ -960,7 +963,7 @@ export function AppointmentPage() {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s600)' }}>Nuevo registro clínico</span>
-                <button onClick={() => setShowRecordForm(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)' }}><X size={16} /></button>
+                <button aria-label="Cerrar registro clínico" onClick={() => setShowRecordForm(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)', padding: 6, minWidth: 32, minHeight: 32 }}><X size={16} /></button>
               </div>
               {lateReason && (
                 <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 9, padding: '10px 14px', marginBottom: 12, fontSize: 12.5, color: '#92400e' }}>

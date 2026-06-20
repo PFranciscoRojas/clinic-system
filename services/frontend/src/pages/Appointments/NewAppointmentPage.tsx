@@ -148,13 +148,13 @@ function MiniCalendar({ selected, onSelect, busyDates = new Set() }: MiniCalenda
   return (
     <div style={{ userSelect: 'none' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <button onClick={prevMonth} style={navBtnStyle}>
+        <button aria-label="Mes anterior" onClick={prevMonth} style={navBtnStyle}>
           <ChevronLeft size={16} />
         </button>
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s800)', textTransform: 'capitalize' }}>
           {monthLabel}
         </span>
-        <button onClick={nextMonth} style={navBtnStyle}>
+        <button aria-label="Mes siguiente" onClick={nextMonth} style={navBtnStyle}>
           <ChevronRight size={16} />
         </button>
       </div>
@@ -180,6 +180,11 @@ function MiniCalendar({ selected, onSelect, busyDates = new Set() }: MiniCalenda
             <div
               key={i}
               onClick={() => !isPast && onSelect(iso)}
+              role="button"
+              aria-label={`${day} de ${view.toLocaleDateString('es-CO', { month: 'long' })}${isPast ? ', no disponible' : isSelected ? ', seleccionado' : ''}`}
+              aria-disabled={isPast ? 'true' : undefined}
+              tabIndex={isPast ? -1 : 0}
+              onKeyDown={e => { if (!isPast && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); onSelect(iso); } }}
               style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center',
                 padding: '4px 0', borderRadius: 6,
@@ -572,11 +577,16 @@ function Section({ icon: Icon, title, children }: { icon: React.ElementType; tit
 function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
   return (
     <div
+      role="switch"
+      aria-checked={on}
+      tabIndex={0}
       onClick={() => onChange(!on)}
+      onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); onChange(!on); } }}
       style={{
         width: 42, height: 24, borderRadius: 12, cursor: 'pointer',
         background: on ? 'var(--teal)' : 'var(--s200)',
         position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+        outline: 'none',
       }}
     >
       <div style={{
@@ -802,7 +812,7 @@ export function NewAppointmentPage() {
     <div style={{
       display: 'grid',
       gridTemplateColumns: compact ? '1fr' : '300px 1fr 272px',
-      ...(compact ? { minHeight: 'calc(100vh - var(--topbar-h))' } : { height: 'calc(100vh - var(--topbar-h))', overflow: 'hidden' }),
+      ...(compact ? { minHeight: 'calc(100dvh - var(--topbar-h))' } : { height: 'calc(100dvh - var(--topbar-h))', overflow: 'hidden' }),
     }}>
       {/* ── Column 1: Calendar + Patient ──────────────────────────────── */}
       <div style={{

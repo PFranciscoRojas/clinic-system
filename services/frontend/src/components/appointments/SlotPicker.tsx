@@ -94,7 +94,7 @@ export function SlotPicker({ modality, onConfirm, onClose, confirming, error }: 
                     <span style={{ fontSize: 14, fontWeight: 800, lineHeight: 1.3 }}>{dt.getDate()}</span>
                     <span style={{ fontSize: 9, opacity: 0.75 }}>{MONTH_SHORT[dt.getMonth()]}</span>
                     <span style={{ fontSize: 9, fontWeight: 600, marginTop: 2, background: isSel ? 'rgba(255,255,255,.25)' : '#eef2ff', borderRadius: 4, padding: '1px 4px' }}>
-                      {d.slots.length}h
+                      {d.slots.length} sl
                     </span>
                   </button>
                 );

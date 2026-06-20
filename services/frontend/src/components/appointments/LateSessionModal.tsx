@@ -144,8 +144,14 @@ export function LateSessionModal({ patientId, onClose }: Props) {
           </div>
 
           <div style={{ marginBottom: 14 }}>
-            <label style={labelStyle}>Justificación del registro tardío <span style={{ color: 'var(--red)' }}>*</span></label>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 5 }}>
+              <label htmlFor="late-reason" style={{ ...labelStyle, marginBottom: 0 }}>Justificación del registro tardío <span style={{ color: 'var(--red)' }}>*</span></label>
+              <span style={{ fontSize: 11, color: reason.trim().length >= 10 ? 'var(--teal-d)' : 'var(--s400)' }}>
+                {reason.trim().length}/10 mín.
+              </span>
+            </div>
             <textarea
+              id="late-reason"
               value={reason}
               onChange={e => setReason(e.target.value)}
               rows={3}
