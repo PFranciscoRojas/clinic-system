@@ -33,73 +33,93 @@ export function SPAHistoryPanel({ spa, familyMH, onSPAChange, onFamilyMHChange, 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Consumo de SPA */}
       <div>
-        <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: 'var(--s700)' }}>
-          Consumo de sustancias (SPA)
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {/* Alcohol */}
-          <div>
-            <Checkbox
-              id="spa-alcohol" checked={spa.alcohol.present}
-              onChange={v => setSPA({ alcohol: { ...spa.alcohol, present: v } })}
-              label="Alcohol" disabled={disabled}
-            />
-            {spa.alcohol.present && (
-              <input
-                value={spa.alcohol.frequency} disabled={disabled}
-                onChange={e => setSPA({ alcohol: { ...spa.alcohol, frequency: e.target.value } })}
-                placeholder="Frecuencia (ej: fines de semana)…"
-                style={inputStyle}
-              />
-            )}
-          </div>
-          {/* Tabaco */}
-          <div>
-            <Checkbox
-              id="spa-tobacco" checked={spa.tobacco.present}
-              onChange={v => setSPA({ tobacco: { ...spa.tobacco, present: v } })}
-              label="Tabaco" disabled={disabled}
-            />
-            {spa.tobacco.present && (
-              <input
-                value={spa.tobacco.frequency} disabled={disabled}
-                onChange={e => setSPA({ tobacco: { ...spa.tobacco, frequency: e.target.value } })}
-                placeholder="Frecuencia…"
-                style={inputStyle}
-              />
-            )}
-          </div>
-          {/* Otras sustancias */}
-          <div>
-            <Checkbox
-              id="spa-other" checked={spa.other.present}
-              onChange={v => setSPA({ other: { ...spa.other, present: v } })}
-              label="Otras sustancias" disabled={disabled}
-            />
-            {spa.other.present && (
-              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--s700)' }}>
+            Consumo de SPA:
+          </p>
+          {([{ v: true, label: 'Sí' }, { v: false, label: 'No' }] as const).map(opt => {
+            const active = spa.present === opt.v;
+            return (
+              <label key={opt.label} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: disabled ? 'default' : 'pointer', fontSize: 13, color: 'var(--s700)' }}>
                 <input
-                  value={spa.other.substance} disabled={disabled}
-                  onChange={e => setSPA({ other: { ...spa.other, substance: e.target.value } })}
-                  placeholder="¿Cuál?"
-                  style={{ ...inputStyle, flex: 1, marginTop: 0 }}
+                  type="radio"
+                  disabled={disabled}
+                  checked={active}
+                  onChange={() => setSPA({ present: opt.v })}
+                  style={{ accentColor: 'var(--teal)', cursor: disabled ? 'default' : 'pointer' }}
                 />
-                <input
-                  value={spa.other.frequency} disabled={disabled}
-                  onChange={e => setSPA({ other: { ...spa.other, frequency: e.target.value } })}
-                  placeholder="Frecuencia…"
-                  style={{ ...inputStyle, flex: 1, marginTop: 0 }}
-                />
-              </div>
-            )}
-          </div>
+                {opt.label}
+              </label>
+            );
+          })}
         </div>
+
+        {spa.present && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingLeft: 8 }}>
+            {/* Alcohol */}
+            <div>
+              <Checkbox
+                id="spa-alcohol" checked={spa.alcohol.present}
+                onChange={v => setSPA({ alcohol: { ...spa.alcohol, present: v } })}
+                label="Alcohol" disabled={disabled}
+              />
+              {spa.alcohol.present && (
+                <input
+                  value={spa.alcohol.frequency} disabled={disabled}
+                  onChange={e => setSPA({ alcohol: { ...spa.alcohol, frequency: e.target.value } })}
+                  placeholder="Frecuencia (ej: fines de semana)…"
+                  style={inputStyle}
+                />
+              )}
+            </div>
+            {/* Tabaco */}
+            <div>
+              <Checkbox
+                id="spa-tobacco" checked={spa.tobacco.present}
+                onChange={v => setSPA({ tobacco: { ...spa.tobacco, present: v } })}
+                label="Tabaco" disabled={disabled}
+              />
+              {spa.tobacco.present && (
+                <input
+                  value={spa.tobacco.frequency} disabled={disabled}
+                  onChange={e => setSPA({ tobacco: { ...spa.tobacco, frequency: e.target.value } })}
+                  placeholder="Frecuencia…"
+                  style={inputStyle}
+                />
+              )}
+            </div>
+            {/* Otras sustancias */}
+            <div>
+              <Checkbox
+                id="spa-other" checked={spa.other.present}
+                onChange={v => setSPA({ other: { ...spa.other, present: v } })}
+                label="Otras Sustancias" disabled={disabled}
+              />
+              {spa.other.present && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                  <input
+                    value={spa.other.substance} disabled={disabled}
+                    onChange={e => setSPA({ other: { ...spa.other, substance: e.target.value } })}
+                    placeholder="¿Cuál?"
+                    style={{ ...inputStyle, flex: 1, marginTop: 0 }}
+                  />
+                  <input
+                    value={spa.other.frequency} disabled={disabled}
+                    onChange={e => setSPA({ other: { ...spa.other, frequency: e.target.value } })}
+                    placeholder="Frecuencia…"
+                    style={{ ...inputStyle, flex: 1, marginTop: 0 }}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Antecedentes familiares SM */}
       <div>
         <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: 'var(--s700)' }}>
-          Antecedentes familiares en salud mental
+          Antecedentes Familiares en Salud Mental:
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <Checkbox id="fmh-anxiety" checked={familyMH.anxiety} onChange={v => setFMH({ anxiety: v })} label="Ansiedad" disabled={disabled} />
