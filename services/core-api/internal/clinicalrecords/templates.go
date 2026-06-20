@@ -42,15 +42,36 @@ var templateSections = map[RecordType]struct {
 }{
 	RecordTypeInitial: {
 		required: []string{"consultation_reason", "current_problem", "mental_exam", "initial_plan"},
-		optional: []string{"personal_history", "family_history", "psychosocial_context", "risk_note", "diagnostic_impression"},
+		optional: []string{
+			"personal_history", "family_history", "psychosocial_context", "risk_note",
+			"diagnostic_impression",
+			// structured additions from Formato 1
+			"complaint_verbatim", "distress_level", "spa_history",
+			"family_mental_health", "clinical_formulation",
+		},
 	},
 	RecordTypeEvolution: {
-		required: []string{"session_development", "plan_tasks"},
-		optional: []string{"interventions", "patient_response", "risk_note"},
+		// plan_tasks moved to optional — task_checklist covers that role;
+		// is_plan_session flags the Formato 2 (therapeutic plan session).
+		required: []string{"session_development"},
+		optional: []string{
+			"interventions", "patient_response", "risk_note",
+			"plan_tasks",
+			// structured additions from Formato 3
+			"distress_level", "task_adherence", "session_axis",
+			"session_evaluation", "task_checklist",
+			// Formato 2 fields (plan session)
+			"is_plan_session", "functional_analysis", "therapeutic_goals",
+			"clinical_hypothesis", "achievement_indicators", "techniques",
+		},
 	},
 	RecordTypeDischarge: {
 		required: []string{"discharge_summary", "final_state"},
-		optional: []string{"goals_achieved", "recommendations", "referral", "risk_note"},
+		optional: []string{
+			"goals_achieved", "recommendations", "referral", "risk_note",
+			// structured additions from Formato 4
+			"functionality_level", "referral_destination",
+		},
 	},
 }
 

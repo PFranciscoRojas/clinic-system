@@ -63,23 +63,52 @@ func TestValidateTemplateV2(t *testing.T) {
 			wantErr:  ErrRiskRequired,
 		},
 		{
-			name:     "missing required section",
+			// plan_tasks is now optional; session_development alone satisfies the template.
+			name:     "session_development alone is valid",
 			rt:       RecordTypeEvolution,
 			sections: map[string]any{"session_development": "x"},
+			risk:     RiskNone,
+			wantErr:  nil,
+		},
+		{
+			// empty plan_tasks is fine when task_checklist is used instead.
+			name:     "empty optional plan_tasks accepted",
+			rt:       RecordTypeEvolution,
+			sections: map[string]any{"session_development": "x", "plan_tasks": ""},
+			risk:     RiskNone,
+			wantErr:  nil,
+		},
+		{
+			// task_checklist (array) is an accepted optional key.
+			name: "task_checklist array accepted",
+			rt:   RecordTypeEvolution,
+			sections: map[string]any{
+				"session_development": "CBT session",
+				"task_checklist":      []any{"autorregistro_abc", "respiracion_diafragmatica"},
+			},
+			risk:    RiskNone,
+			wantErr: nil,
+		},
+		{
+			// required section missing.
+			name:     "missing required section",
+			rt:       RecordTypeEvolution,
+			sections: map[string]any{"plan_tasks": "x"},
 			risk:     RiskNone,
 			wantErr:  ErrMissingSection,
 		},
 		{
+			// required section empty.
 			name:     "empty required section",
 			rt:       RecordTypeEvolution,
-			sections: map[string]any{"session_development": "x", "plan_tasks": ""},
+			sections: map[string]any{"session_development": ""},
 			risk:     RiskNone,
 			wantErr:  ErrMissingSection,
 		},
 		{
 			name:     "unknown section key rejected",
 			rt:       RecordTypeEvolution,
-			sections: map[string]any{"session_development": "x", "plan_tasks": "y", "not_a_real_section": "leftover"},
+			sections: map[string]any{"session_development": "x", "not_a_real_section": "leftover"},
 			risk:     RiskNone,
 			wantErr:  ErrInvalidInput,
 		},
