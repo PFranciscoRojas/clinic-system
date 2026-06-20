@@ -28,7 +28,7 @@ function CheckboxGroup({ options, selected, onToggle, disabled }: CheckboxGroupP
       {options.map(opt => (
         <label key={opt.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: disabled ? 'default' : 'pointer' }}>
           <input
-            type="checkbox" checked={selected.includes(opt.key)} disabled={disabled}
+            type="checkbox" checked={(selected ?? []).includes(opt.key)} disabled={disabled}
             onChange={() => onToggle(opt.key)}
             style={{ marginTop: 2, accentColor: 'var(--teal)', cursor: disabled ? 'default' : 'pointer' }}
           />
@@ -87,14 +87,23 @@ function Accordion({ title, number, subtitle, hasContent, children }: AccordionP
 // Formulación Clínica Macro — Modelo de los 5 Factores (Formato 1, sección V).
 // Shown only in INITIAL records as a full-width card below the 2-column grid.
 export function ClinicalFormulation5F({ value, onChange, disabled }: Props) {
+  const ef = (): Factor5F => ({ selected: [], notes: '' });
+  const norm = {
+    predisposition: { ...ef(), ...(value.predisposition ?? {}) },
+    acquisition: { ...(({ onset: '', pathway: [] as string[], notes: '' })), ...(value.acquisition ?? {}) },
+    triggers: { ...ef(), ...(value.triggers ?? {}) },
+    maintenance: { ...ef(), ...(value.maintenance ?? {}) },
+    protection: { ...ef(), ...(value.protection ?? {}) },
+  };
+
   const setFactor = (key: keyof Omit<Formulation5FData, 'acquisition'>, patch: Partial<Factor5F>) =>
-    onChange({ ...value, [key]: { ...(value[key] as Factor5F), ...patch } });
+    onChange({ ...norm, [key]: { ...(norm[key] as Factor5F), ...patch } });
 
   const setAcq = (patch: Partial<Formulation5FData['acquisition']>) =>
-    onChange({ ...value, acquisition: { ...value.acquisition, ...patch } });
+    onChange({ ...norm, acquisition: { ...norm.acquisition, ...patch } });
 
   const hasContent = (f: Factor5F) => f.selected.length > 0 || f.notes.trim() !== '';
-  const hasAcq = value.acquisition.onset !== '' || value.acquisition.pathway.length > 0 || value.acquisition.notes.trim() !== '';
+  const hasAcq = norm.acquisition.onset !== '' || norm.acquisition.pathway.length > 0 || norm.acquisition.notes.trim() !== '';
 
   const notesStyle: React.CSSProperties = {
     marginTop: 10, width: '100%', padding: '8px 10px', borderRadius: 8,
@@ -113,14 +122,14 @@ export function ClinicalFormulation5F({ value, onChange, disabled }: Props) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
         {/* 1. Predisposición */}
-        <Accordion number="1" title="Predisposición" subtitle="Vulnerabilidades previas" hasContent={hasContent(value.predisposition)}>
+        <Accordion number="1" title="Predisposición" subtitle="Vulnerabilidades previas" hasContent={hasContent(norm.predisposition)}>
           <CheckboxGroup
-            options={PREDISPOSITION_OPTIONS} selected={value.predisposition.selected}
-            onToggle={key => setFactor('predisposition', { selected: toggle(value.predisposition.selected, key) })}
+            options={PREDISPOSITION_OPTIONS} selected={norm.predisposition.selected}
+            onToggle={key => setFactor('predisposition', { selected: toggle(norm.predisposition.selected, key) })}
             disabled={disabled}
           />
           <textarea
-            value={value.predisposition.notes} disabled={disabled}
+            value={norm.predisposition.notes} disabled={disabled}
             onChange={e => setFactor('predisposition', { notes: e.target.value })}
             placeholder="Notas específicas…"
             style={notesStyle}
@@ -135,7 +144,7 @@ export function ClinicalFormulation5F({ value, onChange, disabled }: Props) {
               <label key={opt.key} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: disabled ? 'default' : 'pointer' }}>
                 <input
                   type="radio" name="onset" value={opt.key} disabled={disabled}
-                  checked={value.acquisition.onset === opt.key}
+                  checked={norm.acquisition.onset === opt.key}
                   onChange={() => setAcq({ onset: opt.key })}
                   style={{ accentColor: 'var(--teal)' }}
                 />
@@ -145,12 +154,12 @@ export function ClinicalFormulation5F({ value, onChange, disabled }: Props) {
           </div>
           <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: 'var(--s600)' }}>Vía de aprendizaje:</p>
           <CheckboxGroup
-            options={PATHWAY_OPTIONS} selected={value.acquisition.pathway}
-            onToggle={key => setAcq({ pathway: toggle(value.acquisition.pathway, key) })}
+            options={PATHWAY_OPTIONS} selected={norm.acquisition.pathway}
+            onToggle={key => setAcq({ pathway: toggle(norm.acquisition.pathway, key) })}
             disabled={disabled}
           />
           <textarea
-            value={value.acquisition.notes} disabled={disabled}
+            value={norm.acquisition.notes} disabled={disabled}
             onChange={e => setAcq({ notes: e.target.value })}
             placeholder="Notas específicas…"
             style={notesStyle}
@@ -158,14 +167,14 @@ export function ClinicalFormulation5F({ value, onChange, disabled }: Props) {
         </Accordion>
 
         {/* 3. Desencadenantes */}
-        <Accordion number="3" title="Desencadenantes" subtitle="Estresores precipitantes recientes" hasContent={hasContent(value.triggers)}>
+        <Accordion number="3" title="Desencadenantes" subtitle="Estresores precipitantes recientes" hasContent={hasContent(norm.triggers)}>
           <CheckboxGroup
-            options={TRIGGER_OPTIONS} selected={value.triggers.selected}
-            onToggle={key => setFactor('triggers', { selected: toggle(value.triggers.selected, key) })}
+            options={TRIGGER_OPTIONS} selected={norm.triggers.selected}
+            onToggle={key => setFactor('triggers', { selected: toggle(norm.triggers.selected, key) })}
             disabled={disabled}
           />
           <textarea
-            value={value.triggers.notes} disabled={disabled}
+            value={norm.triggers.notes} disabled={disabled}
             onChange={e => setFactor('triggers', { notes: e.target.value })}
             placeholder="Notas específicas…"
             style={notesStyle}
@@ -173,14 +182,14 @@ export function ClinicalFormulation5F({ value, onChange, disabled }: Props) {
         </Accordion>
 
         {/* 4. Mantenimiento */}
-        <Accordion number="4" title="Mantenimiento" subtitle="Factores que perpetúan el problema hoy" hasContent={hasContent(value.maintenance)}>
+        <Accordion number="4" title="Mantenimiento" subtitle="Factores que perpetúan el problema hoy" hasContent={hasContent(norm.maintenance)}>
           <CheckboxGroup
-            options={MAINTENANCE_OPTIONS} selected={value.maintenance.selected}
-            onToggle={key => setFactor('maintenance', { selected: toggle(value.maintenance.selected, key) })}
+            options={MAINTENANCE_OPTIONS} selected={norm.maintenance.selected}
+            onToggle={key => setFactor('maintenance', { selected: toggle(norm.maintenance.selected, key) })}
             disabled={disabled}
           />
           <textarea
-            value={value.maintenance.notes} disabled={disabled}
+            value={norm.maintenance.notes} disabled={disabled}
             onChange={e => setFactor('maintenance', { notes: e.target.value })}
             placeholder="Notas específicas…"
             style={notesStyle}
@@ -188,14 +197,14 @@ export function ClinicalFormulation5F({ value, onChange, disabled }: Props) {
         </Accordion>
 
         {/* 5. Protección */}
-        <Accordion number="5" title="Protección" subtitle="Recursos y fortalezas a favor" hasContent={hasContent(value.protection)}>
+        <Accordion number="5" title="Protección" subtitle="Recursos y fortalezas a favor" hasContent={hasContent(norm.protection)}>
           <CheckboxGroup
-            options={PROTECTION_OPTIONS} selected={value.protection.selected}
-            onToggle={key => setFactor('protection', { selected: toggle(value.protection.selected, key) })}
+            options={PROTECTION_OPTIONS} selected={norm.protection.selected}
+            onToggle={key => setFactor('protection', { selected: toggle(norm.protection.selected, key) })}
             disabled={disabled}
           />
           <textarea
-            value={value.protection.notes} disabled={disabled}
+            value={norm.protection.notes} disabled={disabled}
             onChange={e => setFactor('protection', { notes: e.target.value })}
             placeholder="Notas específicas…"
             style={notesStyle}
