@@ -46,6 +46,7 @@ export interface ClinicalDraft {
   functionalAnalysis?: FunctionalAnalysisData;
   achievementIndicators?: string[];
   planTechniques?: string[];
+  tasksAssigned?: boolean;
   // Formato 3 (EVOLUTION)
   taskAdherence?: TaskAdherenceData;
   sessionEval?: SessionEvalData;
@@ -65,6 +66,7 @@ export function emptyDraft(): ClinicalDraft {
     functionalAnalysis: defaultFunctionalAnalysis(),
     achievementIndicators: [],
     planTechniques: [],
+    tasksAssigned: false,
     taskAdherence: defaultTaskAdherence(),
     sessionEval: defaultSessionEval(),
     taskChecklist: [],
@@ -105,8 +107,11 @@ export function draftToPayload(uiType: UIRecordType, d: ClinicalDraft): {
       sections.clinical_hypothesis = d.sections['clinical_hypothesis'].trim();
     }
     if (d.achievementIndicators?.length) sections.achievement_indicators = d.achievementIndicators;
+    if ((d.sections['achievement_indicators_other'] ?? '').trim()) sections.achievement_indicators_other = d.sections['achievement_indicators_other'].trim();
     if (d.planTechniques?.length) sections.techniques = d.planTechniques;
-    if (d.taskChecklist?.length) sections.task_checklist = d.taskChecklist;
+    if ((d.sections['techniques_other'] ?? '').trim()) sections.techniques_other = d.sections['techniques_other'].trim();
+    sections.tasks_assigned = d.tasksAssigned ?? false;
+    if (d.tasksAssigned && d.taskChecklist?.length) sections.task_checklist = d.taskChecklist;
   }
 
   if (uiType === 'EVOLUTION') {
@@ -156,6 +161,8 @@ export function recordToDraft(sections: RecordSections | undefined, risk?: RiskL
         d.achievementIndicators = v as string[];
       } else if (k === 'techniques' && Array.isArray(v)) {
         d.planTechniques = v as string[];
+      } else if (k === 'tasks_assigned' && typeof v === 'boolean') {
+        d.tasksAssigned = v;
       } else if (k === 'task_adherence' && typeof v === 'object' && !Array.isArray(v)) {
         d.taskAdherence = v as unknown as TaskAdherenceData;
       } else if (k === 'session_evaluation' && typeof v === 'object' && !Array.isArray(v)) {
@@ -188,7 +195,6 @@ export function validateDraft(uiType: UIRecordType, d: ClinicalDraft): string | 
     if (!(d.sections['session_development'] ?? '').trim()) {
       return 'El análisis funcional inicial es obligatorio';
     }
-    if (!d.risk) return 'La evaluación de riesgo es obligatoria';
     return null;
   }
   const apiType: RecordType = uiType;
@@ -214,33 +220,52 @@ interface Props {
 }
 
 function CheckChips({
-  options, selected, onToggle, disabled,
+  options, selected, onToggle, disabled, otherValue, onOtherChange, otherPlaceholder,
 }: {
   options: { key: string; label: string }[];
   selected: string[];
   onToggle: (k: string) => void;
   disabled?: boolean;
+  otherValue?: string;
+  onOtherChange?: (v: string) => void;
+  otherPlaceholder?: string;
 }) {
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-      {options.map(opt => {
-        const active = selected.includes(opt.key);
-        return (
-          <button
-            key={opt.key}
-            type="button"
-            disabled={disabled}
-            onClick={() => onToggle(opt.key)}
-            style={{
-              padding: '5px 12px', borderRadius: 16, fontSize: 12, fontWeight: 500,
-              cursor: disabled ? 'default' : 'pointer',
-              border: `1.5px solid ${active ? 'var(--teal)' : 'var(--s200)'}`,
-              background: active ? 'var(--teal)' : '#fff',
-              color: active ? '#fff' : 'var(--s600)',
-            }}
-          >{opt.label}</button>
-        );
-      })}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {options.map(opt => {
+          const active = selected.includes(opt.key);
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              disabled={disabled}
+              onClick={() => onToggle(opt.key)}
+              style={{
+                padding: '5px 12px', borderRadius: 16, fontSize: 12, fontWeight: 500,
+                cursor: disabled ? 'default' : 'pointer',
+                border: `1.5px solid ${active ? 'var(--teal)' : 'var(--s200)'}`,
+                background: active ? 'var(--teal)' : '#fff',
+                color: active ? '#fff' : 'var(--s600)',
+              }}
+            >{opt.label}</button>
+          );
+        })}
+      </div>
+      {selected.includes('other') && onOtherChange && (
+        <input
+          type="text"
+          value={otherValue ?? ''}
+          disabled={disabled}
+          onChange={e => onOtherChange(e.target.value)}
+          placeholder={otherPlaceholder ?? 'Especificar…'}
+          style={{
+            padding: '6px 10px', borderRadius: 8, fontSize: 13,
+            border: '1.5px solid var(--teal)', color: 'var(--s700)',
+            background: disabled ? '#f9fafb' : '#fff',
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -276,109 +301,133 @@ export function RecordSectionsForm({ recordType, value, onChange, disabled }: Pr
   );
 
   // ════════════════════════════════════════════════════
-  // F2 — PLAN TERAPÉUTICO
+  // F2 — PLAN TERAPÉUTICO (layout lineal, orden exacto del formato)
   // ════════════════════════════════════════════════════
   if (recordType === 'PLAN') {
+    const sectionTitle = (text: string) => (
+      <p style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 800, color: 'var(--s900)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        {text}
+      </p>
+    );
+
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: 16, alignItems: 'start' }}>
-          {/* Main card */}
-          <div className="card" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-            {/* I. Análisis funcional — intro */}
-            <div>
-              <p style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
-                I. Análisis funcional — Comportamiento objeto <span style={{ color: '#dc2626' }}>*</span>
-              </p>
-              <AutoGrowTextarea
-                value={value.sections['session_development'] ?? ''}
-                disabled={disabled}
-                minRows={3}
-                onChange={e => setSection('session_development', e.target.value)}
-                placeholder="¿Cómo estuvo el paciente durante la semana? Retomar el motivo de consulta, conducta problema…"
-              />
-            </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-            {/* Triple sistema de respuesta */}
-            <FunctionalAnalysisPanel
-              value={value.functionalAnalysis ?? defaultFunctionalAnalysis()}
-              onChange={v => onChange({ ...value, functionalAnalysis: v })}
-              disabled={disabled}
-            />
-
-            {/* II. Objetivos terapéuticos */}
-            <div>
-              <p style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
-                II. Objetivos terapéuticos consensuados
-              </p>
-              <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--s500)' }}>
-                ¿Qué quiere lograr el consultante? Máximo 4 puntos concretos.
-              </p>
-              {[1, 2, 3, 4].map(n => (
-                <div key={n} style={{ marginBottom: n < 4 ? 8 : 0 }}>
-                  <AutoGrowTextarea
-                    value={value.sections[`therapeutic_goal_${n}`] ?? ''}
-                    disabled={disabled}
-                    minRows={2}
-                    onChange={e => setSection(`therapeutic_goal_${n}`, e.target.value)}
-                    placeholder={`Objetivo ${n}…`}
-                  />
-                </div>
-              ))}
-            </div>
-
-            {/* III. Hipótesis y devolución */}
-            <div>
-              <p style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
-                III. Hipótesis clínica y devolución al paciente
-              </p>
-              <AutoGrowTextarea
-                value={value.sections['clinical_hypothesis'] ?? ''}
-                disabled={disabled}
-                minRows={4}
-                onChange={e => setSection('clinical_hypothesis', e.target.value)}
-                placeholder="Hipótesis explicativa del problema. Cómo se devolvió la información al consultante en lenguaje no técnico (psicoeducación)…"
-              />
-            </div>
-
-            {/* IV. Indicadores de logro */}
-            <div>
-              <p style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
-                IV. Indicadores de logro y bienestar
-              </p>
-              <CheckChips
-                options={ACHIEVEMENT_INDICATOR_OPTIONS}
-                selected={value.achievementIndicators ?? []}
-                onToggle={k => onChange({ ...value, achievementIndicators: toggleArr(value.achievementIndicators ?? [], k) })}
-                disabled={disabled}
-              />
-            </div>
-
-            {/* V. Enfoque y técnicas */}
-            <div>
-              <p style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
-                V. Enfoque y técnicas a utilizar
-              </p>
-              <CheckChips
-                options={TECHNIQUE_OPTIONS}
-                selected={value.planTechniques ?? []}
-                onToggle={k => onChange({ ...value, planTechniques: toggleArr(value.planTechniques ?? [], k) })}
-                disabled={disabled}
-              />
-            </div>
-          </div>
-
-          {/* Side: risk */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {riskPanel}
-          </div>
+        {/* I. ANÁLISIS FUNCIONAL */}
+        <div className="card" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {sectionTitle('I. Análisis Funcional de la Conducta Objeto')}
+          <AutoGrowTextarea
+            value={value.sections['session_development'] ?? ''}
+            disabled={disabled}
+            minRows={3}
+            onChange={e => setSection('session_development', e.target.value)}
+            placeholder="¿Cómo estuvo el paciente durante la semana? Retomar el motivo de consulta, conducta problema… *"
+          />
+          <FunctionalAnalysisPanel
+            value={value.functionalAnalysis ?? defaultFunctionalAnalysis()}
+            onChange={v => onChange({ ...value, functionalAnalysis: v })}
+            disabled={disabled}
+          />
         </div>
 
-        {/* VI. Tareas */}
-        <TaskChecklist
-          selected={value.taskChecklist ?? []}
-          onChange={v => onChange({ ...value, taskChecklist: v })}
-          disabled={disabled}
-        />
+        {/* II. OBJETIVOS TERAPÉUTICOS */}
+        <div className="card" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {sectionTitle('II. Objetivos Terapéuticos Consensuados')}
+          <p style={{ margin: '-6px 0 8px', fontSize: 12, color: 'var(--s500)' }}>
+            ¿Qué quiere lograr el consultante? Máximo 4 puntos concretos, priorizar 2.
+          </p>
+          {[1, 2, 3, 4].map(n => (
+            <div key={n} style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s600)', flexShrink: 0 }}>{n}.</span>
+              <AutoGrowTextarea
+                value={value.sections[`therapeutic_goal_${n}`] ?? ''}
+                disabled={disabled}
+                minRows={1}
+                onChange={e => setSection(`therapeutic_goal_${n}`, e.target.value)}
+                placeholder={`Objetivo ${n}…`}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* III. HIPÓTESIS Y DEVOLUCIÓN */}
+        <div className="card" style={{ padding: '20px 24px' }}>
+          {sectionTitle('III. Hipótesis y Devolución Clínica (Psicoeducación)')}
+          <p style={{ margin: '-6px 0 10px', fontSize: 12, color: 'var(--s500)' }}>
+            Breve nota de cómo se le explicó al paciente el funcionamiento de su caso.
+          </p>
+          <AutoGrowTextarea
+            value={value.sections['clinical_hypothesis'] ?? ''}
+            disabled={disabled}
+            minRows={3}
+            onChange={e => setSection('clinical_hypothesis', e.target.value)}
+            placeholder="Hipótesis explicativa del problema. Cómo se devolvió la información al consultante en lenguaje no técnico…"
+          />
+        </div>
+
+        {/* IV. INDICADORES DE LOGRO */}
+        <div className="card" style={{ padding: '20px 24px' }}>
+          {sectionTitle('IV. Indicadores de Logro y Bienestar')}
+          <p style={{ margin: '-6px 0 10px', fontSize: 12, color: 'var(--s500)' }}>
+            ¿Cómo sabremos que el proceso está funcionando?
+          </p>
+          <CheckChips
+            options={ACHIEVEMENT_INDICATOR_OPTIONS}
+            selected={value.achievementIndicators ?? []}
+            onToggle={k => onChange({ ...value, achievementIndicators: toggleArr(value.achievementIndicators ?? [], k) })}
+            disabled={disabled}
+            otherValue={value.sections['achievement_indicators_other'] ?? ''}
+            onOtherChange={v => setSection('achievement_indicators_other', v)}
+            otherPlaceholder="Especificar indicador…"
+          />
+        </div>
+
+        {/* V. ENFOQUE Y TÉCNICAS */}
+        <div className="card" style={{ padding: '20px 24px' }}>
+          {sectionTitle('V. Enfoque y Técnicas a Utilizar')}
+          <CheckChips
+            options={TECHNIQUE_OPTIONS}
+            selected={value.planTechniques ?? []}
+            onToggle={k => onChange({ ...value, planTechniques: toggleArr(value.planTechniques ?? [], k) })}
+            disabled={disabled}
+            otherValue={value.sections['techniques_other'] ?? ''}
+            onOtherChange={v => setSection('techniques_other', v)}
+            otherPlaceholder="Especificar técnica…"
+          />
+        </div>
+
+        {/* VI. TAREAS */}
+        <div className="card" style={{ padding: '20px 24px' }}>
+          {sectionTitle('VI. Tareas')}
+          <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+            {([{ v: true, label: 'Sí' }, { v: false, label: 'No' }] as const).map(opt => {
+              const active = (value.tasksAssigned ?? false) === opt.v;
+              return (
+                <button
+                  key={opt.label}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onChange({ ...value, tasksAssigned: opt.v })}
+                  style={{
+                    padding: '6px 20px', borderRadius: 16, fontSize: 13, fontWeight: 600,
+                    cursor: disabled ? 'default' : 'pointer',
+                    border: `1.5px solid ${active ? 'var(--teal)' : 'var(--s200)'}`,
+                    background: active ? 'var(--teal)' : '#fff',
+                    color: active ? '#fff' : 'var(--s600)',
+                  }}
+                >{opt.label}</button>
+              );
+            })}
+          </div>
+          {value.tasksAssigned && (
+            <TaskChecklist
+              selected={value.taskChecklist ?? []}
+              onChange={v => onChange({ ...value, taskChecklist: v })}
+              disabled={disabled}
+            />
+          )}
+        </div>
+
       </div>
     );
   }
