@@ -5,12 +5,13 @@ import {
   ArrowLeft, FileText, CheckCircle2, AlertTriangle,
   Edit3, Save, Shield, Download, Plus, X, PenLine,
 } from 'lucide-react';
-import { clinicalRecordsApi, type ClinicalRecord, type MentalExamEntry, type Addendum } from '@/api/clinicalRecords';
+import { clinicalRecordsApi, type ClinicalRecord, type Addendum } from '@/api/clinicalRecords';
 import { useAuth } from '@/context/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
 import { RecordSectionsForm, recordToDraft, draftToPayload, validateDraft, toUIRecordType, type ClinicalDraft } from '@/components/clinical/RecordSectionsForm';
-import { TEMPLATE_SECTIONS, MENTAL_EXAM_DOMAINS, RECORD_TYPE_LABELS, DISCHARGE_REASONS, riskMeta } from '@/components/clinical/constants';
+import { TEMPLATE_SECTIONS, RECORD_TYPE_LABELS, DISCHARGE_REASONS, riskMeta } from '@/components/clinical/constants';
+import { type MentalExam } from '@/components/clinical/MentalExamChecklist';
 
 export function ClinicalRecordPage() {
   const { id } = useParams<{ id: string }>();
@@ -225,11 +226,20 @@ export function ClinicalRecordPage() {
   );
 }
 
+function MentalExamRow({ label, items }: { label: string; items: string[] }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s700)', width: 160, flexShrink: 0 }}>{label}</span>
+      <span style={{ fontSize: 13, color: 'var(--s700)' }}>{items.join(' · ')}</span>
+    </div>
+  );
+}
+
 // Read-only view of a template-v2 record, in the section order of its type.
 function V2RecordView({ record }: { record: ClinicalRecord }) {
   const defs = TEMPLATE_SECTIONS[record.record_type as keyof typeof TEMPLATE_SECTIONS] ?? [];
   const sections = record.sections ?? {};
-  const mentalExam = (sections.mental_exam ?? null) as Record<string, MentalExamEntry> | null;
+  const mentalExam = (sections.mental_exam ?? null) as unknown as MentalExam | null;
   const riskNote = typeof sections.risk_note === 'string' ? sections.risk_note : '';
 
   return (
@@ -245,24 +255,39 @@ function V2RecordView({ record }: { record: ClinicalRecord }) {
         );
       })}
 
-      {mentalExam && (
+      {mentalExam && typeof mentalExam === 'object' && (
         <div className="card" style={{ padding: '16px 20px' }}>
-          <p style={{ margin: '0 0 10px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>Examen mental</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {MENTAL_EXAM_DOMAINS.map(d => {
-              const entry = mentalExam[d.key];
-              if (!entry) return null;
-              const altered = entry.status === 'ALTERED';
-              return (
-                <div key={d.key} style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '6px 10px', borderRadius: 8, background: altered ? '#fffbeb' : 'transparent' }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s700)', width: 180, flexShrink: 0 }}>{d.label}</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: altered ? '#92400e' : '#065f46' }}>
-                    {altered ? 'Alterado' : 'Normal'}
-                  </span>
-                  {altered && entry.note && <span style={{ fontSize: 13, color: 'var(--s600)' }}>— {entry.note}</span>}
-                </div>
-              );
-            })}
+          <p style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>VI. Examen mental en consulta</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {(mentalExam.porte?.length ?? 0) > 0 && (
+              <MentalExamRow label="Porte y Actitud" items={mentalExam.porte} />
+            )}
+            {mentalExam.orientacion && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s700)', width: 160, flexShrink: 0 }}>Orientación</span>
+                <span style={{ fontSize: 13, color: mentalExam.orientacion === 'desorientado' ? '#92400e' : '#065f46', fontWeight: 500 }}>
+                  {mentalExam.orientacion === 'orientado'
+                    ? 'Orientado globalmente'
+                    : `Desorientado en: ${(mentalExam.orientacion_areas ?? []).join(', ') || '—'}`}
+                </span>
+              </div>
+            )}
+            {(mentalExam.afecto?.length ?? 0) > 0 && (
+              <MentalExamRow label="Afecto" items={mentalExam.afecto} />
+            )}
+            {(mentalExam.pensamiento?.length ?? 0) > 0 && (
+              <MentalExamRow label="Pensamiento" items={mentalExam.pensamiento} />
+            )}
+            {mentalExam.percepcion && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s700)', width: 160, flexShrink: 0 }}>Percepción</span>
+                <span style={{ fontSize: 13, color: 'var(--s700)', fontWeight: 500 }}>
+                  {mentalExam.percepcion === 'sin_alteraciones'
+                    ? 'Sin alteraciones'
+                    : `Alucinaciones${mentalExam.percepcion_spec ? ': ' + mentalExam.percepcion_spec : ''}`}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       )}

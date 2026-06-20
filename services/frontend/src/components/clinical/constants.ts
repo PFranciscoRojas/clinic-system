@@ -335,14 +335,21 @@ export interface SectionDef {
 }
 
 // Section text fields per record type — mirrors backend template v2 whitelist.
-// PLAN (F2) uses a fully custom layout and is not included here.
+// INITIAL uses a fully custom layout in RecordSectionsForm; these defs are only
+// used by validateDraft (required-field check). PLAN also uses custom layout.
 export const TEMPLATE_SECTIONS: Record<Exclude<RecordType, 'INTERCONSULTATION'>, SectionDef[]> = {
   INITIAL: [
-    { key: 'consultation_reason', label: 'II. Cita textual del paciente', placeholder: '"En sus propias palabras, ¿qué lo trae a consulta?"…', required: true, rows: 3 },
-    { key: 'current_problem', label: 'Análisis clínico del motivo de consulta', placeholder: '¿Cuál es el problema principal? Frecuencia, intensidad y duración de los síntomas. ¿Qué factores lo detonan o lo mitigan? ¿Cómo afecta sus áreas de ajuste?', required: true, rows: 4 },
-    { key: 'personal_history', label: 'IV. Antecedentes médicos, psicológicos y farmacológicos', placeholder: 'Antecedentes médicos/orgánicos — Psicológicos previos — Psiquiátricos previos — Medicamentos y dosis actuales…', required: false, rows: 3 },
-    { key: 'family_history', label: 'III. Historia de vida y contexto', placeholder: 'Historia familiar y dinámica de crianza — Historia académica y laboral — Historia relacional, social y red de apoyo…', required: false, rows: 4 },
-    { key: 'diagnostic_impression', label: 'VII. Hipótesis diagnóstica provisional', placeholder: 'Basado en criterios DSM-5/CIE-11 o análisis funcional: conductas problema, antecedentes y consecuentes…', required: false, rows: 3 },
+    // II. Motivo de consulta
+    { key: 'consultation_reason', label: 'II. Reporte textual (cita del paciente)', placeholder: '"En sus propias palabras, ¿qué lo trae a consulta?"…', required: true, rows: 3 },
+    { key: 'current_problem', label: 'Análisis clínico del motivo', placeholder: '¿Cuál es el problema principal? Frecuencia, intensidad y duración de los síntomas. ¿Qué factores lo detonan o mitigan? ¿Cómo afecta sus áreas de ajuste?', required: true, rows: 4 },
+    // III. Historia de vida y contexto — 3 subsecciones
+    { key: 'family_dynamics', label: 'III.1. Historia familiar y dinámica de crianza', placeholder: '¿Cómo fue la relación con sus padres/cuidadores en la infancia? ¿Qué estilo de crianza predominó? ¿Existen eventos traumáticos, pérdidas significativas o violencia intrafamiliar?', required: false, rows: 3 },
+    { key: 'academic_history', label: 'III.2. Historia académica y laboral', placeholder: '¿Cómo ha sido su rendimiento y adaptación escolar/universitaria? ¿Cómo es su estabilidad laboral actual? ¿Tiene dificultades con figuras de autoridad o compañeros?', required: false, rows: 3 },
+    { key: 'relational_history', label: 'III.3. Historia relacional, social y red de apoyo', placeholder: '¿Cómo son sus relaciones interpersonales actuales? ¿Tiene amigos cercanos o personas en quienes confiar? ¿Cómo han sido sus relaciones de pareja pasadas y presente?', required: false, rows: 3 },
+    // IV. Antecedentes relevantes — texto (SPA y familia MH son paneles estructurados)
+    { key: 'personal_history', label: 'IV. Antecedentes médicos, psicológicos, psiquiátricos y farmacológicos', placeholder: 'Antecedentes médicos/orgánicos — Psicológicos previos — Psiquiátricos previos — Medicamentos y dosis actuales…', required: false, rows: 3 },
+    // VII. Hipótesis
+    { key: 'diagnostic_impression', label: 'VII. Impresión diagnóstica / Hipótesis clínica provisional', placeholder: 'Basado en criterios DSM-5/CIE-11 o análisis funcional: conductas problema, antecedentes y consecuentes…', required: false, rows: 3 },
   ],
   EVOLUTION: [
     { key: 'session_development', label: 'I. Estado actual', placeholder: '¿Cómo llega el paciente? Eventos significativos de la semana. ¿Refiere mejoría, estabilidad o empeoramiento de los síntomas?', required: true, rows: 5 },

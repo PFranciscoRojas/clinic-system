@@ -1,4 +1,4 @@
-import type { RecordSections, RecordType, RiskLevel, DischargeReason, MentalExamEntry } from '@/api/clinicalRecords';
+import type { RecordSections, RecordType, RiskLevel, DischargeReason } from '@/api/clinicalRecords';
 import {
   TEMPLATE_SECTIONS, DISCHARGE_REASONS,
   ACHIEVEMENT_INDICATOR_OPTIONS, TECHNIQUE_OPTIONS,
@@ -86,7 +86,7 @@ export function draftToPayload(uiType: UIRecordType, d: ClinicalDraft): {
   }
 
   if (uiType === 'INITIAL') {
-    sections.mental_exam = d.mentalExam;
+    sections.mental_exam = d.mentalExam as unknown as Record<string, unknown>;
     if (d.distressLevel !== undefined) sections.distress_level = d.distressLevel;
     if (d.spaHistory) sections.spa_history = d.spaHistory as unknown as Record<string, unknown>;
     if (d.familyMH) sections.family_mental_health = d.familyMH as unknown as Record<string, unknown>;
@@ -135,7 +135,7 @@ export function recordToDraft(sections: RecordSections | undefined, risk?: RiskL
   if (sections) {
     for (const [k, v] of Object.entries(sections)) {
       if (k === 'mental_exam' && typeof v === 'object' && !Array.isArray(v)) {
-        d.mentalExam = { ...defaultMentalExam(), ...(v as Record<string, MentalExamEntry>) };
+        d.mentalExam = { ...defaultMentalExam(), ...(v as Partial<MentalExam>) };
       } else if (k === 'risk_note' && typeof v === 'string') {
         d.riskNote = v;
       } else if (k === 'distress_level' && typeof v === 'number') {
@@ -371,7 +371,117 @@ export function RecordSectionsForm({ recordType, value, onChange, disabled }: Pr
   }
 
   // ════════════════════════════════════════════════════
-  // F1 / F3 / F4 — standard two-column layout
+  // F1 — SESIÓN INICIAL (orden exacto del formato)
+  // ════════════════════════════════════════════════════
+  if (recordType === 'INITIAL') {
+    const textField = (key: string, label: string, placeholder: string, required = false, rows = 3) => (
+      <div>
+        <p style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
+          {label} {required && <span style={{ color: '#dc2626' }}>*</span>}
+        </p>
+        <AutoGrowTextarea
+          value={value.sections[key] ?? ''}
+          disabled={disabled}
+          minRows={Math.max(rows, 3)}
+          onChange={e => setSection(key, e.target.value)}
+          placeholder={placeholder}
+        />
+      </div>
+    );
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: 16, alignItems: 'start' }}>
+
+          {/* Columna principal */}
+          <div className="card" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
+
+            {/* II. Motivo de consulta */}
+            {textField('consultation_reason',
+              'II. Reporte textual (cita del paciente)',
+              '"En sus propias palabras, ¿qué lo trae a consulta?"…',
+              true, 3)}
+
+            {textField('current_problem',
+              'Análisis clínico del motivo de consulta',
+              '¿Cuál es el problema principal? Frecuencia, intensidad y duración. ¿Qué factores lo detonan o mitigan? ¿Cómo afecta sus áreas de ajuste?',
+              true, 4)}
+
+            {/* II. Nivel de malestar subjetivo — va después del análisis */}
+            <SubjectiveDistressScale
+              value={value.distressLevel}
+              onChange={v => onChange({ ...value, distressLevel: v })}
+              disabled={disabled}
+            />
+
+            {/* III. Historia de vida y contexto */}
+            {textField('family_dynamics',
+              'III.1. Historia familiar y dinámica de crianza',
+              '¿Cómo fue la relación con sus padres/cuidadores? ¿Qué estilo de crianza predominó? ¿Existen eventos traumáticos, pérdidas o violencia intrafamiliar?',
+              false, 3)}
+
+            {textField('academic_history',
+              'III.2. Historia académica y laboral',
+              '¿Cómo ha sido su rendimiento y adaptación escolar/universitaria? ¿Cómo es su estabilidad laboral actual?',
+              false, 3)}
+
+            {textField('relational_history',
+              'III.3. Historia relacional, social y red de apoyo',
+              '¿Cómo son sus relaciones interpersonales actuales? ¿Tiene personas en quienes confiar? ¿Cómo han sido sus relaciones de pareja?',
+              false, 3)}
+
+            {/* IV. Antecedentes médicos/psico/psiq/farm — texto */}
+            {textField('personal_history',
+              'IV. Antecedentes médicos, psicológicos, psiquiátricos y farmacológicos',
+              'Antecedentes médicos/orgánicos — Psicológicos previos — Psiquiátricos previos — Medicamentos y dosis actuales…',
+              false, 3)}
+
+            {/* VII. Hipótesis diagnóstica */}
+            {textField('diagnostic_impression',
+              'VII. Impresión diagnóstica / Hipótesis clínica provisional',
+              'Basado en criterios DSM-5/CIE-11 o análisis funcional: conductas problema, antecedentes y consecuentes…',
+              false, 3)}
+          </div>
+
+          {/* Columna lateral */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+            {/* IV. SPA + antecedentes familiares SM */}
+            <div className="card" style={{ padding: '16px 20px' }}>
+              <p style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
+                IV. Consumo de SPA y antecedentes familiares en SM
+              </p>
+              <SPAHistoryPanel
+                spa={value.spaHistory ?? defaultSPAHistory()}
+                familyMH={value.familyMH ?? defaultFamilyMH()}
+                onSPAChange={v => onChange({ ...value, spaHistory: v })}
+                onFamilyMHChange={v => onChange({ ...value, familyMH: v })}
+                disabled={disabled}
+              />
+            </div>
+
+            {/* VI. Examen mental */}
+            <MentalExamChecklist
+              value={value.mentalExam}
+              onChange={m => onChange({ ...value, mentalExam: m })}
+              disabled={disabled}
+            />
+
+            {riskPanel}
+          </div>
+        </div>
+
+        {/* V. Formulación clínica 5 factores (full-width) */}
+        <ClinicalFormulation5F
+          value={value.clinicalFormulation ?? defaultFormulation5F()}
+          onChange={v => onChange({ ...value, clinicalFormulation: v })}
+          disabled={disabled}
+        />
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════
+  // F3 / F4 — standard two-column layout
   // ════════════════════════════════════════════════════
 
   const sideColumn = (
@@ -416,31 +526,6 @@ export function RecordSectionsForm({ recordType, value, onChange, disabled }: Pr
         </div>
       )}
 
-      {/* F1: VI. Examen Mental */}
-      {recordType === 'INITIAL' && (
-        <MentalExamChecklist
-          value={value.mentalExam}
-          onChange={m => onChange({ ...value, mentalExam: m })}
-          disabled={disabled}
-        />
-      )}
-
-      {/* F1: IV. Antecedentes SPA + familia */}
-      {recordType === 'INITIAL' && (
-        <div className="card" style={{ padding: '16px 20px' }}>
-          <p style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
-            IV. Antecedentes — Consumo SPA y familia
-          </p>
-          <SPAHistoryPanel
-            spa={value.spaHistory ?? defaultSPAHistory()}
-            familyMH={value.familyMH ?? defaultFamilyMH()}
-            onSPAChange={v => onChange({ ...value, spaHistory: v })}
-            onFamilyMHChange={v => onChange({ ...value, familyMH: v })}
-            disabled={disabled}
-          />
-        </div>
-      )}
-
       {/* F3: IV. Evaluación de sesión */}
       {recordType === 'EVOLUTION' && (
         <div className="card" style={{ padding: '16px 20px' }}>
@@ -461,8 +546,8 @@ export function RecordSectionsForm({ recordType, value, onChange, disabled }: Pr
 
   const mainCard = (
     <div className="card" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
-      {/* F1 + F3: I. Escala de malestar subjetivo */}
-      {(recordType === 'INITIAL' || recordType === 'EVOLUTION') && (
+      {/* F3: I. Escala de malestar subjetivo */}
+      {recordType === 'EVOLUTION' && (
         <SubjectiveDistressScale
           value={value.distressLevel}
           onChange={v => onChange({ ...value, distressLevel: v })}
@@ -479,7 +564,7 @@ export function RecordSectionsForm({ recordType, value, onChange, disabled }: Pr
         />
       )}
 
-      {/* Text sections per type */}
+      {/* Text sections (F3: session_development, interventions; F4: discharge text fields) */}
       {defs.map(def => (
         <div key={def.key}>
           <p style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
@@ -509,15 +594,6 @@ export function RecordSectionsForm({ recordType, value, onChange, disabled }: Pr
         <TaskChecklist
           selected={value.taskChecklist ?? []}
           onChange={v => onChange({ ...value, taskChecklist: v })}
-          disabled={disabled}
-        />
-      )}
-
-      {/* F1: V. Formulación clínica 5 factores */}
-      {recordType === 'INITIAL' && (
-        <ClinicalFormulation5F
-          value={value.clinicalFormulation ?? defaultFormulation5F()}
-          onChange={v => onChange({ ...value, clinicalFormulation: v })}
           disabled={disabled}
         />
       )}

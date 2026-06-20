@@ -1,15 +1,97 @@
-import { Brain } from 'lucide-react';
-import type { MentalExamEntry } from '@/api/clinicalRecords';
-import { MENTAL_EXAM_DOMAINS } from './constants';
+// VI. EXAMEN MENTAL EN CONSULTA — fiel al Formato 1 Sesión Inicial
+// Opciones exactas del documento; multi-select donde el formato tiene checkboxes.
 
-export type MentalExam = Record<string, MentalExamEntry>;
+export interface MentalExam {
+  porte: string[];             // adecuado | colaborador | ansioso | hostil | inhibido
+  orientacion: string;         // 'orientado' | 'desorientado' | ''
+  orientacion_areas: string[]; // tiempo | espacio | persona
+  afecto: string[];            // eutimico | depresivo | ansioso | irritable | aplanado
+  pensamiento: string[];       // logico_coherente | ideas_minusvalia | ideas_obsesivas | ideas_delirantes
+  percepcion: string;          // 'sin_alteraciones' | 'alucinaciones' | ''
+  percepcion_spec: string;
+}
 
-// Every domain starts as NORMAL so a fully normal exam costs zero clicks —
-// the professional only touches what is altered.
 export function defaultMentalExam(): MentalExam {
-  const exam: MentalExam = {};
-  for (const d of MENTAL_EXAM_DOMAINS) exam[d.key] = { status: 'NORMAL' };
-  return exam;
+  return {
+    porte: [],
+    orientacion: '',
+    orientacion_areas: [],
+    afecto: [],
+    pensamiento: [],
+    percepcion: '',
+    percepcion_spec: '',
+  };
+}
+
+const PORTE_OPTIONS = [
+  { key: 'adecuado', label: 'Adecuado' },
+  { key: 'colaborador', label: 'Colaborador' },
+  { key: 'ansioso', label: 'Ansioso' },
+  { key: 'hostil', label: 'Hostil' },
+  { key: 'inhibido', label: 'Inhibido' },
+];
+
+const AFECTO_OPTIONS = [
+  { key: 'eutimico', label: 'Eutímico (Estable)' },
+  { key: 'depresivo', label: 'Depresivo' },
+  { key: 'ansioso', label: 'Ansioso' },
+  { key: 'irritable', label: 'Irritable' },
+  { key: 'aplanado', label: 'Aplanado' },
+];
+
+const PENSAMIENTO_OPTIONS = [
+  { key: 'logico_coherente', label: 'Lógico / Coherente' },
+  { key: 'ideas_minusvalia', label: 'Ideas de minusvalía' },
+  { key: 'ideas_obsesivas', label: 'Ideas obsesivas' },
+  { key: 'ideas_delirantes', label: 'Ideas delirantes' },
+];
+
+function toggle(arr: string[], key: string): string[] {
+  return arr.includes(key) ? arr.filter(k => k !== key) : [...arr, key];
+}
+
+function Chips({
+  label,
+  options,
+  selected,
+  onToggle,
+  disabled,
+}: {
+  label: string;
+  options: { key: string; label: string }[];
+  selected: string[];
+  onToggle: (k: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div>
+      <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 600, color: 'var(--s700)' }}>
+        {label}
+      </p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {options.map(opt => {
+          const active = selected.includes(opt.key);
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              disabled={disabled}
+              onClick={() => onToggle(opt.key)}
+              style={{
+                padding: '5px 12px', borderRadius: 16, fontSize: 12, fontWeight: 500,
+                cursor: disabled ? 'default' : 'pointer',
+                border: `1.5px solid ${active ? 'var(--teal)' : 'var(--s200)'}`,
+                background: active ? 'var(--teal)' : '#fff',
+                color: active ? '#fff' : 'var(--s600)',
+              }}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 interface Props {
@@ -19,57 +101,139 @@ interface Props {
 }
 
 export function MentalExamChecklist({ value, onChange, disabled }: Props) {
-  const setDomain = (key: string, entry: MentalExamEntry) =>
-    onChange({ ...value, [key]: entry });
+  const set = (patch: Partial<MentalExam>) => onChange({ ...value, ...patch });
 
   return (
-    <div className="card" style={{ padding: '16px 20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-        <Brain size={15} color="var(--s500)" />
-        <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
-          Examen mental <span style={{ color: '#dc2626' }}>*</span>
-        </p>
-      </div>
-      <p style={{ margin: '0 0 12px', fontSize: 12, color: 'var(--s400)' }}>
-        Todos los dominios inician en normal — marca solo lo alterado.
+    <div className="card" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
+        VI. Examen mental en consulta
       </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {MENTAL_EXAM_DOMAINS.map(d => {
-          const entry = value[d.key] ?? { status: 'NORMAL' as const };
-          const altered = entry.status === 'ALTERED';
-          return (
-            <div key={d.key} style={{ borderRadius: 10, border: `1px solid ${altered ? '#fde68a' : 'var(--s100)'}`, background: altered ? '#fffbeb' : '#fff', padding: '8px 12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--s700)' }}>{d.label}</span>
+
+      {/* Porte y Actitud */}
+      <Chips
+        label="• Porte y Actitud"
+        options={PORTE_OPTIONS}
+        selected={value.porte}
+        onToggle={k => set({ porte: toggle(value.porte, k) })}
+        disabled={disabled}
+      />
+
+      {/* Orientación */}
+      <div>
+        <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 600, color: 'var(--s700)' }}>
+          • Orientación
+        </p>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+          {(['orientado', 'desorientado'] as const).map(opt => {
+            const active = value.orientacion === opt;
+            return (
+              <button
+                key={opt}
+                type="button"
+                disabled={disabled}
+                onClick={() => set({ orientacion: active ? '' : opt, orientacion_areas: [] })}
+                style={{
+                  padding: '5px 12px', borderRadius: 16, fontSize: 12, fontWeight: 500,
+                  cursor: disabled ? 'default' : 'pointer',
+                  border: `1.5px solid ${active ? 'var(--teal)' : 'var(--s200)'}`,
+                  background: active ? 'var(--teal)' : '#fff',
+                  color: active ? '#fff' : 'var(--s600)',
+                }}
+              >
+                {opt === 'orientado' ? 'Orientado globalmente' : 'Desorientado en:'}
+              </button>
+            );
+          })}
+        </div>
+        {value.orientacion === 'desorientado' && (
+          <div style={{ display: 'flex', gap: 6, paddingLeft: 8 }}>
+            {(['tiempo', 'espacio', 'persona'] as const).map(area => {
+              const active = value.orientacion_areas.includes(area);
+              return (
                 <button
+                  key={area}
                   type="button"
                   disabled={disabled}
-                  onClick={() => setDomain(d.key, { status: 'NORMAL' })}
-                  style={{ padding: '4px 12px', borderRadius: 14, fontSize: 12, fontWeight: 600, cursor: disabled ? 'default' : 'pointer', border: `1.5px solid ${!altered ? '#6ee7b7' : 'var(--s200)'}`, background: !altered ? '#d1fae5' : '#fff', color: !altered ? '#065f46' : 'var(--s400)' }}
+                  onClick={() => set({ orientacion_areas: toggle(value.orientacion_areas, area) })}
+                  style={{
+                    padding: '4px 10px', borderRadius: 14, fontSize: 12, fontWeight: 500,
+                    cursor: disabled ? 'default' : 'pointer',
+                    border: `1.5px solid ${active ? '#f59e0b' : 'var(--s200)'}`,
+                    background: active ? '#fef3c7' : '#fff',
+                    color: active ? '#92400e' : 'var(--s600)',
+                  }}
                 >
-                  Normal
+                  {area.charAt(0).toUpperCase() + area.slice(1)}
                 </button>
-                <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => setDomain(d.key, { status: 'ALTERED', note: entry.note ?? '' })}
-                  style={{ padding: '4px 12px', borderRadius: 14, fontSize: 12, fontWeight: 600, cursor: disabled ? 'default' : 'pointer', border: `1.5px solid ${altered ? '#fde68a' : 'var(--s200)'}`, background: altered ? '#fef3c7' : '#fff', color: altered ? '#92400e' : 'var(--s400)' }}
-                >
-                  Alterado
-                </button>
-              </div>
-              {altered && (
-                <input
-                  value={entry.note ?? ''}
-                  disabled={disabled}
-                  onChange={e => setDomain(d.key, { status: 'ALTERED', note: e.target.value })}
-                  placeholder="Describe la alteración…"
-                  style={{ width: '100%', marginTop: 8, padding: '8px 10px', borderRadius: 8, border: '1px solid #fde68a', fontSize: 13, color: 'var(--s700)', boxSizing: 'border-box', background: '#fff' }}
-                />
-              )}
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Afecto */}
+      <Chips
+        label="• Afecto"
+        options={AFECTO_OPTIONS}
+        selected={value.afecto}
+        onToggle={k => set({ afecto: toggle(value.afecto, k) })}
+        disabled={disabled}
+      />
+
+      {/* Pensamiento */}
+      <Chips
+        label="• Pensamiento"
+        options={PENSAMIENTO_OPTIONS}
+        selected={value.pensamiento}
+        onToggle={k => set({ pensamiento: toggle(value.pensamiento, k) })}
+        disabled={disabled}
+      />
+
+      {/* Percepción */}
+      <div>
+        <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 600, color: 'var(--s700)' }}>
+          • Percepción
+        </p>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+          {([
+            { key: 'sin_alteraciones', label: 'Sin alteraciones' },
+            { key: 'alucinaciones', label: 'Alucinaciones' },
+          ] as const).map(opt => {
+            const active = value.percepcion === opt.key;
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                disabled={disabled}
+                onClick={() => set({ percepcion: active ? '' : opt.key, percepcion_spec: '' })}
+                style={{
+                  padding: '5px 12px', borderRadius: 16, fontSize: 12, fontWeight: 500,
+                  cursor: disabled ? 'default' : 'pointer',
+                  border: `1.5px solid ${active ? 'var(--teal)' : 'var(--s200)'}`,
+                  background: active ? 'var(--teal)' : '#fff',
+                  color: active ? '#fff' : 'var(--s600)',
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+        {value.percepcion === 'alucinaciones' && (
+          <input
+            type="text"
+            value={value.percepcion_spec}
+            disabled={disabled}
+            onChange={e => set({ percepcion_spec: e.target.value })}
+            placeholder="Especificar tipo y modalidad…"
+            style={{
+              width: '100%', padding: '6px 10px', borderRadius: 8,
+              border: '1.5px solid var(--s200)', fontSize: 12,
+              color: 'var(--s700)', background: disabled ? '#f9fafb' : '#fff',
+              boxSizing: 'border-box',
+            }}
+          />
+        )}
       </div>
     </div>
   );

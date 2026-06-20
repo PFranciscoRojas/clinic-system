@@ -44,9 +44,11 @@ var templateSections = map[RecordType]struct {
 		required: []string{"consultation_reason", "current_problem", "mental_exam"},
 		optional: []string{
 			"personal_history", "family_history", "risk_note", "diagnostic_impression",
-			// backward-compat keys kept so old records still read-back cleanly
+			// III. Historia de vida subsections
+			"family_dynamics", "academic_history", "relational_history",
+			// backward-compat keys
 			"psychosocial_context", "initial_plan", "complaint_verbatim",
-			// structured additions from Formato 1
+			// structured fields
 			"distress_level", "spa_history", "family_mental_health", "clinical_formulation",
 		},
 	},
