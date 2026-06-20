@@ -3,12 +3,12 @@ import {
   TEMPLATE_SECTIONS, DISCHARGE_REASONS,
   ACHIEVEMENT_INDICATOR_OPTIONS, TECHNIQUE_OPTIONS,
   SESSION_AXIS_OPTIONS, INSIGHT_LEVELS, RESISTANCE_BARRIER_OPTIONS, AFFECT_EXIT_OPTIONS,
+  FUNCTIONALITY_LEVELS, REFERRAL_DESTINATIONS,
   defaultSPAHistory, defaultFamilyMH, defaultFormulation5F,
   defaultTaskAdherence, defaultSessionEval, defaultFunctionality, defaultFunctionalAnalysis,
   type SPAHistoryData, type FamilyMentalHealthData, type Formulation5FData,
   type TaskAdherenceData, type SessionEvalData, type FunctionalityData, type FunctionalAnalysisData,
 } from './constants';
-import { RiskSelector } from './RiskSelector';
 import { MentalExamChecklist, defaultMentalExam, type MentalExam } from './MentalExamChecklist';
 import { AutoGrowTextarea } from './AutoGrowTextarea';
 import { SubjectiveDistressScale } from './SubjectiveDistressScale';
@@ -16,7 +16,6 @@ import { SPAHistoryPanel } from './SPAHistoryPanel';
 import { ClinicalFormulation5F } from './ClinicalFormulation5F';
 import { TaskAdherencePanel } from './TaskAdherencePanel';
 import { TaskChecklist } from './TaskChecklist';
-import { FunctionalityPanel } from './FunctionalityPanel';
 import { FunctionalAnalysisPanel } from './FunctionalAnalysisPanel';
 
 // UI-only type — PLAN maps to EVOLUTION in the API (is_plan_session: true).
@@ -205,8 +204,7 @@ export function validateDraft(uiType: UIRecordType, d: ClinicalDraft): string | 
       return `La sección "${def.label}" es obligatoria`;
     }
   }
-  // INITIAL: risk derived from mental exam. EVOLUTION/PLAN: no risk on the form.
-  if (uiType === 'DISCHARGE' && !d.risk) return 'La evaluación de riesgo es obligatoria';
+  // Risk is not shown on any form — derived from mental exam (INITIAL) or omitted.
   if (uiType === 'DISCHARGE' && !d.dischargeReason) return 'El motivo de egreso es obligatorio';
   return null;
 }
@@ -275,30 +273,8 @@ function toggleArr(arr: string[], key: string): string[] {
 }
 
 export function RecordSectionsForm({ recordType, value, onChange, disabled }: Props) {
-  const apiType: RecordType = recordType === 'PLAN' ? 'EVOLUTION' : recordType;
-  const defs = TEMPLATE_SECTIONS[apiType as keyof typeof TEMPLATE_SECTIONS] ?? [];
   const setSection = (key: string, v: string) =>
     onChange({ ...value, sections: { ...value.sections, [key]: v } });
-
-  // ── Risk + riskNote (shared side element) ──
-  const riskPanel = (
-    <>
-      <RiskSelector value={value.risk} onChange={r => onChange({ ...value, risk: r })} disabled={disabled} />
-      {value.risk && value.risk !== 'NONE' && (
-        <div className="card" style={{ padding: '14px 20px' }}>
-          <p style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600, color: 'var(--s700)' }}>Nota sobre el riesgo</p>
-          <AutoGrowTextarea
-            value={value.riskNote}
-            disabled={disabled}
-            minRows={3}
-            onChange={e => onChange({ ...value, riskNote: e.target.value })}
-            placeholder="Evaluación, factores protectores, plan de seguridad acordado…"
-            style={{ border: '1.5px solid #fde68a', background: '#fffbeb' }}
-          />
-        </div>
-      )}
-    </>
-  );
 
   // ════════════════════════════════════════════════════
   // F2 — PLAN TERAPÉUTICO (layout lineal, orden exacto del formato)
@@ -765,80 +741,161 @@ export function RecordSectionsForm({ recordType, value, onChange, disabled }: Pr
   }
 
   // ════════════════════════════════════════════════════
-  // F4 — standard two-column layout
+  // F4 — INFORME DE CIERRE (layout lineal, orden exacto del formato)
   // ════════════════════════════════════════════════════
+  const functionality = value.functionality ?? defaultFunctionality();
+  const setFunc = (patch: Partial<FunctionalityData>) =>
+    onChange({ ...value, functionality: { ...functionality, ...patch } });
 
-  const sideColumn = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
-      {/* F4: motivo de egreso */}
-      {recordType === 'DISCHARGE' && (
-        <div className="card" style={{ padding: '16px 20px', border: value.dischargeReason ? undefined : '1.5px solid #fde68a' }}>
-          <p style={{ margin: '0 0 10px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
-            II. Motivo de egreso <span style={{ color: '#dc2626' }}>*</span>
-          </p>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {DISCHARGE_REASONS.map(r => {
-              const active = value.dischargeReason === r.value;
-              return (
-                <button
-                  key={r.value}
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => onChange({ ...value, dischargeReason: r.value })}
-                  style={{ padding: '8px 16px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: disabled ? 'default' : 'pointer', border: `1.5px solid ${active ? 'var(--teal)' : 'var(--s200)'}`, background: active ? 'var(--teal)' : '#fff', color: active ? '#fff' : 'var(--s500)' }}
-                >
-                  {r.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* F4: IV. Estado clínico */}
-      {recordType === 'DISCHARGE' && (
-        <div className="card" style={{ padding: '16px 20px' }}>
-          <p style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
-            IV. Estado clínico al cierre
-          </p>
-          <FunctionalityPanel
-            value={value.functionality ?? defaultFunctionality()}
-            onChange={v => onChange({ ...value, functionality: v })}
-            dischargeReason={value.dischargeReason}
-            disabled={disabled}
-          />
-        </div>
-      )}
-
-      {riskPanel}
-    </div>
-  );
-
-  const mainCard = (
-    <div className="card" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
-      {/* F4: text sections */}
-      {defs.map(def => (
-        <div key={def.key}>
-          <p style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
-            {def.label} {def.required && <span style={{ color: '#dc2626' }}>*</span>}
-          </p>
-          <AutoGrowTextarea
-            value={value.sections[def.key] ?? ''}
-            disabled={disabled}
-            minRows={Math.max(def.rows ?? 3, 4)}
-            onChange={e => setSection(def.key, e.target.value)}
-            placeholder={def.placeholder}
-          />
-        </div>
-      ))}
-    </div>
+  const sectionTitle = (text: string) => (
+    <p style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 800, color: 'var(--s900)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+      {text}
+    </p>
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: 16, alignItems: 'start' }}>
-        {mainCard}
-        {sideColumn}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+      {/* I. RESUMEN DEL MOTIVO DE CONSULTA INICIAL */}
+      <div className="card" style={{ padding: '20px 24px' }}>
+        {sectionTitle('I. Resumen del Motivo de Consulta Inicial')}
+        <AutoGrowTextarea
+          value={value.sections['discharge_summary'] ?? ''}
+          disabled={disabled}
+          minRows={3}
+          onChange={e => setSection('discharge_summary', e.target.value)}
+          placeholder="Síntesis del motivo de consulta con el que inició el proceso… *"
+        />
+      </div>
+
+      {/* II. MOTIVO DEL CIERRE */}
+      <div className="card" style={{ padding: '20px 24px' }}>
+        {sectionTitle('II. Motivo del Cierre de la Historia Clínica')}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {DISCHARGE_REASONS.map(r => {
+            const active = value.dischargeReason === r.value;
+            return (
+              <div key={r.value}>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: disabled ? 'default' : 'pointer' }}>
+                  <input
+                    type="radio" name="discharge-reason" disabled={disabled}
+                    checked={active}
+                    onChange={() => onChange({ ...value, dischargeReason: r.value })}
+                    style={{ marginTop: 3, accentColor: 'var(--teal)', flexShrink: 0 }}
+                  />
+                  <span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s800)' }}>{r.label}: </span>
+                    <span style={{ fontSize: 13, color: 'var(--s500)' }}>{r.description}</span>
+                  </span>
+                </label>
+
+                {active && r.value === 'DROPOUT' && (
+                  <div style={{ marginTop: 8, paddingLeft: 26, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, color: 'var(--s600)' }}>Inasistencia a</span>
+                    <input
+                      type="text"
+                      value={value.sections['dropout_sessions'] ?? ''}
+                      disabled={disabled}
+                      onChange={e => setSection('dropout_sessions', e.target.value)}
+                      placeholder="___"
+                      style={{
+                        width: 52, padding: '4px 8px', borderRadius: 8, fontSize: 13, textAlign: 'center',
+                        border: '1.5px solid var(--teal)', color: 'var(--s700)', background: disabled ? '#f9fafb' : '#fff',
+                      }}
+                    />
+                    <span style={{ fontSize: 13, color: 'var(--s600)' }}>sesiones consecutivas</span>
+                  </div>
+                )}
+
+                {active && r.value === 'REFERRAL' && (
+                  <div style={{ marginTop: 8, paddingLeft: 26 }}>
+                    <p style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600, color: 'var(--s700)' }}>Destino:</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {REFERRAL_DESTINATIONS.map(dest => {
+                        const destActive = functionality.referral_destination === dest.key;
+                        return (
+                          <button
+                            key={dest.key} type="button" disabled={disabled}
+                            onClick={() => setFunc({ referral_destination: destActive ? '' : dest.key })}
+                            style={{
+                              padding: '5px 12px', borderRadius: 16, fontSize: 12, fontWeight: 600,
+                              cursor: disabled ? 'default' : 'pointer',
+                              border: `1.5px solid ${destActive ? 'var(--teal)' : 'var(--s200)'}`,
+                              background: destActive ? 'var(--teal)' : '#fff',
+                              color: destActive ? '#fff' : 'var(--s600)',
+                            }}
+                          >{dest.label}</button>
+                        );
+                      })}
+                    </div>
+                    {functionality.referral_destination === 'other' && (
+                      <input
+                        type="text"
+                        value={functionality.referral_destination_other ?? ''}
+                        disabled={disabled}
+                        onChange={e => setFunc({ referral_destination_other: e.target.value })}
+                        placeholder="Especificar destino…"
+                        style={{
+                          marginTop: 8, width: '100%', padding: '6px 10px', borderRadius: 8, fontSize: 13,
+                          border: '1.5px solid var(--teal)', color: 'var(--s700)',
+                          background: disabled ? '#f9fafb' : '#fff', boxSizing: 'border-box',
+                        }}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* III. EVALUACIÓN DE LOGROS */}
+      <div className="card" style={{ padding: '20px 24px' }}>
+        {sectionTitle('III. Evaluación de Logros Terapéuticos y Evolución')}
+        <AutoGrowTextarea
+          value={value.sections['final_state'] ?? ''}
+          disabled={disabled}
+          minRows={3}
+          onChange={e => setSection('final_state', e.target.value)}
+          placeholder="¿Qué cambios significativos se lograron desde la sesión inicial? ¿Qué herramientas cognitivas o conductuales consolidó el paciente?… *"
+        />
+      </div>
+
+      {/* IV. ESTADO CLÍNICO AL CIERRE */}
+      <div className="card" style={{ padding: '20px 24px' }}>
+        {sectionTitle('IV. Estado Clínico Actual al Momento del Cierre')}
+        <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: 'var(--s700)' }}>
+          • Nivel de Funcionalidad General:
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {FUNCTIONALITY_LEVELS.map(level => {
+            const active = functionality.level === level.key;
+            return (
+              <label key={level.key} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: disabled ? 'default' : 'pointer' }}>
+                <input
+                  type="radio" name="functionality-level" value={level.key} disabled={disabled}
+                  checked={active}
+                  onChange={() => setFunc({ level: level.key })}
+                  style={{ accentColor: 'var(--teal)' }}
+                />
+                <span style={{ fontSize: 13, color: 'var(--s700)' }}>{level.label}</span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* V. RECOMENDACIONES Y PLAN PREVENTIVO */}
+      <div className="card" style={{ padding: '20px 24px' }}>
+        {sectionTitle('V. Recomendaciones y Plan Preventivo')}
+        <AutoGrowTextarea
+          value={value.sections['recommendations'] ?? ''}
+          disabled={disabled}
+          minRows={3}
+          onChange={e => setSection('recommendations', e.target.value)}
+          placeholder="¿Señales de alerta tempranas identificadas? ¿Estrategias autónomas ante reaparición del malestar? ¿Cuándo reconsultar?"
+        />
       </div>
 
     </div>
