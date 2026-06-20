@@ -9,7 +9,7 @@ import { clinicalRecordsApi, type ClinicalRecord, type MentalExamEntry, type Add
 import { useAuth } from '@/context/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
-import { RecordSectionsForm, recordToDraft, draftToPayload, validateDraft, type ClinicalDraft } from '@/components/clinical/RecordSectionsForm';
+import { RecordSectionsForm, recordToDraft, draftToPayload, validateDraft, toUIRecordType, type ClinicalDraft } from '@/components/clinical/RecordSectionsForm';
 import { TEMPLATE_SECTIONS, MENTAL_EXAM_DOMAINS, RECORD_TYPE_LABELS, DISCHARGE_REASONS, riskMeta } from '@/components/clinical/constants';
 
 export function ClinicalRecordPage() {
@@ -42,11 +42,12 @@ export function ClinicalRecordPage() {
   const handleSave = async () => {
     if (!id || !record || !draft) return;
     setErr('');
-    const validation = validateDraft(record.record_type, draft);
+    const uiType = toUIRecordType(record.record_type, record.sections);
+    const validation = validateDraft(uiType, draft);
     if (validation) { setErr(validation); return; }
     setSaving(true);
     try {
-      await clinicalRecordsApi.update(id, draftToPayload(record.record_type, draft));
+      await clinicalRecordsApi.update(id, draftToPayload(uiType, draft));
       queryClient.invalidateQueries({ queryKey: ['clinical-record', id] });
       setEditing(false); setDraft(null);
     } catch { setErr('Error al guardar. Intenta de nuevo.'); }
@@ -166,7 +167,7 @@ export function ClinicalRecordPage() {
       {/* Content — clinical-record sections */}
       {editing && draft ? (
         <div style={{ marginBottom: 24 }}>
-          <RecordSectionsForm recordType={record.record_type} value={draft} onChange={setDraft} />
+          <RecordSectionsForm recordType={toUIRecordType(record.record_type, record.sections)} value={draft} onChange={setDraft} />
         </div>
       ) : (
         <V2RecordView record={record} />

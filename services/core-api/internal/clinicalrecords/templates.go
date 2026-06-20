@@ -41,18 +41,16 @@ var templateSections = map[RecordType]struct {
 	optional []string
 }{
 	RecordTypeInitial: {
-		required: []string{"consultation_reason", "current_problem", "mental_exam", "initial_plan"},
+		required: []string{"consultation_reason", "current_problem", "mental_exam"},
 		optional: []string{
-			"personal_history", "family_history", "psychosocial_context", "risk_note",
-			"diagnostic_impression",
+			"personal_history", "family_history", "risk_note", "diagnostic_impression",
+			// backward-compat keys kept so old records still read-back cleanly
+			"psychosocial_context", "initial_plan", "complaint_verbatim",
 			// structured additions from Formato 1
-			"complaint_verbatim", "distress_level", "spa_history",
-			"family_mental_health", "clinical_formulation",
+			"distress_level", "spa_history", "family_mental_health", "clinical_formulation",
 		},
 	},
 	RecordTypeEvolution: {
-		// plan_tasks moved to optional — task_checklist covers that role;
-		// is_plan_session flags the Formato 2 (therapeutic plan session).
 		required: []string{"session_development"},
 		optional: []string{
 			"interventions", "patient_response", "risk_note",
@@ -60,9 +58,10 @@ var templateSections = map[RecordType]struct {
 			// structured additions from Formato 3
 			"distress_level", "task_adherence", "session_axis",
 			"session_evaluation", "task_checklist",
-			// Formato 2 fields (plan session)
-			"is_plan_session", "functional_analysis", "therapeutic_goals",
-			"clinical_hypothesis", "achievement_indicators", "techniques",
+			// Formato 2 fields (plan session — is_plan_session:true)
+			"is_plan_session", "functional_analysis",
+			"therapeutic_goal_1", "therapeutic_goal_2", "therapeutic_goal_3", "therapeutic_goal_4",
+			"therapeutic_goals", "clinical_hypothesis", "achievement_indicators", "techniques",
 		},
 	},
 	RecordTypeDischarge: {
@@ -70,7 +69,7 @@ var templateSections = map[RecordType]struct {
 		optional: []string{
 			"goals_achieved", "recommendations", "referral", "risk_note",
 			// structured additions from Formato 4
-			"functionality_level", "referral_destination",
+			"functionality", "functionality_level", "referral_destination",
 		},
 	},
 }

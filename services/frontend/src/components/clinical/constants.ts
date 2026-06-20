@@ -308,31 +308,50 @@ export interface SectionDef {
   rows?: number;
 }
 
-// Section formats per record type — must mirror the backend template v2
-// definitions in internal/clinicalrecords/templates.go.
+// ── Formato 2: Achievement indicators (F2 IV) ─────────────────────────────────
+export const ACHIEVEMENT_INDICATOR_OPTIONS: { key: string; label: string }[] = [
+  { key: 'symptom_reduction', label: 'Disminución en frecuencia/intensidad del síntoma principal (Escala subjetiva)' },
+  { key: 'activity_return', label: 'Retorno a actividades cotidianas que se encontraban evitadas o limitadas' },
+  { key: 'coping_strategies', label: 'Incorporación de estrategias de afrontamiento y autorregulación emocional autónomas' },
+  { key: 'other', label: 'Otro (especificar en observaciones)' },
+];
+
+// ── Formato 2: Techniques (F2 V) ──────────────────────────────────────────────
+export const TECHNIQUE_OPTIONS: { key: string; label: string }[] = [
+  { key: 'cognitive_restructuring', label: 'Reestructuración Cognitiva' },
+  { key: 'behavioral_activation', label: 'Activación Conductual' },
+  { key: 'emotional_regulation', label: 'Regulación Emocional / Mindfulness' },
+  { key: 'gradual_exposure', label: 'Exposición Gradual' },
+  { key: 'skills_training', label: 'Entrenamiento en Habilidades' },
+  { key: 'other', label: 'Otro' },
+];
+
+export interface SectionDef {
+  key: string;
+  label: string;
+  placeholder: string;
+  required: boolean;
+  rows?: number;
+}
+
+// Section text fields per record type — mirrors backend template v2 whitelist.
+// PLAN (F2) uses a fully custom layout and is not included here.
 export const TEMPLATE_SECTIONS: Record<Exclude<RecordType, 'INTERCONSULTATION'>, SectionDef[]> = {
   INITIAL: [
-    { key: 'consultation_reason', label: 'Cita textual del paciente', placeholder: '"En sus propias palabras, ¿qué lo trae a consulta?"…', required: true, rows: 3 },
-    { key: 'current_problem', label: 'Análisis clínico del motivo', placeholder: '¿Cuál es el problema principal? Frecuencia, intensidad, duración de los síntomas, factores que los detonan o mitigan, áreas de ajuste afectadas…', required: true, rows: 4 },
-    { key: 'personal_history', label: 'Antecedentes personales', placeholder: 'Médicos/orgánicos, psicológicos previos, psiquiátricos previos, medicación actual…', required: false, rows: 3 },
-    { key: 'family_history', label: 'Historia de vida y contexto', placeholder: 'Historia familiar y dinámica de crianza — Historia académica y laboral — Historia relacional, social y red de apoyo…', required: false, rows: 4 },
-    { key: 'psychosocial_context', label: 'Contexto psicosocial actual', placeholder: 'Situación laboral, convivencia, red de apoyo disponible…', required: false, rows: 3 },
-    { key: 'diagnostic_impression', label: 'Hipótesis diagnóstica provisional', placeholder: 'Basado en criterios DSM-5/CIE-11 o análisis funcional (conductas problema, antecedentes y consecuentes)…', required: false, rows: 3 },
-    { key: 'initial_plan', label: 'Plan inicial', placeholder: 'Enfoque terapéutico propuesto, frecuencia de sesiones, objetivos preliminares…', required: true, rows: 3 },
+    { key: 'consultation_reason', label: 'II. Cita textual del paciente', placeholder: '"En sus propias palabras, ¿qué lo trae a consulta?"…', required: true, rows: 3 },
+    { key: 'current_problem', label: 'Análisis clínico del motivo de consulta', placeholder: '¿Cuál es el problema principal? Frecuencia, intensidad y duración de los síntomas. ¿Qué factores lo detonan o lo mitigan? ¿Cómo afecta sus áreas de ajuste?', required: true, rows: 4 },
+    { key: 'personal_history', label: 'IV. Antecedentes médicos, psicológicos y farmacológicos', placeholder: 'Antecedentes médicos/orgánicos — Psicológicos previos — Psiquiátricos previos — Medicamentos y dosis actuales…', required: false, rows: 3 },
+    { key: 'family_history', label: 'III. Historia de vida y contexto', placeholder: 'Historia familiar y dinámica de crianza — Historia académica y laboral — Historia relacional, social y red de apoyo…', required: false, rows: 4 },
+    { key: 'diagnostic_impression', label: 'VII. Hipótesis diagnóstica provisional', placeholder: 'Basado en criterios DSM-5/CIE-11 o análisis funcional: conductas problema, antecedentes y consecuentes…', required: false, rows: 3 },
   ],
   EVOLUTION: [
-    // Note: plan_tasks is now optional — task_checklist covers structured tasks.
-    { key: 'session_development', label: 'Estado actual y descripción de la sesión', placeholder: '¿Cómo llega el paciente? Eventos significativos de la semana, mejoría/estabilidad/empeoramiento de síntomas. Qué se trabajó…', required: true, rows: 5 },
-    { key: 'interventions', label: 'Intervenciones aplicadas en sesión', placeholder: 'Técnicas específicas aplicadas en vivo: reestructuración cognitiva, exposición, psicoeducación, mindfulness…', required: false, rows: 3 },
-    { key: 'patient_response', label: 'Respuesta del paciente / cierre de sesión', placeholder: 'Cómo respondió, qué se lleva del espacio, avance respecto a objetivos…', required: false, rows: 3 },
-    { key: 'plan_tasks', label: 'Notas adicionales de plan y tareas', placeholder: 'Indicaciones particulares, contexto adicional a las tareas seleccionadas…', required: false, rows: 2 },
+    { key: 'session_development', label: 'I. Estado actual', placeholder: '¿Cómo llega el paciente? Eventos significativos de la semana. ¿Refiere mejoría, estabilidad o empeoramiento de los síntomas?', required: true, rows: 5 },
+    { key: 'interventions', label: 'III. Descripción clínica de la sesión', placeholder: 'Qué temas se abordaron, qué técnicas específicas se aplicaron en vivo, cómo reaccionó el consultante…', required: false, rows: 3 },
   ],
   DISCHARGE: [
-    { key: 'discharge_summary', label: 'Resumen del motivo de consulta inicial', placeholder: 'Síntesis del motivo de consulta con el que inició el proceso…', required: true, rows: 4 },
-    { key: 'final_state', label: 'Evaluación de logros y evolución', placeholder: 'Cambios significativos logrados desde la sesión inicial. Herramientas cognitivas o conductuales consolidadas para el manejo del motivo de consulta…', required: true, rows: 3 },
-    { key: 'goals_achieved', label: 'Estado clínico actual al momento del cierre', placeholder: 'Nivel de funcionalidad, autonomía alcanzada…', required: false, rows: 3 },
-    { key: 'recommendations', label: 'Recomendaciones y plan preventivo', placeholder: 'Señales de alerta tempranas identificadas, estrategias autónomas ante reaparición del malestar, escenarios para reconsultar…', required: false, rows: 3 },
-    { key: 'referral', label: 'Remisión (si aplica)', placeholder: 'A quién se remite y motivo…', required: false, rows: 2 },
+    { key: 'discharge_summary', label: 'I. Resumen del motivo de consulta inicial', placeholder: 'Síntesis del motivo de consulta con el que inició el proceso…', required: true, rows: 4 },
+    { key: 'final_state', label: 'III. Evaluación de logros', placeholder: 'Cambios significativos logrados desde la sesión inicial. Herramientas cognitivas o conductuales consolidadas para el manejo del motivo de consulta…', required: true, rows: 3 },
+    { key: 'recommendations', label: 'V. Recomendaciones y plan preventivo', placeholder: 'Señales de alerta tempranas identificadas, estrategias autónomas ante reaparición del malestar, escenarios para reconsultar…', required: false, rows: 3 },
   ],
 };
 
@@ -367,6 +386,7 @@ export const MENTAL_EXAM_DOMAINS: { key: string; label: string }[] = [
 
 export const RECORD_TYPE_LABELS: Record<string, string> = {
   INITIAL: 'Apertura',
+  PLAN: 'Plan Terapéutico',
   EVOLUTION: 'Evolución',
   DISCHARGE: 'Cierre',
   INTERCONSULTATION: 'Interconsulta',

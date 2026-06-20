@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { AlertTriangle, Save, Copy } from 'lucide-react';
 import { clinicalRecordsApi, type RecordType } from '@/api/clinicalRecords';
 import { Spinner } from '@/components/ui/Spinner';
-import { RecordSectionsForm, emptyDraft, draftToPayload, recordToDraft, validateDraft, type ClinicalDraft } from './RecordSectionsForm';
+import { RecordSectionsForm, emptyDraft, draftToPayload, recordToDraft, validateDraft, type ClinicalDraft, type UIRecordType } from './RecordSectionsForm';
 import { RECORD_TYPE_LABELS } from './constants';
 
 // ─── Clinical record form (template v2) ──────────────────────────────────────
@@ -21,17 +21,19 @@ interface RecordFormProps {
   onSaved: () => void;
 }
 
-const V2_TYPES = ['INITIAL', 'EVOLUTION', 'DISCHARGE'] as const;
+const UI_TYPES: UIRecordType[] = ['INITIAL', 'PLAN', 'EVOLUTION', 'DISCHARGE'];
 
 export function RecordForm({ patientId, appointmentId, defaultType, sessionDate: sessionDateProp, lateEntryReason, treatmentConsentSigned, onSaved }: RecordFormProps) {
   const storageKey = appointmentId ? `clinical-draft-${appointmentId}` : `clinical-draft-patient-${patientId}`;
-  const [recordType, setRecordType] = useState<RecordType>(defaultType ?? 'EVOLUTION');
+  const [uiType, setUIType] = useState<UIRecordType>(defaultType === 'INITIAL' ? 'INITIAL' : defaultType === 'DISCHARGE' ? 'DISCHARGE' : 'EVOLUTION');
   const [draft, setDraft] = useState<ClinicalDraft>(emptyDraft);
   const [sessionDate] = useState(() => sessionDateProp ?? new Date().toISOString().slice(0, 10));
   const [saving, setSaving] = useState(false);
   const [copying, setCopying] = useState(false);
   const [restored, setRestored] = useState(false);
   const [err, setErr] = useState('');
+
+  const apiType: RecordType = uiType === 'PLAN' ? 'EVOLUTION' : uiType;
 
   // Autosave: the in-progress note survives a closed tab or session lock.
   // Nothing reaches the server until the professional saves explicitly.
@@ -40,7 +42,7 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         const saved = JSON.parse(raw);
-        if (saved.recordType) setRecordType(saved.recordType);
+        if (saved.uiType) setUIType(saved.uiType);
         if (saved.draft) { setDraft({ ...emptyDraft(), ...saved.draft }); setRestored(true); }
       }
     } catch { /* corrupt draft — start clean */ }
@@ -49,10 +51,10 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
 
   useEffect(() => {
     const t = setTimeout(() => {
-      try { localStorage.setItem(storageKey, JSON.stringify({ recordType, draft })); } catch { /* storage full */ }
+      try { localStorage.setItem(storageKey, JSON.stringify({ uiType, draft })); } catch { /* storage full */ }
     }, 600);
     return () => clearTimeout(t);
-  }, [storageKey, recordType, draft]);
+  }, [storageKey, uiType, draft]);
 
   // Copy-forward: start from the latest approved-or-draft evolution note.
   // Risk is intentionally NOT copied — it must be re-assessed every session.
@@ -71,15 +73,15 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   };
 
   const handleSave = async () => {
-    const validation = validateDraft(recordType, draft);
+    const validation = validateDraft(uiType, draft);
     if (validation) { setErr(validation); return; }
     setSaving(true); setErr('');
     try {
-      const payload = draftToPayload(recordType, draft);
+      const payload = draftToPayload(uiType, draft);
       if (lateEntryReason?.trim()) payload.sections.late_entry_reason = lateEntryReason.trim();
       await clinicalRecordsApi.create(patientId, {
         ...(appointmentId ? { appointment_id: appointmentId } : {}),
-        record_type: recordType,
+        record_type: apiType,
         session_date: sessionDate,
         ...payload,
       });
@@ -88,7 +90,7 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : '';
       if (msg.includes('open clinical process')) {
-        setErr(recordType === 'INITIAL'
+        setErr(apiType === 'INITIAL'
           ? 'Este paciente ya tiene un proceso abierto — registra una Evolución o un Cierre.'
           : 'Este paciente no tiene proceso abierto — registra primero la Apertura.');
       } else {
@@ -103,20 +105,20 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
     <div>
       {/* Record type selector */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        {V2_TYPES.map(val => (
+        {UI_TYPES.map(val => (
           <button
             key={val}
-            onClick={() => setRecordType(val)}
+            onClick={() => setUIType(val)}
             style={{
               padding: '6px 14px', borderRadius: 20, border: '1.5px solid',
-              borderColor: recordType === val ? 'var(--teal)' : 'var(--s200)',
-              background: recordType === val ? 'var(--teal)' : '#fff',
-              color: recordType === val ? '#fff' : 'var(--s600)',
+              borderColor: uiType === val ? 'var(--teal)' : 'var(--s200)',
+              background: uiType === val ? 'var(--teal)' : '#fff',
+              color: uiType === val ? '#fff' : 'var(--s600)',
               fontSize: 12, fontWeight: 600, cursor: 'pointer',
             }}
           >{RECORD_TYPE_LABELS[val]}</button>
         ))}
-        {recordType === 'EVOLUTION' && (
+        {uiType === 'EVOLUTION' && (
           <button
             onClick={handleCopyForward}
             disabled={copying}
@@ -133,13 +135,13 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
         </p>
       )}
 
-      {recordType === 'INITIAL' && !treatmentConsentSigned && (
+      {uiType === 'INITIAL' && !treatmentConsentSigned && (
         <p style={{ margin: '0 0 12px', fontSize: 12.5, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px' }}>
           Recuerda registrar el <strong>consentimiento informado</strong> del paciente (pestaña Consentimientos del perfil) — es obligatorio antes de iniciar tratamiento.
         </p>
       )}
       <div style={{ marginBottom: 16 }}>
-        <RecordSectionsForm recordType={recordType} value={draft} onChange={setDraft} />
+        <RecordSectionsForm recordType={uiType} value={draft} onChange={setDraft} />
       </div>
 
       {err && (
