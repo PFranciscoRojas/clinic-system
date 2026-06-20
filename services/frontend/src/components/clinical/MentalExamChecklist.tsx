@@ -9,6 +9,8 @@ export interface MentalExam {
   pensamiento: string[];       // logico_coherente | ideas_minusvalia | ideas_obsesivas | ideas_delirantes
   percepcion: string;          // 'sin_alteraciones' | 'alucinaciones' | ''
   percepcion_spec: string;
+  suicidal_ideation: string;   // 'ausente' | 'pasiva' | 'activa_con_plan' | ''
+  prior_attempt: boolean | null;
 }
 
 export function defaultMentalExam(): MentalExam {
@@ -20,6 +22,8 @@ export function defaultMentalExam(): MentalExam {
     pensamiento: [],
     percepcion: '',
     percepcion_spec: '',
+    suicidal_ideation: '',
+    prior_attempt: null,
   };
 }
 
@@ -100,13 +104,19 @@ interface Props {
   disabled?: boolean;
 }
 
+const SUICIDAL_IDEATION_OPTIONS = [
+  { key: 'ausente', label: 'Ausente' },
+  { key: 'pasiva', label: 'Pasiva (deseos de morir)' },
+  { key: 'activa_con_plan', label: 'Activa con plan estructurado' },
+];
+
 export function MentalExamChecklist({ value, onChange, disabled }: Props) {
   const set = (patch: Partial<MentalExam>) => onChange({ ...value, ...patch });
 
   return (
     <div className="card" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
       <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
-        VI. Examen mental en consulta
+        VI. EXAMEN MENTAL EN CONSULTA
       </p>
 
       {/* Porte y Actitud */}
@@ -234,6 +244,62 @@ export function MentalExamChecklist({ value, onChange, disabled }: Props) {
             }}
           />
         )}
+      </div>
+
+      {/* Indicadores de Riesgo */}
+      <div style={{ borderTop: '1px solid var(--s100)', paddingTop: 10 }}>
+        <p style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600, color: 'var(--s700)' }}>
+          • Indicadores de Riesgo
+        </p>
+
+        <p style={{ margin: '0 0 6px', fontSize: 12, color: 'var(--s500)' }}>Ideación Suicida:</p>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          {SUICIDAL_IDEATION_OPTIONS.map(opt => {
+            const active = value.suicidal_ideation === opt.key;
+            const isRisk = opt.key !== 'ausente';
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                disabled={disabled}
+                onClick={() => set({ suicidal_ideation: active ? '' : opt.key })}
+                style={{
+                  padding: '5px 12px', borderRadius: 16, fontSize: 12, fontWeight: 500,
+                  cursor: disabled ? 'default' : 'pointer',
+                  border: `1.5px solid ${active ? (isRisk ? '#dc2626' : 'var(--teal)') : 'var(--s200)'}`,
+                  background: active ? (isRisk ? '#fee2e2' : 'var(--teal)') : '#fff',
+                  color: active ? (isRisk ? '#991b1b' : '#fff') : 'var(--s600)',
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <p style={{ margin: '0 0 6px', fontSize: 12, color: 'var(--s500)' }}>Antecedente de intento previo:</p>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {([{ v: true, label: 'SÍ' }, { v: false, label: 'NO' }] as const).map(opt => {
+            const active = value.prior_attempt === opt.v;
+            return (
+              <button
+                key={opt.label}
+                type="button"
+                disabled={disabled}
+                onClick={() => set({ prior_attempt: active ? null : opt.v })}
+                style={{
+                  padding: '5px 12px', borderRadius: 16, fontSize: 12, fontWeight: 500,
+                  cursor: disabled ? 'default' : 'pointer',
+                  border: `1.5px solid ${active ? (opt.v ? '#dc2626' : 'var(--teal)') : 'var(--s200)'}`,
+                  background: active ? (opt.v ? '#fee2e2' : 'var(--teal)') : '#fff',
+                  color: active ? (opt.v ? '#991b1b' : '#fff') : 'var(--s600)',
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

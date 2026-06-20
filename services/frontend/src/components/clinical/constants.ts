@@ -12,6 +12,7 @@ export interface SPASubstance {
   frequency: string;
 }
 export interface SPAHistoryData {
+  present: boolean;
   alcohol: SPASubstance;
   tobacco: SPASubstance;
   other: { present: boolean; substance: string; frequency: string };
@@ -24,6 +25,7 @@ export interface FamilyMentalHealthData {
 }
 export function defaultSPAHistory(): SPAHistoryData {
   return {
+    present: false,
     alcohol: { present: false, frequency: '' },
     tobacco: { present: false, frequency: '' },
     other: { present: false, substance: '', frequency: '' },
@@ -340,16 +342,19 @@ export interface SectionDef {
 export const TEMPLATE_SECTIONS: Record<Exclude<RecordType, 'INTERCONSULTATION'>, SectionDef[]> = {
   INITIAL: [
     // II. Motivo de consulta
-    { key: 'consultation_reason', label: 'II. Reporte textual (cita del paciente)', placeholder: '"En sus propias palabras, ¿qué lo trae a consulta?"…', required: true, rows: 3 },
-    { key: 'current_problem', label: 'Análisis clínico del motivo', placeholder: '¿Cuál es el problema principal? Frecuencia, intensidad y duración de los síntomas. ¿Qué factores lo detonan o mitigan? ¿Cómo afecta sus áreas de ajuste?', required: true, rows: 4 },
+    { key: 'consultation_reason', label: 'Reporte Textual', placeholder: '"En sus propias palabras, ¿qué lo trae a consulta?"…', required: true, rows: 3 },
+    { key: 'current_problem', label: 'Análisis Clínico del Motivo de Consulta', placeholder: '¿Cuál es el problema principal actual? ¿Frecuencia, intensidad y duración de los síntomas? ¿Qué factores lo detonan o lo mitigan? ¿Cómo afecta sus áreas de ajuste?', required: true, rows: 4 },
     // III. Historia de vida y contexto — 3 subsecciones
-    { key: 'family_dynamics', label: 'III.1. Historia familiar y dinámica de crianza', placeholder: '¿Cómo fue la relación con sus padres/cuidadores en la infancia? ¿Qué estilo de crianza predominó? ¿Existen eventos traumáticos, pérdidas significativas o violencia intrafamiliar?', required: false, rows: 3 },
-    { key: 'academic_history', label: 'III.2. Historia académica y laboral', placeholder: '¿Cómo ha sido su rendimiento y adaptación escolar/universitaria? ¿Cómo es su estabilidad laboral actual? ¿Tiene dificultades con figuras de autoridad o compañeros?', required: false, rows: 3 },
-    { key: 'relational_history', label: 'III.3. Historia relacional, social y red de apoyo', placeholder: '¿Cómo son sus relaciones interpersonales actuales? ¿Tiene amigos cercanos o personas en quienes confiar? ¿Cómo han sido sus relaciones de pareja pasadas y presente?', required: false, rows: 3 },
-    // IV. Antecedentes relevantes — texto (SPA y familia MH son paneles estructurados)
-    { key: 'personal_history', label: 'IV. Antecedentes médicos, psicológicos, psiquiátricos y farmacológicos', placeholder: 'Antecedentes médicos/orgánicos — Psicológicos previos — Psiquiátricos previos — Medicamentos y dosis actuales…', required: false, rows: 3 },
+    { key: 'family_dynamics', label: 'III.1. Historia Familiar y Dinámica de Crianza', placeholder: '¿Cómo fue la relación con sus padres/cuidadores en la infancia? ¿Qué estilo de crianza predominó? ¿Existen eventos traumáticos, pérdidas significativas o violencia intrafamiliar?', required: false, rows: 3 },
+    { key: 'academic_history', label: 'III.2. Historia Académica y Laboral', placeholder: '¿Cómo ha sido su rendimiento y adaptación escolar/universitaria? ¿Cómo es su estabilidad laboral actual? ¿Tiene dificultades con figuras de autoridad o compañeros?', required: false, rows: 3 },
+    { key: 'relational_history', label: 'III.3. Historia Relacional, Social y Red de Apoyo', placeholder: '¿Cómo son sus relaciones interpersonales actuales? ¿Tiene amigos cercanos o personas en quienes confiar? ¿Cómo han sido sus relaciones de pareja pasadas y presente?', required: false, rows: 3 },
+    // IV. Antecedentes relevantes — 4 campos separados
+    { key: 'medical_history', label: 'Médicos / Orgánicos', placeholder: 'Antecedentes médicos u orgánicos relevantes…', required: false, rows: 2 },
+    { key: 'psychological_history', label: 'Psicológicos previos', placeholder: 'Atenciones psicológicas anteriores…', required: false, rows: 2 },
+    { key: 'psychiatric_history', label: 'Psiquiátricos previos', placeholder: 'Atenciones psiquiátricas anteriores…', required: false, rows: 2 },
+    { key: 'pharmacological_history', label: 'Farmacológicos (Medicamentos y dosis actuales)', placeholder: 'Medicamentos actuales y dosis…', required: false, rows: 2 },
     // VII. Hipótesis
-    { key: 'diagnostic_impression', label: 'VII. Impresión diagnóstica / Hipótesis clínica provisional', placeholder: 'Basado en criterios DSM-5/CIE-11 o análisis funcional: conductas problema, antecedentes y consecuentes…', required: false, rows: 3 },
+    { key: 'diagnostic_impression', label: 'VII. IMPRESIÓN DIAGNÓSTICA O HIPÓTESIS CLÍNICA PROVISIONAL', placeholder: 'Basado en criterios DSM-5/CIE-11 o análisis funcional: conductas problema, antecedentes y consecuentes…', required: false, rows: 3 },
   ],
   EVOLUTION: [
     { key: 'session_development', label: 'I. Estado actual', placeholder: '¿Cómo llega el paciente? Eventos significativos de la semana. ¿Refiere mejoría, estabilidad o empeoramiento de los síntomas?', required: true, rows: 5 },
