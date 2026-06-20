@@ -209,6 +209,7 @@ export const RESISTANCE_BARRIER_OPTIONS: { key: string; label: string }[] = [
   { key: 'contradictions', label: 'Contradicciones en el relato' },
   { key: 'defensiveness', label: 'Conductas defensivas u hostilidad' },
   { key: 'silence_block', label: 'Silencios prolongados / Bloqueo' },
+  { key: 'other', label: 'Otra' },
 ];
 
 export const AFFECT_EXIT_OPTIONS: { key: string; label: string; color: string }[] = [
@@ -220,12 +221,13 @@ export const AFFECT_EXIT_OPTIONS: { key: string; label: string; color: string }[
 export interface SessionEvalData {
   axis: string[];
   patient_feedback: string;
-  insight: string;   // 'high' | 'medium' | 'low' | ''
+  insight: string;        // 'high' | 'medium' | 'low' | ''
   barriers: string[];
-  affect_exit: string; // 'regulated' | 'emotionally_moved' | 'anxious' | ''
+  barriers_other: string;
+  affect_exit: string;    // 'regulated' | 'emotionally_moved' | 'anxious' | ''
 }
 export function defaultSessionEval(): SessionEvalData {
-  return { axis: [], patient_feedback: '', insight: '', barriers: [], affect_exit: '' };
+  return { axis: [], patient_feedback: '', insight: '', barriers: [], barriers_other: '', affect_exit: '' };
 }
 
 // ── Formato 3: Task adherence ─────────────────────────────────────────────────
