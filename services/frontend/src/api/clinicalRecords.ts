@@ -6,7 +6,9 @@ export type RiskLevel = 'NONE' | 'IDEATION' | 'PLAN' | 'ATTEMPT';
 export type DischargeReason = 'THERAPEUTIC_DISCHARGE' | 'DROPOUT' | 'REFERRAL' | 'MUTUAL_AGREEMENT';
 
 export type MentalExamEntry = { status: 'NORMAL' | 'ALTERED'; note?: string };
-export type RecordSections = Record<string, string | Record<string, MentalExamEntry>>;
+// Sections can hold strings, numbers (distress_level), string arrays (task_checklist,
+// session_axis), or structured objects (spa_history, clinical_formulation, etc.).
+export type RecordSections = Record<string, string | number | boolean | string[] | Record<string, unknown>>;
 export type ConsentType = 'TREATMENT' | 'RECORDING' | 'DATA_PROCESSING' | 'INFORMATION_SHARING';
 
 export interface ClinicalRecord {
