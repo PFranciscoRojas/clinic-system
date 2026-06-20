@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-06-19)
+## Estado actual (2026-06-20)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -18,14 +18,14 @@
 | **Ola 3 — IA** | 🟡 en progreso | Recap pre-sesión + plan terapéutico sugerido (Whisper + Sonnet) |
 | BC-6 Facturación | ✅ producción | Tarjeta/PSE/Efecty/Nequi, semana/mes/3meses/año, balance-por-paciente |
 
-### Últimos PRs (semana 2026-06-19)
+### Últimos PRs (semana 2026-06-20)
 
-- `#96` fix(agenda,appointments): ocultar citas CANCELLED del calendario + navegar a home al reagendar desde cita
-- `#95` feat(agenda,appointments): SlotPicker para reagendar — endpoint privado `/me/availability` + componente visual de franjas disponibles
-- `#94` fix(patients): fecha nacimiento + teléfono obligatorios en formulario nuevo paciente
-- `#93` enhancement(patients,agenda,appointments): Lote A-C — contacto emergencia, bloques cita, acciones inline agenda
-- `#92` enhancement(patients): new-patient form UX — scroll to error, select tipo doc, labels apellidos
-- `#91` hotfix(db): tenant_isolation policy en consents/ai_drafts/patient_assessments
+- `#106` fix(clinical): guard ALL array `.includes()` against stale localStorage — FunctionalAnalysisPanel, MentalExamChecklist, ClinicalFormulation5F, RecordSectionsForm
+- `#105` fix(clinical): guard `sessionEval.axis/.barriers` undefined crash on stale localStorage
+- `#104` feat(clinical): rewrite F4 Informe de Cierre to match exact paper format (linear I→II→III→IV→V)
+- `#103` feat(clinical): rewrite F3 Evolución to match exact paper format
+- `#102` feat(clinical): rewrite F2 Plan Terapéutico to match exact paper format
+- `#101` feat(clinical): rewrite F1 Sesión Inicial to match exact paper format
 
 ---
 
@@ -91,7 +91,7 @@
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
 | Migrations | `services/core-api/migrations/` | Última: `000028_patient_emergency_contact` |
-| Claude skills | `~/.claude/commands/` | Sincronizadas en sesión 2026-06-19 |
+| Claude skills | `~/.claude/commands/` | Sincronizadas en sesión 2026-06-20 |
 
 ---
 
