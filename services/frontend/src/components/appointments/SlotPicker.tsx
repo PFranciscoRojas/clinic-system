@@ -83,7 +83,7 @@ export function SlotPicker({ modality, onConfirm, onClose, confirming, error }: 
                     onClick={() => handleSelectDate(d.date)}
                     style={{
                       flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center',
-                      padding: '7px 12px', borderRadius: 9,
+                      padding: '7px 12px', minHeight: 44, borderRadius: 9,
                       border: `1.5px solid ${isSel ? '#6366f1' : '#c7d2fe'}`,
                       background: isSel ? '#6366f1' : '#fff',
                       color: isSel ? '#fff' : '#4338ca',

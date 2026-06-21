@@ -312,6 +312,7 @@ export function AppointmentPage() {
   const [statusLoading, setStatusLoading] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [statusErr, setStatusErr] = useState('');
+  const [lastStatus, setLastStatus] = useState<AppointmentStatus | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const [reagendarOpen,  setReagendarOpen]  = useState(false);
@@ -474,6 +475,7 @@ export function AppointmentPage() {
 
   const handleStatusChange = async (status: AppointmentStatus) => {
     if (!id) return;
+    setLastStatus(status);
     setStatusLoading(true); setStatusErr('');
     try {
       await appointmentsApi.updateStatus(id, status);
@@ -686,7 +688,7 @@ export function AppointmentPage() {
                     key={c.id}
                     onClick={() => setViewConsentId(c.id)}
                     title={`Firmado el ${c.signed_at} — ver documento`}
-                    style={{ border: 'none', background: 'none', color: '#065f46', cursor: 'pointer', fontSize: 12, fontWeight: 700, textDecoration: 'underline', padding: 0 }}
+                    style={{ border: 'none', background: 'none', color: '#065f46', cursor: 'pointer', fontSize: 12, fontWeight: 700, textDecoration: 'underline', padding: '6px 4px', minHeight: 36 }}
                   >
                     {CONSENT_SHORT[c.consent_type] ?? c.consent_type}
                   </button>
@@ -706,7 +708,16 @@ export function AppointmentPage() {
         {statusErr && (
           <div role="alert" style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#fee2e2', borderRadius: 8 }}>
             <AlertTriangle size={14} color="#dc2626" />
-            <span style={{ fontSize: 13, color: '#991b1b' }}>{statusErr}</span>
+            <span style={{ fontSize: 13, color: '#991b1b', flex: 1 }}>{statusErr}</span>
+            {lastStatus && (
+              <button
+                onClick={() => handleStatusChange(lastStatus)}
+                disabled={statusLoading}
+                style={{ fontSize: 12, fontWeight: 600, padding: '4px 10px', minHeight: 32, borderRadius: 6, border: '1px solid #fca5a5', background: '#fff', color: '#991b1b', cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
+                Reintentar
+              </button>
+            )}
           </div>
         )}
 
@@ -952,7 +963,7 @@ export function AppointmentPage() {
                   </span>
                   <button
                     onClick={() => navigate(`/clinical-records/${rec.id}`)}
-                    style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s700)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    style={{ fontSize: 11, fontWeight: 600, padding: '6px 12px', minHeight: 36, borderRadius: 6, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s700)', cursor: 'pointer', whiteSpace: 'nowrap' }}
                   >
                     Ver
                   </button>
