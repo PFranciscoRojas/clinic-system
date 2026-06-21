@@ -13,6 +13,7 @@ import { EditPatientModal } from '@/components/patients/EditPatientModal';
 import { PatientSearchBox } from '@/components/patients/PatientSearchBox';
 import { calcAge } from '@/lib/age';
 import { useIsCompact } from '@/lib/useMediaQuery';
+import { CLR_DANGER, CLR_WARN, CLR_SUCCESS, CLR_INFO, CLR_PROC, CLR_NEUTRAL } from '@/lib/tokens';
 import { clinicalRecordsApi, consentsApi, type RecordMeta } from '@/api/clinicalRecords';
 import { ConsentViewModal } from '@/components/consents/ConsentViewModal';
 import { UnifiedConsentSignModal } from '@/components/consents/UnifiedConsentSignModal';
@@ -28,11 +29,11 @@ import { SlotPicker } from '@/components/appointments/SlotPicker';
 // ─── Status config ────────────────────────────────────────────────────────────
 
 const STATUS_CFG: Record<AppointmentStatus, { label: string; color: string; bg: string }> = {
-  SCHEDULED:   { label: 'Confirmada',  color: '#1e40af', bg: '#dbeafe' },
-  IN_PROGRESS: { label: 'En curso',    color: '#065f46', bg: '#d1fae5' },
-  COMPLETED:   { label: 'Completada',  color: '#374151', bg: '#f1f5f9' },
-  CANCELLED:   { label: 'Cancelada',   color: '#991b1b', bg: '#fee2e2' },
-  NO_SHOW:     { label: 'No asistió',  color: '#92400e', bg: '#fef3c7' },
+  SCHEDULED:   { label: 'Confirmada',  color: CLR_INFO.text,    bg: CLR_INFO.bg },
+  IN_PROGRESS: { label: 'En curso',    color: CLR_SUCCESS.text, bg: CLR_SUCCESS.bg },
+  COMPLETED:   { label: 'Completada',  color: CLR_NEUTRAL.text, bg: '#f1f5f9' },
+  CANCELLED:   { label: 'Cancelada',   color: CLR_DANGER.text,  bg: CLR_DANGER.bg },
+  NO_SHOW:     { label: 'No asistió',  color: CLR_WARN.text,    bg: CLR_WARN.bg },
 };
 
 const MODALITY_LABEL: Record<string, string> = {
@@ -114,11 +115,11 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, sessionDa
 
   if (draftId && draft) {
     const statusCfg: Record<string, { label: string; color: string; bg: string; pulse?: boolean }> = {
-      PENDING:     { label: 'En cola',    color: '#6b7280', bg: '#f3f4f6' },
-      PROCESSING:  { label: 'Procesando', color: '#0369a1', bg: '#e0f2fe', pulse: true },
-      DRAFT_READY: { label: 'Listo para revisar', color: '#065f46', bg: '#d1fae5' },
-      APPROVED:    { label: 'Aprobado',   color: '#fff',    bg: '#059669' },
-      ERROR:       { label: 'Error',      color: '#991b1b', bg: '#fee2e2' },
+      PENDING:     { label: 'En cola',             color: CLR_NEUTRAL.icon, bg: CLR_NEUTRAL.bg },
+      PROCESSING:  { label: 'Procesando',           color: CLR_PROC.text,    bg: CLR_PROC.bg, pulse: true },
+      DRAFT_READY: { label: 'Listo para revisar',  color: CLR_SUCCESS.text, bg: CLR_SUCCESS.bg },
+      APPROVED:    { label: 'Aprobado',             color: '#fff',           bg: CLR_SUCCESS.icon },
+      ERROR:       { label: 'Error',                color: CLR_DANGER.text,  bg: CLR_DANGER.bg },
     };
     const cfg = statusCfg[draft.status] ?? statusCfg.PENDING;
     const isProcessing = draft.status === 'PENDING' || draft.status === 'PROCESSING';
@@ -625,7 +626,7 @@ export function AppointmentPage() {
 
         {/* ── Bloque 1: Datos del sujeto ──────────────────────────────────────── */}
         <div style={{ paddingBottom: 16, borderBottom: '1px solid var(--s100)', marginBottom: 16 }}>
-          <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Datos del sujeto</p>
+          <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Datos del sujeto</p>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'linear-gradient(135deg, var(--teal), var(--teal-d))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
               {patientInitials}
@@ -656,7 +657,7 @@ export function AppointmentPage() {
 
         {/* ── Bloque 2: Datos de la cita ──────────────────────────────────────── */}
         <div style={{ paddingBottom: 16, borderBottom: '1px solid var(--s100)', marginBottom: 16 }}>
-          <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Datos de la cita</p>
+          <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Datos de la cita</p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <InfoChip icon={<Calendar size={13} />} text={date} />
             <InfoChip icon={<Clock size={13} />} text={`${time} · ${appt.duration_min} min`} />
@@ -679,7 +680,7 @@ export function AppointmentPage() {
         {/* ── Bloque 3: Consentimiento ─────────────────────────────────────────── */}
         {!isGuest && (
           <div style={{ paddingBottom: 16, borderBottom: '1px solid var(--s100)', marginBottom: 16 }}>
-            <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Consentimiento</p>
+            <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Consentimiento</p>
             {activeConsents.length > 0 ? (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, background: '#d1fae5', color: '#065f46' }}>
                 <CheckCircle2 size={13} /> Firmados:
@@ -956,14 +957,14 @@ export function AppointmentPage() {
                     <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--s800)' }}>
                       {RECORD_TYPE_LABEL[rec.record_type] ?? rec.record_type}
                     </p>
-                    <p style={{ margin: 0, fontSize: 11, color: 'var(--s400)' }}>{rec.session_date}</p>
+                    <p style={{ margin: 0, fontSize: 12, color: 'var(--s400)' }}>{rec.session_date}</p>
                   </div>
                   <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 6, background: rec.status === 'APPROVED' ? '#d1fae5' : '#fef3c7', color: rec.status === 'APPROVED' ? '#065f46' : '#92400e' }}>
                     {rec.status === 'APPROVED' ? 'Aprobado' : 'Borrador'}
                   </span>
                   <button
                     onClick={() => navigate(`/clinical-records/${rec.id}`)}
-                    style={{ fontSize: 11, fontWeight: 600, padding: '6px 12px', minHeight: 36, borderRadius: 6, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s700)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    style={{ fontSize: 12, fontWeight: 600, padding: '6px 12px', minHeight: 36, borderRadius: 6, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s700)', cursor: 'pointer', whiteSpace: 'nowrap' }}
                   >
                     Ver
                   </button>
