@@ -28,8 +28,12 @@ const base = "https://api.mercadopago.com"
 // When no secret is configured it returns true (fail-open) so the integration
 // keeps working until the secret is set in the dashboard + env.
 func VerifyWebhook(secret, xSignature, xRequestID, dataID string) bool {
+	// Fail closed: with no configured secret we cannot authenticate the caller,
+	// so we reject rather than trust the notification. config.Load enforces that
+	// the secret is present whenever billing (MP_ACCESS_TOKEN) is enabled, so in
+	// a correctly configured deployment this branch is never reached.
 	if secret == "" {
-		return true
+		return false
 	}
 	var ts, v1 string
 	for _, part := range strings.Split(xSignature, ",") {

@@ -52,6 +52,17 @@ type Config struct {
 }
 
 func Load() Config {
+	// Billing webhooks must be authenticated: if online payments are enabled
+	// (an MP access token is set), the signing secret is mandatory. Otherwise the
+	// public webhook would accept forged notifications (fail-closed, see
+	// mercadopago.VerifyWebhook).
+	mpAccessToken := getEnv("MP_ACCESS_TOKEN", "")
+	mpWebhookSecret := getEnv("MP_WEBHOOK_SECRET", "")
+	if mpAccessToken != "" && mpWebhookSecret == "" {
+		slog.Error("MP_WEBHOOK_SECRET is required when MP_ACCESS_TOKEN is set (webhook signature verification)")
+		os.Exit(1)
+	}
+
 	return Config{
 		Port:        getEnv("PORT", "8080"),
 		Environment: getEnv("ENVIRONMENT", "development"),
@@ -84,8 +95,8 @@ func Load() Config {
 
 		AllowDataReset: getEnvBool("ALLOW_DATA_RESET", false),
 
-		MPAccessToken:   getEnv("MP_ACCESS_TOKEN", ""),
-		MPWebhookSecret: getEnv("MP_WEBHOOK_SECRET", ""),
+		MPAccessToken:   mpAccessToken,
+		MPWebhookSecret: mpWebhookSecret,
 		MPPlanAmount:    getEnvInt("MP_PLAN_AMOUNT", 79000),
 		MPPlanReason:    getEnv("MP_PLAN_REASON", "SGHCP · Plan mensual"),
 
