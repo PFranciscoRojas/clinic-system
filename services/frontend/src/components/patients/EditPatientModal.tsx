@@ -50,6 +50,9 @@ export function EditPatientModal({ patient, onClose, onSaved, requiredContext }:
   const [ecName,     setEcName]     = useState(patient.emergency_contact_name ?? '');
   const [ecRelation, setEcRelation] = useState(patient.emergency_contact_relationship ?? '');
   const [ecPhone,    setEcPhone]    = useState(patient.emergency_contact_phone ?? '');
+  const [maritalStatus, setMaritalStatus] = useState(patient.marital_status ?? '');
+  const [education,     setEducation]     = useState(patient.education ?? '');
+  const [occupation,    setOccupation]    = useState(patient.occupation ?? '');
   const [apiError, setApiError] = useState('');
 
   // Plausibility first (a half-typed year gives ages like 2025), then adult-only doc check
@@ -77,6 +80,9 @@ export function EditPatientModal({ patient, onClose, onSaved, requiredContext }:
       emergency_contact_name:          ecName      || undefined,
       emergency_contact_phone:         ecPhone     || undefined,
       emergency_contact_relationship:  ecRelation  || undefined,
+      marital_status:                  maritalStatus || undefined,
+      education:                       education     || undefined,
+      occupation:                      occupation    || undefined,
     }),
     onSuccess: () => { onSaved(); onClose(); },
     onError:   () => setApiError('No se pudo guardar. Intenta de nuevo.'),
@@ -203,6 +209,34 @@ export function EditPatientModal({ patient, onClose, onSaved, requiredContext }:
               <div style={{ gridColumn: '1 / -1' }}>
                 {iLabel('Dirección')}
                 <input style={iStyle} value={address} onChange={e => setAddress(e.target.value)} />
+              </div>
+              <div>
+                {iLabel('Estado civil')}
+                <select style={iStyle} value={maritalStatus} onChange={e => setMaritalStatus(e.target.value)}>
+                  <option value="">— Sin especificar —</option>
+                  <option value="Soltero/a">Soltero/a</option>
+                  <option value="Casado/a">Casado/a</option>
+                  <option value="Unión libre">Unión libre</option>
+                  <option value="Separado/a">Separado/a</option>
+                  <option value="Divorciado/a">Divorciado/a</option>
+                  <option value="Viudo/a">Viudo/a</option>
+                </select>
+              </div>
+              <div>
+                {iLabel('Escolaridad')}
+                <select style={iStyle} value={education} onChange={e => setEducation(e.target.value)}>
+                  <option value="">— Sin especificar —</option>
+                  <option value="Primaria">Primaria</option>
+                  <option value="Bachillerato">Bachillerato</option>
+                  <option value="Técnico / Tecnólogo">Técnico / Tecnólogo</option>
+                  <option value="Universitario">Universitario</option>
+                  <option value="Posgrado">Posgrado</option>
+                  <option value="Ninguno">Ninguno</option>
+                </select>
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                {iLabel('Ocupación actual')}
+                <input style={iStyle} value={occupation} onChange={e => setOccupation(e.target.value)} placeholder="Ej. Docente, estudiante, comerciante…" />
               </div>
             </div>
           </div>

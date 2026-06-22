@@ -25,6 +25,7 @@ func (r *Repository) Update(ctx context.Context, p patients.UpdateParams) error 
 			doc_search_hash         = $15,
 			birth_date              = $16,
 			emergency_contact_enc   = $17,
+			demographics_enc        = $18,
 			updated_at              = NOW()
 		WHERE id = $1 AND organization_id = $2
 	`,
@@ -37,6 +38,7 @@ func (r *Repository) Update(ctx context.Context, p patients.UpdateParams) error 
 		nullableString(p.DocumentTypeCode), nullableBytes(p.DocumentNumberEnc),
 		nullableString(p.DocSearchHash), nullableDate(p.BirthDate),
 		nullableBytes(p.EmergencyContactEnc),
+		nullableBytes(p.DemographicsEnc),
 	)
 	if err != nil {
 		return fmt.Errorf("update patient: %w", err)

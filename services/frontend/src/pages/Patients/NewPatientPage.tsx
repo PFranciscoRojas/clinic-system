@@ -171,6 +171,9 @@ export function NewPatientPage() {
   const [ecName,      setEcName]      = useState('');
   const [ecPhone,     setEcPhone]     = useState('');
   const [ecRelation,  setEcRelation]  = useState('');
+  const [maritalStatus, setMaritalStatus] = useState('');
+  const [education,     setEducation]     = useState('');
+  const [occupation,    setOccupation]    = useState('');
 
   // Per-field errors (set on submit attempt)
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -241,6 +244,9 @@ export function NewPatientPage() {
       emergency_contact_name:  ecName.trim()  || undefined,
       emergency_contact_phone: ecPhone.trim() || undefined,
       emergency_contact_relationship: ecRelation.trim() || undefined,
+      marital_status: maritalStatus.trim() || undefined,
+      education:      education.trim()     || undefined,
+      occupation:     occupation.trim()    || undefined,
     });
   };
 
@@ -397,6 +403,44 @@ export function NewPatientPage() {
 
           <div style={{ marginTop: 16 }}>
             <Field label="Dirección" value={address} onChange={setAddress} icon={MapPin} placeholder="Calle 123 # 45-67, Bogotá" />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--s700)', marginBottom: 6 }}>Estado civil</label>
+              <select
+                value={maritalStatus}
+                onChange={e => setMaritalStatus(e.target.value)}
+                style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1.5px solid var(--s200)', fontSize: 14, color: 'var(--s800)', background: '#fff', cursor: 'pointer', outline: 'none' }}
+              >
+                <option value="">— Sin especificar —</option>
+                <option value="Soltero/a">Soltero/a</option>
+                <option value="Casado/a">Casado/a</option>
+                <option value="Unión libre">Unión libre</option>
+                <option value="Separado/a">Separado/a</option>
+                <option value="Divorciado/a">Divorciado/a</option>
+                <option value="Viudo/a">Viudo/a</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--s700)', marginBottom: 6 }}>Escolaridad</label>
+              <select
+                value={education}
+                onChange={e => setEducation(e.target.value)}
+                style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1.5px solid var(--s200)', fontSize: 14, color: 'var(--s800)', background: '#fff', cursor: 'pointer', outline: 'none' }}
+              >
+                <option value="">— Sin especificar —</option>
+                <option value="Primaria">Primaria</option>
+                <option value="Bachillerato">Bachillerato</option>
+                <option value="Técnico / Tecnólogo">Técnico / Tecnólogo</option>
+                <option value="Universitario">Universitario</option>
+                <option value="Posgrado">Posgrado</option>
+                <option value="Ninguno">Ninguno</option>
+              </select>
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <Field label="Ocupación actual" value={occupation} onChange={setOccupation} placeholder="Ej. Docente, estudiante, comerciante…" />
+            </div>
           </div>
         </div>
 

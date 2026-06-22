@@ -19,6 +19,9 @@ type CreateInput struct {
 	EmergencyContactName         string
 	EmergencyContactPhone        string
 	EmergencyContactRelationship string
+	MaritalStatus    string
+	Education        string
+	Occupation       string
 }
 
 // UpdateInput carries plain-text fields for a full patient update.
@@ -39,6 +42,9 @@ type UpdateInput struct {
 	EmergencyContactName         string
 	EmergencyContactPhone        string
 	EmergencyContactRelationship string
+	MaritalStatus    string
+	Education        string
+	Occupation       string
 }
 
 // SearchInput holds plain-text search terms; exactly one filter field must be set.

@@ -20,6 +20,9 @@ type PatientResponse struct {
 	EmergencyContactName         string `json:"emergency_contact_name,omitempty"`
 	EmergencyContactPhone        string `json:"emergency_contact_phone,omitempty"`
 	EmergencyContactRelationship string `json:"emergency_contact_relationship,omitempty"`
+	MaritalStatus    string `json:"marital_status,omitempty"`
+	Education        string `json:"education,omitempty"`
+	Occupation       string `json:"occupation,omitempty"`
 	IsActive         bool   `json:"is_active"`
 }
 
@@ -41,6 +44,9 @@ func ToResponse(p *patients.Patient) PatientResponse {
 		EmergencyContactName:         p.EmergencyContactName,
 		EmergencyContactPhone:        p.EmergencyContactPhone,
 		EmergencyContactRelationship: p.EmergencyContactRelationship,
+		MaritalStatus:    p.MaritalStatus,
+		Education:        p.Education,
+		Occupation:       p.Occupation,
 		IsActive:         p.IsActive,
 	}
 }

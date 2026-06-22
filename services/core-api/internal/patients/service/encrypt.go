@@ -49,6 +49,47 @@ func openEmergencyContact(dek, ciphertext []byte, p *patients.Patient) error {
 	return nil
 }
 
+// demographics is the JSON shape stored, encrypted, in demographics_enc —
+// Section I fields of the clinical format that are not otherwise persisted.
+type demographics struct {
+	MaritalStatus string `json:"marital_status,omitempty"`
+	Education     string `json:"education,omitempty"`
+	Occupation    string `json:"occupation,omitempty"`
+}
+
+// sealDemographics JSON-encodes and encrypts the demographics, or returns nil
+// (SQL NULL) when all fields are empty.
+func sealDemographics(dek []byte, maritalStatus, education, occupation string) ([]byte, error) {
+	if maritalStatus == "" && education == "" && occupation == "" {
+		return nil, nil
+	}
+	raw, err := json.Marshal(demographics{MaritalStatus: maritalStatus, Education: education, Occupation: occupation})
+	if err != nil {
+		return nil, fmt.Errorf("marshal demographics: %w", err)
+	}
+	return crypto.Seal(dek, raw)
+}
+
+// openDemographics decrypts and decodes the demographics blob into the
+// patient's fields; a nil blob leaves them empty.
+func openDemographics(dek, ciphertext []byte, p *patients.Patient) error {
+	if len(ciphertext) == 0 {
+		return nil
+	}
+	raw, err := crypto.Open(dek, ciphertext)
+	if err != nil {
+		return fmt.Errorf("decrypt demographics: %w", err)
+	}
+	var d demographics
+	if err := json.Unmarshal(raw, &d); err != nil {
+		return fmt.Errorf("parse demographics: %w", err)
+	}
+	p.MaritalStatus = d.MaritalStatus
+	p.Education = d.Education
+	p.Occupation = d.Occupation
+	return nil
+}
+
 // plainPII groups all encryptable PII string fields for batch processing.
 // Adding a new PII field means one edit here and one in sealAll — nowhere else.
 type plainPII struct {
@@ -175,6 +216,9 @@ func decryptRaw(dek []byte, r *patients.RawPatient) (*patients.Patient, error) {
 		}
 	}
 	if err := openEmergencyContact(dek, r.EmergencyContactEnc, p); err != nil {
+		return nil, err
+	}
+	if err := openDemographics(dek, r.DemographicsEnc, p); err != nil {
 		return nil, err
 	}
 	return p, nil

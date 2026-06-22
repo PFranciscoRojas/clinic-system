@@ -53,6 +53,11 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) error {
 		return err
 	}
 
+	demoEnc, err := sealDemographics(dek, in.MaritalStatus, in.Education, in.Occupation)
+	if err != nil {
+		return err
+	}
+
 	fullName := in.FirstName + " " + in.PaternalLastName
 	if in.MaternalLastName != "" {
 		fullName += " " + in.MaternalLastName
@@ -71,6 +76,7 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) error {
 		EmailEnc:             sealed.EmailEnc,
 		AddressEnc:           sealed.AddressEnc,
 		EmergencyContactEnc:  ecEnc,
+		DemographicsEnc:      demoEnc,
 		Gender:               in.Gender,
 		DocumentTypeCode:     in.DocumentTypeCode,
 		DocumentNumberEnc:    docEnc,

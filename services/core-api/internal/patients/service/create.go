@@ -49,6 +49,11 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (string, error) {
 		return "", err
 	}
 
+	demoEnc, err := sealDemographics(dek, in.MaritalStatus, in.Education, in.Occupation)
+	if err != nil {
+		return "", err
+	}
+
 	fullName := in.FirstName + " " + in.PaternalLastName
 	if in.MaternalLastName != "" {
 		fullName += " " + in.MaternalLastName
@@ -70,6 +75,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (string, error) {
 		EmailEnc:             sealed.EmailEnc,
 		AddressEnc:           sealed.AddressEnc,
 		EmergencyContactEnc:  ecEnc,
+		DemographicsEnc:      demoEnc,
 		BirthDate:            in.BirthDate,
 		Gender:               in.Gender,
 	})

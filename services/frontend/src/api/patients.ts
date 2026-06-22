@@ -16,6 +16,9 @@ export interface Patient {
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
   emergency_contact_relationship?: string;
+  marital_status?: string;
+  education?: string;
+  occupation?: string;
   is_active: boolean;
 }
 
@@ -35,6 +38,9 @@ export interface CreatePatientBody {
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
   emergency_contact_relationship?: string;
+  marital_status?: string;
+  education?: string;
+  occupation?: string;
 }
 
 export const patientsApi = {
