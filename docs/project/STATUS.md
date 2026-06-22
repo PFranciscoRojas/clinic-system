@@ -20,6 +20,7 @@
 
 ### Últimos commits a `main` (sesión 2026-06-22) — desplegados
 
+- `9adcb1c` feat(rls): `bookings`, `booking_requests`, `consent_sign_tokens`, `consent_templates` bajo RLS por tenant (migración 000032 + resolvers SECURITY DEFINER `booking_org`/`consent_token_org`). `dbctx.WithOrgScope` para handlers públicos; `bookingrequests` y `booking` convertidos a scope; provisioning de signup fija scope al sembrar plantillas; arregla bug latente (firma pública leía `patients` sin scope). Cierra **bloqueante RLS**. Verificado en prod (fail-closed, resolver, write/read con scope, cross-org bloqueado)
 - `eb62f60` feat(booking): aceptación obligatoria de la política de reembolso/cancelación antes de pagar — checkbox en el paso de datos del wizard público, botón deshabilitado hasta aceptar, checkout rechaza sin `policy_accepted` y sella `policy_accepted_at` (migración 000031). Cierra **B6**
 - `07ae88f` fix(billing): firma de webhook MP obligatoria — quitado el fail-open. `VerifyWebhook` falla cerrado con secreto vacío; `config.Load` exige `MP_WEBHOOK_SECRET` cuando hay `MP_ACCESS_TOKEN`. Cierra **B-11**. Secreto añadido al `.env` del VPS
 - `7e2e132` feat(patients): Nº de HC consecutivo por tenant (`patient_code`, patrón `invoice_number` con advisory lock), asignado al registrar; migración 000030 con backfill (lift FORCE RLS); franja de identificación muestra `HC-000001` + Fecha de apertura (cierra Sección I del Formato 1)
@@ -33,7 +34,6 @@
 
 | ID | Descripción | Estado |
 |---|---|---|
-| **RLS** | Aplicar RLS a `ai_drafts` + endpoints públicos booking/consents | 🟡 pendiente |
 | **UI** | Botón "Cambiar correo del admin" en Configuración | 🟡 pendiente |
 
 ---
@@ -67,7 +67,7 @@
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción (rebuild 2026-06-22, migración 000031 aplicada) |
+| `core-api:8080` | ✅ producción (rebuild 2026-06-22, migración 000032 aplicada) |
 | `ai-service` | ✅ producción (`Dockerfile.patch` rebuild #79) |
 | `frontend` (Caddy :80/:443) | ✅ producción |
 | Backups | `pg_dump` cifrado GPG → Backblaze B2 |
@@ -88,7 +88,7 @@
 | `core-api` | `services/core-api/` | ✅ Go 1.21, prod |
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
-| Migrations | `services/core-api/migrations/` | Última: `000031_booking_policy_accepted` |
+| Migrations | `services/core-api/migrations/` | Última: `000032_rls_public_booking_consent` |
 | Claude skills | `~/.claude/commands/` | Sincronizadas en sesión 2026-06-22 |
 
 ---
