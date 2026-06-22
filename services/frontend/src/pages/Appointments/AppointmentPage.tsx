@@ -708,6 +708,45 @@ export function AppointmentPage() {
             )}
           </div>
 
+          {/* ── I. Datos de identificación (encabezado del registro, ancho completo) ──
+              Es la Sección I del formato clínico — no metadata: el RecordForm de
+              Apertura arranca en "II", esta franja la antecede horizontalmente. */}
+          <div className="card" style={{ padding: '12px 16px', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '.06em' }}>I. Datos de identificación</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {activeConsents.length > 0 ? (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 11.5, fontWeight: 600, padding: '4px 10px', borderRadius: 7, background: '#d1fae5', color: '#065f46' }}>
+                    <CheckCircle2 size={12} /> Consentimiento:
+                    {activeConsents.map(c => (
+                      <button key={c.id} onClick={() => setViewConsentId(c.id)} title={`Firmado el ${c.signed_at} — ver documento`} style={{ border: 'none', background: 'none', color: '#065f46', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, textDecoration: 'underline', padding: 0 }}>
+                        {CONSENT_SHORT[c.consent_type] ?? c.consent_type}
+                      </button>
+                    ))}
+                  </span>
+                ) : (
+                  <button onClick={() => setSignConsentOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 600, padding: '4px 10px', borderRadius: 7, background: '#fef3c7', color: '#92400e', border: 'none', cursor: 'pointer' }}>
+                    <AlertTriangle size={12} /> Consentimiento: No — firmar
+                  </button>
+                )}
+                <button onClick={() => navigate(`/patients/${appt.patient_id}`)} style={{ padding: '5px 11px', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 11.5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <User size={11} /> Ver perfil
+                </button>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px 18px' }}>
+              <IdField label="Nombre completo" value={patientName} />
+              {patient?.document_number && <IdField label="Documento" value={`${patient.document_type_code ?? ''} ${patient.document_number}`.trim()} />}
+              {patientAge !== null && <IdField label="Edad" value={`${patientAge} años`} />}
+              {patient?.birth_date && <IdField label="F. nacimiento" value={new Date(patient.birth_date).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' })} />}
+              {patient?.gender && <IdField label="Género" value={patient.gender} />}
+              {patient?.phone && <IdField label="Teléfono" value={patient.phone} />}
+              {(patient?.emergency_contact_name || patient?.emergency_contact_phone) && (
+                <IdField label="Contacto emergencia" value={[patient.emergency_contact_name, patient.emergency_contact_relationship, patient.emergency_contact_phone].filter(Boolean).join(' · ')} />
+              )}
+            </div>
+          </div>
+
           {/* ── Workspace: registro clínico (protagonista) + apoyo lateral ── */}
           <div style={{ display: 'grid', gridTemplateColumns: compactLayout ? '1fr' : 'minmax(0, 1fr) 360px', gap: 20, alignItems: 'start' }}>
             {/* MAIN — el registro clínico es el foco */}
@@ -1217,6 +1256,15 @@ export function AppointmentPage() {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function IdField({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--s700)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={value}>{value}</div>
+    </div>
+  );
+}
 
 function InfoChip({ icon, text, color }: { icon: React.ReactNode; text: string; color?: string }) {
   return (
