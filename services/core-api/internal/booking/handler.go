@@ -9,6 +9,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -238,7 +239,7 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 
 		prefID, ip, err := h.mp.CreatePreference(
 			ctx, title, amount, bookingID, body.Email,
-			h.cfg.AppBaseURL+"/book/return",
+			h.cfg.AppBaseURL+"/book/return?slug="+url.QueryEscape(body.OrgSlug),
 			h.cfg.AppBaseURL+"/api/v1/public/pay/webhook",
 		)
 		if err != nil {

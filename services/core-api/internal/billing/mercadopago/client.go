@@ -137,8 +137,9 @@ func (c *Client) CreatePreference(ctx context.Context, title string, amountCOP i
 		}},
 		"external_reference": externalRef,
 		"back_urls":          map[string]string{"success": backURL, "failure": backURL, "pending": backURL},
-		"auto_return":        "approved",
-		"notification_url":   notificationURL,
+		// No auto_return: MercadoPago shows a manual "Volver al sitio" button on
+		// its success screen instead of an automatic countdown redirect.
+		"notification_url": notificationURL,
 		"payer":              map[string]string{"email": payerEmail},
 	}
 	var out struct {

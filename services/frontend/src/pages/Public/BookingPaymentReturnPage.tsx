@@ -21,6 +21,9 @@ const FAILED_STATUSES = new Set(['null', 'rejected', 'cancelled', 'refunded', 'c
 export function BookingPaymentReturnPage() {
   const [params] = useSearchParams();
   const bookingId = params.get('external_reference') || '';
+  // back_url carries ?slug=<org_slug> so we can route the patient back to the
+  // booking flow even before the status fetch resolves (or if it fails).
+  const slugParam = params.get('slug') || '';
   const mpStatus = (params.get('status') || params.get('collection_status') || '').toLowerCase();
   // The patient came back without completing payment — don't poll, just offer a retry.
   const abandoned = !!mpStatus && FAILED_STATUSES.has(mpStatus);
@@ -62,9 +65,13 @@ export function BookingPaymentReturnPage() {
   }, [failed, bookingId, released]);
 
   // Send the patient back to the clinic's own site ("la tienda"), not the API host.
-  const retryHref = b?.website || (b?.org_slug ? `/book/${b.org_slug}` : '/');
+  // Prefer the configured website; otherwise reopen the booking flow by slug
+  // (from the status response, falling back to the back_url's ?slug=).
+  const slug = b?.org_slug || slugParam;
+  const bookHref = slug ? `/book/${slug}` : '/';
+  const retryHref = b?.website || bookHref;
   // After a confirmed appointment, "Finalizar" returns to the clinic's home page.
-  const homeHref = b?.website || '/';
+  const homeHref = b?.website || bookHref;
   const start = b ? new Date(b.scheduled_at) : null;
   const end = start ? new Date(start.getTime() + DURATION_MIN * 60000) : null;
   const title = `Cita${b?.clinic_name ? ' · ' + b.clinic_name : ''}`;
@@ -124,7 +131,8 @@ export function BookingPaymentReturnPage() {
         ) : (
           <p style={{ color: INK_SOFT, fontSize: 14.5, lineHeight: 1.7 }}>
             Estamos confirmando tu pago con MercadoPago. En cuanto se acredite (unos segundos),
-            tu cita quedará agendada y te llegará la confirmación por correo. Puedes cerrar esta página.
+            tu cita quedará agendada y te llegará la confirmación por correo. Por favor, no cierres
+            esta página hasta ver la confirmación.
           </p>
         )}
       </div>
