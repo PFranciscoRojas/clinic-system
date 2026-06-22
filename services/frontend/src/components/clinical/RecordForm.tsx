@@ -18,12 +18,15 @@ interface RecordFormProps {
   lateEntryReason?: string;
   /** When the treatment consent is already signed, the reminder is suppressed. */
   treatmentConsentSigned?: boolean;
+  /** Emitted when the selected record type changes, so the audio/AI draft can
+   *  target the same format the professional is filling. */
+  onTypeChange?: (t: RecordType) => void;
   onSaved: () => void;
 }
 
 const UI_TYPES: UIRecordType[] = ['INITIAL', 'PLAN', 'EVOLUTION', 'DISCHARGE'];
 
-export function RecordForm({ patientId, appointmentId, defaultType, sessionDate: sessionDateProp, lateEntryReason, treatmentConsentSigned, onSaved }: RecordFormProps) {
+export function RecordForm({ patientId, appointmentId, defaultType, sessionDate: sessionDateProp, lateEntryReason, treatmentConsentSigned, onTypeChange, onSaved }: RecordFormProps) {
   const storageKey = appointmentId ? `clinical-draft-${appointmentId}` : `clinical-draft-patient-${patientId}`;
   const [uiType, setUIType] = useState<UIRecordType>(defaultType === 'INITIAL' ? 'INITIAL' : defaultType === 'DISCHARGE' ? 'DISCHARGE' : 'EVOLUTION');
   const [draft, setDraft] = useState<ClinicalDraft>(emptyDraft);
@@ -34,6 +37,9 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   const [err, setErr] = useState('');
 
   const apiType: RecordType = uiType === 'PLAN' ? 'EVOLUTION' : uiType;
+
+  // Keep the audio/AI draft aligned with the format being filled.
+  useEffect(() => { onTypeChange?.(apiType); }, [apiType, onTypeChange]);
 
   // Autosave: the in-progress note survives a closed tab or session lock.
   // Nothing reaches the server until the professional saves explicitly.
@@ -73,8 +79,16 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   };
 
   const handleSave = async () => {
-    const validation = validateDraft(uiType, draft);
-    if (validation) { setErr(validation); return; }
+    const miss = validateDraft(uiType, draft);
+    if (miss) {
+      setErr(miss.message);
+      if (miss.key) {
+        const el = document.getElementById(`clinical-field-${miss.key}`);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => (el?.querySelector('textarea, input, select') as HTMLElement | null)?.focus(), 350);
+      }
+      return;
+    }
     setSaving(true); setErr('');
     try {
       const payload = draftToPayload(uiType, draft);
@@ -104,6 +118,9 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   return (
     <div>
       {/* Record type selector */}
+      <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, color: 'var(--s500)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
+        Tipo de registro <span style={{ fontWeight: 400, textTransform: 'none', color: 'var(--s400)' }}>— elige el formato y se validan solo sus campos obligatorios</span>
+      </p>
       <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {UI_TYPES.map(val => (
           <button

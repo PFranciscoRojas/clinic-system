@@ -46,6 +46,8 @@ var templateSections = map[RecordType]struct {
 			"personal_history", "family_history", "risk_note", "diagnostic_impression",
 			// III. Historia de vida subsections
 			"family_dynamics", "academic_history", "relational_history",
+			// IV. Antecedentes relevantes (Formato 1)
+			"medical_history", "psychological_history", "psychiatric_history", "pharmacological_history",
 			// backward-compat keys
 			"psychosocial_context", "initial_plan", "complaint_verbatim",
 			// structured fields
@@ -64,6 +66,7 @@ var templateSections = map[RecordType]struct {
 			"is_plan_session", "functional_analysis",
 			"therapeutic_goal_1", "therapeutic_goal_2", "therapeutic_goal_3", "therapeutic_goal_4",
 			"therapeutic_goals", "clinical_hypothesis", "achievement_indicators", "techniques",
+			"achievement_indicators_other", "techniques_other", "tasks_assigned",
 		},
 	},
 	RecordTypeDischarge: {

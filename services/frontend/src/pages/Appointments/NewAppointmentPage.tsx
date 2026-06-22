@@ -657,11 +657,16 @@ export function NewAppointmentPage() {
     const d = searchParams.get('date');
     return d && /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= todayISO() ? d : todayISO();
   })();
+  // Time preselected from a quick-booking click in the calendar (?time=HH:MM)
+  const initialTime = (() => {
+    const t = searchParams.get('time');
+    return t && /^\d{2}:\d{2}$/.test(t) ? t : '';
+  })();
 
   const [patient,     setPatient]     = useState<Patient | null>(null);
   const [guestName,   setGuestName]   = useState<string>('');
   const [date,        setDate]        = useState<string>(initialDate);
-  const [time,        setTime]        = useState<string>('');
+  const [time,        setTime]        = useState<string>(initialTime);
   const [sessionType, setSessionType] = useState<SessionType | null>(SESSION_TYPES[1]);
   const [duration,    setDuration]    = useState<number>(50);
   const [modality,    setModality]    = useState<Modality>('presencial');

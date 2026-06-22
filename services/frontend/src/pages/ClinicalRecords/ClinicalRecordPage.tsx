@@ -44,8 +44,16 @@ export function ClinicalRecordPage() {
     if (!id || !record || !draft) return;
     setErr('');
     const uiType = toUIRecordType(record.record_type, record.sections);
-    const validation = validateDraft(uiType, draft);
-    if (validation) { setErr(validation); return; }
+    const miss = validateDraft(uiType, draft);
+    if (miss) {
+      setErr(miss.message);
+      if (miss.key) {
+        const el = document.getElementById(`clinical-field-${miss.key}`);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => (el?.querySelector('textarea, input, select') as HTMLElement | null)?.focus(), 350);
+      }
+      return;
+    }
     setSaving(true);
     try {
       await clinicalRecordsApi.update(id, draftToPayload(uiType, draft));

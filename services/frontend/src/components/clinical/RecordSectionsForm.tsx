@@ -189,23 +189,30 @@ function deriveRiskFromMentalExam(exam: MentalExam): RiskLevel {
 }
 
 // ── Validator ─────────────────────────────────────────────────────────────────
-export function validateDraft(uiType: UIRecordType, d: ClinicalDraft): string | null {
+// Returns the first unmet requirement (message + the section key to scroll to),
+// or null when the draft is valid. `key` matches the id `clinical-field-<key>`
+// rendered on the field so the caller can take the user straight to it.
+export interface ValidationMiss { message: string; key: string }
+
+export function validateDraft(uiType: UIRecordType, d: ClinicalDraft): ValidationMiss | null {
   if (uiType === 'PLAN') {
     if (!(d.sections['session_development'] ?? '').trim()) {
-      return 'El análisis funcional inicial es obligatorio';
+      return { message: 'El análisis funcional inicial es obligatorio', key: 'session_development' };
     }
     return null;
   }
   const apiType: RecordType = uiType;
   const defs = TEMPLATE_SECTIONS[apiType as keyof typeof TEMPLATE_SECTIONS];
-  if (!defs) return 'Tipo de registro no soportado';
+  if (!defs) return { message: 'Tipo de registro no soportado', key: '' };
   for (const def of defs) {
     if (def.required && !(d.sections[def.key] ?? '').trim()) {
-      return `La sección "${def.label}" es obligatoria`;
+      return { message: `La sección "${def.label}" es obligatoria`, key: def.key };
     }
   }
   // Risk is not shown on any form — derived from mental exam (INITIAL) or omitted.
-  if (uiType === 'DISCHARGE' && !d.dischargeReason) return 'El motivo de egreso es obligatorio';
+  if (uiType === 'DISCHARGE' && !d.dischargeReason) {
+    return { message: 'El motivo de egreso es obligatorio', key: 'discharge_reason' };
+  }
   return null;
 }
 
@@ -290,7 +297,7 @@ export function RecordSectionsForm({ recordType, value, onChange, disabled }: Pr
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
         {/* I. ANÁLISIS FUNCIONAL */}
-        <div className="card" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div id="clinical-field-session_development" className="card" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14, scrollMarginTop: 96 }}>
           {sectionTitle('I. Análisis Funcional de la Conducta Objeto')}
           <AutoGrowTextarea
             value={value.sections['session_development'] ?? ''}
@@ -419,7 +426,7 @@ export function RecordSectionsForm({ recordType, value, onChange, disabled }: Pr
     );
 
     const textField = (key: string, label: string, placeholder: string, required = false, rows = 3) => (
-      <div>
+      <div id={`clinical-field-${key}`} style={{ scrollMarginTop: 96 }}>
         <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 600, color: 'var(--s700)' }}>
           {label} {required && <span style={{ color: '#dc2626' }}>*</span>}
         </p>
@@ -560,7 +567,7 @@ export function RecordSectionsForm({ recordType, value, onChange, disabled }: Pr
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
         {/* I. ESTADO ACTUAL Y REPORTE SUBJETIVO */}
-        <div className="card" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div id="clinical-field-session_development" className="card" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14, scrollMarginTop: 96 }}>
           {sectionTitle('I. Estado Actual y Reporte Subjetivo')}
           <SubjectiveDistressScale
             value={value.distressLevel}
@@ -757,7 +764,7 @@ export function RecordSectionsForm({ recordType, value, onChange, disabled }: Pr
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
       {/* I. RESUMEN DEL MOTIVO DE CONSULTA INICIAL */}
-      <div className="card" style={{ padding: '20px 24px' }}>
+      <div id="clinical-field-discharge_summary" className="card" style={{ padding: '20px 24px', scrollMarginTop: 96 }}>
         {sectionTitle('I. Resumen del Motivo de Consulta Inicial')}
         <AutoGrowTextarea
           value={value.sections['discharge_summary'] ?? ''}
@@ -769,7 +776,7 @@ export function RecordSectionsForm({ recordType, value, onChange, disabled }: Pr
       </div>
 
       {/* II. MOTIVO DEL CIERRE */}
-      <div className="card" style={{ padding: '20px 24px' }}>
+      <div id="clinical-field-discharge_reason" className="card" style={{ padding: '20px 24px', scrollMarginTop: 96 }}>
         {sectionTitle('II. Motivo del Cierre de la Historia Clínica')}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {DISCHARGE_REASONS.map(r => {
@@ -851,7 +858,7 @@ export function RecordSectionsForm({ recordType, value, onChange, disabled }: Pr
       </div>
 
       {/* III. EVALUACIÓN DE LOGROS */}
-      <div className="card" style={{ padding: '20px 24px' }}>
+      <div id="clinical-field-final_state" className="card" style={{ padding: '20px 24px', scrollMarginTop: 96 }}>
         {sectionTitle('III. Evaluación de Logros Terapéuticos y Evolución')}
         <AutoGrowTextarea
           value={value.sections['final_state'] ?? ''}

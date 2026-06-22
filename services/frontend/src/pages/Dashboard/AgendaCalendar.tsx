@@ -12,16 +12,26 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
 import { useIsCompact, useIsMobile } from '@/lib/useMediaQuery';
 import { SlotPicker } from '@/components/appointments/SlotPicker';
+import { loadSchedule } from '@/lib/schedule';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const HOUR_H    = 64;
-const START_H   = 7;
-const END_H     = 20;
-const TOTAL_H   = (END_H - START_H) * HOUR_H;   // 832px
 const TIME_COL  = 52;
 const PX_PER_MIN = HOUR_H / 60;
-const HOURS = Array.from({ length: END_H - START_H }, (_, i) => START_H + i);
+
+// The visible day range is derived from the professional's configured schedule
+// (Settings → Horario y agenda), then expanded if any appointment falls outside
+// it so nothing is ever clipped. Defaults apply when no schedule is set.
+const DEFAULT_START_H = 7;
+const DEFAULT_END_H   = 20;
+
+// 'HH:MM' → integer hour (0–24). Returns fallback on malformed input.
+function hhmmToHour(s: string | undefined, fallback: number): number {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s ?? '');
+  if (!m) return fallback;
+  return Math.min(24, Math.max(0, parseInt(m[1], 10)));
+}
 
 const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const MONTH_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -136,9 +146,9 @@ function pName(p: Patient) {
 
 // ── Per-appt pixel geometry ───────────────────────────────────────────────────
 
-function apptTop(appt: Appointment): number {
+function apptTop(appt: Appointment, startH: number): number {
   const d = new Date(appt.scheduled_at);
-  return ((d.getHours() - START_H) + d.getMinutes() / 60) * HOUR_H;
+  return ((d.getHours() - startH) + d.getMinutes() / 60) * HOUR_H;
 }
 
 function apptH(appt: Appointment): number {
@@ -158,20 +168,22 @@ function usePatient(id: string) {
 
 // ── NowIndicator ──────────────────────────────────────────────────────────────
 
-function NowIndicator() {
+function NowIndicator({ startH, endH }: { startH: number; endH: number }) {
   const calcTop = () => {
     const n = new Date();
-    return ((n.getHours() - START_H) + n.getMinutes() / 60) * HOUR_H;
+    return ((n.getHours() - startH) + n.getMinutes() / 60) * HOUR_H;
   };
   const [top, setTop] = useState(calcTop);
 
   useEffect(() => {
+    setTop(calcTop());
     const id = setInterval(() => setTop(calcTop()), 60_000);
     return () => clearInterval(id);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startH]);
 
   const h = new Date().getHours();
-  if (h < START_H || h >= END_H) return null;
+  if (h < startH || h >= endH) return null;
 
   return (
     <div style={{ position: 'absolute', left: 0, right: 0, top, zIndex: 20, pointerEvents: 'none', display: 'flex', alignItems: 'center' }}>
@@ -183,18 +195,18 @@ function NowIndicator() {
 
 // ── AppBlock ──────────────────────────────────────────────────────────────────
 
-function AppBlock({ appt, onClick }: { appt: Appointment; onClick: (a: Appointment) => void }) {
+function AppBlock({ appt, onClick, startH, totalH }: { appt: Appointment; onClick: (a: Appointment) => void; startH: number; totalH: number }) {
   const { data: patient } = usePatient(appt.patient_id);
   const mc      = MC[appt.modality] ?? MC.IN_PERSON;
   const inProg  = isInProgress(appt);
   const done    = appt.status === 'COMPLETED';
   const cancel  = appt.status === 'CANCELLED';
 
-  const top = apptTop(appt);
+  const top = apptTop(appt, startH);
   const h   = apptH(appt);
-  if (top < 0 || top >= TOTAL_H) return null;
+  if (top < 0 || top >= totalH) return null;
 
-  const clampedH = Math.min(h, TOTAL_H - top);
+  const clampedH = Math.min(h, totalH - top);
   const bg     = (done || cancel) ? 'var(--s100)' : mc.bg;
   const bdr    = (done || cancel) ? 'var(--s200)' : mc.border;
   const lBdr   = (done || cancel) ? 'var(--s300)' : mc.color;
@@ -219,7 +231,7 @@ function AppBlock({ appt, onClick }: { appt: Appointment; onClick: (a: Appointme
 
   return (
     <div
-      onClick={() => onClick(appt)}
+      onClick={e => { e.stopPropagation(); onClick(appt); }}
       onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}
       style={{
@@ -736,6 +748,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
   });
   const changeView = (v: CalView) => { setCalView(v); localStorage.setItem('sghcp_cal_view', v); };
   const [selAppt, setSelAppt]         = useState<Appointment | null>(null);
+  const [quickSlot, setQuickSlot]     = useState<{ day: string; time: string; top: number } | null>(null);
   const gridRef   = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
 
@@ -772,13 +785,35 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
   const apptDates = useMemo(() => new Set(appts.map(a => localDateOf(a.scheduled_at))), [appts]);
   const viewDays  = calView === 'week' ? weekDays : [selected];
 
+  // ── Visible day range: configured schedule, expanded to fit any appointment ──
+  const schedule = useMemo(() => loadSchedule(), []);
+  const { startH, endH } = useMemo(() => {
+    let s = hhmmToHour(schedule.startHour, DEFAULT_START_H);
+    let e = hhmmToHour(schedule.endHour, DEFAULT_END_H);
+    if (e <= s) e = Math.min(24, s + 1);
+    for (const a of appts) {
+      const d = new Date(a.scheduled_at);
+      s = Math.min(s, d.getHours());
+      const endMins = d.getHours() * 60 + d.getMinutes() + a.duration_min;
+      e = Math.max(e, Math.ceil(endMins / 60));
+    }
+    s = Math.max(0, Math.min(s, 23));
+    e = Math.min(24, Math.max(e, s + 1));
+    return { startH: s, endH: e };
+  }, [schedule, appts]);
+  const hours  = useMemo(() => Array.from({ length: endH - startH }, (_, i) => startH + i), [startH, endH]);
+  const totalH = (endH - startH) * HOUR_H;
+
+  // Dismiss the quick-booking popover when the day/week or view changes.
+  useEffect(() => { setQuickSlot(null); }, [selected, calView]);
+
   // Scroll to current time on first render and view change
   useEffect(() => {
     if (!gridRef.current) return;
     const n    = new Date();
-    const mins = (n.getHours() - START_H) * 60 + n.getMinutes();
+    const mins = (n.getHours() - startH) * 60 + n.getMinutes();
     gridRef.current.scrollTop = Math.max(0, mins * PX_PER_MIN - 120);
-  }, [calView]);
+  }, [calView, startH]);
 
   // Close detail on outside click
   useEffect(() => {
@@ -919,7 +954,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
 
               {/* Time column */}
               <div style={{ width: TIME_COL, flexShrink: 0, paddingTop: 48 }}>
-                {HOURS.map(h => (
+                {hours.map(h => (
                   <div key={h} style={{ height: HOUR_H, display: 'flex', alignItems: 'flex-start', paddingTop: 5, paddingRight: 8, justifyContent: 'flex-end' }}>
                     <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, fontWeight: 500, color: 'var(--s300)' }}>
                       {String(h).padStart(2, '0')}:00
@@ -953,16 +988,53 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
                         </div>
                       </div>
 
-                      {/* Slot area */}
-                      <div style={{ position: 'relative', height: TOTAL_H, background: isT ? 'rgba(20,184,166,.015)' : 'transparent' }}>
-                        {HOURS.map(h => (
-                          <div key={h} style={{ position: 'absolute', left: 0, right: 0, top: (h - START_H) * HOUR_H, borderTop: '1px solid var(--s100)' }} />
+                      {/* Slot area — clicking an empty spot offers a quick booking */}
+                      <div
+                        style={{ position: 'relative', height: totalH, background: isT ? 'rgba(20,184,166,.015)' : 'transparent', cursor: 'pointer' }}
+                        onClick={e => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const y = e.clientY - rect.top;
+                          let mins = startH * 60 + y / PX_PER_MIN;
+                          mins = Math.round(mins / 15) * 15;
+                          mins = Math.max(startH * 60, Math.min(mins, endH * 60 - 15));
+                          const time = `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+                          setQuickSlot({ day, time, top: (mins - startH * 60) * PX_PER_MIN });
+                        }}
+                      >
+                        {hours.map(h => (
+                          <div key={h} style={{ position: 'absolute', left: 0, right: 0, top: (h - startH) * HOUR_H, borderTop: '1px solid var(--s100)' }} />
                         ))}
-                        {HOURS.map(h => (
-                          <div key={`hh${h}`} style={{ position: 'absolute', left: 0, right: 0, top: (h - START_H) * HOUR_H + HOUR_H / 2, borderTop: '1px dashed var(--s100)' }} />
+                        {hours.map(h => (
+                          <div key={`hh${h}`} style={{ position: 'absolute', left: 0, right: 0, top: (h - startH) * HOUR_H + HOUR_H / 2, borderTop: '1px dashed var(--s100)' }} />
                         ))}
-                        {isT && <NowIndicator />}
-                        {dayAppts.map(a => <AppBlock key={a.id} appt={a} onClick={setSelAppt} />)}
+                        {isT && <NowIndicator startH={startH} endH={endH} />}
+                        {dayAppts.map(a => <AppBlock key={a.id} appt={a} onClick={x => { setSelAppt(x); setQuickSlot(null); }} startH={startH} totalH={totalH} />)}
+                        {quickSlot?.day === day && (
+                          <div
+                            onClick={e => e.stopPropagation()}
+                            style={{
+                              position: 'absolute', top: Math.max(0, quickSlot.top - 4), left: 4, right: 4, zIndex: 25,
+                              background: '#fff', border: '1.5px solid var(--teal)', borderRadius: 10,
+                              boxShadow: '0 6px 24px rgba(15,23,42,.16)', padding: '8px 10px',
+                              display: 'flex', alignItems: 'center', gap: 8,
+                            }}
+                          >
+                            <Clock size={14} color="var(--teal)" style={{ flexShrink: 0 }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--s800)' }}>Agendar a las {quickSlot.time}</div>
+                              <div style={{ fontSize: 11, color: 'var(--s400)' }}>{new Date(day + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
+                            </div>
+                            <button
+                              onClick={() => navigate(`/appointments/new?date=${day}&time=${quickSlot.time}`)}
+                              style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                            ><Plus size={13} color="white" /> Agendar</button>
+                            <button
+                              onClick={() => setQuickSlot(null)}
+                              aria-label="Cerrar"
+                              style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--s400)', display: 'flex', padding: 2, flexShrink: 0 }}
+                            ><X size={15} /></button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );

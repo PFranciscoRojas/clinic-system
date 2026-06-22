@@ -14,7 +14,7 @@ import { PatientSearchBox } from '@/components/patients/PatientSearchBox';
 import { calcAge } from '@/lib/age';
 import { useIsCompact } from '@/lib/useMediaQuery';
 import { CLR_DANGER, CLR_WARN, CLR_SUCCESS, CLR_INFO, CLR_PROC, CLR_NEUTRAL } from '@/lib/tokens';
-import { clinicalRecordsApi, consentsApi, type RecordMeta } from '@/api/clinicalRecords';
+import { clinicalRecordsApi, consentsApi, type RecordMeta, type RecordType } from '@/api/clinicalRecords';
 import { ConsentViewModal } from '@/components/consents/ConsentViewModal';
 import { UnifiedConsentSignModal } from '@/components/consents/UnifiedConsentSignModal';
 import { RecordForm } from '@/components/clinical/RecordForm';
@@ -334,6 +334,10 @@ export function AppointmentPage() {
   const draftKey = `sghcp_draft_${id}`;
   const [draftId, setDraftId] = useState(() => localStorage.getItem(draftKey) ?? '');
 
+  // The record type the professional is actively filling — drives which format
+  // the session recording / AI draft targets. Set by RecordForm via onTypeChange.
+  const [selectedRecordType, setSelectedRecordType] = useState<RecordType | null>(null);
+
   const { data: appt, isLoading, isError } = useQuery({
     queryKey: ['appointment', id],
     queryFn: () => appointmentsApi.get(id!),
@@ -470,6 +474,9 @@ export function AppointmentPage() {
   const lastDischarge = allRecords.filter(r => r.record_type === 'DISCHARGE').map(r => r.session_date).sort().pop();
   const hasOpenProcess = !!lastInitial && (!lastDischarge || lastInitial > lastDischarge);
   const defaultRecordType = hasOpenProcess ? 'EVOLUTION' as const : 'INITIAL' as const;
+  // What the audio recording / AI draft targets: the type the professional is
+  // actively filling (RecordForm), falling back to the inferred default.
+  const aiRecordType: RecordType = selectedRecordType ?? defaultRecordType;
 
   // Records linked to this appointment
   const linkedRecords: RecordMeta[] = (recordsData?.items ?? []).filter(r => r.appointment_id === id);
@@ -504,7 +511,7 @@ export function AppointmentPage() {
     await handleStatusChange('COMPLETED');
     if (audio && appt?.patient_id) {
       try {
-        const res = await appointmentsApi.uploadAudio(id!, appt.patient_id, audio, defaultRecordType);
+        const res = await appointmentsApi.uploadAudio(id!, appt.patient_id, audio, aiRecordType);
         handleDraftCreated(res.draft_id);
       } catch {
         setProcessingAudio(false);
@@ -771,7 +778,7 @@ export function AppointmentPage() {
                   <span><b>Registro extemporáneo</b> — motivo: {lateReason}. Quedará declarado en la historia y en el PDF.</span>
                 </div>
               )}
-              <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} onSaved={handleRecordSaved} />
+              <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} onTypeChange={setSelectedRecordType} onSaved={handleRecordSaved} />
             </div>
 
             {/* ASIDE — recap + borrador IA como apoyo (sticky en desktop) */}
@@ -793,7 +800,7 @@ export function AppointmentPage() {
                     appointmentId={id!}
                     patientId={appt.patient_id}
                     draftId={draftId}
-                    recordType={defaultRecordType}
+                    recordType={aiRecordType}
                     sessionDate={apptDate}
                     processing={processingAudio}
                     onDraftCreated={handleDraftCreated}
@@ -1136,7 +1143,7 @@ export function AppointmentPage() {
                 appointmentId={id!}
                 patientId={appt.patient_id}
                 draftId={draftId}
-                recordType={defaultRecordType}
+                recordType={aiRecordType}
                 sessionDate={apptDate}
                 processing={processingAudio}
                 onDraftCreated={handleDraftCreated}
@@ -1200,7 +1207,7 @@ export function AppointmentPage() {
                 <span><b>Registro extemporáneo</b> — motivo: {lateReason}. Quedará declarado en la historia y en el PDF.</span>
               </div>
             )}
-            <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} onSaved={handleRecordSaved} />
+            <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} onTypeChange={setSelectedRecordType} onSaved={handleRecordSaved} />
           </div>
         ) : canWriteNote ? (
           <div style={{ textAlign: 'center', padding: '24px 0' }}>
