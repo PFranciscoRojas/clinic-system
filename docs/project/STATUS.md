@@ -20,6 +20,7 @@
 
 ### Últimos commits a `main` (sesión 2026-06-22) — desplegados
 
+- `eb62f60` feat(booking): aceptación obligatoria de la política de reembolso/cancelación antes de pagar — checkbox en el paso de datos del wizard público, botón deshabilitado hasta aceptar, checkout rechaza sin `policy_accepted` y sella `policy_accepted_at` (migración 000031). Cierra **B6**
 - `07ae88f` fix(billing): firma de webhook MP obligatoria — quitado el fail-open. `VerifyWebhook` falla cerrado con secreto vacío; `config.Load` exige `MP_WEBHOOK_SECRET` cuando hay `MP_ACCESS_TOKEN`. Cierra **B-11**. Secreto añadido al `.env` del VPS
 - `7e2e132` feat(patients): Nº de HC consecutivo por tenant (`patient_code`, patrón `invoice_number` con advisory lock), asignado al registrar; migración 000030 con backfill (lift FORCE RLS); franja de identificación muestra `HC-000001` + Fecha de apertura (cierra Sección I del Formato 1)
 - `8b38fd1` fix(agenda): el popover de agendado rápido detecta solapamiento con citas del día (`byDay`) y muestra estado "ocupado" en vez de proponer una hora que luego choca
@@ -32,7 +33,6 @@
 
 | ID | Descripción | Estado |
 |---|---|---|
-| **B6** | Política de reembolso/cancelación en booking con check de aceptación | 🟡 pendiente |
 | **RLS** | Aplicar RLS a `ai_drafts` + endpoints públicos booking/consents | 🟡 pendiente |
 | **UI** | Botón "Cambiar correo del admin" en Configuración | 🟡 pendiente |
 
@@ -42,7 +42,7 @@
 
 | Versión | Hito |
 |---|---|
-| `1.0.0` | Go-live real: token MP producción, precio real, `ALLOW_DATA_RESET=false`, política reembolso (B6) |
+| `1.0.0` | Go-live real: token MP producción, precio real, `ALLOW_DATA_RESET=false` |
 | post-1.0 | Google Calendar OAuth + sync |
 | post-1.0 | Recordatorios WhatsApp (Meta API / Twilio) |
 | post-1.0 | Videollamada / Zoom nativa |
@@ -67,7 +67,7 @@
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción (rebuild 2026-06-22, migración 000030 aplicada) |
+| `core-api:8080` | ✅ producción (rebuild 2026-06-22, migración 000031 aplicada) |
 | `ai-service` | ✅ producción (`Dockerfile.patch` rebuild #79) |
 | `frontend` (Caddy :80/:443) | ✅ producción |
 | Backups | `pg_dump` cifrado GPG → Backblaze B2 |
@@ -88,7 +88,7 @@
 | `core-api` | `services/core-api/` | ✅ Go 1.21, prod |
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
-| Migrations | `services/core-api/migrations/` | Última: `000030_patient_code` |
+| Migrations | `services/core-api/migrations/` | Última: `000031_booking_policy_accepted` |
 | Claude skills | `~/.claude/commands/` | Sincronizadas en sesión 2026-06-22 |
 
 ---
