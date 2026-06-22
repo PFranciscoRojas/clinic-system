@@ -614,8 +614,155 @@ export function AppointmentPage() {
   // Hard gates before a clinical session can start (Res. 1995/1999 + consent law)
   const canStartSession = !!patient && !!treatmentConsent && !isFutureDay;
 
+  // Writing mode = the clinical record is the screen's primary work surface:
+  // the session is in progress, or it just finished and the note is still
+  // pending. The layout flips to a focused workspace (record protagonist +
+  // recap/AI as a supporting sidebar) instead of the metadata-first header.
+  const writingMode = !isGuest && !!appt.patient_id && canWriteNote;
+
   return (
     <div style={{ maxWidth: 1400, margin: '0 auto', padding: compactLayout ? '16px 12px' : '24px 24px 40px' }}>
+      {writingMode ? (
+        <>
+          {/* ── Barra de sesión compacta (sticky) ─────────────────────────── */}
+          <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--s50)', paddingTop: 4, paddingBottom: 12, marginBottom: 4 }}>
+            <div className="card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', boxShadow: '0 4px 16px rgba(15,23,42,.08)' }}>
+              <button
+                onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/')}
+                aria-label="Volver"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s500)', padding: 8, minWidth: 40, minHeight: 40, flexShrink: 0 }}
+              >
+                <ArrowLeft size={18} />
+              </button>
+              <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg, var(--teal), var(--teal-d))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
+                {patientInitials}
+              </div>
+              <div style={{ minWidth: 0, flex: '1 1 200px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--s800)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{patientName}</span>
+                  <Badge label={statusCfg.label} color={statusCfg.color} bg={statusCfg.bg} />
+                </div>
+                <span style={{ fontSize: 12, color: 'var(--s400)' }}>{time} · {appt.duration_min} min · {MODALITY_LABEL[appt.modality] ?? appt.modality}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {isInProgress && <SessionTimer startedAt={appt.started_at ?? appt.scheduled_at} durationMin={appt.duration_min} />}
+                {isInProgress && recording && <RecChip startMs={recStart} analyser={analyser} paused={recPaused} />}
+                {isInProgress && recordingConsent && recording && !recPaused && (
+                  <button onClick={pauseRecording} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: '#92400e', border: '1.5px solid #fcd34d', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                    <Pause size={13} /> Pausar
+                  </button>
+                )}
+                {isInProgress && recordingConsent && recording && recPaused && (
+                  <button onClick={resumeRecording} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                    <Mic size={13} /> Reanudar
+                  </button>
+                )}
+                {isInProgress && recordingConsent && !recording && (
+                  <button onClick={startRecording} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                    {micError ? <RotateCcw size={13} /> : <Mic size={13} />}
+                    {micError ? 'Reintentar' : 'Grabar'}
+                  </button>
+                )}
+                {isInProgress && (
+                  <button
+                    onClick={handleFinishSession}
+                    disabled={statusLoading}
+                    style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 20px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 9, cursor: statusLoading ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 700, opacity: statusLoading ? 0.7 : 1 }}
+                  >
+                    {statusLoading ? <Spinner size={15} color="#fff" /> : <CheckCircle2 size={15} />}
+                    Finalizar sesión
+                  </button>
+                )}
+                {!isInProgress && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '6px 12px' }}>
+                    <AlertTriangle size={13} /> Sesión finalizada — registra la nota
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {statusErr && (
+              <div role="alert" style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#fee2e2', borderRadius: 8 }}>
+                <AlertTriangle size={14} color="#dc2626" />
+                <span style={{ fontSize: 13, color: '#991b1b', flex: 1 }}>{statusErr}</span>
+                {lastStatus && (
+                  <button onClick={() => handleStatusChange(lastStatus)} disabled={statusLoading} style={{ fontSize: 12, fontWeight: 600, padding: '4px 10px', minHeight: 32, borderRadius: 6, border: '1px solid #fca5a5', background: '#fff', color: '#991b1b', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    Reintentar
+                  </button>
+                )}
+              </div>
+            )}
+            {micError && (
+              <div role="alert" style={{ marginTop: 10, display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 9, fontSize: 13, color: '#9a3412' }}>
+                <MicOff size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: '0 0 4px', fontWeight: 700 }}>Sin acceso al micrófono — la sesión no se está grabando</p>
+                  <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5 }}>{micError}</p>
+                </div>
+              </div>
+            )}
+            {recNote && (
+              <div role="alert" style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, fontSize: 12.5, color: '#92400e' }}>
+                <AlertTriangle size={13} /> {recNote}
+              </div>
+            )}
+          </div>
+
+          {/* ── Workspace: registro clínico (protagonista) + apoyo lateral ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: compactLayout ? '1fr' : 'minmax(0, 1fr) 360px', gap: 20, alignItems: 'start' }}>
+            {/* MAIN — el registro clínico es el foco */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 9, background: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <FileText size={18} color="var(--teal)" />
+                </div>
+                <div>
+                  <h1 style={{ margin: 0, fontWeight: 800, fontSize: 18, color: 'var(--s800)' }}>Registro clínico</h1>
+                  <span style={{ fontSize: 12, color: 'var(--s400)' }}>
+                    {isInProgress ? 'Sesión en curso — registra la nota' : 'Sesión finalizada — registra la nota con la fecha real de la sesión'}
+                  </span>
+                </div>
+              </div>
+              {lateReason && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 9, padding: '10px 14px', fontSize: 12.5, color: '#92400e' }}>
+                  <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <span><b>Registro extemporáneo</b> — motivo: {lateReason}. Quedará declarado en la historia y en el PDF.</span>
+                </div>
+              )}
+              <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} onSaved={handleRecordSaved} />
+            </div>
+
+            {/* ASIDE — recap + borrador IA como apoyo (sticky en desktop) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, position: compactLayout ? 'static' : 'sticky', top: 84 }}>
+              <RiskBanner patientId={appt.patient_id} />
+              <RecapCard patientId={appt.patient_id} />
+              {(canWriteNote || !!draftId) && (
+                <div className="card" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 9, background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Brain size={16} color="#f59e0b" />
+                    </div>
+                    <div>
+                      <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)', display: 'block' }}>Borrador IA</span>
+                      <span style={{ fontSize: 11, color: 'var(--s400)' }}>Audio → transcripción → borrador</span>
+                    </div>
+                  </div>
+                  <AudioSection
+                    appointmentId={id!}
+                    patientId={appt.patient_id}
+                    draftId={draftId}
+                    recordType={defaultRecordType}
+                    sessionDate={apptDate}
+                    processing={processingAudio}
+                    onDraftCreated={handleDraftCreated}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      ) : (
+       <>
       {/* Back */}
       <button onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s500)', fontSize: 14, marginBottom: 24, padding: '10px 8px 10px 0', minHeight: 44 }}>
         <ArrowLeft size={16} /> Volver
@@ -1039,6 +1186,8 @@ export function AppointmentPage() {
           </div>
         )}
       </div>
+      </>
+      )}
 
       {viewConsentId && <ConsentViewModal consentId={viewConsentId} onClose={() => setViewConsentId(null)} />}
       {signConsentOpen && appt.patient_id && (
