@@ -18,6 +18,9 @@ interface RecordFormProps {
   lateEntryReason?: string;
   /** When the treatment consent is already signed, the reminder is suppressed. */
   treatmentConsentSigned?: boolean;
+  /** Whether the patient already has an open clinical process. Constrains which
+   *  record types are offerable: open → Plan/Evolución/Alta; closed → Apertura. */
+  hasOpenProcess?: boolean;
   /** Emitted when the selected record type changes, so the audio/AI draft can
    *  target the same format the professional is filling. */
   onTypeChange?: (t: RecordType) => void;
@@ -26,17 +29,54 @@ interface RecordFormProps {
 
 const UI_TYPES: UIRecordType[] = ['INITIAL', 'PLAN', 'EVOLUTION', 'DISCHARGE'];
 
-export function RecordForm({ patientId, appointmentId, defaultType, sessionDate: sessionDateProp, lateEntryReason, treatmentConsentSigned, onTypeChange, onSaved }: RecordFormProps) {
+// A draft carries real work the user would lose on a format switch.
+function draftHasContent(d: ClinicalDraft): boolean {
+  if (Object.values(d.sections).some(v => (v ?? '').trim())) return true;
+  if ((d.riskNote ?? '').trim()) return true;
+  if (d.distressLevel !== undefined) return true;
+  if (d.dischargeReason) return true;
+  if ((d.achievementIndicators?.length ?? 0) > 0) return true;
+  if ((d.planTechniques?.length ?? 0) > 0) return true;
+  if ((d.taskChecklist?.length ?? 0) > 0) return true;
+  return false;
+}
+
+export function RecordForm({ patientId, appointmentId, defaultType, sessionDate: sessionDateProp, lateEntryReason, treatmentConsentSigned, hasOpenProcess, onTypeChange, onSaved }: RecordFormProps) {
   const storageKey = appointmentId ? `clinical-draft-${appointmentId}` : `clinical-draft-patient-${patientId}`;
+  // Only the types the open-process rule permits are offered, so the user can't
+  // pick a format the server will reject on save.
+  const allowedTypes: UIRecordType[] = hasOpenProcess === undefined
+    ? UI_TYPES
+    : hasOpenProcess
+      ? ['PLAN', 'EVOLUTION', 'DISCHARGE']
+      : ['INITIAL'];
   const [uiType, setUIType] = useState<UIRecordType>(defaultType === 'INITIAL' ? 'INITIAL' : defaultType === 'DISCHARGE' ? 'DISCHARGE' : 'EVOLUTION');
   const [draft, setDraft] = useState<ClinicalDraft>(emptyDraft);
   const [sessionDate] = useState(() => sessionDateProp ?? new Date().toISOString().slice(0, 10));
   const [saving, setSaving] = useState(false);
   const [copying, setCopying] = useState(false);
   const [restored, setRestored] = useState(false);
+  const [pendingType, setPendingType] = useState<UIRecordType | null>(null);
   const [err, setErr] = useState('');
 
   const apiType: RecordType = uiType === 'PLAN' ? 'EVOLUTION' : uiType;
+
+  // Discard the draft and switch format — wiped because each format has its own fields.
+  const switchType = (val: UIRecordType) => {
+    setUIType(val);
+    setDraft(emptyDraft());
+    setErr('');
+    setRestored(false);
+    setPendingType(null);
+    try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
+  };
+
+  // Switching with content asks first; empty drafts switch immediately.
+  const requestTypeChange = (val: UIRecordType) => {
+    if (val === uiType) return;
+    if (draftHasContent(draft)) setPendingType(val);
+    else switchType(val);
+  };
 
   // Keep the audio/AI draft aligned with the format being filled.
   useEffect(() => { onTypeChange?.(apiType); }, [apiType, onTypeChange]);
@@ -48,6 +88,8 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         const saved = JSON.parse(raw);
+        // Ignore a saved draft whose type the process rule no longer permits.
+        if (saved.uiType && !allowedTypes.includes(saved.uiType)) return;
         if (saved.uiType) setUIType(saved.uiType);
         if (saved.draft) { setDraft({ ...emptyDraft(), ...saved.draft }); setRestored(true); }
       }
@@ -122,10 +164,10 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
         Tipo de registro <span style={{ fontWeight: 400, textTransform: 'none', color: 'var(--s400)' }}>— elige el formato y se validan solo sus campos obligatorios</span>
       </p>
       <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        {UI_TYPES.map(val => (
+        {UI_TYPES.filter(v => allowedTypes.includes(v)).map(val => (
           <button
             key={val}
-            onClick={() => setUIType(val)}
+            onClick={() => requestTypeChange(val)}
             style={{
               padding: '6px 14px', borderRadius: 20, border: '1.5px solid',
               borderColor: uiType === val ? 'var(--teal)' : 'var(--s200)',
@@ -146,6 +188,34 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
           </button>
         )}
       </div>
+      {hasOpenProcess !== undefined && (
+        <p style={{ margin: '0 0 10px', fontSize: 11.5, color: 'var(--s400)' }}>
+          {hasOpenProcess
+            ? 'El paciente tiene un proceso abierto — registra Evolución, Plan o Alta (la Apertura ya existe).'
+            : 'El paciente no tiene proceso abierto — se registra la Apertura de la historia.'}
+        </p>
+      )}
+
+      {/* Format-switch confirmation: each format has its own fields, so changing
+          discards what was typed. */}
+      {pendingType && (
+        <div role="alertdialog" style={{ marginBottom: 12, padding: '12px 14px', background: '#fffbeb', border: '1.5px solid #fcd34d', borderRadius: 10 }}>
+          <p style={{ margin: '0 0 10px', fontSize: 13, color: '#92400e', lineHeight: 1.5 }}>
+            <AlertTriangle size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
+            Vas a cambiar a <strong>{RECORD_TYPE_LABELS[pendingType]}</strong>. Cada formato tiene sus propios campos, así que <strong>se borrará lo que escribiste</strong> en {RECORD_TYPE_LABELS[uiType]}. ¿Continuar?
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => switchType(pendingType)}
+              style={{ padding: '7px 14px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 700 }}
+            >Cambiar y borrar</button>
+            <button
+              onClick={() => setPendingType(null)}
+              style={{ padding: '7px 14px', background: '#fff', color: 'var(--s600)', border: '1.5px solid var(--s200)', borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 600 }}
+            >Cancelar</button>
+          </div>
+        </div>
+      )}
       {restored && (
         <p style={{ margin: '0 0 12px', fontSize: 12, color: 'var(--s400)', fontStyle: 'italic' }}>
           Borrador restaurado automáticamente.

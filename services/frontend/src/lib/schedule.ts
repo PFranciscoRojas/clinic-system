@@ -75,3 +75,29 @@ export function dayLabelOf(isoDate: string): string {
 export function isWorkingDay(isoDate: string, cfg: ScheduleConfig): boolean {
   return cfg.activeDays.includes(dayLabelOf(isoDate));
 }
+
+// SLOT_STEP_MIN must match the new-appointment page grid so a quick-booked time
+// lands exactly on an offered slot.
+export const SLOT_STEP_MIN = 30;
+
+function toMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+// timeSlotsFor returns the bookable 'HH:MM' start times for a given date,
+// honouring working days, working hours and the midday break. Empty when the
+// date is not a working day.
+export function timeSlotsFor(isoDate: string, cfg: ScheduleConfig): string[] {
+  if (!isWorkingDay(isoDate, cfg)) return [];
+  const start = toMinutes(cfg.startHour);
+  const end   = toMinutes(cfg.endHour);
+  const brkS  = cfg.breakStart ? toMinutes(cfg.breakStart) : -1;
+  const brkE  = cfg.breakEnd   ? toMinutes(cfg.breakEnd)   : -1;
+  const slots: string[] = [];
+  for (let m = start; m < end; m += SLOT_STEP_MIN) {
+    if (brkS >= 0 && brkE > brkS && m >= brkS && m < brkE) continue;
+    slots.push(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
+  }
+  return slots;
+}

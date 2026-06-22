@@ -12,7 +12,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
 import { useIsCompact, useIsMobile } from '@/lib/useMediaQuery';
 import { SlotPicker } from '@/components/appointments/SlotPicker';
-import { loadSchedule } from '@/lib/schedule';
+import { loadSchedule, timeSlotsFor, SLOT_STEP_MIN } from '@/lib/schedule';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -993,12 +993,18 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
                         style={{ position: 'relative', height: totalH, background: isT ? 'rgba(20,184,166,.015)' : 'transparent', cursor: 'pointer' }}
                         onClick={e => {
                           const rect = e.currentTarget.getBoundingClientRect();
-                          const y = e.clientY - rect.top;
-                          let mins = startH * 60 + y / PX_PER_MIN;
-                          mins = Math.round(mins / 15) * 15;
-                          mins = Math.max(startH * 60, Math.min(mins, endH * 60 - 15));
-                          const time = `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
-                          setQuickSlot({ day, time, top: (mins - startH * 60) * PX_PER_MIN });
+                          const clickedMin = startH * 60 + (e.clientY - rect.top) / PX_PER_MIN;
+                          // Only offer a slot the schedule actually makes available:
+                          // the click must fall inside a configured slot window.
+                          const slots = timeSlotsFor(day, schedule);
+                          const hit = slots.find(s => {
+                            const sm = Number(s.slice(0, 2)) * 60 + Number(s.slice(3));
+                            return clickedMin >= sm && clickedMin < sm + SLOT_STEP_MIN;
+                          });
+                          const topPx = Math.max(0, (Math.round(clickedMin / SLOT_STEP_MIN) * SLOT_STEP_MIN - startH * 60) * PX_PER_MIN);
+                          setQuickSlot(hit
+                            ? { day, time: hit, top: (Number(hit.slice(0, 2)) * 60 + Number(hit.slice(3)) - startH * 60) * PX_PER_MIN }
+                            : { day, time: '', top: topPx });
                         }}
                       >
                         {hours.map(h => (
@@ -1014,20 +1020,31 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
                             onClick={e => e.stopPropagation()}
                             style={{
                               position: 'absolute', top: Math.max(0, quickSlot.top - 4), left: 4, right: 4, zIndex: 25,
-                              background: '#fff', border: '1.5px solid var(--teal)', borderRadius: 10,
+                              background: '#fff', border: `1.5px solid ${quickSlot.time ? 'var(--teal)' : 'var(--s300)'}`, borderRadius: 10,
                               boxShadow: '0 6px 24px rgba(15,23,42,.16)', padding: '8px 10px',
                               display: 'flex', alignItems: 'center', gap: 8,
                             }}
                           >
-                            <Clock size={14} color="var(--teal)" style={{ flexShrink: 0 }} />
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--s800)' }}>Agendar a las {quickSlot.time}</div>
-                              <div style={{ fontSize: 11, color: 'var(--s400)' }}>{new Date(day + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
-                            </div>
-                            <button
-                              onClick={() => navigate(`/appointments/new?date=${day}&time=${quickSlot.time}`)}
-                              style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                            ><Plus size={13} color="white" /> Agendar</button>
+                            {quickSlot.time ? (
+                              <>
+                                <Clock size={14} color="var(--teal)" style={{ flexShrink: 0 }} />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--s800)' }}>Agendar a las {quickSlot.time}</div>
+                                  <div style={{ fontSize: 11, color: 'var(--s400)' }}>{new Date(day + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
+                                </div>
+                                <button
+                                  onClick={() => navigate(`/appointments/new?date=${day}&time=${quickSlot.time}`)}
+                                  style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                                ><Plus size={13} color="white" /> Agendar</button>
+                              </>
+                            ) : (
+                              <>
+                                <AlertTriangle size={14} color="var(--s400)" style={{ flexShrink: 0 }} />
+                                <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--s500)' }}>
+                                  Fuera de tu horario disponible. Ajústalo en <b>Configuración → Horario</b>.
+                                </div>
+                              </>
+                            )}
                             <button
                               onClick={() => setQuickSlot(null)}
                               aria-label="Cerrar"

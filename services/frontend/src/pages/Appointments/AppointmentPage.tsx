@@ -778,7 +778,7 @@ export function AppointmentPage() {
                   <span><b>Registro extemporáneo</b> — motivo: {lateReason}. Quedará declarado en la historia y en el PDF.</span>
                 </div>
               )}
-              <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} onTypeChange={setSelectedRecordType} onSaved={handleRecordSaved} />
+              <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} hasOpenProcess={hasOpenProcess} onTypeChange={setSelectedRecordType} onSaved={handleRecordSaved} />
             </div>
 
             {/* ASIDE — recap + borrador IA como apoyo (sticky en desktop) */}
@@ -1207,7 +1207,7 @@ export function AppointmentPage() {
                 <span><b>Registro extemporáneo</b> — motivo: {lateReason}. Quedará declarado en la historia y en el PDF.</span>
               </div>
             )}
-            <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} onTypeChange={setSelectedRecordType} onSaved={handleRecordSaved} />
+            <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} hasOpenProcess={hasOpenProcess} onTypeChange={setSelectedRecordType} onSaved={handleRecordSaved} />
           </div>
         ) : canWriteNote ? (
           <div style={{ textAlign: 'center', padding: '24px 0' }}>
