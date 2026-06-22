@@ -615,7 +615,7 @@ export function AppointmentPage() {
   const canStartSession = !!patient && !!treatmentConsent && !isFutureDay;
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: compactLayout ? '16px 12px' : '24px 24px 40px' }}>
+    <div style={{ maxWidth: 1400, margin: '0 auto', padding: compactLayout ? '16px 12px' : '24px 24px 40px' }}>
       {/* Back */}
       <button onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s500)', fontSize: 14, marginBottom: 24, padding: '10px 8px 10px 0', minHeight: 44 }}>
         <ArrowLeft size={16} /> Volver
@@ -927,7 +927,7 @@ export function AppointmentPage() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: compactLayout ? '1fr' : '1fr 1fr', gap: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: compactLayout ? '1fr' : 'minmax(0, 1fr) 380px', gap: 20 }}>
 
         {/* ── Historia clínica ─────────────────────────────────────────────── */}
         <div className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1012,8 +1012,8 @@ export function AppointmentPage() {
           )}
         </div>
 
-        {/* ── Grabación de sesión (AI) ─────────────────────────────────────── */}
-        <div className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* ── Grabación de sesión (AI) — solo visible cuando hay acción posible ─ */}
+        {(canWriteNote || !!draftId) && <div className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ width: 34, height: 34, borderRadius: 9, background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Brain size={17} color="#f59e0b" />
@@ -1024,22 +1024,16 @@ export function AppointmentPage() {
             </div>
           </div>
 
-          {canWriteNote ? (
-            <AudioSection
-              appointmentId={id!}
-              patientId={appt.patient_id}
-              draftId={draftId}
-              recordType={defaultRecordType}
-              sessionDate={apptDate}
-              processing={processingAudio}
-              onDraftCreated={handleDraftCreated}
-            />
-          ) : (
-            <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--s400)', fontSize: 13 }}>
-              La cita debe estar activa para subir grabaciones
-            </div>
-          )}
-        </div>
+          <AudioSection
+            appointmentId={id!}
+            patientId={appt.patient_id}
+            draftId={draftId}
+            recordType={defaultRecordType}
+            sessionDate={apptDate}
+            processing={processingAudio}
+            onDraftCreated={handleDraftCreated}
+          />
+        </div>}
 
       </div>
 
