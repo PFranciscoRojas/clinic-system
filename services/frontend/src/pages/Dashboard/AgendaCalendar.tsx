@@ -155,6 +155,23 @@ function apptH(appt: Appointment): number {
   return Math.max(22, (appt.duration_min / 60) * HOUR_H);
 }
 
+// Local start/end of an appointment expressed in minutes from midnight.
+function apptRange(appt: Appointment): { start: number; end: number } {
+  const d = new Date(appt.scheduled_at);
+  const start = d.getHours() * 60 + d.getMinutes();
+  return { start, end: start + appt.duration_min };
+}
+
+// True when the [slotStart, slotStart+SLOT_STEP_MIN) window overlaps any
+// non-cancelled appointment for the day.
+function slotIsBusy(slotStart: number, dayAppts: Appointment[]): boolean {
+  const slotEnd = slotStart + SLOT_STEP_MIN;
+  return dayAppts.some(a => {
+    const { start, end } = apptRange(a);
+    return slotStart < end && start < slotEnd;
+  });
+}
+
 // ── usePatient ────────────────────────────────────────────────────────────────
 
 function usePatient(id: string) {
@@ -748,7 +765,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
   });
   const changeView = (v: CalView) => { setCalView(v); localStorage.setItem('sghcp_cal_view', v); };
   const [selAppt, setSelAppt]         = useState<Appointment | null>(null);
-  const [quickSlot, setQuickSlot]     = useState<{ day: string; time: string; top: number } | null>(null);
+  const [quickSlot, setQuickSlot]     = useState<{ day: string; time: string; top: number; busy: boolean } | null>(null);
   const gridRef   = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
 
@@ -1002,9 +1019,10 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
                             return clickedMin >= sm && clickedMin < sm + SLOT_STEP_MIN;
                           });
                           const topPx = Math.max(0, (Math.round(clickedMin / SLOT_STEP_MIN) * SLOT_STEP_MIN - startH * 60) * PX_PER_MIN);
+                          const hitMin = hit ? Number(hit.slice(0, 2)) * 60 + Number(hit.slice(3)) : 0;
                           setQuickSlot(hit
-                            ? { day, time: hit, top: (Number(hit.slice(0, 2)) * 60 + Number(hit.slice(3)) - startH * 60) * PX_PER_MIN }
-                            : { day, time: '', top: topPx });
+                            ? { day, time: hit, top: (hitMin - startH * 60) * PX_PER_MIN, busy: slotIsBusy(hitMin, dayAppts) }
+                            : { day, time: '', top: topPx, busy: false });
                         }}
                       >
                         {hours.map(h => (
@@ -1020,12 +1038,19 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
                             onClick={e => e.stopPropagation()}
                             style={{
                               position: 'absolute', top: Math.max(0, quickSlot.top - 4), left: 4, right: 4, zIndex: 25,
-                              background: '#fff', border: `1.5px solid ${quickSlot.time ? 'var(--teal)' : 'var(--s300)'}`, borderRadius: 10,
+                              background: '#fff', border: `1.5px solid ${quickSlot.busy ? '#fca5a5' : quickSlot.time ? 'var(--teal)' : 'var(--s300)'}`, borderRadius: 10,
                               boxShadow: '0 6px 24px rgba(15,23,42,.16)', padding: '8px 10px',
                               display: 'flex', alignItems: 'center', gap: 8,
                             }}
                           >
-                            {quickSlot.time ? (
+                            {quickSlot.busy ? (
+                              <>
+                                <AlertTriangle size={14} color="#dc2626" style={{ flexShrink: 0 }} />
+                                <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--s600)' }}>
+                                  Ya tienes una cita a las <b>{quickSlot.time}</b>. Elige otra hora.
+                                </div>
+                              </>
+                            ) : quickSlot.time ? (
                               <>
                                 <Clock size={14} color="var(--teal)" style={{ flexShrink: 0 }} />
                                 <div style={{ flex: 1, minWidth: 0 }}>
