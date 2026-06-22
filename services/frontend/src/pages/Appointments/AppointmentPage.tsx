@@ -919,122 +919,125 @@ export function AppointmentPage() {
         )}
       </div>
 
-      {/* ── Señales de riesgo (IA) + Recap pre-sesión — con paciente registrado ── */}
+      {/* ── Recap pre-sesión + Borrador IA (columna lateral cuando aplica) ── */}
       {!isGuest && appt.patient_id && (
-        <div style={{ marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <RiskBanner patientId={appt.patient_id} />
-          <RecapCard patientId={appt.patient_id} />
-        </div>
-      )}
-
-      <div style={{ display: 'grid', gridTemplateColumns: compactLayout ? '1fr' : 'minmax(0, 1fr) 380px', gap: 20 }}>
-
-        {/* ── Historia clínica ─────────────────────────────────────────────── */}
-        <div className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 9, background: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <FileText size={17} color="var(--teal)" />
-              </div>
-              <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--s800)' }}>Historia clínica</span>
-            </div>
-            {linkedRecords.length > 0 && !showRecordForm && canWriteNote && (
-              <button
-                onClick={() => setShowRecordForm(true)}
-                style={{ fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, border: '1px solid var(--teal)', background: '#f0fdfa', color: 'var(--teal)', cursor: 'pointer' }}
-              >
-                + Nuevo
-              </button>
-            )}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: (canWriteNote || !!draftId) && !compactLayout ? 'minmax(0, 1fr) 380px' : '1fr',
+          gap: 20,
+          marginBottom: 20,
+          alignItems: 'start',
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <RiskBanner patientId={appt.patient_id} />
+            <RecapCard patientId={appt.patient_id} />
           </div>
-
-          {linkedRecords.length > 0 && !showRecordForm ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {linkedRecords.map(rec => (
-                <div key={rec.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'var(--s50)', borderRadius: 10, border: '1px solid var(--s200)' }}>
-                  <FileText size={16} color="var(--teal)" />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--s800)' }}>
-                      {RECORD_TYPE_LABEL[rec.record_type] ?? rec.record_type}
-                    </p>
-                    <p style={{ margin: 0, fontSize: 12, color: 'var(--s400)' }}>{rec.session_date}</p>
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 6, background: rec.status === 'APPROVED' ? '#d1fae5' : '#fef3c7', color: rec.status === 'APPROVED' ? '#065f46' : '#92400e' }}>
-                    {rec.status === 'APPROVED' ? 'Aprobado' : 'Borrador'}
-                  </span>
-                  <button
-                    onClick={() => navigate(`/clinical-records/${rec.id}`)}
-                    style={{ fontSize: 12, fontWeight: 600, padding: '6px 12px', minHeight: 36, borderRadius: 6, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s700)', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                  >
-                    Ver
-                  </button>
+          {(canWriteNote || !!draftId) && (
+            <div className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 9, background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Brain size={17} color="#f59e0b" />
                 </div>
-              ))}
-            </div>
-          ) : showRecordForm ? (
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s600)' }}>Nuevo registro clínico</span>
-                <button aria-label="Cerrar registro clínico" onClick={() => setShowRecordForm(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)', padding: 6, minWidth: 32, minHeight: 32 }}><X size={16} /></button>
+                <div>
+                  <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--s800)', display: 'block' }}>Borrador IA</span>
+                  <span style={{ fontSize: 11, color: 'var(--s400)' }}>Audio → transcripción → borrador automático</span>
+                </div>
               </div>
-              {lateReason && (
-                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 9, padding: '10px 14px', marginBottom: 12, fontSize: 12.5, color: '#92400e' }}>
-                  <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-                  <span><b>Registro extemporáneo</b> — motivo: {lateReason}. Quedará declarado en la historia y en el PDF.</span>
-                </div>
-              )}
-              <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} onSaved={handleRecordSaved} />
-            </div>
-          ) : canWriteNote ? (
-            <div style={{ textAlign: 'center', padding: '24px 0' }}>
-              <FileText size={36} color="var(--s200)" style={{ marginBottom: 12 }} />
-              <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--s500)' }}>
-                {isInProgress ? 'Sin registro para esta sesión' : 'La sesión terminó sin nota — regístrala ahora con la fecha real de la sesión.'}
-              </p>
-              <button
-                onClick={() => setShowRecordForm(true)}
-                style={{ padding: '10px 20px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 7 }}
-              >
-                <FileText size={14} /> Crear registro clínico
-              </button>
-            </div>
-          ) : isScheduled ? (
-            <div style={{ textAlign: 'center', padding: '24px 0' }}>
-              <FileText size={36} color="var(--s200)" style={{ marginBottom: 12 }} />
-              <p style={{ margin: 0, fontSize: 13, color: 'var(--s500)' }}>
-                La nota clínica se registra durante la sesión — primero pulsa <b>Iniciar sesión</b>.
-              </p>
-            </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '24px 0' }}>
-              <p style={{ margin: 0, fontSize: 13, color: 'var(--s400)' }}>Sin registros clínicos vinculados</p>
+              <AudioSection
+                appointmentId={id!}
+                patientId={appt.patient_id}
+                draftId={draftId}
+                recordType={defaultRecordType}
+                sessionDate={apptDate}
+                processing={processingAudio}
+                onDraftCreated={handleDraftCreated}
+              />
             </div>
           )}
         </div>
+      )}
 
-        {/* ── Grabación de sesión (AI) — solo visible cuando hay acción posible ─ */}
-        {(canWriteNote || !!draftId) && <div className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* ── Historia clínica — ancho completo ────────────────────────────── */}
+      <div className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 9, background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Brain size={17} color="#f59e0b" />
+            <div style={{ width: 34, height: 34, borderRadius: 9, background: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <FileText size={17} color="var(--teal)" />
             </div>
-            <div>
-              <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--s800)', display: 'block' }}>Borrador IA</span>
-              <span style={{ fontSize: 11, color: 'var(--s400)' }}>Audio → transcripción → borrador automático</span>
-            </div>
+            <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--s800)' }}>Historia clínica</span>
           </div>
+          {linkedRecords.length > 0 && !showRecordForm && canWriteNote && (
+            <button
+              onClick={() => setShowRecordForm(true)}
+              style={{ fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, border: '1px solid var(--teal)', background: '#f0fdfa', color: 'var(--teal)', cursor: 'pointer' }}
+            >
+              + Nuevo
+            </button>
+          )}
+        </div>
 
-          <AudioSection
-            appointmentId={id!}
-            patientId={appt.patient_id}
-            draftId={draftId}
-            recordType={defaultRecordType}
-            sessionDate={apptDate}
-            processing={processingAudio}
-            onDraftCreated={handleDraftCreated}
-          />
-        </div>}
-
+        {linkedRecords.length > 0 && !showRecordForm ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {linkedRecords.map(rec => (
+              <div key={rec.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'var(--s50)', borderRadius: 10, border: '1px solid var(--s200)' }}>
+                <FileText size={16} color="var(--teal)" />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--s800)' }}>
+                    {RECORD_TYPE_LABEL[rec.record_type] ?? rec.record_type}
+                  </p>
+                  <p style={{ margin: 0, fontSize: 12, color: 'var(--s400)' }}>{rec.session_date}</p>
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 6, background: rec.status === 'APPROVED' ? '#d1fae5' : '#fef3c7', color: rec.status === 'APPROVED' ? '#065f46' : '#92400e' }}>
+                  {rec.status === 'APPROVED' ? 'Aprobado' : 'Borrador'}
+                </span>
+                <button
+                  onClick={() => navigate(`/clinical-records/${rec.id}`)}
+                  style={{ fontSize: 12, fontWeight: 600, padding: '6px 12px', minHeight: 36, borderRadius: 6, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s700)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >
+                  Ver
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : showRecordForm ? (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s600)' }}>Nuevo registro clínico</span>
+              <button aria-label="Cerrar registro clínico" onClick={() => setShowRecordForm(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)', padding: 6, minWidth: 32, minHeight: 32 }}><X size={16} /></button>
+            </div>
+            {lateReason && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 9, padding: '10px 14px', marginBottom: 12, fontSize: 12.5, color: '#92400e' }}>
+                <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span><b>Registro extemporáneo</b> — motivo: {lateReason}. Quedará declarado en la historia y en el PDF.</span>
+              </div>
+            )}
+            <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} onSaved={handleRecordSaved} />
+          </div>
+        ) : canWriteNote ? (
+          <div style={{ textAlign: 'center', padding: '24px 0' }}>
+            <FileText size={36} color="var(--s200)" style={{ marginBottom: 12 }} />
+            <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--s500)' }}>
+              {isInProgress ? 'Sin registro para esta sesión' : 'La sesión terminó sin nota — regístrala ahora con la fecha real de la sesión.'}
+            </p>
+            <button
+              onClick={() => setShowRecordForm(true)}
+              style={{ padding: '10px 20px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 7 }}
+            >
+              <FileText size={14} /> Crear registro clínico
+            </button>
+          </div>
+        ) : isScheduled ? (
+          <div style={{ textAlign: 'center', padding: '24px 0' }}>
+            <FileText size={36} color="var(--s200)" style={{ marginBottom: 12 }} />
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--s500)' }}>
+              La nota clínica se registra durante la sesión — primero pulsa <b>Iniciar sesión</b>.
+            </p>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '24px 0' }}>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--s400)' }}>Sin registros clínicos vinculados</p>
+          </div>
+        )}
       </div>
 
       {viewConsentId && <ConsentViewModal consentId={viewConsentId} onClose={() => setViewConsentId(null)} />}
