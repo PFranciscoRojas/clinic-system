@@ -43,8 +43,12 @@ type Config struct {
 	// the billing endpoints respond 503 and tenants are activated manually.
 	MPAccessToken   string
 	MPWebhookSecret string // signs MercadoPago webhook notifications (x-signature)
-	MPPlanAmount    int    // monthly price in the smallest COP unit the gateway expects (whole pesos)
-	MPPlanReason    string // plan name shown on the MercadoPago checkout
+	// MPWebhookEnforce drops webhooks whose signature fails. Default true. May be
+	// set false to fall back to the authoritative re-fetch (GetPayment with our
+	// token) when the signing secret/manifest is being diagnosed.
+	MPWebhookEnforce bool
+	MPPlanAmount     int    // monthly price in the smallest COP unit the gateway expects (whole pesos)
+	MPPlanReason     string // plan name shown on the MercadoPago checkout
 
 	// BookingSessionPrice is the whole-COP price a patient pays per appointment
 	// through the public booking page.
@@ -95,8 +99,9 @@ func Load() Config {
 
 		AllowDataReset: getEnvBool("ALLOW_DATA_RESET", false),
 
-		MPAccessToken:   mpAccessToken,
-		MPWebhookSecret: mpWebhookSecret,
+		MPAccessToken:    mpAccessToken,
+		MPWebhookSecret:  mpWebhookSecret,
+		MPWebhookEnforce: getEnvBool("MP_WEBHOOK_ENFORCE", true),
 		MPPlanAmount:    getEnvInt("MP_PLAN_AMOUNT", 79000),
 		MPPlanReason:    getEnv("MP_PLAN_REASON", "SGHCP · Plan mensual"),
 

@@ -25,15 +25,11 @@ const base = "https://api.mercadopago.com"
 // VerifyWebhook validates a MercadoPago webhook's x-signature against the
 // configured webhook secret. The signed manifest is
 // "id:<data.id>;request-id:<x-request-id>;ts:<ts>;" hashed with HMAC-SHA256.
-// When no secret is configured it returns true (fail-open) so the integration
-// keeps working until the secret is set in the dashboard + env.
-func VerifyWebhook(secret, xSignature, xRequestID, dataID string) bool {
-	// Fail closed: with no configured secret we cannot authenticate the caller,
-	// so we reject rather than trust the notification. config.Load enforces that
-	// the secret is present whenever billing (MP_ACCESS_TOKEN) is enabled, so in
-	// a correctly configured deployment this branch is never reached.
+// It returns (ok, detail) where detail describes the mismatch for diagnostics
+// (never logged in the success path). Fails closed when no secret is set.
+func VerifyWebhook(secret, xSignature, xRequestID, dataID string) (bool, string) {
 	if secret == "" {
-		return false
+		return false, "no webhook secret configured"
 	}
 	var ts, v1 string
 	for _, part := range strings.Split(xSignature, ",") {
@@ -49,7 +45,7 @@ func VerifyWebhook(secret, xSignature, xRequestID, dataID string) bool {
 		}
 	}
 	if ts == "" || v1 == "" {
-		return false
+		return false, "x-signature missing ts/v1"
 	}
 	var manifest strings.Builder
 	if dataID != "" {
@@ -63,7 +59,11 @@ func VerifyWebhook(secret, xSignature, xRequestID, dataID string) bool {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(manifest.String()))
 	expected := hex.EncodeToString(mac.Sum(nil))
-	return hmac.Equal([]byte(expected), []byte(v1))
+	if hmac.Equal([]byte(expected), []byte(v1)) {
+		return true, ""
+	}
+	return false, fmt.Sprintf("mismatch manifest=%q dataID=%q reqID=%q expected=%s got=%s",
+		manifest.String(), dataID, xRequestID, expected, v1)
 }
 
 type Client struct {

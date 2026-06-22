@@ -302,10 +302,12 @@ func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
 	if !h.mp.Enabled() {
 		return
 	}
-	if !mercadopago.VerifyWebhook(h.cfg.MPWebhookSecret,
-		r.Header.Get("x-signature"), r.Header.Get("x-request-id"), r.URL.Query().Get("data.id")) {
-		slog.Warn("booking.webhook: invalid signature")
-		return
+	if ok, detail := mercadopago.VerifyWebhook(h.cfg.MPWebhookSecret,
+		r.Header.Get("x-signature"), r.Header.Get("x-request-id"), r.URL.Query().Get("data.id")); !ok {
+		slog.Warn("booking.webhook: signature check failed", "detail", detail, "enforce", h.cfg.MPWebhookEnforce)
+		if h.cfg.MPWebhookEnforce {
+			return
+		}
 	}
 	kind, id := notification(r)
 	if id == "" || !strings.Contains(kind, "payment") {
