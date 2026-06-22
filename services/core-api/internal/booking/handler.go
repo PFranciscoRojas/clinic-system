@@ -130,6 +130,7 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 		Name          string `json:"name"`
 		Email         string `json:"email"`
 		Phone         string `json:"phone"`
+		PolicyAccepted bool  `json:"policy_accepted"` // refund/cancellation policy (B6)
 		PrevBookingID string `json:"prev_booking_id"` // hold to release before re-checking out
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -139,6 +140,10 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 	body.Name, body.Email = strings.TrimSpace(body.Name), strings.TrimSpace(body.Email)
 	if body.Name == "" || body.Email == "" || body.Date == "" || body.Time == "" {
 		httputil.WriteError(w, http.StatusBadRequest, "faltan datos")
+		return
+	}
+	if !body.PolicyAccepted {
+		httputil.WriteError(w, http.StatusBadRequest, "debes aceptar la política de reembolso y cancelación")
 		return
 	}
 	modality := "VIRTUAL"
@@ -187,8 +192,8 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 	amount := h.cfg.BookingSessionPrice
 	var bookingID string
 	err = h.pool.QueryRow(r.Context(), `
-		INSERT INTO bookings (organization_id, staff_id, scheduled_at, modality, guest_name, email, phone, amount, hold_expires_at)
-		VALUES ($1, $2, $3, $4::appointment_modality, $5, $6, $7, $8, NOW() + interval '15 minutes')
+		INSERT INTO bookings (organization_id, staff_id, scheduled_at, modality, guest_name, email, phone, amount, hold_expires_at, policy_accepted_at)
+		VALUES ($1, $2, $3, $4::appointment_modality, $5, $6, $7, $8, NOW() + interval '15 minutes', NOW())
 		RETURNING id
 	`, prof.OrgID, prof.StaffID, scheduledAt, modality, body.Name, body.Email, body.Phone, amount).Scan(&bookingID)
 	if err != nil {

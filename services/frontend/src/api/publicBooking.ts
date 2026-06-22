@@ -40,7 +40,7 @@ export const publicBookingApi = {
   // Holds the slot and returns a MercadoPago checkout URL + a summary to show
   // before redirecting to pay. prev_booking_id releases a hold created earlier
   // in the same wizard session (so editing the summary and re-submitting works).
-  checkout: (body: { org_slug: string; modality: string; date: string; time: string; name: string; email: string; phone: string; prev_booking_id?: string }) =>
+  checkout: (body: { org_slug: string; modality: string; date: string; time: string; name: string; email: string; phone: string; policy_accepted: boolean; prev_booking_id?: string }) =>
     api.post<{ init_point: string; booking_id: string; summary: { date: string; time: string; modality: string; amount: number; currency: string } }>(
       '/public/pay/checkout', body,
     ),

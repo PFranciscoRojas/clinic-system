@@ -36,6 +36,7 @@ export function BookingWizardPage() {
   const [phone, setPhone] = useState('');
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
+  const [policyAccepted, setPolicyAccepted] = useState(false);
   const [checkout, setCheckout] = useState<Checkout | null>(null);
 
   const accent = info?.brand_color && /^#[0-9a-fA-F]{3,8}$/.test(info.brand_color) ? info.brand_color : '#8a5a5a';
@@ -68,12 +69,14 @@ export function BookingWizardPage() {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { setErr('Ingresa un correo válido.'); return; }
     const phoneErr = validatePhone(code, phone.trim());
     if (phoneErr) { setErr(phoneErr); return; }
+    if (!policyAccepted) { setErr('Debes aceptar la política de reembolso y cancelación.'); return; }
     if (!picked) { setStep('slot'); return; }
     setSaving(true);
     try {
       const res = await publicBookingApi.checkout({
         org_slug: slug, modality, date: picked.date, time: picked.time,
         name: name.trim(), email: email.trim(), phone: `${code} ${phone.trim()}`,
+        policy_accepted: policyAccepted,
         // Release any prior hold from this same wizard session so editing the
         // summary and re-submitting doesn't collide with the patient's own slot.
         prev_booking_id: checkout?.booking_id,
@@ -235,8 +238,21 @@ export function BookingWizardPage() {
                 <div style={{ width: 1, height: 20, background: LINE, flexShrink: 0 }} />
                 <input value={phone} onChange={e => setPhone(e.target.value.replace(/[^\d]/g, ''))} placeholder="Número de celular" inputMode="numeric" maxLength={11} style={{ ...input, minWidth: 0 }} />
               </div>
+              {/* Refund / cancellation policy — acceptance required before payment (B6) */}
+              <div style={{ background: '#fff', border: `1.5px solid ${LINE}`, borderRadius: 11, padding: '13px 15px', marginBottom: 14 }}>
+                <div style={{ fontFamily: DISPLAY, fontSize: 14, fontWeight: 600, marginBottom: 7 }}>Política de reembolso y cancelación</div>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, lineHeight: 1.6, color: INK_SOFT }}>
+                  <li>Puedes cancelar o reagendar sin costo hasta <strong>24 horas antes</strong> de tu cita, con reembolso del 100%.</li>
+                  <li>Cancelaciones con menos de 24 horas de anticipación o inasistencias <strong>no son reembolsables</strong>.</li>
+                  <li>Los reembolsos se devuelven al mismo medio de pago en un plazo de hasta 10 días hábiles.</li>
+                </ul>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginTop: 11, cursor: 'pointer', fontSize: 13, color: INK }}>
+                  <input type="checkbox" checked={policyAccepted} onChange={e => { setPolicyAccepted(e.target.checked); if (e.target.checked) setErr(''); }} style={{ marginTop: 2, width: 16, height: 16, accentColor: accent, flexShrink: 0, cursor: 'pointer' }} />
+                  <span>He leído y acepto la política de reembolso y cancelación.</span>
+                </label>
+              </div>
               {err && <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: '#a8443c', marginBottom: 14 }}><AlertTriangle size={14} />{err}</div>}
-              <button onClick={submit} disabled={saving} style={{ width: '100%', padding: 14, borderRadius: 11, border: 'none', background: saving ? INK_FAINT : accent, color: '#fff', fontSize: 15, fontWeight: 600, cursor: saving ? 'wait' : 'pointer', fontFamily: DISPLAY }}>
+              <button onClick={submit} disabled={saving || !policyAccepted} style={{ width: '100%', padding: 14, borderRadius: 11, border: 'none', background: (saving || !policyAccepted) ? INK_FAINT : accent, color: '#fff', fontSize: 15, fontWeight: 600, cursor: saving ? 'wait' : !policyAccepted ? 'not-allowed' : 'pointer', fontFamily: DISPLAY }}>
                 {saving ? 'Un momento…' : 'Continuar al pago'}
               </button>
             </div>
