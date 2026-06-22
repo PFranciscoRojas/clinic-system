@@ -18,6 +18,7 @@ import (
 	patientsrepo "sghcp/core-api/internal/patients/repository"
 	patientssvc "sghcp/core-api/internal/patients/service"
 	"sghcp/core-api/internal/shared/crypto"
+	"sghcp/core-api/internal/shared/dbctx"
 	"sghcp/core-api/internal/shared/middleware"
 )
 
@@ -34,6 +35,7 @@ type Handler struct {
 	patientSvc patientCreator
 	apptSvc    apptCreator
 	notifier   notify.Notifier
+	pool       *pgxpool.Pool
 }
 
 func New(pool *pgxpool.Pool, km *crypto.KeyManager, notifier notify.Notifier) *Handler {
@@ -42,6 +44,7 @@ func New(pool *pgxpool.Pool, km *crypto.KeyManager, notifier notify.Notifier) *H
 		patientSvc: patientssvc.New(patientsrepo.New(pool), km),
 		apptSvc:    apptssvc.New(apptsrepo.New(pool)),
 		notifier:   notifier,
+		pool:       pool,
 	}
 }
 
@@ -98,18 +101,25 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		modality = "IN_PERSON"
 	}
 
-	br, err := h.svc.Create(r.Context(), bookingrequests.CreateInput{
-		OrganizationID:       orgID,
-		FirstName:            body.FirstName,
-		LastName:             body.LastName,
-		Email:                body.Email,
-		Phone:                body.Phone,
-		Modality:             modality,
-		PreferredDate:        body.PreferredDate,
-		PreferredTime:        body.PreferredTime,
-		Notes:                body.Notes,
-		ConsentAccepted:      body.ConsentAccepted,
-		ConsentPolicyVersion: body.ConsentPolicyVersion,
+	// Public route: no JWT, so pin the resolved org's RLS scope for the insert
+	// into booking_requests (now under RLS).
+	var br *bookingrequests.BookingRequest
+	err = dbctx.WithOrgScope(r.Context(), h.pool, orgID, func(ctx context.Context) error {
+		var cerr error
+		br, cerr = h.svc.Create(ctx, bookingrequests.CreateInput{
+			OrganizationID:       orgID,
+			FirstName:            body.FirstName,
+			LastName:             body.LastName,
+			Email:                body.Email,
+			Phone:                body.Phone,
+			Modality:             modality,
+			PreferredDate:        body.PreferredDate,
+			PreferredTime:        body.PreferredTime,
+			Notes:                body.Notes,
+			ConsentAccepted:      body.ConsentAccepted,
+			ConsentPolicyVersion: body.ConsentPolicyVersion,
+		})
+		return cerr
 	})
 	if errors.Is(err, bookingrequests.ErrInvalidInput) {
 		http.Error(w, "nombre, apellido y correo son requeridos", http.StatusUnprocessableEntity)

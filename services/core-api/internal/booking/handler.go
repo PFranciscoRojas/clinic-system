@@ -14,14 +14,34 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"sghcp/core-api/internal/availability"
 	"sghcp/core-api/internal/billing/mercadopago"
 	"sghcp/core-api/internal/notify"
 	"sghcp/core-api/internal/shared/config"
+	"sghcp/core-api/internal/shared/dbctx"
 	"sghcp/core-api/internal/shared/httputil"
 )
+
+// Sentinel errors surfaced from the scoped checkout closure to map to HTTP.
+var (
+	errSlotTaken  = errors.New("slot taken")
+	errPreference = errors.New("preference failed")
+)
+
+// bookingOrg maps a booking id to its organization via the SECURITY DEFINER
+// resolver (bypassing RLS — the unguessable id is the credential), so the
+// id-first webhook/status/release lookups can pin the org's RLS scope before
+// touching the now-RLS-protected bookings table. Empty string when not found.
+func (h *Handler) bookingOrg(ctx context.Context, id string) (string, error) {
+	var org pgtype.Text
+	if err := h.pool.QueryRow(ctx, `SELECT booking_org($1::uuid)::text`, id).Scan(&org); err != nil {
+		return "", err
+	}
+	return org.String, nil
+}
 
 var bogota = loadBogota()
 
@@ -72,8 +92,13 @@ func (h *Handler) release(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusBadRequest, "id is required")
 		return
 	}
-	_, _ = h.pool.Exec(r.Context(),
-		`DELETE FROM bookings WHERE id = $1 AND status = 'PENDING_PAYMENT'`, body.ID)
+	if org, err := h.bookingOrg(r.Context(), body.ID); err == nil && org != "" {
+		_ = dbctx.WithOrgScope(r.Context(), h.pool, org, func(ctx context.Context) error {
+			_, err := dbctx.From(ctx, h.pool).Exec(ctx,
+				`DELETE FROM bookings WHERE id = $1 AND status = 'PENDING_PAYMENT'`, body.ID)
+			return err
+		})
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -85,15 +110,22 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusBadRequest, "id is required")
 		return
 	}
+	org, err := h.bookingOrg(r.Context(), id)
+	if err != nil || org == "" {
+		httputil.WriteError(w, http.StatusNotFound, "reserva no encontrada")
+		return
+	}
 	var st, modality, clinic, slug string
 	var website *string
 	var when time.Time
-	err := h.pool.QueryRow(r.Context(), `
-		SELECT b.status, b.modality, b.scheduled_at, COALESCE(o.name, ''), COALESCE(o.slug, ''),
-		       o.settings->'branding'->>'website'
-		FROM bookings b JOIN organizations o ON o.id = b.organization_id
-		WHERE b.id = $1
-	`, id).Scan(&st, &modality, &when, &clinic, &slug, &website)
+	err = dbctx.WithOrgScope(r.Context(), h.pool, org, func(ctx context.Context) error {
+		return dbctx.From(ctx, h.pool).QueryRow(ctx, `
+			SELECT b.status, b.modality, b.scheduled_at, COALESCE(o.name, ''), COALESCE(o.slug, ''),
+			       o.settings->'branding'->>'website'
+			FROM bookings b JOIN organizations o ON o.id = b.organization_id
+			WHERE b.id = $1
+		`, id).Scan(&st, &modality, &when, &clinic, &slug, &website)
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		httputil.WriteError(w, http.StatusNotFound, "reserva no encontrada")
 		return
@@ -168,54 +200,69 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 	}
 	scheduledAt := when.UTC()
 
-	// Release the patient's own prior unpaid holds before re-checking the slot.
-	// Without this, going back to edit the summary and re-submitting collides
-	// with the hold the same patient just created (a self-inflicted 409).
-	if body.PrevBookingID != "" {
-		_, _ = h.pool.Exec(r.Context(),
-			`DELETE FROM bookings WHERE id = $1 AND status = 'PENDING_PAYMENT'`, body.PrevBookingID)
-	}
-	_, _ = h.pool.Exec(r.Context(),
-		`DELETE FROM bookings WHERE email = $1 AND staff_id = $2 AND scheduled_at = $3 AND status = 'PENDING_PAYMENT'`,
-		body.Email, prof.StaffID, scheduledAt)
+	amount := h.cfg.BookingSessionPrice
+	title := "Sesión psicológica · " + when.Format("02/01 03:04 pm") + " · " + modalityLabel(modality)
+	var bookingID, initPoint string
 
-	taken, err := h.slotTaken(r.Context(), prof.OrgID, prof.StaffID, scheduledAt)
-	if err != nil {
-		httputil.WriteError(w, http.StatusInternalServerError, "error")
-		return
-	}
-	if taken {
+	// Public route: pin the resolved org's RLS scope for every bookings
+	// statement (the table is now under RLS). slotTaken's appointments check
+	// self-scopes on its own connection.
+	scopeErr := dbctx.WithOrgScope(r.Context(), h.pool, prof.OrgID, func(ctx context.Context) error {
+		q := dbctx.From(ctx, h.pool)
+
+		// Release the patient's own prior unpaid holds before re-checking the
+		// slot. Without this, going back to edit the summary and re-submitting
+		// collides with the hold the same patient just created (a 409).
+		if body.PrevBookingID != "" {
+			_, _ = q.Exec(ctx, `DELETE FROM bookings WHERE id = $1 AND status = 'PENDING_PAYMENT'`, body.PrevBookingID)
+		}
+		_, _ = q.Exec(ctx,
+			`DELETE FROM bookings WHERE email = $1 AND staff_id = $2 AND scheduled_at = $3 AND status = 'PENDING_PAYMENT'`,
+			body.Email, prof.StaffID, scheduledAt)
+
+		taken, err := h.slotTaken(ctx, prof.OrgID, prof.StaffID, scheduledAt)
+		if err != nil {
+			return err
+		}
+		if taken {
+			return errSlotTaken
+		}
+
+		if err := q.QueryRow(ctx, `
+			INSERT INTO bookings (organization_id, staff_id, scheduled_at, modality, guest_name, email, phone, amount, hold_expires_at, policy_accepted_at)
+			VALUES ($1, $2, $3, $4::appointment_modality, $5, $6, $7, $8, NOW() + interval '15 minutes', NOW())
+			RETURNING id
+		`, prof.OrgID, prof.StaffID, scheduledAt, modality, body.Name, body.Email, body.Phone, amount).Scan(&bookingID); err != nil {
+			return err
+		}
+
+		prefID, ip, err := h.mp.CreatePreference(
+			ctx, title, amount, bookingID, body.Email,
+			h.cfg.AppBaseURL+"/book/return",
+			h.cfg.AppBaseURL+"/api/v1/public/pay/webhook",
+		)
+		if err != nil {
+			// Release the hold so a failed gateway call doesn't block the slot.
+			_, _ = q.Exec(ctx, `DELETE FROM bookings WHERE id = $1`, bookingID)
+			slog.Error("booking.checkout preference", "err", err)
+			return errPreference
+		}
+		_, _ = q.Exec(ctx, `UPDATE bookings SET mp_preference_id = $2 WHERE id = $1`, bookingID, prefID)
+		initPoint = ip
+		return nil
+	})
+	switch {
+	case errors.Is(scopeErr, errSlotTaken):
 		httputil.WriteError(w, http.StatusConflict, "ese horario ya no está disponible")
 		return
-	}
-
-	amount := h.cfg.BookingSessionPrice
-	var bookingID string
-	err = h.pool.QueryRow(r.Context(), `
-		INSERT INTO bookings (organization_id, staff_id, scheduled_at, modality, guest_name, email, phone, amount, hold_expires_at, policy_accepted_at)
-		VALUES ($1, $2, $3, $4::appointment_modality, $5, $6, $7, $8, NOW() + interval '15 minutes', NOW())
-		RETURNING id
-	`, prof.OrgID, prof.StaffID, scheduledAt, modality, body.Name, body.Email, body.Phone, amount).Scan(&bookingID)
-	if err != nil {
-		slog.Error("booking.checkout insert", "err", err)
+	case errors.Is(scopeErr, errPreference):
+		httputil.WriteError(w, http.StatusBadGateway, "no se pudo iniciar el pago")
+		return
+	case scopeErr != nil:
+		slog.Error("booking.checkout", "err", scopeErr)
 		httputil.WriteError(w, http.StatusInternalServerError, "no se pudo crear la reserva")
 		return
 	}
-
-	title := "Sesión psicológica · " + when.Format("02/01 03:04 pm") + " · " + modalityLabel(modality)
-	prefID, initPoint, err := h.mp.CreatePreference(
-		r.Context(), title, amount, bookingID, body.Email,
-		h.cfg.AppBaseURL+"/book/return",
-		h.cfg.AppBaseURL+"/api/v1/public/pay/webhook",
-	)
-	if err != nil {
-		// Release the hold so a failed gateway call doesn't block the slot.
-		_, _ = h.pool.Exec(r.Context(), `DELETE FROM bookings WHERE id = $1`, bookingID)
-		slog.Error("booking.checkout preference", "err", err)
-		httputil.WriteError(w, http.StatusBadGateway, "no se pudo iniciar el pago")
-		return
-	}
-	_, _ = h.pool.Exec(r.Context(), `UPDATE bookings SET mp_preference_id = $2 WHERE id = $1`, bookingID, prefID)
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"init_point": initPoint,
@@ -231,7 +278,7 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 // an unexpired hold.
 func (h *Handler) slotTaken(ctx context.Context, orgID, staffID string, at time.Time) (bool, error) {
 	var holds int
-	if err := h.pool.QueryRow(ctx, `
+	if err := dbctx.From(ctx, h.pool).QueryRow(ctx, `
 		SELECT count(*) FROM bookings
 		WHERE staff_id = $1 AND scheduled_at = $2
 		  AND status = 'PENDING_PAYMENT' AND hold_expires_at > NOW()
@@ -277,8 +324,13 @@ func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
 		h.confirm(ctx, pay.ExternalReference, id, pay.PaymentTypeID, pay.PaymentMethodID)
 	case "rejected", "cancelled", "refunded", "charged_back":
 		// Free the held slot immediately so it can be booked again.
-		_, _ = h.pool.Exec(ctx,
-			`DELETE FROM bookings WHERE id = $1 AND status = 'PENDING_PAYMENT'`, pay.ExternalReference)
+		if org, e := h.bookingOrg(ctx, pay.ExternalReference); e == nil && org != "" {
+			_ = dbctx.WithOrgScope(ctx, h.pool, org, func(ctx context.Context) error {
+				_, err := dbctx.From(ctx, h.pool).Exec(ctx,
+					`DELETE FROM bookings WHERE id = $1 AND status = 'PENDING_PAYMENT'`, pay.ExternalReference)
+				return err
+			})
+		}
 	}
 }
 
@@ -286,50 +338,53 @@ func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
 // paymentType/paymentMethod are MercadoPago's reported channel detail (may be
 // empty) and are recorded for the income-by-method breakdown.
 func (h *Handler) confirm(ctx context.Context, bookingID, paymentID, paymentType, paymentMethod string) {
-	var orgID, staffID, guest, modality string
-	var scheduledAt time.Time
-	var durationMin int
-	err := h.pool.QueryRow(ctx, `
-		SELECT organization_id, staff_id, scheduled_at, duration_min, modality, guest_name
-		FROM bookings WHERE id = $1 AND status = 'PENDING_PAYMENT'
-	`, bookingID).Scan(&orgID, &staffID, &scheduledAt, &durationMin, &modality, &guest)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return // already confirmed or unknown
-	}
-	if err != nil {
-		slog.Error("booking.confirm load", "err", err)
+	// Resolve the org from the unguessable booking id (bypassing RLS) so every
+	// query below — including reading the booking itself — runs under the org's
+	// RLS scope. Without this, the now-RLS-protected bookings read returns no
+	// rows and the payment would never be confirmed.
+	orgID, err := h.bookingOrg(ctx, bookingID)
+	if err != nil || orgID == "" {
 		return
 	}
 
-	// Create the appointment under the org's RLS scope.
-	conn, err := h.pool.Acquire(ctx)
-	if err != nil {
-		return
-	}
-	defer conn.Release()
-	if _, err := conn.Exec(ctx, `SELECT set_config('app.current_org', $1, false)`, orgID); err != nil {
-		return
-	}
-	defer conn.Exec(ctx, `SELECT set_config('app.current_org', '', false)`) //nolint:errcheck
+	scopeErr := dbctx.WithOrgScope(ctx, h.pool, orgID, func(ctx context.Context) error {
+		q := dbctx.From(ctx, h.pool)
+		var staffID, guest, modality string
+		var scheduledAt time.Time
+		var durationMin int
+		err := q.QueryRow(ctx, `
+			SELECT staff_id, scheduled_at, duration_min, modality, guest_name
+			FROM bookings WHERE id = $1 AND status = 'PENDING_PAYMENT'
+		`, bookingID).Scan(&staffID, &scheduledAt, &durationMin, &modality, &guest)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil // already confirmed or unknown
+		}
+		if err != nil {
+			return err
+		}
 
-	var apptID string
-	err = conn.QueryRow(ctx, `
-		INSERT INTO appointments (organization_id, patient_id, staff_id, guest_name, scheduled_at, duration_min, modality, status)
-		VALUES ($1, NULL, $2, $3, $4, $5, $6::appointment_modality, 'SCHEDULED')
-		RETURNING id
-	`, orgID, staffID, guest, scheduledAt, durationMin, modality).Scan(&apptID)
-	if err != nil {
-		slog.Error("booking.confirm appointment", "err", err)
+		var apptID string
+		if err := q.QueryRow(ctx, `
+			INSERT INTO appointments (organization_id, patient_id, staff_id, guest_name, scheduled_at, duration_min, modality, status)
+			VALUES ($1, NULL, $2, $3, $4, $5, $6::appointment_modality, 'SCHEDULED')
+			RETURNING id
+		`, orgID, staffID, guest, scheduledAt, durationMin, modality).Scan(&apptID); err != nil {
+			return err
+		}
+
+		_, err = q.Exec(ctx, `
+			UPDATE bookings
+			SET status = 'PAID', mp_payment_id = $2, appointment_id = $3,
+			    mp_payment_type = NULLIF($4, ''), mp_payment_method = NULLIF($5, ''),
+			    updated_at = NOW()
+			WHERE id = $1
+		`, bookingID, paymentID, apptID, paymentType, paymentMethod)
+		return err
+	})
+	if scopeErr != nil {
+		slog.Error("booking.confirm", "err", scopeErr)
 		return
 	}
-
-	_, _ = h.pool.Exec(ctx, `
-		UPDATE bookings
-		SET status = 'PAID', mp_payment_id = $2, appointment_id = $3,
-		    mp_payment_type = NULLIF($4, ''), mp_payment_method = NULLIF($5, ''),
-		    updated_at = NOW()
-		WHERE id = $1
-	`, bookingID, paymentID, apptID, paymentType, paymentMethod)
 
 	// Fire-and-forget on its own context so a slow Resend call never delays the
 	// 200 the MercadoPago webhook is waiting for (which would trigger retries).
@@ -339,9 +394,11 @@ func (h *Handler) confirm(ctx context.Context, bookingID, paymentID, paymentType
 func (h *Handler) notifyConfirmed(ctx context.Context, orgID, bookingID string) {
 	var guest, email, modality string
 	var when time.Time
-	if err := h.pool.QueryRow(ctx, `
-		SELECT guest_name, email, modality, scheduled_at FROM bookings WHERE id = $1
-	`, bookingID).Scan(&guest, &email, &modality, &when); err != nil {
+	if err := dbctx.WithOrgScope(ctx, h.pool, orgID, func(ctx context.Context) error {
+		return dbctx.From(ctx, h.pool).QueryRow(ctx, `
+			SELECT guest_name, email, modality, scheduled_at FROM bookings WHERE id = $1
+		`, bookingID).Scan(&guest, &email, &modality, &when)
+	}); err != nil {
 		return
 	}
 	local := when.In(bogota)

@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"sghcp/core-api/internal/shared/dbctx"
 )
 
 var (
@@ -23,6 +25,11 @@ type Service struct {
 func NewService(pool *pgxpool.Pool) *Service {
 	return &Service{pool: pool}
 }
+
+// q resolves the request-scoped querier (the TenantScope connection on
+// authenticated routes, or a WithOrgScope connection on public routes) so RLS
+// on booking_requests sees the right org, falling back to the pool otherwise.
+func (s *Service) q(ctx context.Context) dbctx.Querier { return dbctx.From(ctx, s.pool) }
 
 func (s *Service) Create(ctx context.Context, in CreateInput) (*BookingRequest, error) {
 	if strings.TrimSpace(in.FirstName) == "" || strings.TrimSpace(in.LastName) == "" || strings.TrimSpace(in.Email) == "" {
@@ -42,7 +49,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*BookingRequest, 
 	}
 
 	var br BookingRequest
-	err := s.pool.QueryRow(ctx, `
+	err := s.q(ctx).QueryRow(ctx, `
 		INSERT INTO booking_requests
 			(organization_id, first_name, last_name, email, phone, modality,
 			 preferred_date, preferred_time, notes,
@@ -67,7 +74,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*BookingRequest, 
 
 func (s *Service) GetByID(ctx context.Context, id, orgID string) (*BookingRequest, error) {
 	var br BookingRequest
-	err := s.pool.QueryRow(ctx, `
+	err := s.q(ctx).QueryRow(ctx, `
 		SELECT id, organization_id, first_name, last_name, email, phone,
 		       modality, preferred_date::text, preferred_time, notes, status,
 		       staff_note, created_at, resolved_at, resolved_by
@@ -91,7 +98,7 @@ func (s *Service) GetByID(ctx context.Context, id, orgID string) (*BookingReques
 
 func (s *Service) OrgIDBySlug(ctx context.Context, slug string) (string, error) {
 	var id string
-	err := s.pool.QueryRow(ctx, `SELECT id FROM organizations WHERE slug = $1`, slug).Scan(&id)
+	err := s.q(ctx).QueryRow(ctx, `SELECT id FROM organizations WHERE slug = $1`, slug).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrOrgNotFound
 	}
@@ -112,7 +119,7 @@ func (s *Service) List(ctx context.Context, orgID string, status *Status) ([]*Bo
 	}
 	query += ` ORDER BY created_at DESC LIMIT 100`
 
-	rows, err := s.pool.Query(ctx, query, args...)
+	rows, err := s.q(ctx).Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +144,7 @@ func (s *Service) List(ctx context.Context, orgID string, status *Status) ([]*Bo
 func (s *Service) Resolve(ctx context.Context, in ResolveInput) (*BookingRequest, error) {
 	now := time.Now()
 	var br BookingRequest
-	err := s.pool.QueryRow(ctx, `
+	err := s.q(ctx).QueryRow(ctx, `
 		UPDATE booking_requests
 		SET status = $1, staff_note = $2, resolved_at = $3, resolved_by = $4
 		WHERE id = $5 AND organization_id = $6 AND status = 'PENDING'
@@ -162,7 +169,7 @@ func (s *Service) Resolve(ctx context.Context, in ResolveInput) (*BookingRequest
 }
 
 func (s *Service) OrgAdminEmails(ctx context.Context, orgID string) ([]string, error) {
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.q(ctx).Query(ctx, `
 		SELECT DISTINCT u.email FROM users u
 		JOIN user_roles ur ON ur.user_id = u.id
 		JOIN roles r ON r.id = ur.role_id
@@ -188,7 +195,7 @@ func (s *Service) OrgAdminEmails(ctx context.Context, orgID string) ([]string, e
 
 func (s *Service) PendingCount(ctx context.Context, orgID string) (int, error) {
 	var n int
-	err := s.pool.QueryRow(ctx,
+	err := s.q(ctx).QueryRow(ctx,
 		`SELECT COUNT(*) FROM booking_requests WHERE organization_id = $1 AND status = 'PENDING'`,
 		orgID,
 	).Scan(&n)

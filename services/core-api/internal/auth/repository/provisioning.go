@@ -47,6 +47,13 @@ func (r *Repository) CreateOrgWithOwner(ctx context.Context, p auth.CreateOrgPar
 		return "", "", "", fmt.Errorf("insert organization: %w", err)
 	}
 
+	// Scope the rest of the signup tx to the new org so RLS WITH CHECK passes on
+	// tenant tables seeded here (consent_templates). Transaction-local so it
+	// clears on commit. Tables without RLS (users, user_roles) are unaffected.
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_org', $1, true)`, orgID); err != nil {
+		return "", "", "", fmt.Errorf("scope signup tx: %w", err)
+	}
+
 	err = tx.QueryRow(ctx, `
 		INSERT INTO users (organization_id, email, email_hash, password_hash, display_name)
 		VALUES ($1, $2, $3, $4, $5)

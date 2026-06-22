@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Querier is the subset of pgx behaviour shared by *pgxpool.Pool,
@@ -37,4 +38,29 @@ func From(ctx context.Context, fallback Querier) Querier {
 		return q
 	}
 	return fallback
+}
+
+const (
+	gucSet   = `SELECT set_config('app.current_org', $1, false)`
+	gucReset = `SELECT set_config('app.current_org', '', false)`
+)
+
+// WithOrgScope pins a pooled connection to orgID's RLS scope and runs fn with a
+// context carrying that connection as the querier. It mirrors the TenantScope
+// middleware for unauthenticated/public handlers that resolve the org
+// themselves (by slug or a SECURITY DEFINER id/token lookup) rather than from
+// JWT claims. The connection's GUC is reset before it returns to the pool.
+func WithOrgScope(ctx context.Context, pool *pgxpool.Pool, orgID string, fn func(context.Context) error) error {
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_, _ = conn.Exec(context.Background(), gucReset)
+		conn.Release()
+	}()
+	if _, err := conn.Exec(ctx, gucSet, orgID); err != nil {
+		return err
+	}
+	return fn(WithQuerier(ctx, conn))
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"sghcp/core-api/internal/consents"
@@ -28,6 +29,7 @@ type Handler struct {
 	audit      *audit.Writer
 	notifier   notify.Notifier
 	appBaseURL string
+	pool       *pgxpool.Pool
 }
 
 func New(db *pgxpool.Pool, km *crypto.KeyManager, notifier notify.Notifier, appBaseURL string) *Handler {
@@ -37,7 +39,20 @@ func New(db *pgxpool.Pool, km *crypto.KeyManager, notifier notify.Notifier, appB
 		audit:      audit.New(db),
 		notifier:   notifier,
 		appBaseURL: strings.TrimRight(appBaseURL, "/"),
+		pool:       db,
 	}
+}
+
+// consentTokenOrg maps a sign-token hash to its organization via the SECURITY
+// DEFINER resolver (bypassing RLS — the token is the credential), so the public
+// remote-signature flow can pin the org's RLS scope before reading the now
+// RLS-protected consent_sign_tokens / consent_templates / patients tables.
+func (h *Handler) consentTokenOrg(ctx context.Context, tokenHash string) (string, error) {
+	var org pgtype.Text
+	if err := h.pool.QueryRow(ctx, `SELECT consent_token_org($1)::text`, tokenHash).Scan(&org); err != nil {
+		return "", err
+	}
+	return org.String, nil
 }
 
 // Routes is mounted at /api/v1/patients/{patient_id}/consents.
