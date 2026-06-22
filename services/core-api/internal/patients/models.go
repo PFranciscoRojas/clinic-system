@@ -7,6 +7,7 @@ import "time"
 type Patient struct {
 	ID               string
 	OrganizationID   string
+	PatientCode      int // Nº de HC — 0 when not yet assigned (legacy rows)
 	DocumentTypeCode string
 	FirstName        string
 	MiddleName       string
@@ -34,6 +35,7 @@ type Patient struct {
 type RawPatient struct {
 	ID                   string
 	OrganizationID       string
+	PatientCode          int
 	DocumentTypeCode     string
 	DEKID                string
 	FirstNameEnc         []byte

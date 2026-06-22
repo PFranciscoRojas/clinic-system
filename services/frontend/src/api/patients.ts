@@ -2,6 +2,8 @@ import { api } from './client';
 
 export interface Patient {
   id: string;
+  patient_code?: number; // Nº de HC consecutivo por organización
+  opened_at?: string;    // Fecha de apertura de la HC (YYYY-MM-DD)
   document_type_code: string;
   document_number: string;
   first_name: string;

@@ -13,7 +13,7 @@ import (
 
 func (r *Repository) FindByID(ctx context.Context, orgID, patientID string) (*patients.RawPatient, error) {
 	row := r.q(ctx).QueryRow(ctx, `
-		SELECT id, organization_id, document_type_code, dek_id,
+		SELECT id, organization_id, patient_code, document_type_code, dek_id,
 		       first_name_enc, middle_name_enc,
 		       paternal_last_name_enc, maternal_last_name_enc,
 		       document_number_enc, phone_enc, email_enc, address_enc,
@@ -41,7 +41,7 @@ func (r *Repository) FindEncKey(ctx context.Context, dekID string) (*patients.En
 // List returns all active patients for the organization, ordered by creation date desc.
 func (r *Repository) List(ctx context.Context, orgID string, limit, offset int) ([]*patients.RawPatient, error) {
 	rows, err := r.q(ctx).Query(ctx, `
-		SELECT id, organization_id, document_type_code, dek_id,
+		SELECT id, organization_id, patient_code, document_type_code, dek_id,
 		       first_name_enc, middle_name_enc,
 		       paternal_last_name_enc, maternal_last_name_enc,
 		       document_number_enc, phone_enc, email_enc, address_enc,
@@ -72,7 +72,7 @@ func (r *Repository) List(ctx context.Context, orgID string, limit, offset int) 
 // Supports search by paternal last name hash OR document hash (not both simultaneously).
 func (r *Repository) Search(ctx context.Context, orgID string, f patients.SearchFilter) ([]*patients.RawPatient, error) {
 	query := `
-		SELECT id, organization_id, document_type_code, dek_id,
+		SELECT id, organization_id, patient_code, document_type_code, dek_id,
 		       first_name_enc, middle_name_enc,
 		       paternal_last_name_enc, maternal_last_name_enc,
 		       document_number_enc, phone_enc, email_enc, address_enc,
@@ -119,11 +119,13 @@ func scanPatient(row interface {
 	var p patients.RawPatient
 	var docTypeCode pgtype.Text
 	var birthDate pgtype.Date
+	// patient_code is nullable for any legacy row not covered by the backfill.
+	var patientCode pgtype.Int4
 	// gender is nullable since migration 000006 (booking-created patients
 	// arrive without it) — scanning into a plain string 500s the whole list.
 	var gender pgtype.Text
 	err := row.Scan(
-		&p.ID, &p.OrganizationID, &docTypeCode, &p.DEKID,
+		&p.ID, &p.OrganizationID, &patientCode, &docTypeCode, &p.DEKID,
 		&p.FirstNameEnc, &p.MiddleNameEnc,
 		&p.PaternalLastNameEnc, &p.MaternalLastNameEnc,
 		&p.DocumentNumberEnc, &p.PhoneEnc, &p.EmailEnc, &p.AddressEnc,
@@ -137,6 +139,7 @@ func scanPatient(row interface {
 		return nil, fmt.Errorf("scan patient: %w", err)
 	}
 	p.DocumentTypeCode = docTypeCode.String
+	p.PatientCode = int(patientCode.Int32)
 	p.Gender = gender.String
 	if birthDate.Valid {
 		p.BirthDate = birthDate.Time

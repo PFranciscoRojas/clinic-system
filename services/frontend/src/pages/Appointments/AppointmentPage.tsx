@@ -720,7 +720,14 @@ export function AppointmentPage() {
               Apertura arranca en "II", esta franja la antecede horizontalmente. */}
           <div className="card" style={{ padding: '12px 16px', marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '.06em' }}>I. Datos de identificación</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '.06em' }}>I. Datos de identificación</span>
+                {patient?.patient_code != null && (
+                  <span title="Número de historia clínica" style={{ fontFamily: "'DM Mono',monospace", fontSize: 11.5, fontWeight: 700, color: 'var(--teal-d)', background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 6, padding: '3px 8px' }}>
+                    HC-{String(patient.patient_code).padStart(6, '0')}
+                  </span>
+                )}
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 {activeConsents.length > 0 ? (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 11.5, fontWeight: 600, padding: '4px 10px', borderRadius: 7, background: '#d1fae5', color: '#065f46' }}>
@@ -754,6 +761,7 @@ export function AppointmentPage() {
               {(patient?.emergency_contact_name || patient?.emergency_contact_phone) && (
                 <IdField label="Contacto emergencia" value={[patient.emergency_contact_name, patient.emergency_contact_relationship, patient.emergency_contact_phone].filter(Boolean).join(' · ')} />
               )}
+              {patient?.opened_at && <IdField label="Fecha de apertura" value={new Date(patient.opened_at + 'T12:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' })} />}
             </div>
           </div>
 

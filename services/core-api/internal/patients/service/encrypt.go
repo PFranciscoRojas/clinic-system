@@ -188,6 +188,7 @@ func decryptRaw(dek []byte, r *patients.RawPatient) (*patients.Patient, error) {
 	p := &patients.Patient{
 		ID:               r.ID,
 		OrganizationID:   r.OrganizationID,
+		PatientCode:      r.PatientCode,
 		DocumentTypeCode: r.DocumentTypeCode,
 		BirthDate:        r.BirthDate,
 		Gender:           r.Gender,
