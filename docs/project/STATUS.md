@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-06-20)
+## Estado actual (2026-06-22)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -18,14 +18,13 @@
 | **Ola 3 — IA** | 🟡 en progreso | Recap pre-sesión + plan terapéutico sugerido (Whisper + Sonnet) |
 | BC-6 Facturación | ✅ producción | Tarjeta/PSE/Efecty/Nequi, semana/mes/3meses/año, balance-por-paciente |
 
-### Últimos PRs (semana 2026-06-20)
+### Últimos commits a `main` (sesión 2026-06-22) — desplegados
 
-- `#106` fix(clinical): guard ALL array `.includes()` against stale localStorage — FunctionalAnalysisPanel, MentalExamChecklist, ClinicalFormulation5F, RecordSectionsForm
-- `#105` fix(clinical): guard `sessionEval.axis/.barriers` undefined crash on stale localStorage
-- `#104` feat(clinical): rewrite F4 Informe de Cierre to match exact paper format (linear I→II→III→IV→V)
-- `#103` feat(clinical): rewrite F3 Evolución to match exact paper format
-- `#102` feat(clinical): rewrite F2 Plan Terapéutico to match exact paper format
-- `#101` feat(clinical): rewrite F1 Sesión Inicial to match exact paper format
+- `07ae88f` fix(billing): firma de webhook MP obligatoria — quitado el fail-open. `VerifyWebhook` falla cerrado con secreto vacío; `config.Load` exige `MP_WEBHOOK_SECRET` cuando hay `MP_ACCESS_TOKEN`. Cierra **B-11**. Secreto añadido al `.env` del VPS
+- `7e2e132` feat(patients): Nº de HC consecutivo por tenant (`patient_code`, patrón `invoice_number` con advisory lock), asignado al registrar; migración 000030 con backfill (lift FORCE RLS); franja de identificación muestra `HC-000001` + Fecha de apertura (cierra Sección I del Formato 1)
+- `8b38fd1` fix(agenda): el popover de agendado rápido detecta solapamiento con citas del día (`byDay`) y muestra estado "ocupado" en vez de proponer una hora que luego choca
+
+> Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 
 ---
 
@@ -33,7 +32,6 @@
 
 | ID | Descripción | Estado |
 |---|---|---|
-| **B-11** | Enforce firma webhook MP — quitar fail-open, exigir `MP_WEBHOOK_SECRET` → 401 | 🔴 pendiente |
 | **B6** | Política de reembolso/cancelación en booking con check de aceptación | 🟡 pendiente |
 | **RLS** | Aplicar RLS a `ai_drafts` + endpoints públicos booking/consents | 🟡 pendiente |
 | **UI** | Botón "Cambiar correo del admin" en Configuración | 🟡 pendiente |
@@ -44,7 +42,7 @@
 
 | Versión | Hito |
 |---|---|
-| `1.0.0` | Go-live real: token MP producción, precio real, `ALLOW_DATA_RESET=false`, política reembolso (B6), MP_WEBHOOK_SECRET obligatorio (B-11) |
+| `1.0.0` | Go-live real: token MP producción, precio real, `ALLOW_DATA_RESET=false`, política reembolso (B6) |
 | post-1.0 | Google Calendar OAuth + sync |
 | post-1.0 | Recordatorios WhatsApp (Meta API / Twilio) |
 | post-1.0 | Videollamada / Zoom nativa |
@@ -69,7 +67,7 @@
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción |
+| `core-api:8080` | ✅ producción (rebuild 2026-06-22, migración 000030 aplicada) |
 | `ai-service` | ✅ producción (`Dockerfile.patch` rebuild #79) |
 | `frontend` (Caddy :80/:443) | ✅ producción |
 | Backups | `pg_dump` cifrado GPG → Backblaze B2 |
@@ -77,7 +75,7 @@
 **Env crítico en VPS:**
 - `MASTER_KEY` — clave maestra de cifrado PII
 - `MP_ACCESS_TOKEN` — MercadoPago producción (actualmente token de prueba)
-- `MP_WEBHOOK_SECRET` — **pendiente de hacer obligatorio** (B-11)
+- `MP_WEBHOOK_SECRET` — ✅ configurado y obligatorio (B-11 cerrado 2026-06-22)
 - `ALLOW_DATA_RESET=true` → cambiar a `false` en go-live (1.0.0)
 - Demo: `admin@demo.clinica.co` / `Admin1234!` · tenant ID `005e349d2fbc5d30000000003`
 
@@ -90,8 +88,8 @@
 | `core-api` | `services/core-api/` | ✅ Go 1.21, prod |
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
-| Migrations | `services/core-api/migrations/` | Última: `000028_patient_emergency_contact` |
-| Claude skills | `~/.claude/commands/` | Sincronizadas en sesión 2026-06-20 |
+| Migrations | `services/core-api/migrations/` | Última: `000030_patient_code` |
+| Claude skills | `~/.claude/commands/` | Sincronizadas en sesión 2026-06-22 |
 
 ---
 
