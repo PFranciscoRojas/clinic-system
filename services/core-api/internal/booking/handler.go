@@ -212,15 +212,10 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 	title := "Sesión psicológica · " + when.Format("02/01 03:04 pm") + " · " + modalityLabel(modality)
 
 	// Cash/voucher (offline) payments only make sense when there's enough lead
-	// time to physically pay before the session. When allowed, bound the
-	// checkout/voucher deadline to a bit before the appointment so an offline
-	// payment can't accredit after it has already passed.
+	// time to physically pay before the session. The deadline itself is enforced
+	// server-side: holdDeferred caps the hold to before the appointment.
 	const minOfflineLead = 24 * time.Hour
 	allowOffline := time.Until(when) >= minOfflineLead
-	var prefExpiry time.Time
-	if allowOffline {
-		prefExpiry = when.Add(-2 * time.Hour)
-	}
 	var bookingID, initPoint string
 
 	// Public route: pin the resolved org's RLS scope for every bookings
@@ -259,7 +254,7 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 			ctx, title, amount, bookingID, body.Email,
 			h.cfg.AppBaseURL+"/book/return?slug="+url.QueryEscape(body.OrgSlug),
 			h.cfg.AppBaseURL+"/api/v1/public/pay/webhook",
-			prefExpiry, allowOffline,
+			allowOffline,
 		)
 		if err != nil {
 			// Release the hold so a failed gateway call doesn't block the slot.
