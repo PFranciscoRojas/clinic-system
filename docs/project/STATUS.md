@@ -12,19 +12,19 @@
 
 | Ola | Estado | Resumen |
 |---|---|---|
-| Fases 1–5 (core) | ✅ producción | Historia clínica, consentimientos, plan terapéutico, PDF export |
+| Fases 1–5 (core) | ✅ producción | Historia clínica, consentimientos, plan terapéutico, PDF export con Nº HC |
 | Ola 2 — SaaS multi-tenant | ✅ producción | RLS por tenant, signup self-serve, trial, gating 402, cobro MP suscripción |
 | Ola Booking | ✅ producción | `/book/:slug` público, tarjeta/PSE/Efecty, diferidos, emails, agenda integrada |
-| **Ola 3 — IA** | 🟡 en progreso | Recap pre-sesión + plan terapéutico sugerido (Whisper + Sonnet) |
+| Ola 3 — IA | ✅ producción | Recap pre-sesión, borrador SOAP, plan TCC, detección de riesgo — activo en VPS |
 | BC-6 Facturación | ✅ producción | Tarjeta/PSE/Efecty/Nequi, semana/mes/3meses/año, balance-por-paciente |
 
-### Últimos commits a `main` (sesión 2026-06-23) — desplegados
+### Últimos commits a `main` — todos desplegados
 
-- `448abed` fix(booking): eliminado `payment_methods` de la preferencia (bloqueaba PSE); email "Tu horario está apartado" para pagos diferidos (Efecty/cash) con fecha de cita, plazo y link al comprobante
-- `e03d511` fix(booking): eliminado `expiration_date_to` de la preferencia — bloqueaba el redirect PSE al banco
-- `6110a83` feat(booking): deadline del comprobante antes de la cita (hold capeado a `scheduled_at − 2h`); botón "Finalizar" en pantalla de reserva apartada
-- `291c743` feat(booking): soporte de pagos diferidos (Efecty/efectivo); página de retorno con 5 estados explícitos (confirmada/apartada/fallida/procesando/confirmando); fix crítico RLS `BusyHolds` (los holds no se aplicaban a disponibilidad desde migración 000032); 404 del endpoint status = fallo definitivo (resuelve PSE rechazado colgado en "Confirmando"); migración 000033 (`payment_voucher_url`)
-- `1515290` fix(booking): sin redirección automática (quitado `auto_return`); `?slug=` en back_url; retryHref/homeHref nunca caen al host del API; copy "no cierres esta página" corregido
+- `2377272` feat(billing): booking detail modal + filter sync + `hold_expires_at` en fila reservas (2026-06-23)
+- `c9b542e` fix(billing): cast `modality::text` en query `ListBookingPayments` — enum vacío causaba 500 (2026-06-23)
+- `dc7be41` fix(frontend): listener `controllerchange` en main.tsx → SW propaga deploys sin doble-refresh (2026-06-23)
+- `823107e` refactor(billing): reservas online integradas en tab Facturas (quita tab Reservas separada) (2026-06-23)
+- `6ef20b2` fix(booking): bloqueo atómico de citas internas sobre holds de pago diferido activos (CTE) (2026-06-23)
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 
@@ -68,7 +68,7 @@
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción (rebuild 2026-06-23, migración 000033 aplicada) |
+| `core-api:8080` | ✅ producción (rebuild 2026-06-23 ×2, migración 000033 aplicada) |
 | `ai-service` | ✅ producción (`Dockerfile.patch` rebuild #79) |
 | `frontend` (Caddy :80/:443) | ✅ producción |
 | Backups | `pg_dump` cifrado GPG → Backblaze B2 |
@@ -90,7 +90,7 @@
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
 | Migrations | `services/core-api/migrations/` | Última: `000033_booking_voucher` |
-| Claude skills | `~/.claude/commands/` | Sincronizadas en sesión 2026-06-22 |
+| Claude skills | `~/.claude/commands/` | Sincronizadas en sesión 2026-06-22 (sin cambios hoy) |
 
 ---
 
