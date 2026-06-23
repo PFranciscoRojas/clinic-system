@@ -20,11 +20,11 @@
 
 ### Últimos commits a `main` — todos desplegados
 
+- `adfe153` feat(patients): exportar lista completa a CSV — botón en PatientsPage, endpoint GET /patients/export.csv — 2026-06-23
 - `a9048ab` feat(auth): cambiar correo admin + gestión de roles del equipo — 2026-06-23
 - `8891f0c` fix(billing): comprobante PDF muestra F-number en vez de UUID — 2026-06-23
 - `1de3a0a` fix(admin): "limpiar datos" incluye invoices/payments/bookings (FK cascade) — 2026-06-23
 - `52c9efb` feat(billing): tabla unificada facturas+reservas con sort por columna — 2026-06-23
-- `466786b` feat(billing): número R-XXXXXX, referencia MP, filtro pendientes, sort reservas — 2026-06-23
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 
@@ -67,7 +67,7 @@
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción (rebuild 2026-06-23 ×3, migración 000033 aplicada) |
+| `core-api:8080` | ✅ producción (rebuild 2026-06-23 ×4, migración 000033 aplicada) |
 | `ai-service` | ✅ producción (`Dockerfile.patch` rebuild #79) |
 | `frontend` (Caddy :80/:443) | ✅ producción |
 | Backups | `pg_dump` cifrado GPG → Backblaze B2 |
