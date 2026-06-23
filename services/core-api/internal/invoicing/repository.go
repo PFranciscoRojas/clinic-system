@@ -140,7 +140,7 @@ func (r *Repository) SetActive(ctx context.Context, orgID, id string, active boo
 // window (or all if from/to are nil), plus active PENDING_PAYMENT holds.
 func (r *Repository) ListBookingPayments(ctx context.Context, orgID, status string, from, to *time.Time) ([]BookingPayment, error) {
 	q := `
-		SELECT id, scheduled_at, COALESCE(guest_name,''), COALESCE(email,''), COALESCE(phone,''), COALESCE(modality,''),
+		SELECT id, scheduled_at, COALESCE(guest_name,''), COALESCE(email,''), COALESCE(phone,''), COALESCE(modality::text,''),
 		       amount, status,
 		       COALESCE(mp_payment_type,''), COALESCE(mp_payment_method,''),
 		       COALESCE(payment_voucher_url,''), hold_expires_at,
