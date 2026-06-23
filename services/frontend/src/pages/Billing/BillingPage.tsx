@@ -9,6 +9,7 @@ import {
   invoicesApi, formatMoney, balanceOf, invoiceLabel,
   INVOICE_STATUS_META, type Invoice, type InvoiceStatus,
   type BillingOverview, type BillingPeriod, type SeriesPoint, type MethodStat,
+  type BookingPayment,
 } from '@/api/invoices';
 
 const FILTERS: { id: string; label: string }[] = [
@@ -94,23 +95,71 @@ const MP_TYPE_LABEL: Record<string, string> = {
   credit_card: 'Tarjeta crédito', debit_card: 'Tarjeta débito',
   bank_transfer: 'PSE', ticket: 'Efecty', atm: 'ATM', account_money: 'Cuenta MP',
 };
+const MODALITY_LABEL: Record<string, string> = {
+  IN_PERSON: 'Presencial', VIRTUAL: 'Virtual', HYBRID: 'Híbrida',
+};
+
+const fmtDateTime = (s?: string | null) => s
+  ? new Date(s).toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  : '—';
+
+function BookingDetailModal({ booking, onClose }: { booking: BookingPayment; onClose: () => void }) {
+  const paid = booking.status === 'PAID';
+  const row = (label: string, value: React.ReactNode) => value ? (
+    <div style={{ display: 'flex', gap: 8, padding: '9px 0', borderBottom: '1px solid var(--s100)' }}>
+      <span style={{ minWidth: 140, fontSize: 12, color: 'var(--s500)', fontWeight: 600 }}>{label}</span>
+      <span style={{ fontSize: 13, color: 'var(--s800)', flex: 1 }}>{value}</span>
+    </div>
+  ) : null;
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: '24px 28px', width: 460, maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,.18)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ padding: '3px 9px', borderRadius: 6, fontSize: 11.5, fontWeight: 700, background: '#e0f2fe', color: '#0369a1' }}>Reserva online</span>
+            <Badge label={paid ? 'Pagada' : 'Pendiente de pago'} color={paid ? '#065f46' : '#92400e'} bg={paid ? '#d1fae5' : '#fef3c7'} />
+          </div>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--s400)', lineHeight: 1 }}>×</button>
+        </div>
+
+        {row('Invitado', <strong>{booking.guest_name || '—'}</strong>)}
+        {row('Correo', booking.email)}
+        {row('Teléfono', booking.phone)}
+        {row('Fecha de cita', fmtDateTime(booking.scheduled_at))}
+        {row('Modalidad', MODALITY_LABEL[booking.modality] ?? (booking.modality || null))}
+        {row('Monto', <strong style={{ fontFamily: "'DM Mono', monospace" }}>{formatMoney(String(booking.amount), 'COP')}</strong>)}
+        {row('Método de pago', booking.payment_type ? (MP_TYPE_LABEL[booking.payment_type] ?? booking.payment_type) : null)}
+        {!paid && booking.hold_expires_at && row('Vence el', <span style={{ color: '#92400e', fontWeight: 600 }}>{fmtDateTime(booking.hold_expires_at)}</span>)}
+        {paid && booking.paid_at && row('Pagó el', fmtDateTime(booking.paid_at))}
+        {booking.voucher_url && row('Comprobante', <a href={booking.voucher_url} target="_blank" rel="noreferrer" style={{ color: '#0ea5e9', fontWeight: 600 }}>Ver comprobante →</a>)}
+      </div>
+    </div>
+  );
+}
 
 // ── Facturas tab ──────────────────────────────────────────────────────────────
 function FacturasTab({ period }: { period: BillingPeriod }) {
   const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState<Invoice | null>(null);
+  const [selectedBooking, setSelectedBooking] = useState<BookingPayment | null>(null);
 
   const { data: invoices, isLoading: loadingInv, refetch } = useQuery({
     queryKey: ['invoices-all', filter, period],
     queryFn: () => invoicesApi.listAll(filter || undefined, period),
   });
+
+  // Bookings only appear on "Todas" and "Pagadas" filters
+  const showBookings = filter === '' || filter === 'PAID';
+  const bkApiStatus  = filter === 'PAID' ? 'PAID' : undefined;
   const { data: bookings, isLoading: loadingBook } = useQuery({
-    queryKey: ['bookings-revenue', period],
-    queryFn: () => invoicesApi.listBookings(undefined, period),
+    queryKey: ['bookings-revenue', bkApiStatus, period],
+    queryFn:  () => invoicesApi.listBookings(bkApiStatus, period),
+    enabled:  showBookings,
   });
 
   const invList = invoices ?? [];
-  const bkList  = bookings ?? [];
+  const bkList  = showBookings ? (bookings ?? []) : [];
   const isLoading = loadingInv || loadingBook;
 
   const exportCsv = () => {
@@ -191,7 +240,10 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
               {bkList.map(b => {
                 const paid = b.status === 'PAID';
                 return (
-                  <tr key={b.id} style={{ borderTop: '1px solid var(--s100)' }}>
+                  <tr key={b.id} onClick={() => setSelectedBooking(b)}
+                    style={{ borderTop: '1px solid var(--s100)', cursor: 'pointer' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--s50)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                     <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
                       <span style={{ padding: '2px 7px', borderRadius: 5, fontSize: 11, fontWeight: 700, background: '#e0f2fe', color: '#0369a1' }}>
                         Reserva
@@ -205,7 +257,14 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
                     <td style={{ padding: '12px 16px', color: 'var(--s600)' }}>
                       {b.payment_type ? (MP_TYPE_LABEL[b.payment_type] ?? b.payment_type) : 'Cita online'}
                     </td>
-                    <td style={{ padding: '12px 16px', color: 'var(--s500)', whiteSpace: 'nowrap' }}>{fmtDate(b.scheduled_at)}</td>
+                    <td style={{ padding: '12px 16px', color: 'var(--s500)', whiteSpace: 'nowrap' }}>
+                      {fmtDate(b.scheduled_at)}
+                      {!paid && b.hold_expires_at && (
+                        <span style={{ display: 'block', fontSize: 11, color: '#b45309' }}>
+                          Vence {fmtDate(b.hold_expires_at)}
+                        </span>
+                      )}
+                    </td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: 'var(--s700)' }}>
                       {formatMoney(String(b.amount), 'COP')}
                     </td>
@@ -225,6 +284,7 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
       </div>
 
       {selected && <InvoiceDetailModal summary={selected} onClose={() => setSelected(null)} onChange={() => refetch()} />}
+      {selectedBooking && <BookingDetailModal booking={selectedBooking} onClose={() => setSelectedBooking(null)} />}
     </div>
   );
 }
