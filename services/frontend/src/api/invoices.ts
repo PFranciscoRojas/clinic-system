@@ -111,6 +111,7 @@ export interface PatientBalance {
 
 export interface BookingPayment {
   id: string;
+  booking_number: number;
   scheduled_at: string;
   guest_name: string;
   email: string;
@@ -120,6 +121,7 @@ export interface BookingPayment {
   status: 'PAID' | 'PENDING_PAYMENT';
   payment_type: string;
   payment_method: string;
+  mp_payment_id: string;
   voucher_url: string;
   hold_expires_at: string | null;
   paid_at: string | null;

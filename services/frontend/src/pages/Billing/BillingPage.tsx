@@ -13,13 +13,24 @@ import {
 } from '@/api/invoices';
 
 const FILTERS: { id: string; label: string }[] = [
-  { id: '',          label: 'Todas'        },
-  { id: 'ISSUED',    label: 'Emitidas'     },
-  { id: 'PARTIAL',   label: 'Pago parcial' },
-  { id: 'PAID',      label: 'Pagadas'      },
-  { id: 'DRAFT',     label: 'Borradores'   },
-  { id: 'CANCELLED', label: 'Anuladas'     },
+  { id: '',                 label: 'Todas'             },
+  { id: 'ISSUED',           label: 'Emitidas'          },
+  { id: 'PARTIAL',          label: 'Pago parcial'      },
+  { id: 'PAID',             label: 'Pagadas'           },
+  { id: 'PENDING_PAYMENT',  label: 'Pendiente de pago' },
+  { id: 'DRAFT',            label: 'Borradores'        },
+  { id: 'CANCELLED',        label: 'Anuladas'          },
 ];
+
+type SortField = 'scheduled_at' | 'hold_expires_at' | 'amount';
+type SortDir   = 'asc' | 'desc';
+
+const bookingLabel = (n: number) => `R-${String(n).padStart(6, '0')}`;
+
+const MP_REF_LABEL: Record<string, string> = {
+  credit_card: 'Auth. MP', debit_card: 'Auth. MP',
+  bank_transfer: 'CUS PSE', ticket: 'Cupón Efecty', atm: 'Ref. ATM', account_money: 'Ref. MP',
+};
 
 const PERIODS: { id: BillingPeriod; label: string; noun: string; chart: string }[] = [
   { id: 'week',    label: 'Semana',  noun: 'de la semana',   chart: 'esta semana (por día)' },
@@ -132,6 +143,10 @@ function BookingDetailModal({ booking, onClose }: { booking: BookingPayment; onC
         {row('Método de pago', booking.payment_type ? (MP_TYPE_LABEL[booking.payment_type] ?? booking.payment_type) : null)}
         {!paid && booking.hold_expires_at && row('Vence el', <span style={{ color: '#92400e', fontWeight: 600 }}>{fmtDateTime(booking.hold_expires_at)}</span>)}
         {paid && booking.paid_at && row('Pagó el', fmtDateTime(booking.paid_at))}
+        {paid && booking.mp_payment_id && row(
+          MP_REF_LABEL[booking.payment_type] ?? 'Ref. pago',
+          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12.5, userSelect: 'all' }}>{booking.mp_payment_id}</span>
+        )}
         {booking.voucher_url && row('Comprobante', <a href={booking.voucher_url} target="_blank" rel="noreferrer" style={{ color: '#0ea5e9', fontWeight: 600 }}>Ver comprobante →</a>)}
       </div>
     </div>
@@ -140,41 +155,67 @@ function BookingDetailModal({ booking, onClose }: { booking: BookingPayment; onC
 
 // ── Facturas tab ──────────────────────────────────────────────────────────────
 function FacturasTab({ period }: { period: BillingPeriod }) {
-  const [filter, setFilter] = useState('');
-  const [selected, setSelected] = useState<Invoice | null>(null);
+  const [filter, setFilter]               = useState('');
+  const [selected, setSelected]           = useState<Invoice | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<BookingPayment | null>(null);
+  const [sortField, setSortField]         = useState<SortField>('scheduled_at');
+  const [sortDir, setSortDir]             = useState<SortDir>('desc');
+
+  const isPendingFilter = filter === 'PENDING_PAYMENT';
 
   const { data: invoices, isLoading: loadingInv, refetch } = useQuery({
     queryKey: ['invoices-all', filter, period],
-    queryFn: () => invoicesApi.listAll(filter || undefined, period),
+    queryFn:  () => invoicesApi.listAll(filter || undefined, period),
+    enabled:  !isPendingFilter,
   });
 
-  // Bookings only appear on "Todas" and "Pagadas" filters
-  const showBookings = filter === '' || filter === 'PAID';
-  const bkApiStatus  = filter === 'PAID' ? 'PAID' : undefined;
+  const showBookings = filter === '' || filter === 'PAID' || isPendingFilter;
+  const bkApiStatus  = filter === 'PAID' ? 'PAID' : isPendingFilter ? 'PENDING_PAYMENT' : undefined;
   const { data: bookings, isLoading: loadingBook } = useQuery({
     queryKey: ['bookings-revenue', bkApiStatus, period],
     queryFn:  () => invoicesApi.listBookings(bkApiStatus, period),
     enabled:  showBookings,
   });
 
-  const invList = invoices ?? [];
+  const invList = isPendingFilter ? [] : (invoices ?? []);
   const bkList  = showBookings ? (bookings ?? []) : [];
-  const isLoading = loadingInv || loadingBook;
+
+  const sortedBkList = [...bkList].sort((a, b) => {
+    let av = 0, bv = 0;
+    if (sortField === 'scheduled_at') {
+      av = new Date(a.scheduled_at).getTime();
+      bv = new Date(b.scheduled_at).getTime();
+    } else if (sortField === 'hold_expires_at') {
+      av = a.hold_expires_at ? new Date(a.hold_expires_at).getTime() : 0;
+      bv = b.hold_expires_at ? new Date(b.hold_expires_at).getTime() : 0;
+    } else {
+      av = a.amount; bv = b.amount;
+    }
+    return sortDir === 'asc' ? av - bv : bv - av;
+  });
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortField(field); setSortDir('desc'); }
+  };
+  const isLoading = (isPendingFilter ? false : loadingInv) || loadingBook;
+
+  const sortIcon = (field: SortField) => sortField === field ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '';
 
   const exportCsv = () => {
     const invRows = invList.map(inv => [
       invoiceLabel(inv), inv.patient_name || '', inv.service || '',
       fmtDate(inv.issued_at ?? inv.created_at), inv.total_due, inv.total_paid,
-      balanceOf(inv), INVOICE_STATUS_META[inv.status as InvoiceStatus].label,
+      balanceOf(inv), INVOICE_STATUS_META[inv.status as InvoiceStatus].label, '',
     ]);
-    const bkRows = bkList.map(b => [
-      'Reserva', b.guest_name, b.email,
+    const bkRows = sortedBkList.map(b => [
+      bookingLabel(b.booking_number), b.guest_name, b.email,
       fmtDate(b.scheduled_at), String(b.amount), b.status === 'PAID' ? String(b.amount) : '0',
-      b.status === 'PAID' ? '0' : String(b.amount), b.status === 'PAID' ? 'Pagada' : 'Pendiente',
+      b.status === 'PAID' ? '0' : String(b.amount), b.status === 'PAID' ? 'Pagada' : 'Pendiente de pago',
+      b.mp_payment_id,
     ]);
     downloadCsv(`facturas-${new Date().toISOString().slice(0, 10)}.csv`, [
-      ['N.º', 'Paciente / Invitado', 'Servicio', 'Fecha', 'Total', 'Pagado', 'Saldo', 'Estado'],
+      ['N.º', 'Invitado', 'Correo', 'Fecha cita', 'Total', 'Pagado', 'Saldo', 'Estado', 'Ref. pago'],
       ...invRows, ...bkRows,
     ]);
   };
@@ -214,9 +255,16 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
               <tr style={{ background: 'var(--s50)', textAlign: 'left', color: 'var(--s500)', fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '.03em' }}>
                 <th style={{ padding: '11px 16px', fontWeight: 700 }}>N.º</th>
                 <th style={{ padding: '11px 16px', fontWeight: 700 }}>Paciente / Invitado</th>
-                <th style={{ padding: '11px 16px', fontWeight: 700 }}>Servicio</th>
-                <th style={{ padding: '11px 16px', fontWeight: 700 }}>Fecha</th>
-                <th style={{ padding: '11px 16px', fontWeight: 700, textAlign: 'right' }}>Monto</th>
+                <th style={{ padding: '11px 16px', fontWeight: 700 }}>Servicio / Método</th>
+                <th onClick={() => toggleSort('scheduled_at')} style={{ padding: '11px 16px', fontWeight: 700, cursor: 'pointer', userSelect: 'none' }}>
+                  Fecha cita{sortIcon('scheduled_at')}
+                </th>
+                <th onClick={() => toggleSort('hold_expires_at')} style={{ padding: '11px 16px', fontWeight: 700, cursor: 'pointer', userSelect: 'none' }}>
+                  Vence{sortIcon('hold_expires_at')}
+                </th>
+                <th onClick={() => toggleSort('amount')} style={{ padding: '11px 16px', fontWeight: 700, textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>
+                  Monto{sortIcon('amount')}
+                </th>
                 <th style={{ padding: '11px 16px', fontWeight: 700 }}>Estado</th>
               </tr>
             </thead>
@@ -232,12 +280,13 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
                     <td style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--s800)' }}>{inv.patient_name || '—'}</td>
                     <td style={{ padding: '12px 16px', color: 'var(--s600)' }}>{inv.service || '—'}</td>
                     <td style={{ padding: '12px 16px', color: 'var(--s500)', whiteSpace: 'nowrap' }}>{fmtDate(inv.issued_at ?? inv.created_at)}</td>
+                    <td style={{ padding: '12px 16px', color: 'var(--s400)', whiteSpace: 'nowrap', fontSize: 12 }}>{inv.due_at ? fmtDate(inv.due_at) : '—'}</td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: 'var(--s700)' }}>{formatMoney(inv.total_due, inv.currency)}</td>
                     <td style={{ padding: '12px 16px' }}><Badge label={meta.label} color={meta.color} bg={meta.bg} /></td>
                   </tr>
                 );
               })}
-              {bkList.map(b => {
+              {sortedBkList.map(b => {
                 const paid = b.status === 'PAID';
                 return (
                   <tr key={b.id} onClick={() => setSelectedBooking(b)}
@@ -245,8 +294,11 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--s50)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                     <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
-                      <span style={{ padding: '2px 7px', borderRadius: 5, fontSize: 11, fontWeight: 700, background: '#e0f2fe', color: '#0369a1' }}>
-                        Reserva
+                      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12.5, color: 'var(--s600)' }}>
+                        {bookingLabel(b.booking_number)}
+                      </span>
+                      <span style={{ marginLeft: 6, padding: '1px 5px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#e0f2fe', color: '#0369a1' }}>
+                        Online
                       </span>
                     </td>
                     <td style={{ padding: '12px 16px' }}>
@@ -256,14 +308,17 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
                     </td>
                     <td style={{ padding: '12px 16px', color: 'var(--s600)' }}>
                       {b.payment_type ? (MP_TYPE_LABEL[b.payment_type] ?? b.payment_type) : 'Cita online'}
-                    </td>
-                    <td style={{ padding: '12px 16px', color: 'var(--s500)', whiteSpace: 'nowrap' }}>
-                      {fmtDate(b.scheduled_at)}
-                      {!paid && b.hold_expires_at && (
-                        <span style={{ display: 'block', fontSize: 11, color: '#b45309' }}>
-                          Vence {fmtDate(b.hold_expires_at)}
+                      {paid && b.mp_payment_id && (
+                        <span style={{ display: 'block', fontSize: 10.5, color: 'var(--s400)', fontFamily: "'DM Mono', monospace" }}>
+                          {MP_REF_LABEL[b.payment_type] ?? 'Ref.'} {b.mp_payment_id}
                         </span>
                       )}
+                    </td>
+                    <td style={{ padding: '12px 16px', color: 'var(--s500)', whiteSpace: 'nowrap' }}>{fmtDate(b.scheduled_at)}</td>
+                    <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                      {b.hold_expires_at
+                        ? <span style={{ fontSize: 12, color: paid ? 'var(--s400)' : '#b45309', fontWeight: paid ? 400 : 600 }}>{fmtDate(b.hold_expires_at)}</span>
+                        : <span style={{ color: 'var(--s300)' }}>—</span>}
                     </td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: 'var(--s700)' }}>
                       {formatMoney(String(b.amount), 'COP')}
