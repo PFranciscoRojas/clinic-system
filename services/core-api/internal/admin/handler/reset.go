@@ -84,11 +84,13 @@ func (h *Handler) wipeOrg(ctx context.Context, orgID string) (map[string]int64, 
 		  UNION SELECT dek_id FROM ai_drafts           WHERE organization_id = $1 AND dek_id IS NOT NULL
 		  UNION SELECT dek_id FROM treatment_plans     WHERE organization_id = $1 AND dek_id IS NOT NULL
 		  UNION SELECT dek_id FROM patient_assessments WHERE organization_id = $1 AND dek_id IS NOT NULL
+		  UNION SELECT dek_id FROM invoices            WHERE organization_id = $1 AND dek_id IS NOT NULL
 	`, orgID); err != nil {
 		return nil, err
 	}
 
 	// Deletion order: leaves first, then their parents.
+	// invoices/payments/bookings must precede appointments (FK references).
 	steps := []struct {
 		table string
 		sql   string
@@ -103,6 +105,9 @@ func (h *Handler) wipeOrg(ctx context.Context, orgID string) (map[string]int64, 
 		{"treatment_goals", `DELETE FROM treatment_goals WHERE plan_id IN (SELECT id FROM treatment_plans WHERE organization_id = $1)`},
 		{"treatment_plans", `DELETE FROM treatment_plans WHERE organization_id = $1`},
 		{"clinical_records", `DELETE FROM clinical_records WHERE organization_id = $1`},
+		{"payments", `DELETE FROM payments p USING invoices i WHERE p.invoice_id = i.id AND i.organization_id = $1`},
+		{"invoices", `DELETE FROM invoices WHERE organization_id = $1`},
+		{"bookings", `DELETE FROM bookings WHERE organization_id = $1`},
 		{"appointments", `DELETE FROM appointments WHERE organization_id = $1`},
 		{"patients", `DELETE FROM patients WHERE organization_id = $1`},
 	}
