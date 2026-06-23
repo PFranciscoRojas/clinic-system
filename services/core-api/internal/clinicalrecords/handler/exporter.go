@@ -68,6 +68,8 @@ func (h *Handler) exportPDF(w http.ResponseWriter, r *http.Request) {
 		FullName:       joinNames(patient.FirstName, patient.MiddleName, patient.PaternalLastName, patient.MaternalLastName),
 		DocumentType:   patient.DocumentTypeCode,
 		DocumentNumber: patient.DocumentNumber,
+		PatientCode:    patient.PatientCode,
+		OpenedAt:       patient.CreatedAt,
 		BirthDate:      patient.BirthDate,
 		Age:            age,
 		Gender:         gender,

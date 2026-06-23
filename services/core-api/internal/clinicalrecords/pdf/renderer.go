@@ -20,11 +20,12 @@ type DiagnosisLine struct {
 }
 
 // PatientInfo is the Resolución 1995/1999 art. 6 identification block.
-// The clinical history number is the patient's identity document number.
 type PatientInfo struct {
 	FullName       string
 	DocumentType   string
 	DocumentNumber string
+	PatientCode    int // Nº de HC correlativo por tenant (0 = no asignado)
+	OpenedAt       time.Time
 	BirthDate      time.Time
 	Age            int
 	Gender         string
@@ -191,9 +192,14 @@ func Render(w io.Writer, in RenderInput) error {
 	doc.SetFont("Helvetica", "", 10)
 	doc.CellFormat(0, 5, tr("Nota de "+strings.ToLower(in.RecordType)), "", 1, "C", false, 0, "")
 
-	// Historia clínica No. = patient document number (Res. 1995/1999 art. 6)
+	// Historia clínica No. = patient document number (Res. 1995/1999 art. 6).
+	// Also show the correlative HC number assigned at registration when available.
+	hcHeader := fmt.Sprintf("Historia clínica No. %s %s", in.Patient.DocumentType, in.Patient.DocumentNumber)
+	if in.Patient.PatientCode > 0 {
+		hcHeader += fmt.Sprintf("  ·  HC-%06d", in.Patient.PatientCode)
+	}
 	doc.SetFont("Helvetica", "B", 9.5)
-	doc.CellFormat(0, 6, tr(fmt.Sprintf("Historia clínica No. %s %s", in.Patient.DocumentType, in.Patient.DocumentNumber)), "", 1, "C", false, 0, "")
+	doc.CellFormat(0, 6, tr(hcHeader), "", 1, "C", false, 0, "")
 	doc.SetFont("Helvetica", "", 7.5)
 	doc.SetTextColor(120, 120, 120)
 	doc.CellFormat(0, 4, tr("Registro electrónico ID: "+in.Record.ID), "", 1, "C", false, 0, "")
@@ -207,7 +213,15 @@ func Render(w io.Writer, in RenderInput) error {
 		numberedHeader(doc, tr, fmt.Sprintf("%d. %s", section, title))
 	}
 	nextSection("Identificación del paciente")
+	hcCode := ""
+	if in.Patient.PatientCode > 0 {
+		hcCode = fmt.Sprintf("HC-%06d", in.Patient.PatientCode)
+		if !in.Patient.OpenedAt.IsZero() {
+			hcCode += "  (apertura: " + in.Patient.OpenedAt.Format("2006-01-02") + ")"
+		}
+	}
 	rows := [][2]string{
+		{"Nº de HC", hcCode},
 		{"Nombre completo", in.Patient.FullName},
 		{"Documento", strings.TrimSpace(in.Patient.DocumentType + " " + in.Patient.DocumentNumber)},
 		{"Fecha de nacimiento", in.Patient.BirthDate.Format("2006-01-02")},
