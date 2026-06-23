@@ -42,6 +42,7 @@ type BookingPayment struct {
 	ScheduledAt    time.Time  `json:"scheduled_at"`
 	GuestName      string     `json:"guest_name"`
 	Email          string     `json:"email"`
+	Phone          string     `json:"phone"`
 	Modality       string     `json:"modality"`
 	Amount         int        `json:"amount"`
 	Status         string     `json:"status"`
@@ -50,6 +51,7 @@ type BookingPayment struct {
 	VoucherURL     string     `json:"voucher_url"`
 	HoldExpiresAt  *time.Time `json:"hold_expires_at"`
 	PaidAt         *time.Time `json:"paid_at"`
+	AppointmentID  *string    `json:"appointment_id"`
 }
 
 // GET /invoices/bookings — list booking payments (PAID and active PENDING_PAYMENT holds).

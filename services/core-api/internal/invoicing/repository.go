@@ -140,11 +140,12 @@ func (r *Repository) SetActive(ctx context.Context, orgID, id string, active boo
 // window (or all if from/to are nil), plus active PENDING_PAYMENT holds.
 func (r *Repository) ListBookingPayments(ctx context.Context, orgID, status string, from, to *time.Time) ([]BookingPayment, error) {
 	q := `
-		SELECT id, scheduled_at, COALESCE(guest_name,''), COALESCE(email,''), COALESCE(modality,''),
+		SELECT id, scheduled_at, COALESCE(guest_name,''), COALESCE(email,''), COALESCE(phone,''), COALESCE(modality,''),
 		       amount, status,
 		       COALESCE(mp_payment_type,''), COALESCE(mp_payment_method,''),
 		       COALESCE(payment_voucher_url,''), hold_expires_at,
-		       CASE WHEN status = 'PAID' THEN updated_at ELSE NULL END
+		       CASE WHEN status = 'PAID' THEN updated_at ELSE NULL END,
+		       appointment_id
 		FROM bookings
 		WHERE organization_id = $1
 		  AND (
@@ -173,10 +174,11 @@ func (r *Repository) ListBookingPayments(ctx context.Context, orgID, status stri
 	for rows.Next() {
 		var bp BookingPayment
 		if err := rows.Scan(
-			&bp.ID, &bp.ScheduledAt, &bp.GuestName, &bp.Email, &bp.Modality,
+			&bp.ID, &bp.ScheduledAt, &bp.GuestName, &bp.Email, &bp.Phone, &bp.Modality,
 			&bp.Amount, &bp.Status,
 			&bp.PaymentType, &bp.PaymentMethod,
 			&bp.VoucherURL, &bp.HoldExpiresAt, &bp.PaidAt,
+			&bp.AppointmentID,
 		); err != nil {
 			return nil, fmt.Errorf("scan booking payment: %w", err)
 		}

@@ -388,6 +388,7 @@ const MP_TYPE_LABEL: Record<string, string> = {
 
 function ReservasTab({ period }: { period: BillingPeriod }) {
   const [filter, setFilter] = useState<'' | 'PAID' | 'PENDING_PAYMENT'>('');
+  const nav = useNavigate();
 
   const { data, isLoading } = useQuery({
     queryKey: ['bookings-revenue', filter, period],
@@ -437,7 +438,7 @@ function ReservasTab({ period }: { period: BillingPeriod }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: '2px solid var(--s200)' }}>
-              {['Cita', 'Paciente / invitado', 'Modalidad', 'Método', 'Monto', 'Estado', 'Vence / pagó'].map(h => (
+              {['Cita', 'Invitado / contacto', 'Modalidad', 'Método', 'Monto', 'Estado', 'Vence / pagó'].map(h => (
                 <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11.5, fontWeight: 700, color: 'var(--s500)', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
@@ -447,8 +448,17 @@ function ReservasTab({ period }: { period: BillingPeriod }) {
               <tr key={b.id} style={{ borderBottom: '1px solid var(--s100)' }}>
                 <td style={{ padding: '10px 10px' }}>{fmtDT(b.scheduled_at)}</td>
                 <td style={{ padding: '10px 10px' }}>
-                  <span style={{ fontWeight: 600 }}>{b.guest_name || '—'}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontWeight: 600 }}>{b.guest_name || '—'}</span>
+                    {b.appointment_id && (
+                      <button onClick={() => nav(`/appointments/${b.appointment_id}`)}
+                        style={{ padding: '2px 8px', borderRadius: 6, border: '1px solid var(--teal)', background: 'var(--teal-l, #f0fdfa)', color: 'var(--teal-d)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                        Ver cita
+                      </button>
+                    )}
+                  </div>
                   {b.email && <span style={{ display: 'block', fontSize: 11, color: 'var(--s400)' }}>{b.email}</span>}
+                  {b.phone && <span style={{ display: 'block', fontSize: 11, color: 'var(--s400)' }}>{b.phone}</span>}
                 </td>
                 <td style={{ padding: '10px 10px', color: 'var(--s500)' }}>{MODALITY_LABEL[b.modality] ?? (b.modality || '—')}</td>
                 <td style={{ padding: '10px 10px', color: 'var(--s600)' }}>

@@ -114,6 +114,7 @@ export interface BookingPayment {
   scheduled_at: string;
   guest_name: string;
   email: string;
+  phone: string;
   modality: string;
   amount: number;
   status: 'PAID' | 'PENDING_PAYMENT';
@@ -122,6 +123,7 @@ export interface BookingPayment {
   voucher_url: string;
   hold_expires_at: string | null;
   paid_at: string | null;
+  appointment_id: string | null;
 }
 
 export const invoicesApi = {
