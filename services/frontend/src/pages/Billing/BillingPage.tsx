@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Receipt, Wallet, Clock, SearchX, ArrowUp, ArrowDown, Globe, HandCoins, FileText, BarChart3, AlertTriangle, Download, Send, CheckCircle, AlertCircle, Users, CalendarCheck } from 'lucide-react';
+import { Receipt, Wallet, Clock, SearchX, ArrowUp, ArrowDown, Globe, HandCoins, FileText, BarChart3, AlertTriangle, Download, Send, CheckCircle, AlertCircle, Users } from 'lucide-react';
 import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
 import { InvoiceDetailModal } from '@/components/billing/InvoiceDetailModal';
@@ -90,27 +90,47 @@ function KpiCards({ ov, period }: { ov?: BillingOverview; period: BillingPeriod 
   );
 }
 
+const MP_TYPE_LABEL: Record<string, string> = {
+  credit_card: 'Tarjeta crédito', debit_card: 'Tarjeta débito',
+  bank_transfer: 'PSE', ticket: 'Efecty', atm: 'ATM', account_money: 'Cuenta MP',
+};
+
 // ── Facturas tab ──────────────────────────────────────────────────────────────
 function FacturasTab({ period }: { period: BillingPeriod }) {
   const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState<Invoice | null>(null);
 
-  const { data: invoices, isLoading, refetch } = useQuery({
+  const { data: invoices, isLoading: loadingInv, refetch } = useQuery({
     queryKey: ['invoices-all', filter, period],
     queryFn: () => invoicesApi.listAll(filter || undefined, period),
   });
-  const list = invoices ?? [];
+  const { data: bookings, isLoading: loadingBook } = useQuery({
+    queryKey: ['bookings-revenue', period],
+    queryFn: () => invoicesApi.listBookings(undefined, period),
+  });
+
+  const invList = invoices ?? [];
+  const bkList  = bookings ?? [];
+  const isLoading = loadingInv || loadingBook;
 
   const exportCsv = () => {
+    const invRows = invList.map(inv => [
+      invoiceLabel(inv), inv.patient_name || '', inv.service || '',
+      fmtDate(inv.issued_at ?? inv.created_at), inv.total_due, inv.total_paid,
+      balanceOf(inv), INVOICE_STATUS_META[inv.status as InvoiceStatus].label,
+    ]);
+    const bkRows = bkList.map(b => [
+      'Reserva', b.guest_name, b.email,
+      fmtDate(b.scheduled_at), String(b.amount), b.status === 'PAID' ? String(b.amount) : '0',
+      b.status === 'PAID' ? '0' : String(b.amount), b.status === 'PAID' ? 'Pagada' : 'Pendiente',
+    ]);
     downloadCsv(`facturas-${new Date().toISOString().slice(0, 10)}.csv`, [
-      ['N.º', 'Paciente', 'Servicio', 'Fecha', 'Total', 'Pagado', 'Saldo', 'Estado'],
-      ...list.map(inv => [
-        invoiceLabel(inv), inv.patient_name || '', inv.service || '',
-        fmtDate(inv.issued_at ?? inv.created_at), inv.total_due, inv.total_paid,
-        balanceOf(inv), INVOICE_STATUS_META[inv.status as InvoiceStatus].label,
-      ]),
+      ['N.º', 'Paciente / Invitado', 'Servicio', 'Fecha', 'Total', 'Pagado', 'Saldo', 'Estado'],
+      ...invRows, ...bkRows,
     ]);
   };
+
+  const empty = invList.length === 0 && bkList.length === 0;
 
   return (
     <div>
@@ -124,27 +144,27 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
             }}>{f.label}</button>
           );
         })}
-        <button onClick={exportCsv} disabled={list.length === 0} style={{
+        <button onClick={exportCsv} disabled={empty} style={{
           marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8,
-          border: '1.5px solid var(--s200)', background: '#fff', color: list.length ? 'var(--s600)' : 'var(--s300)',
-          fontSize: 12.5, fontWeight: 600, cursor: list.length ? 'pointer' : 'not-allowed',
+          border: '1.5px solid var(--s200)', background: '#fff', color: !empty ? 'var(--s600)' : 'var(--s300)',
+          fontSize: 12.5, fontWeight: 600, cursor: !empty ? 'pointer' : 'not-allowed',
         }}><Download size={13} /> Exportar CSV</button>
       </div>
 
       <div style={{ background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, overflow: 'hidden' }}>
         {isLoading ? (
           <div style={{ padding: 48, display: 'flex', justifyContent: 'center' }}><Spinner /></div>
-        ) : list.length === 0 ? (
+        ) : empty ? (
           <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--s400)' }}>
             <SearchX size={28} style={{ opacity: 0.5 }} />
-            <div style={{ fontSize: 13.5, marginTop: 10 }}>No hay facturas en este período/estado.</div>
+            <div style={{ fontSize: 13.5, marginTop: 10 }}>No hay facturas ni reservas en este período.</div>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: 'var(--s50)', textAlign: 'left', color: 'var(--s500)', fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '.03em' }}>
                 <th style={{ padding: '11px 16px', fontWeight: 700 }}>N.º</th>
-                <th style={{ padding: '11px 16px', fontWeight: 700 }}>Paciente</th>
+                <th style={{ padding: '11px 16px', fontWeight: 700 }}>Paciente / Invitado</th>
                 <th style={{ padding: '11px 16px', fontWeight: 700 }}>Servicio</th>
                 <th style={{ padding: '11px 16px', fontWeight: 700 }}>Fecha</th>
                 <th style={{ padding: '11px 16px', fontWeight: 700, textAlign: 'right' }}>Monto</th>
@@ -152,7 +172,7 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
               </tr>
             </thead>
             <tbody>
-              {list.map((inv: Invoice) => {
+              {invList.map((inv: Invoice) => {
                 const meta = INVOICE_STATUS_META[inv.status as InvoiceStatus];
                 return (
                   <tr key={inv.id} onClick={() => setSelected(inv)}
@@ -165,6 +185,37 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
                     <td style={{ padding: '12px 16px', color: 'var(--s500)', whiteSpace: 'nowrap' }}>{fmtDate(inv.issued_at ?? inv.created_at)}</td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: 'var(--s700)' }}>{formatMoney(inv.total_due, inv.currency)}</td>
                     <td style={{ padding: '12px 16px' }}><Badge label={meta.label} color={meta.color} bg={meta.bg} /></td>
+                  </tr>
+                );
+              })}
+              {bkList.map(b => {
+                const paid = b.status === 'PAID';
+                return (
+                  <tr key={b.id} style={{ borderTop: '1px solid var(--s100)' }}>
+                    <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                      <span style={{ padding: '2px 7px', borderRadius: 5, fontSize: 11, fontWeight: 700, background: '#e0f2fe', color: '#0369a1' }}>
+                        Reserva
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <span style={{ fontWeight: 600, color: 'var(--s800)' }}>{b.guest_name || '—'}</span>
+                      {b.email && <span style={{ display: 'block', fontSize: 11, color: 'var(--s400)' }}>{b.email}</span>}
+                      {b.phone && <span style={{ display: 'block', fontSize: 11, color: 'var(--s400)' }}>{b.phone}</span>}
+                    </td>
+                    <td style={{ padding: '12px 16px', color: 'var(--s600)' }}>
+                      {b.payment_type ? (MP_TYPE_LABEL[b.payment_type] ?? b.payment_type) : 'Cita online'}
+                    </td>
+                    <td style={{ padding: '12px 16px', color: 'var(--s500)', whiteSpace: 'nowrap' }}>{fmtDate(b.scheduled_at)}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: 'var(--s700)' }}>
+                      {formatMoney(String(b.amount), 'COP')}
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <Badge
+                        label={paid ? 'Pagada' : 'Pendiente de pago'}
+                        color={paid ? '#065f46' : '#92400e'}
+                        bg={paid ? '#d1fae5' : '#fef3c7'}
+                      />
+                    </td>
                   </tr>
                 );
               })}
@@ -373,132 +424,15 @@ function PacientesTab({ period }: { period: BillingPeriod }) {
 }
 
 // ── Page shell ────────────────────────────────────────────────────────────────
-// ── Reservas online tab ───────────────────────────────────────────────────────
-const BOOKING_STATUS_LABEL: Record<string, string> = {
-  PAID: 'Pagada', PENDING_PAYMENT: 'Pendiente de pago',
-};
-const BOOKING_STATUS_COLOR: Record<string, string> = {
-  PAID: '#059669', PENDING_PAYMENT: '#d97706',
-};
-const MODALITY_LABEL: Record<string, string> = { IN_PERSON: 'Presencial', VIRTUAL: 'Virtual', HYBRID: 'Híbrida' };
-const MP_TYPE_LABEL: Record<string, string> = {
-  credit_card: 'Tarjeta crédito', debit_card: 'Tarjeta débito',
-  bank_transfer: 'PSE', ticket: 'Efecty', atm: 'ATM', account_money: 'Cuenta MP',
-};
-
-function ReservasTab({ period }: { period: BillingPeriod }) {
-  const [filter, setFilter] = useState<'' | 'PAID' | 'PENDING_PAYMENT'>('');
-  const nav = useNavigate();
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['bookings-revenue', filter, period],
-    queryFn: () => invoicesApi.listBookings(filter || undefined, period),
-  });
-  const list = data ?? [];
-
-  const fmtDT = (s: string) => new Date(s).toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-  const fmtD  = (s: string) => new Date(s).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
-
-  const totalPaid = list.filter(b => b.status === 'PAID').reduce((s, b) => s + b.amount, 0);
-
-  const BOOKING_FILTERS = [
-    { id: '' as const, label: 'Todas' },
-    { id: 'PAID' as const, label: 'Pagadas' },
-    { id: 'PENDING_PAYMENT' as const, label: 'Pendientes' },
-  ];
-
-  return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {BOOKING_FILTERS.map(f => (
-            <button key={f.id} onClick={() => setFilter(f.id)} style={{
-              padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12.5,
-              fontWeight: filter === f.id ? 700 : 500,
-              background: filter === f.id ? 'var(--teal)' : 'var(--s100)',
-              color: filter === f.id ? '#fff' : 'var(--s600)',
-            }}>{f.label}</button>
-          ))}
-        </div>
-        {totalPaid > 0 && (
-          <span style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 700, color: '#059669' }}>
-            Total cobrado: {formatMoney(String(totalPaid), 'COP')}
-          </span>
-        )}
-      </div>
-
-      {isLoading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}><Spinner size={24} /></div>
-      ) : list.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--s400)' }}>
-          <SearchX size={32} style={{ marginBottom: 8, opacity: 0.4 }} />
-          <p style={{ margin: 0, fontSize: 13 }}>Sin reservas en este período.</p>
-        </div>
-      ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead>
-            <tr style={{ borderBottom: '2px solid var(--s200)' }}>
-              {['Cita', 'Invitado / contacto', 'Modalidad', 'Método', 'Monto', 'Estado', 'Vence / pagó'].map(h => (
-                <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11.5, fontWeight: 700, color: 'var(--s500)', whiteSpace: 'nowrap' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {list.map(b => (
-              <tr key={b.id} style={{ borderBottom: '1px solid var(--s100)' }}>
-                <td style={{ padding: '10px 10px' }}>{fmtDT(b.scheduled_at)}</td>
-                <td style={{ padding: '10px 10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontWeight: 600 }}>{b.guest_name || '—'}</span>
-                    {b.appointment_id && (
-                      <button onClick={() => nav(`/appointments/${b.appointment_id}`)}
-                        style={{ padding: '2px 8px', borderRadius: 6, border: '1px solid var(--teal)', background: 'var(--teal-l, #f0fdfa)', color: 'var(--teal-d)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-                        Ver cita
-                      </button>
-                    )}
-                  </div>
-                  {b.email && <span style={{ display: 'block', fontSize: 11, color: 'var(--s400)' }}>{b.email}</span>}
-                  {b.phone && <span style={{ display: 'block', fontSize: 11, color: 'var(--s400)' }}>{b.phone}</span>}
-                </td>
-                <td style={{ padding: '10px 10px', color: 'var(--s500)' }}>{MODALITY_LABEL[b.modality] ?? (b.modality || '—')}</td>
-                <td style={{ padding: '10px 10px', color: 'var(--s600)' }}>
-                  {b.payment_type ? (MP_TYPE_LABEL[b.payment_type] ?? b.payment_type) : '—'}
-                  {b.voucher_url && b.status === 'PENDING_PAYMENT' && (
-                    <a href={b.voucher_url} target="_blank" rel="noreferrer" style={{ display: 'block', fontSize: 11, color: '#0ea5e9' }}>Ver comprobante</a>
-                  )}
-                </td>
-                <td style={{ padding: '10px 10px', fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>
-                  {formatMoney(String(b.amount), 'COP')}
-                </td>
-                <td style={{ padding: '10px 10px' }}>
-                  <span style={{ padding: '3px 8px', borderRadius: 6, fontSize: 11.5, fontWeight: 700,
-                    background: BOOKING_STATUS_COLOR[b.status] + '18',
-                    color: BOOKING_STATUS_COLOR[b.status] }}>
-                    {BOOKING_STATUS_LABEL[b.status] ?? b.status}
-                  </span>
-                </td>
-                <td style={{ padding: '10px 10px', fontSize: 12, color: 'var(--s500)' }}>
-                  {b.paid_at ? fmtD(b.paid_at) : b.hold_expires_at ? `vence ${fmtD(b.hold_expires_at)}` : '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
-  );
-}
-
-type Tab = 'facturas' | 'resumen' | 'pacientes' | 'reservas';
+type Tab = 'facturas' | 'resumen' | 'pacientes';
 
 export function BillingPage() {
-  const [tab, setTab] = useState<Tab>('reservas');
+  const [tab, setTab] = useState<Tab>('facturas');
   const [period, setPeriod] = useState<BillingPeriod>('month');
 
   const { data: ov } = useQuery<BillingOverview>({ queryKey: ['billing-overview', period], queryFn: () => invoicesApi.overview(period) });
 
   const TABS: { id: Tab; label: string; Icon: React.ElementType }[] = [
-    { id: 'reservas',  label: 'Reservas online', Icon: CalendarCheck },
     { id: 'facturas',  label: 'Facturas', Icon: FileText },
     { id: 'resumen',   label: 'Resumen financiero', Icon: BarChart3 },
     { id: 'pacientes', label: 'Balance por paciente', Icon: Users },
@@ -541,7 +475,6 @@ export function BillingPage() {
         })}
       </div>
 
-      {tab === 'reservas'  && <ReservasTab period={period} />}
       {tab === 'facturas'  && <FacturasTab period={period} />}
       {tab === 'resumen'   && <ResumenTab ov={ov} />}
       {tab === 'pacientes' && <PacientesTab period={period} />}
