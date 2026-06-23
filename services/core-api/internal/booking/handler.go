@@ -117,15 +117,17 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var st, modality, clinic, slug string
-	var website *string
+	var website, paymentType, voucherURL *string
 	var when time.Time
+	var holdExpires time.Time
 	err = dbctx.WithOrgScope(r.Context(), h.pool, org, func(ctx context.Context) error {
 		return dbctx.From(ctx, h.pool).QueryRow(ctx, `
 			SELECT b.status, b.modality, b.scheduled_at, COALESCE(o.name, ''), COALESCE(o.slug, ''),
-			       o.settings->'branding'->>'website'
+			       o.settings->'branding'->>'website', b.mp_payment_type, b.payment_voucher_url,
+			       b.hold_expires_at
 			FROM bookings b JOIN organizations o ON o.id = b.organization_id
 			WHERE b.id = $1
-		`, id).Scan(&st, &modality, &when, &clinic, &slug, &website)
+		`, id).Scan(&st, &modality, &when, &clinic, &slug, &website, &paymentType, &voucherURL, &holdExpires)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		httputil.WriteError(w, http.StatusNotFound, "reserva no encontrada")
@@ -135,17 +137,22 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusInternalServerError, "error")
 		return
 	}
-	site := ""
-	if website != nil {
-		site = *website
+	deref := func(p *string) string {
+		if p != nil {
+			return *p
+		}
+		return ""
 	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{
-		"status":       st,
-		"modality":     modality,
-		"scheduled_at": when.UTC().Format(time.RFC3339),
-		"clinic_name":  clinic,
-		"org_slug":     slug,
-		"website":      site,
+		"status":          st,
+		"modality":        modality,
+		"scheduled_at":    when.UTC().Format(time.RFC3339),
+		"clinic_name":     clinic,
+		"org_slug":        slug,
+		"website":         deref(website),
+		"payment_type":    deref(paymentType),
+		"voucher_url":     deref(voucherURL),
+		"hold_expires_at": holdExpires.UTC().Format(time.RFC3339),
 	})
 }
 
@@ -325,6 +332,11 @@ func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
 	switch pay.Status {
 	case "approved":
 		h.confirm(ctx, pay.ExternalReference, id, pay.PaymentTypeID, pay.PaymentMethodID)
+	case "pending", "in_process":
+		// Deferred (cash/voucher) payment: the patient pays the voucher later.
+		// Keep the slot held until the voucher expires and store its URL so the
+		// return page can show "reserva apartada, paga tu comprobante".
+		h.holdDeferred(ctx, pay.ExternalReference, id, pay)
 	case "rejected", "cancelled", "refunded", "charged_back":
 		// Free the held slot immediately so it can be booked again.
 		if org, e := h.bookingOrg(ctx, pay.ExternalReference); e == nil && org != "" {
@@ -392,6 +404,40 @@ func (h *Handler) confirm(ctx context.Context, bookingID, paymentID, paymentType
 	// Fire-and-forget on its own context so a slow Resend call never delays the
 	// 200 the MercadoPago webhook is waiting for (which would trigger retries).
 	go h.notifyConfirmed(context.Background(), orgID, bookingID)
+}
+
+// holdDeferred extends the slot hold for a pending offline payment (Efecty,
+// cash, some transfers): the patient gets a voucher and pays it later, so we
+// keep the slot reserved until the voucher's own expiration instead of the
+// 15-minute checkout hold, and record the voucher URL for the return page. The
+// booking stays PENDING_PAYMENT — the later "approved" webhook confirms it, and
+// "cancelled" (voucher expired) releases it (both already handled).
+func (h *Handler) holdDeferred(ctx context.Context, bookingID, paymentID string, pay *mercadopago.Payment) {
+	orgID, err := h.bookingOrg(ctx, bookingID)
+	if err != nil || orgID == "" {
+		return
+	}
+	// Hold until the voucher expires; fall back to 3 days if MP omits the date.
+	expires := time.Now().Add(72 * time.Hour)
+	if pay.DateOfExpiration != "" {
+		if t, e := time.Parse(time.RFC3339, pay.DateOfExpiration); e == nil {
+			expires = t
+		}
+	}
+	scopeErr := dbctx.WithOrgScope(ctx, h.pool, orgID, func(ctx context.Context) error {
+		_, err := dbctx.From(ctx, h.pool).Exec(ctx, `
+			UPDATE bookings
+			SET mp_payment_id = $2,
+			    mp_payment_type = NULLIF($3, ''), mp_payment_method = NULLIF($4, ''),
+			    payment_voucher_url = NULLIF($5, ''), hold_expires_at = $6, updated_at = NOW()
+			WHERE id = $1 AND status = 'PENDING_PAYMENT'
+		`, bookingID, paymentID, pay.PaymentTypeID, pay.PaymentMethodID,
+			pay.TransactionDetails.ExternalResourceURL, expires)
+		return err
+	})
+	if scopeErr != nil {
+		slog.Error("booking.holdDeferred", "err", scopeErr)
+	}
 }
 
 func (h *Handler) notifyConfirmed(ctx context.Context, orgID, bookingID string) {

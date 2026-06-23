@@ -162,9 +162,23 @@ func (r *Repository) BusyAppointments(ctx context.Context, orgID, staffID string
 }
 
 // BusyHolds returns the staff's unexpired paid-booking holds in [from, to).
-// bookings has no RLS, so a plain read is fine.
-func (r *Repository) BusyHolds(ctx context.Context, staffID string, from, to time.Time) ([]Busy, error) {
-	rows, err := r.pool.Query(ctx, `
+// bookings is RLS-protected (000032), so — like BusyAppointments — we pin a
+// connection and set the org GUC for this read (the public endpoint has no
+// JWT/TenantScope). Without this the holds are silently filtered out and held
+// slots wrongly show as free (critical with deferred holds that last days).
+func (r *Repository) BusyHolds(ctx context.Context, orgID, staffID string, from, to time.Time) ([]Busy, error) {
+	conn, err := r.pool.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("acquire conn: %w", err)
+	}
+	defer conn.Release()
+
+	if _, err := conn.Exec(ctx, `SELECT set_config('app.current_org', $1, false)`, orgID); err != nil {
+		return nil, fmt.Errorf("set org guc: %w", err)
+	}
+	defer conn.Exec(ctx, `SELECT set_config('app.current_org', '', false)`) //nolint:errcheck
+
+	rows, err := conn.Query(ctx, `
 		SELECT scheduled_at, duration_min
 		FROM bookings
 		WHERE staff_id = $1 AND status = 'PENDING_PAYMENT' AND hold_expires_at > NOW()

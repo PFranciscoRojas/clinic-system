@@ -45,9 +45,12 @@ export const publicBookingApi = {
       '/public/pay/checkout', body,
     ),
 
-  // Booking status for the post-payment return page (PAID once the webhook lands).
+  // Booking status for the post-payment return page (PAID once the webhook
+  // lands). For deferred payments (Efecty/cash) it stays PENDING_PAYMENT but
+  // carries the voucher URL + hold deadline so the page can tell the patient to
+  // pay the voucher. 404 means the booking was rejected/released (definitive).
   status: (id: string) =>
-    api.get<{ status: string; modality: string; scheduled_at: string; clinic_name: string; org_slug: string; website: string }>(
+    api.get<{ status: string; modality: string; scheduled_at: string; clinic_name: string; org_slug: string; website: string; payment_type: string; voucher_url: string; hold_expires_at: string }>(
       `/public/pay/status?id=${encodeURIComponent(id)}`,
     ),
 

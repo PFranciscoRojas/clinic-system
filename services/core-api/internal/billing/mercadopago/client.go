@@ -159,13 +159,19 @@ func (c *Client) CreatePreference(ctx context.Context, title string, amountCOP i
 // Payment is a single charge (used for recurring renewal notifications).
 type Payment struct {
 	ID                int64  `json:"id"`
-	Status            string `json:"status"` // approved | rejected | ...
+	Status            string `json:"status"` // approved | pending | in_process | rejected | ...
 	ExternalReference string `json:"external_reference"`
 	// How the payment was made. PaymentTypeID is the coarse category
 	// (credit_card | debit_card | ticket | bank_transfer | account_money | atm);
 	// PaymentMethodID is the brand (visa | pse | efecty | nequi | …).
 	PaymentTypeID   string `json:"payment_type_id"`
 	PaymentMethodID string `json:"payment_method_id"`
+	// Deferred (cash/voucher) payments: when the voucher expires and where the
+	// patient can reopen it to pay. Empty for instant methods (card, PSE).
+	DateOfExpiration   string `json:"date_of_expiration"` // RFC3339
+	TransactionDetails struct {
+		ExternalResourceURL string `json:"external_resource_url"`
+	} `json:"transaction_details"`
 }
 
 // GetPayment fetches a payment by id (from an authorized-payment webhook).

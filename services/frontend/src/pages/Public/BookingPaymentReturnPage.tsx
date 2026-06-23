@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CheckCircle2, Clock, CalendarPlus, Download, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, CalendarPlus, Download, XCircle, Receipt } from 'lucide-react';
 import { publicBookingApi } from '@/api/publicBooking';
+import { ApiError } from '@/api/client';
 
 const PAPER = '#faf6f1', INK = '#2a2420', INK_SOFT = '#6b5f55', INK_FAINT = '#a89c90', ACCENT = '#8a5a5a', LINE = '#e6ddd2';
 const DISPLAY = "'Fraunces', Georgia, serif";
 const DURATION_MIN = 50;
+const MAX_TRIES = 15; // ~45s of polling before we hand off to email confirmation
 
-type Booking = { status: string; modality: string; scheduled_at: string; clinic_name: string; org_slug: string; website: string };
+type Booking = {
+  status: string; modality: string; scheduled_at: string; clinic_name: string;
+  org_slug: string; website: string; payment_type: string; voucher_url: string; hold_expires_at: string;
+};
 
 // MercadoPago appends ?status= / ?collection_status= to the back URL. "Volver a
 // la tienda" without paying lands here with a null/rejected/cancelled status, so
@@ -16,8 +21,12 @@ const FAILED_STATUSES = new Set(['null', 'rejected', 'cancelled', 'refunded', 'c
 
 // Landing after MercadoPago checkout (back_url = /book/return). MercadoPago
 // appends ?external_reference=<booking_id>&status=...; the webhook confirms the
-// booking server-side, so we poll the booking status and, once paid, show the
-// confirmed appointment plus an add-to-calendar option.
+// booking server-side. We poll the booking status and branch into five states:
+//   PAID          → appointment confirmed (+ add-to-calendar)
+//   deferred      → pending + voucher (Efecty/cash): "reserva apartada, paga tu comprobante"
+//   failed        → MP reported a failure, or the booking is gone (404 = rejected/released)
+//   processing    → still pending after the poll window (we'll confirm by email)
+//   confirming    → still polling
 export function BookingPaymentReturnPage() {
   const [params] = useSearchParams();
   const bookingId = params.get('external_reference') || '';
@@ -29,40 +38,49 @@ export function BookingPaymentReturnPage() {
   const abandoned = !!mpStatus && FAILED_STATUSES.has(mpStatus);
   const [b, setB] = useState<Booking | null>(null);
   const [tries, setTries] = useState(0);
+  const [notFound, setNotFound] = useState(false); // 404 → booking rejected/released
   const [released, setReleased] = useState(false);
 
   useEffect(() => {
-    if (!bookingId) return;
+    if (!bookingId || notFound) return;
     let stop = false;
-    // Abandoned/failed: fetch status once (for the clinic's website) but don't poll.
-    if (abandoned) {
-      publicBookingApi.status(bookingId).then(res => { if (!stop) setB(res); }).catch(() => {});
-      return () => { stop = true; };
-    }
-    const poll = async () => {
+    const fetchStatus = async () => {
       try {
         const res = await publicBookingApi.status(bookingId);
         if (stop) return;
         setB(res);
-        if (res.status !== 'PAID' && tries < 6) setTimeout(() => setTries(t => t + 1), 2500);
-      } catch { /* not found yet */ if (!stop && tries < 6) setTimeout(() => setTries(t => t + 1), 2500); }
+        // Done as far as polling goes: confirmed, or a voucher to pay later.
+        const settled = res.status === 'PAID' || !!res.voucher_url;
+        // Abandoned: fetch once (for the clinic's website) but don't poll.
+        if (!abandoned && !settled && tries < MAX_TRIES) setTimeout(() => setTries(t => t + 1), 3000);
+      } catch (e) {
+        if (stop) return;
+        // The booking no longer exists → it was rejected or released. Definitive.
+        if (e instanceof ApiError && e.status === 404) { setNotFound(true); return; }
+        if (!abandoned && tries < MAX_TRIES) setTimeout(() => setTries(t => t + 1), 3000);
+      }
     };
-    poll();
+    fetchStatus();
     return () => { stop = true; };
-  }, [bookingId, tries, abandoned]);
+  }, [bookingId, tries, abandoned, notFound]);
 
   const paid = b?.status === 'PAID';
-  // Not paid, and either the gateway reported a non-success status or polling ran out.
-  const failed = !paid && (abandoned || tries >= 6);
+  // Pending offline payment (Efecty/cash): the slot is held, the voucher awaits payment.
+  const deferred = !paid && !!b?.voucher_url;
+  // Definitive failure: the gateway reported one, or the booking is gone.
+  const failed = !paid && !deferred && (abandoned || notFound);
+  // Still pending after the poll window — the webhook may still land; confirm by email.
+  const processing = !paid && !deferred && !failed && tries >= MAX_TRIES;
 
-  // Free the held slot right away when the payment didn't go through, so it
-  // becomes bookable again without waiting for the 15-minute hold to expire.
+  // Free the held slot when the patient explicitly abandoned (came back via
+  // MercadoPago's failure status). A 404 means it's already gone; a timeout
+  // (processing) must NOT release — the payment may still be accrediting.
   useEffect(() => {
-    if (failed && bookingId && !released) {
+    if (abandoned && bookingId && !released && !notFound) {
       setReleased(true);
       publicBookingApi.release(bookingId).catch(() => {});
     }
-  }, [failed, bookingId, released]);
+  }, [abandoned, bookingId, released, notFound]);
 
   // Send the patient back to the clinic's own site ("la tienda"), not the API host.
   // Prefer the configured website; otherwise reopen the booking flow by slug
@@ -76,9 +94,9 @@ export function BookingPaymentReturnPage() {
   const end = start ? new Date(start.getTime() + DURATION_MIN * 60000) : null;
   const title = `Cita${b?.clinic_name ? ' · ' + b.clinic_name : ''}`;
   const ics = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-  const longDate = start
-    ? start.toLocaleString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit', hour12: true })
-    : '';
+  const fmt = (d: Date) => d.toLocaleString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit', hour12: true });
+  const longDate = start ? fmt(start) : '';
+  const voucherDeadline = deferred && b?.hold_expires_at ? fmt(new Date(b.hold_expires_at)) : '';
 
   const googleUrl = start && end
     ? `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${ics(start)}/${ics(end)}&details=${encodeURIComponent('Modalidad: ' + (b?.modality === 'VIRTUAL' ? 'Online' : 'Presencial'))}`
@@ -92,18 +110,25 @@ export function BookingPaymentReturnPage() {
   };
 
   const calBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', boxSizing: 'border-box', padding: 12, borderRadius: 11, border: `1.5px solid ${LINE}`, background: '#fff', color: INK, fontSize: 14, fontWeight: 600, cursor: 'pointer', textDecoration: 'none', marginTop: 10 };
+  const primaryBtn: React.CSSProperties = { ...calBtn, background: ACCENT, color: '#fff', border: 'none', fontFamily: DISPLAY, fontSize: 15 };
+
+  const heading = paid ? '¡Cita confirmada!'
+    : deferred ? 'Reserva apartada'
+    : failed ? 'No se completó el pago'
+    : processing ? 'Estamos procesando tu pago'
+    : 'Confirmando tu pago…';
+
+  const icon = paid ? <CheckCircle2 size={50} color="#3e6b4e" style={{ margin: '0 auto 16px' }} />
+    : deferred ? <Receipt size={50} color={ACCENT} style={{ margin: '0 auto 16px' }} />
+    : failed ? <XCircle size={50} color={ACCENT} style={{ margin: '0 auto 16px' }} />
+    : <Clock size={50} color={ACCENT} style={{ margin: '0 auto 16px' }} />;
 
   return (
     <div style={{ minHeight: '100vh', background: PAPER, color: INK, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: "'DM Sans', -apple-system, sans-serif" }}>
       <div style={{ background: '#fff', borderRadius: 18, padding: '40px 32px', boxShadow: '0 20px 60px rgba(42,36,32,0.12)', width: '100%', maxWidth: 460, textAlign: 'center', border: `1px solid ${LINE}`, boxSizing: 'border-box' }}>
-        {paid
-          ? <CheckCircle2 size={50} color="#3e6b4e" style={{ margin: '0 auto 16px' }} />
-          : failed
-            ? <XCircle size={50} color={ACCENT} style={{ margin: '0 auto 16px' }} />
-            : <Clock size={50} color={ACCENT} style={{ margin: '0 auto 16px' }} />}
-        <h1 style={{ fontFamily: DISPLAY, fontWeight: 500, fontSize: 25, marginBottom: 12 }}>
-          {paid ? '¡Cita confirmada!' : failed ? 'No se completó el pago' : 'Confirmando tu pago…'}
-        </h1>
+        {icon}
+        <h1 style={{ fontFamily: DISPLAY, fontWeight: 500, fontSize: 25, marginBottom: 12 }}>{heading}</h1>
+
         {paid && start ? (
           <>
             <p style={{ color: INK_SOFT, fontSize: 14.5, lineHeight: 1.7, marginBottom: 6, textTransform: 'capitalize' }}>{longDate}</p>
@@ -114,9 +139,24 @@ export function BookingPaymentReturnPage() {
             <p style={{ fontSize: 12, color: INK_FAINT, lineHeight: 1.5, margin: '18px 0 10px' }}>
               Guarda tu comprobante de pago. Cuando termines, finaliza:
             </p>
-            <a href={homeHref} style={{ ...calBtn, background: ACCENT, color: '#fff', border: 'none', marginTop: 0, fontFamily: DISPLAY, fontSize: 15 }}>
-              Finalizar
-            </a>
+            <a href={homeHref} style={{ ...primaryBtn, marginTop: 0 }}>Finalizar</a>
+          </>
+        ) : deferred ? (
+          <>
+            <p style={{ color: INK_SOFT, fontSize: 14.5, lineHeight: 1.7, marginBottom: 6, textTransform: 'capitalize' }}>{longDate}</p>
+            <p style={{ color: INK_SOFT, fontSize: 14.5, lineHeight: 1.7, marginBottom: 18 }}>
+              Apartamos tu horario. Para confirmar la cita, paga tu comprobante
+              {voucherDeadline ? <> antes del <strong style={{ textTransform: 'capitalize' }}>{voucherDeadline}</strong></> : null}.
+              En cuanto se acredite el pago te enviaremos la confirmación por correo.
+            </p>
+            {b?.voucher_url ? (
+              <a href={b.voucher_url} target="_blank" rel="noreferrer" style={{ ...primaryBtn, marginTop: 0 }}>
+                <Receipt size={16} /> Ver / pagar mi comprobante
+              </a>
+            ) : null}
+            <p style={{ fontSize: 12, color: INK_FAINT, lineHeight: 1.5, margin: '16px 0 0' }}>
+              Si no pagas a tiempo, el horario se liberará automáticamente.
+            </p>
           </>
         ) : failed ? (
           <>
@@ -128,6 +168,11 @@ export function BookingPaymentReturnPage() {
               Volver a agendar
             </a>
           </>
+        ) : processing ? (
+          <p style={{ color: INK_SOFT, fontSize: 14.5, lineHeight: 1.7 }}>
+            Tu pago está en revisión por MercadoPago. En cuanto se acredite, tu cita quedará
+            agendada y te enviaremos la confirmación por correo. Ya puedes cerrar esta página.
+          </p>
         ) : (
           <p style={{ color: INK_SOFT, fontSize: 14.5, lineHeight: 1.7 }}>
             Estamos confirmando tu pago con MercadoPago. En cuanto se acredite (unos segundos),
