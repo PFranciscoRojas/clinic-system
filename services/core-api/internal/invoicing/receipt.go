@@ -1,6 +1,7 @@
 package invoicing
 
 import (
+	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -128,7 +129,7 @@ func RenderReceipt(w io.Writer, d ReceiptData) error {
 	doc.CellFormat(0, 7, tr("Comprobante de pago"), "", 1, "L", false, 0, "")
 	doc.SetFont("Helvetica", "", 9)
 	doc.SetTextColor(100, 116, 139)
-	doc.CellFormat(0, 5, tr("N.º "+shortID(d.Invoice.ID)+"   ·   Estado: "+statusES(d.Invoice.Status)), "", 1, "L", false, 0, "")
+	doc.CellFormat(0, 5, tr("N.º "+invoiceRef(d.Invoice)+"   ·   Estado: "+statusES(d.Invoice.Status)), "", 1, "L", false, 0, "")
 	doc.CellFormat(0, 5, tr("Fecha de emisión: "+fmtDateOr(d.Invoice.IssuedAt, d.Invoice.CreatedAt)), "", 1, "L", false, 0, "")
 	doc.Ln(3)
 
@@ -224,6 +225,13 @@ func shortID(id string) string {
 		return strings.ToUpper(id[:8])
 	}
 	return strings.ToUpper(id)
+}
+
+func invoiceRef(inv Invoice) string {
+	if inv.InvoiceNumber != nil {
+		return fmt.Sprintf("F-%06d", *inv.InvoiceNumber)
+	}
+	return shortID(inv.ID)
 }
 func fmtDateOr(primary *time.Time, fallback time.Time) string {
 	if primary != nil {
