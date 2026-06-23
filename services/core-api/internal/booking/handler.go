@@ -20,7 +20,7 @@ import (
 
 	"sghcp/core-api/internal/availability"
 	"sghcp/core-api/internal/billing/mercadopago"
-	"sghcp/core-api/internal/notify"
+	notify "sghcp/core-api/internal/notify"
 	"sghcp/core-api/internal/shared/config"
 	"sghcp/core-api/internal/shared/dbctx"
 	"sghcp/core-api/internal/shared/httputil"
@@ -211,11 +211,6 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 	amount := h.cfg.BookingSessionPrice
 	title := "Sesión psicológica · " + when.Format("02/01 03:04 pm") + " · " + modalityLabel(modality)
 
-	// Cash/voucher (offline) payments only make sense when there's enough lead
-	// time to physically pay before the session. The deadline itself is enforced
-	// server-side: holdDeferred caps the hold to before the appointment.
-	const minOfflineLead = 24 * time.Hour
-	allowOffline := time.Until(when) >= minOfflineLead
 	var bookingID, initPoint string
 
 	// Public route: pin the resolved org's RLS scope for every bookings
@@ -254,7 +249,6 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 			ctx, title, amount, bookingID, body.Email,
 			h.cfg.AppBaseURL+"/book/return?slug="+url.QueryEscape(body.OrgSlug),
 			h.cfg.AppBaseURL+"/api/v1/public/pay/webhook",
-			allowOffline,
 		)
 		if err != nil {
 			// Release the hold so a failed gateway call doesn't block the slot.
@@ -431,8 +425,12 @@ func (h *Handler) holdDeferred(ctx context.Context, bookingID, paymentID string,
 			expires = t
 		}
 	}
+	var guest, email, modality string
+	var scheduledAt time.Time
+	var holdUntil time.Time
 	scopeErr := dbctx.WithOrgScope(ctx, h.pool, orgID, func(ctx context.Context) error {
-		_, err := dbctx.From(ctx, h.pool).Exec(ctx, `
+		q := dbctx.From(ctx, h.pool)
+		if err := q.QueryRow(ctx, `
 			UPDATE bookings
 			SET mp_payment_id = $2,
 			    mp_payment_type = NULLIF($3, ''), mp_payment_method = NULLIF($4, ''),
@@ -441,13 +439,33 @@ func (h *Handler) holdDeferred(ctx context.Context, bookingID, paymentID string,
 			    hold_expires_at = LEAST($6, scheduled_at - interval '2 hours'),
 			    updated_at = NOW()
 			WHERE id = $1 AND status = 'PENDING_PAYMENT'
+			RETURNING guest_name, email, modality, scheduled_at,
+			          LEAST($6, scheduled_at - interval '2 hours')
 		`, bookingID, paymentID, pay.PaymentTypeID, pay.PaymentMethodID,
-			pay.TransactionDetails.ExternalResourceURL, expires)
-		return err
+			pay.TransactionDetails.ExternalResourceURL, expires).
+			Scan(&guest, &email, &modality, &scheduledAt, &holdUntil); err != nil {
+			return err
+		}
+		return nil
 	})
 	if scopeErr != nil {
 		slog.Error("booking.holdDeferred", "err", scopeErr)
+		return
 	}
+
+	go func() {
+		local := scheduledAt.In(bogota)
+		deadline := holdUntil.In(bogota)
+		h.notifier.BookingVoucher(context.Background(), notify.BookingVoucherDetails{
+			OrgID:         orgID,
+			GuestName:     guest,
+			PatientEmail:  email,
+			Modality:      modalityLabel(modality),
+			AppointmentAt: local.Format("Monday, 2 de January, 3:04 pm"),
+			Deadline:      deadline.Format("Monday, 2 de January, 3:04 pm"),
+			VoucherURL:    pay.TransactionDetails.ExternalResourceURL,
+		})
+	}()
 }
 
 func (h *Handler) notifyConfirmed(ctx context.Context, orgID, bookingID string) {

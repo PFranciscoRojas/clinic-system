@@ -82,6 +82,43 @@ func (n *ResendNotifier) BookingConfirmed(ctx context.Context, b BookingDetails)
 	}
 }
 
+// BookingVoucher tells the patient their slot is held pending a cash/voucher
+// payment (Efecty etc.) and gives them the deadline and link to pay.
+func (n *ResendNotifier) BookingVoucher(ctx context.Context, d BookingVoucherDetails) {
+	brand := n.brandFor(ctx, d.OrgID)
+	greeting := "Hola"
+	if d.GuestName != "" {
+		greeting = "Hola " + d.GuestName
+	}
+	voucherBtn := ""
+	if d.VoucherURL != "" {
+		voucherBtn = fmt.Sprintf(
+			`<p style="margin:18px 0 0"><a href="%s" style="display:inline-block;padding:11px 22px;background:%s;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px">Ver / pagar mi comprobante</a></p>`,
+			d.VoucherURL, brand.BrandColor)
+	}
+	deadline := ""
+	if d.Deadline != "" {
+		deadline = fmt.Sprintf(` antes del <strong>%s</strong>`, d.Deadline)
+	}
+	html := fmt.Sprintf(
+		`<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#1f2937">`+
+			`<p style="font-size:11px;color:%s;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin:0 0 6px">%s</p>`+
+			`<h2 style="margin:0 0 12px;font-size:20px">Tu horario está apartado</h2>`+
+			`<p style="font-size:14px;line-height:1.6;margin:0 0 8px">%s, reservamos tu cita para el <strong>%s</strong> (%s).</p>`+
+			`<p style="font-size:14px;line-height:1.6;margin:0 0 8px">Para confirmarla, paga tu comprobante%s. En cuanto se acredite el pago recibirás la confirmación de tu cita.</p>`+
+			`<p style="font-size:13px;color:#6b7280;line-height:1.6;margin:0 0 4px">Si no realizas el pago a tiempo, el horario se liberará automáticamente.</p>`+
+			`%s`+
+			`<p style="font-size:13px;color:#6b7280;margin:22px 0 0">%s</p></div>`,
+		brand.BrandColor, brand.PublicName,
+		greeting, d.AppointmentAt, d.Modality,
+		deadline, voucherBtn, brand.PublicName)
+
+	subj := "Tu horario está apartado — paga tu comprobante · " + brand.PublicName
+	if err := n.send(ctx, d.PatientEmail, subj, html); err != nil {
+		slog.Default().Warn("notify: booking-voucher email failed", "err", err)
+	}
+}
+
 // AppointmentReminder nudges the patient ahead of their appointment (24h/2h).
 func (n *ResendNotifier) AppointmentReminder(ctx context.Context, b BookingDetails, hoursBefore int) {
 	brand := n.brandFor(ctx, b.OrgID)

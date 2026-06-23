@@ -56,6 +56,17 @@ type PaymentReminderDetails struct {
 	DueDate       string // optional, formatted; empty if none
 }
 
+// BookingVoucherDetails carries the data for a deferred (Efecty/cash) voucher email.
+type BookingVoucherDetails struct {
+	OrgID         string
+	GuestName     string
+	PatientEmail  string
+	Modality      string // "Virtual" or "Presencial"
+	AppointmentAt string // formatted date+time in local TZ
+	Deadline      string // formatted voucher payment deadline
+	VoucherURL    string // URL to reopen/print the voucher
+}
+
 // Notifier dispatches booking-lifecycle and consent emails.
 // Implementations must not block — callers fire them in goroutines.
 // Errors are logged internally; they never reach the HTTP response.
@@ -64,6 +75,7 @@ type Notifier interface {
 	BookingPaidAdmin(ctx context.Context, b BookingDetails, adminEmails []string)
 	BookingConfirmed(ctx context.Context, b BookingDetails)
 	BookingRejected(ctx context.Context, b BookingDetails)
+	BookingVoucher(ctx context.Context, d BookingVoucherDetails)
 	AppointmentReminder(ctx context.Context, b BookingDetails, hoursBefore int)
 	ConsentSignLink(ctx context.Context, toEmail string, d ConsentLinkDetails)
 	PasswordReset(ctx context.Context, toEmail string, d PasswordResetDetails)
@@ -82,6 +94,7 @@ func (NoopNotifier) NewBooking(_ context.Context, _ BookingDetails, _ []string) 
 func (NoopNotifier) BookingPaidAdmin(_ context.Context, _ BookingDetails, _ []string)       {}
 func (NoopNotifier) BookingConfirmed(_ context.Context, _ BookingDetails)                   {}
 func (NoopNotifier) BookingRejected(_ context.Context, _ BookingDetails)                    {}
+func (NoopNotifier) BookingVoucher(_ context.Context, _ BookingVoucherDetails)              {}
 func (NoopNotifier) AppointmentReminder(_ context.Context, _ BookingDetails, _ int)         {}
 func (NoopNotifier) ConsentSignLink(_ context.Context, _ string, _ ConsentLinkDetails)      {}
 func (NoopNotifier) PasswordReset(_ context.Context, _ string, _ PasswordResetDetails)      {}
