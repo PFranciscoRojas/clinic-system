@@ -18,6 +18,7 @@ import (
 	"sghcp/core-api/internal/shared/crypto"
 	"sghcp/core-api/internal/shared/db"
 	"sghcp/core-api/internal/shared/outbox"
+	"sghcp/core-api/internal/whatsapp"
 )
 
 // app holds every long-lived dependency of the process.
@@ -27,6 +28,7 @@ type app struct {
 	pool   *pgxpool.Pool
 	rdb    *redis.Client
 	km     *crypto.KeyManager
+	wa     *whatsapp.Sender
 	server *http.Server
 }
 
@@ -59,6 +61,7 @@ func newApp(cfg config.Config) (*app, error) {
 	}
 
 	a := &app{cfg: cfg, pool: pool, rdb: rdb, km: km}
+	a.wa = whatsapp.New(pool, km, slog.Default())
 	a.server = &http.Server{
 		Addr:    ":" + cfg.Port,
 		Handler: a.buildRouter(),
@@ -90,7 +93,7 @@ func (a *app) run(ctx context.Context) error {
 	if a.cfg.ResendAPIKey != "" {
 		notifier = notify.NewResend(a.cfg.ResendAPIKey, a.cfg.ResendFrom, orgs.New(a.pool).ResolveBranding)
 	}
-	go reminders.New(a.pool, a.km, notifier, slog.Default()).Run(ctx)
+	go reminders.New(a.pool, a.km, notifier, a.wa, slog.Default()).Run(ctx)
 
 	// ListenAndServe blocks forever, so it runs in a goroutine.
 	// We capture unexpected errors (anything other than ErrServerClosed,

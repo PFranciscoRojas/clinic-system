@@ -6,20 +6,22 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"sghcp/core-api/internal/bookingrequests"
-	"sghcp/core-api/internal/notify"
 	apptsrepo "sghcp/core-api/internal/appointments/repository"
 	apptssvc "sghcp/core-api/internal/appointments/service"
+	"sghcp/core-api/internal/bookingrequests"
+	"sghcp/core-api/internal/notify"
 	patientsrepo "sghcp/core-api/internal/patients/repository"
 	patientssvc "sghcp/core-api/internal/patients/service"
 	"sghcp/core-api/internal/shared/crypto"
 	"sghcp/core-api/internal/shared/dbctx"
 	"sghcp/core-api/internal/shared/middleware"
+	"sghcp/core-api/internal/whatsapp"
 )
 
 type patientCreator interface {
@@ -35,15 +37,17 @@ type Handler struct {
 	patientSvc patientCreator
 	apptSvc    apptCreator
 	notifier   notify.Notifier
+	wa         *whatsapp.Sender
 	pool       *pgxpool.Pool
 }
 
-func New(pool *pgxpool.Pool, km *crypto.KeyManager, notifier notify.Notifier) *Handler {
+func New(pool *pgxpool.Pool, km *crypto.KeyManager, notifier notify.Notifier, wa *whatsapp.Sender) *Handler {
 	return &Handler{
 		svc:        bookingrequests.NewService(pool),
 		patientSvc: patientssvc.New(patientsrepo.New(pool), km),
 		apptSvc:    apptssvc.New(apptsrepo.New(pool)),
 		notifier:   notifier,
+		wa:         wa,
 		pool:       pool,
 	}
 }
@@ -312,6 +316,10 @@ func (h *Handler) sendResolvedNotification(br *bookingrequests.BookingRequest) {
 	switch br.Status {
 	case bookingrequests.StatusConfirmed:
 		h.notifier.BookingConfirmed(ctx, d)
+		if br.Phone != nil && *br.Phone != "" {
+			when := strings.TrimSpace(d.PreferredDate + " " + d.PreferredTime)
+			h.wa.BookingConfirmed(ctx, br.OrganizationID, *br.Phone, br.FirstName, when, d.Modality)
+		}
 	case bookingrequests.StatusRejected:
 		h.notifier.BookingRejected(ctx, d)
 	}

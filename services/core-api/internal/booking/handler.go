@@ -24,6 +24,7 @@ import (
 	"sghcp/core-api/internal/shared/config"
 	"sghcp/core-api/internal/shared/dbctx"
 	"sghcp/core-api/internal/shared/httputil"
+	"sghcp/core-api/internal/whatsapp"
 )
 
 // Sentinel errors surfaced from the scoped checkout closure to map to HTTP.
@@ -59,15 +60,17 @@ type Handler struct {
 	mp       *mercadopago.Client
 	resolver *availability.Repository
 	notifier notify.Notifier
+	wa       *whatsapp.Sender
 	cfg      config.Config
 }
 
-func New(pool *pgxpool.Pool, notifier notify.Notifier, cfg config.Config) *Handler {
+func New(pool *pgxpool.Pool, notifier notify.Notifier, wa *whatsapp.Sender, cfg config.Config) *Handler {
 	return &Handler{
 		pool:     pool,
 		mp:       mercadopago.New(cfg.MPAccessToken),
 		resolver: availability.New(pool),
 		notifier: notifier,
+		wa:       wa,
 		cfg:      cfg,
 	}
 }
@@ -163,15 +166,15 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		OrgSlug       string `json:"org_slug"`
-		Modality      string `json:"modality"`
-		Date          string `json:"date"` // YYYY-MM-DD
-		Time          string `json:"time"` // HH:MM
-		Name          string `json:"name"`
-		Email         string `json:"email"`
-		Phone         string `json:"phone"`
-		PolicyAccepted bool  `json:"policy_accepted"` // refund/cancellation policy (B6)
-		PrevBookingID string `json:"prev_booking_id"` // hold to release before re-checking out
+		OrgSlug        string `json:"org_slug"`
+		Modality       string `json:"modality"`
+		Date           string `json:"date"` // YYYY-MM-DD
+		Time           string `json:"time"` // HH:MM
+		Name           string `json:"name"`
+		Email          string `json:"email"`
+		Phone          string `json:"phone"`
+		PolicyAccepted bool   `json:"policy_accepted"` // refund/cancellation policy (B6)
+		PrevBookingID  string `json:"prev_booking_id"` // hold to release before re-checking out
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
@@ -469,12 +472,12 @@ func (h *Handler) holdDeferred(ctx context.Context, bookingID, paymentID string,
 }
 
 func (h *Handler) notifyConfirmed(ctx context.Context, orgID, bookingID string) {
-	var guest, email, modality string
+	var guest, email, phone, modality string
 	var when time.Time
 	if err := dbctx.WithOrgScope(ctx, h.pool, orgID, func(ctx context.Context) error {
 		return dbctx.From(ctx, h.pool).QueryRow(ctx, `
-			SELECT guest_name, email, modality, scheduled_at FROM bookings WHERE id = $1
-		`, bookingID).Scan(&guest, &email, &modality, &when)
+			SELECT guest_name, email, COALESCE(phone,''), modality, scheduled_at FROM bookings WHERE id = $1
+		`, bookingID).Scan(&guest, &email, &phone, &modality, &when)
 	}); err != nil {
 		return
 	}
@@ -490,6 +493,10 @@ func (h *Handler) notifyConfirmed(ctx context.Context, orgID, bookingID string) 
 	// Patient gets the branded confirmation; admins get a paid-booking heads-up
 	// with the patient's contact (a dedicated template, not the unpaid-request one).
 	h.notifier.BookingConfirmed(ctx, d)
+	if phone != "" {
+		h.wa.BookingConfirmed(ctx, orgID, phone, guest,
+			d.PreferredDate+" "+d.PreferredTime, d.Modality)
+	}
 
 	admins, _ := h.orgAdminEmails(ctx, orgID)
 	h.notifier.BookingPaidAdmin(ctx, d, admins)

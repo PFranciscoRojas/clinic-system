@@ -72,7 +72,7 @@ func (a *app) buildRouter() http.Handler {
 		brandingResolver := orgs.New(a.pool).ResolveBranding
 		notifier = notify.NewResend(a.cfg.ResendAPIKey, a.cfg.ResendFrom, brandingResolver)
 	}
-	bookingH := bookingrequestshandler.New(a.pool, a.km, notifier)
+	bookingH := bookingrequestshandler.New(a.pool, a.km, notifier, a.wa)
 	availabilityH := availabilityhandler.NewHandler(a.pool)
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RateLimit(5, time.Minute))
@@ -85,7 +85,7 @@ func (a *app) buildRouter() http.Handler {
 	})
 
 	// Paid booking: checkout (rate-limited) + MercadoPago webhook.
-	bookingPayH := bookinghandler.New(a.pool, notifier, a.cfg)
+	bookingPayH := bookinghandler.New(a.pool, notifier, a.wa, a.cfg)
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RateLimit(15, time.Minute))
 		r.Mount("/api/v1/public/pay", bookingPayH.PublicRoutes())
@@ -127,7 +127,7 @@ func (a *app) buildRouter() http.Handler {
 		r.Mount("/api/v1/consents", consentsH.OrgRoutes())
 		r.Mount("/api/v1/consent-templates", consentsH.TemplateRoutes())
 
-		r.Mount("/api/v1/org", orgs.NewHandler(orgs.New(a.pool)).Routes())
+		r.Mount("/api/v1/org", orgs.NewHandler(orgs.New(a.pool), a.km).Routes())
 
 		diag := diagnoseshandler.New(a.pool)
 		r.Mount("/api/v1/icd10", diag.CatalogRoutes())
@@ -141,7 +141,7 @@ func (a *app) buildRouter() http.Handler {
 		profH := profileshandler.New(a.pool, a.km)
 		r.Mount("/api/v1/specialties", profH.SpecialtyRoutes())
 		r.Mount("/api/v1/me/professional-profile", profH.Routes())
-			r.Mount("/api/v1/me/availability", availabilityH.PrivateRoutes())
+		r.Mount("/api/v1/me/availability", availabilityH.PrivateRoutes())
 
 		aiDrafts := aidraftshandler.New(a.pool, a.km, a.rdb, a.cfg.AudioDir)
 		r.Mount("/api/v1/ai-drafts", aiDrafts.Routes())

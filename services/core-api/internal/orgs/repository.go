@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"regexp"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"sghcp/core-api/internal/notify"
@@ -52,6 +53,71 @@ func (r *Repository) SetNotifications(ctx context.Context, orgID string, s Notif
 		    updated_at = NOW()
 		WHERE id = $1`, orgID, s.Reminder24h, s.Reminder2h)
 	return err
+}
+
+// WhatsAppConfig mirrors org_whatsapp_config minus the secret token. TokenSet
+// tells the UI whether a token is already stored (it's never sent back).
+type WhatsAppConfig struct {
+	Enabled        bool   `json:"enabled"`
+	PhoneNumberID  string `json:"phone_number_id"`
+	WABAID         string `json:"waba_id"`
+	TplReminder24h string `json:"tpl_reminder_24h"`
+	TplReminder2h  string `json:"tpl_reminder_2h"`
+	TplBooking     string `json:"tpl_booking"`
+	Lang           string `json:"lang"`
+	TokenSet       bool   `json:"token_set"`
+}
+
+// GetWhatsApp reads the org's WhatsApp config without exposing the token.
+// A missing row yields a zero-value (disabled) config.
+func (r *Repository) GetWhatsApp(ctx context.Context, orgID string) (WhatsAppConfig, error) {
+	c := WhatsAppConfig{Lang: "es"}
+	err := r.pool.QueryRow(ctx, `
+		SELECT enabled, COALESCE(phone_number_id,''), COALESCE(waba_id,''),
+		       COALESCE(tpl_reminder_24h,''), COALESCE(tpl_reminder_2h,''),
+		       COALESCE(tpl_booking,''), COALESCE(lang,'es'),
+		       access_token_enc IS NOT NULL
+		FROM org_whatsapp_config WHERE organization_id = $1`, orgID).
+		Scan(&c.Enabled, &c.PhoneNumberID, &c.WABAID, &c.TplReminder24h,
+			&c.TplReminder2h, &c.TplBooking, &c.Lang, &c.TokenSet)
+	if err == pgx.ErrNoRows {
+		return WhatsAppConfig{Lang: "es"}, nil
+	}
+	return c, err
+}
+
+// SetWhatsApp upserts the org's config. When tokenEnc is nil the existing token
+// is preserved (write-only field); otherwise it replaces it.
+func (r *Repository) SetWhatsApp(ctx context.Context, orgID string, c WhatsAppConfig, tokenEnc []byte, keySource string) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO org_whatsapp_config
+		    (organization_id, enabled, phone_number_id, waba_id,
+		     access_token_enc, key_source,
+		     tpl_reminder_24h, tpl_reminder_2h, tpl_booking, lang)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+		ON CONFLICT (organization_id) DO UPDATE SET
+		    enabled          = EXCLUDED.enabled,
+		    phone_number_id  = EXCLUDED.phone_number_id,
+		    waba_id          = EXCLUDED.waba_id,
+		    access_token_enc = COALESCE(EXCLUDED.access_token_enc, org_whatsapp_config.access_token_enc),
+		    key_source       = COALESCE(EXCLUDED.key_source, org_whatsapp_config.key_source),
+		    tpl_reminder_24h = EXCLUDED.tpl_reminder_24h,
+		    tpl_reminder_2h  = EXCLUDED.tpl_reminder_2h,
+		    tpl_booking      = EXCLUDED.tpl_booking,
+		    lang             = EXCLUDED.lang,
+		    updated_at       = NOW()`,
+		orgID, c.Enabled, nullIfEmpty(c.PhoneNumberID), nullIfEmpty(c.WABAID),
+		tokenEnc, nullIfEmpty(keySource),
+		nullIfEmpty(c.TplReminder24h), nullIfEmpty(c.TplReminder2h),
+		nullIfEmpty(c.TplBooking), c.Lang)
+	return err
+}
+
+func nullIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 // hexColor guards against injecting arbitrary CSS through the brand color.

@@ -14,6 +14,7 @@ import (
 
 	"sghcp/core-api/internal/notify"
 	"sghcp/core-api/internal/shared/crypto"
+	"sghcp/core-api/internal/whatsapp"
 )
 
 var bogota = func() *time.Location {
@@ -45,11 +46,12 @@ type Engine struct {
 	pool     *pgxpool.Pool
 	km       *crypto.KeyManager
 	notifier notify.Notifier
+	wa       *whatsapp.Sender
 	logger   *slog.Logger
 }
 
-func New(pool *pgxpool.Pool, km *crypto.KeyManager, notifier notify.Notifier, logger *slog.Logger) *Engine {
-	return &Engine{pool: pool, km: km, notifier: notifier, logger: logger}
+func New(pool *pgxpool.Pool, km *crypto.KeyManager, notifier notify.Notifier, wa *whatsapp.Sender, logger *slog.Logger) *Engine {
+	return &Engine{pool: pool, km: km, notifier: notifier, wa: wa, logger: logger}
 }
 
 // Run sweeps on a ticker until ctx is cancelled. One goroutine inside core-api.
@@ -118,8 +120,8 @@ func (e *Engine) processOrgOffset(ctx context.Context, orgID string, off offset)
 	rows, err := conn.Query(ctx, `
 		SELECT a.id, a.guest_name, a.scheduled_at, a.modality::text,
 		       a.patient_id IS NOT NULL,
-		       p.email_enc, p.first_name_enc, k.encrypted_dek, k.key_source,
-		       COALESCE(b.email, '')
+		       p.email_enc, p.first_name_enc, p.phone_enc, k.encrypted_dek, k.key_source,
+		       COALESCE(b.email, ''), COALESCE(b.phone, '')
 		FROM appointments a
 		LEFT JOIN patients p ON p.id = a.patient_id
 		LEFT JOIN encryption_keys k ON k.id = p.dek_id
@@ -136,39 +138,47 @@ func (e *Engine) processOrgOffset(ctx context.Context, orgID string, off offset)
 	}
 
 	type due struct {
-		apptID, guestName, modality, guestEmail, keySource string
-		scheduledAt                                        time.Time
-		hasPatient                                         bool
-		emailEnc, firstNameEnc, encDEK                     []byte
+		apptID, guestName, modality, guestEmail, guestPhone, keySource string
+		scheduledAt                                                    time.Time
+		hasPatient                                                     bool
+		emailEnc, firstNameEnc, phoneEnc, encDEK                       []byte
 	}
 	var items []due
 	for rows.Next() {
 		var d due
 		if err := rows.Scan(&d.apptID, &d.guestName, &d.scheduledAt, &d.modality, &d.hasPatient,
-			&d.emailEnc, &d.firstNameEnc, &d.encDEK, &d.keySource, &d.guestEmail); err == nil {
+			&d.emailEnc, &d.firstNameEnc, &d.phoneEnc, &d.encDEK, &d.keySource, &d.guestEmail, &d.guestPhone); err == nil {
 			items = append(items, d)
 		}
 	}
 	rows.Close()
 
 	for _, d := range items {
-		email, firstName := d.guestEmail, firstWord(d.guestName)
-		if email == "" && d.hasPatient && len(d.emailEnc) > 0 && len(d.encDEK) > 0 {
+		email, firstName, phone := d.guestEmail, firstWord(d.guestName), d.guestPhone
+		if d.hasPatient && len(d.encDEK) > 0 {
 			if dek, err := e.km.DecryptDEK(d.keySource, d.encDEK); err == nil {
-				if b, err := crypto.Open(dek, d.emailEnc); err == nil {
-					email = string(b)
+				if email == "" && len(d.emailEnc) > 0 {
+					if b, err := crypto.Open(dek, d.emailEnc); err == nil {
+						email = string(b)
+					}
 				}
 				if b, err := crypto.Open(dek, d.firstNameEnc); err == nil {
 					firstName = string(b)
 				}
+				if phone == "" && len(d.phoneEnc) > 0 {
+					if b, err := crypto.Open(dek, d.phoneEnc); err == nil {
+						phone = string(b)
+					}
+				}
 				crypto.Zeroize(dek)
 			}
 		}
-		if email == "" {
-			continue // nothing to send to
+		if email == "" && phone == "" {
+			continue // no channel to reach the patient
 		}
 
 		// Claim the slot first (exactly-once); only send if we won the insert.
+		// One claim covers the reminder event; both channels fire under it.
 		tag, err := conn.Exec(ctx,
 			`INSERT INTO appointment_reminders_sent (appointment_id, kind) VALUES ($1, $2)
 			 ON CONFLICT DO NOTHING`, d.apptID, off.kind)
@@ -177,14 +187,21 @@ func (e *Engine) processOrgOffset(ctx context.Context, orgID string, off offset)
 		}
 
 		local := d.scheduledAt.In(bogota)
-		e.notifier.AppointmentReminder(ctx, notify.BookingDetails{
-			OrgID:         orgID,
-			FirstName:     firstName,
-			PatientEmail:  email,
-			Modality:      modalityLabel(d.modality),
-			PreferredDate: local.Format("2006-01-02"),
-			PreferredTime: local.Format("03:04 pm"),
-		}, off.hours)
+		dateStr, timeStr := local.Format("2006-01-02"), local.Format("03:04 pm")
+		if email != "" {
+			e.notifier.AppointmentReminder(ctx, notify.BookingDetails{
+				OrgID:         orgID,
+				FirstName:     firstName,
+				PatientEmail:  email,
+				Modality:      modalityLabel(d.modality),
+				PreferredDate: dateStr,
+				PreferredTime: timeStr,
+			}, off.hours)
+		}
+		if phone != "" {
+			e.wa.AppointmentReminder(ctx, orgID, phone, firstName,
+				dateStr+" "+timeStr, modalityLabel(d.modality), off.hours)
+		}
 	}
 }
 

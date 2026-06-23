@@ -58,6 +58,27 @@ func (km *KeyManager) DecryptDEK(keySource string, encryptedDEK []byte) ([]byte,
 	return nil, fmt.Errorf("crypto: unsupported key source %q", keySource)
 }
 
+// SealSecret encrypts an organization-level secret (e.g. a per-tenant WhatsApp
+// access token) directly under the master key. Unlike GenerateDEK this stores no
+// per-row DEK: the ciphertext is opened again with OpenSecret using the same
+// master key. Returns the ciphertext and the key source to persist alongside it.
+func (km *KeyManager) SealSecret(plaintext []byte) (enc []byte, keySource string, err error) {
+	enc, err = Seal(km.masterKey, plaintext)
+	if err != nil {
+		return nil, "", fmt.Errorf("crypto: failed to seal secret: %w", err)
+	}
+	return enc, "env:MASTER_KEY", nil
+}
+
+// OpenSecret decrypts a secret sealed with SealSecret. keySource selects the key
+// (only "env:MASTER_KEY" today, mirroring DecryptDEK).
+func (km *KeyManager) OpenSecret(keySource string, enc []byte) ([]byte, error) {
+	if strings.HasPrefix(keySource, "env:") {
+		return Open(km.masterKey, enc)
+	}
+	return nil, fmt.Errorf("crypto: unsupported key source %q", keySource)
+}
+
 // Zeroize overwrites a byte slice with zeros to clear sensitive key material from memory.
 func Zeroize(b []byte) {
 	for i := range b {
