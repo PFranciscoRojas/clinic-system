@@ -15,6 +15,11 @@
 ## Facturación
 - Analytics avanzado: ingresos por servicio, ticket promedio, conversión de leads.
 
+## Booking público
+- **Email de "reserva apartada" a admins (2026-06-23)** — cuando el webhook recibe un pago diferido, notificar también a los admins de la clínica (igual que `BookingPaidAdmin` para pagos aprobados). Hoy solo recibe email el paciente.
+- **Doble booking en diferidos (2026-06-23)** — si un pago Efecty se acredita después de que el cupo expiró y fue tomado por otro paciente, `confirm()` crea la cita sin re-verificar el slot → posible doble booking. Mitigación: validar slot libre antes de crear la cita en `confirm()` y marcar para reembolso si ya está ocupado. Riesgo bajo con el tope de `scheduled_at − 2h` pero no eliminado.
+- **Nº de HC en PDF de historia clínica (2026-06-22)** — el campo `patient_code` ya existe pero no se incluye en el PDF exportado del Formato 1.
+
 ## Agenda — Métricas operativas (2026-06-19)
 - Tasa de cancelación y reagendamiento por profesional / período: ¿sirve? Sí tiene valor — una tasa alta de cancelaciones puede indicar problemas de adherencia del paciente o de horarios mal configurados; una tasa alta de reagendas puede indicar que el profesional cambia mucho. Podría mostrarse como tarjeta en el módulo de facturación o en un futuro panel de gestión. Datos ya disponibles en BD (status CANCELLED + cancel_reason = 'Reagendado').
 

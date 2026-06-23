@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-06-22)
+## Estado actual (2026-06-23)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -14,17 +14,17 @@
 |---|---|---|
 | Fases 1–5 (core) | ✅ producción | Historia clínica, consentimientos, plan terapéutico, PDF export |
 | Ola 2 — SaaS multi-tenant | ✅ producción | RLS por tenant, signup self-serve, trial, gating 402, cobro MP suscripción |
-| Ola Booking | ✅ producción | `/book/:slug` público, pago MP único, emails 24h/2h, agenda integrada |
+| Ola Booking | ✅ producción | `/book/:slug` público, tarjeta/PSE/Efecty, diferidos, emails, agenda integrada |
 | **Ola 3 — IA** | 🟡 en progreso | Recap pre-sesión + plan terapéutico sugerido (Whisper + Sonnet) |
 | BC-6 Facturación | ✅ producción | Tarjeta/PSE/Efecty/Nequi, semana/mes/3meses/año, balance-por-paciente |
 
-### Últimos commits a `main` (sesión 2026-06-22) — desplegados
+### Últimos commits a `main` (sesión 2026-06-23) — desplegados
 
-- `9adcb1c` feat(rls): `bookings`, `booking_requests`, `consent_sign_tokens`, `consent_templates` bajo RLS por tenant (migración 000032 + resolvers SECURITY DEFINER `booking_org`/`consent_token_org`). `dbctx.WithOrgScope` para handlers públicos; `bookingrequests` y `booking` convertidos a scope; provisioning de signup fija scope al sembrar plantillas; arregla bug latente (firma pública leía `patients` sin scope). Cierra **bloqueante RLS**. Verificado en prod (fail-closed, resolver, write/read con scope, cross-org bloqueado)
-- `eb62f60` feat(booking): aceptación obligatoria de la política de reembolso/cancelación antes de pagar — checkbox en el paso de datos del wizard público, botón deshabilitado hasta aceptar, checkout rechaza sin `policy_accepted` y sella `policy_accepted_at` (migración 000031). Cierra **B6**
-- `07ae88f` fix(billing): firma de webhook MP obligatoria — quitado el fail-open. `VerifyWebhook` falla cerrado con secreto vacío; `config.Load` exige `MP_WEBHOOK_SECRET` cuando hay `MP_ACCESS_TOKEN`. Cierra **B-11**. Secreto añadido al `.env` del VPS
-- `7e2e132` feat(patients): Nº de HC consecutivo por tenant (`patient_code`, patrón `invoice_number` con advisory lock), asignado al registrar; migración 000030 con backfill (lift FORCE RLS); franja de identificación muestra `HC-000001` + Fecha de apertura (cierra Sección I del Formato 1)
-- `8b38fd1` fix(agenda): el popover de agendado rápido detecta solapamiento con citas del día (`byDay`) y muestra estado "ocupado" en vez de proponer una hora que luego choca
+- `448abed` fix(booking): eliminado `payment_methods` de la preferencia (bloqueaba PSE); email "Tu horario está apartado" para pagos diferidos (Efecty/cash) con fecha de cita, plazo y link al comprobante
+- `e03d511` fix(booking): eliminado `expiration_date_to` de la preferencia — bloqueaba el redirect PSE al banco
+- `6110a83` feat(booking): deadline del comprobante antes de la cita (hold capeado a `scheduled_at − 2h`); botón "Finalizar" en pantalla de reserva apartada
+- `291c743` feat(booking): soporte de pagos diferidos (Efecty/efectivo); página de retorno con 5 estados explícitos (confirmada/apartada/fallida/procesando/confirmando); fix crítico RLS `BusyHolds` (los holds no se aplicaban a disponibilidad desde migración 000032); 404 del endpoint status = fallo definitivo (resuelve PSE rechazado colgado en "Confirmando"); migración 000033 (`payment_voucher_url`)
+- `1515290` fix(booking): sin redirección automática (quitado `auto_return`); `?slug=` en back_url; retryHref/homeHref nunca caen al host del API; copy "no cierres esta página" corregido
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 
@@ -35,6 +35,7 @@
 | ID | Descripción | Estado |
 |---|---|---|
 | **UI** | Botón "Cambiar correo del admin" en Configuración | 🟡 pendiente |
+| **MP webhook** | `MP_WEBHOOK_ENFORCE=false` en VPS — secreto mal configurado; hacer un pago real y capturar log de firma para corregir y volver a `true` | 🔴 pendiente |
 
 ---
 
@@ -67,7 +68,7 @@
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción (rebuild 2026-06-22, migración 000032 aplicada) |
+| `core-api:8080` | ✅ producción (rebuild 2026-06-23, migración 000033 aplicada) |
 | `ai-service` | ✅ producción (`Dockerfile.patch` rebuild #79) |
 | `frontend` (Caddy :80/:443) | ✅ producción |
 | Backups | `pg_dump` cifrado GPG → Backblaze B2 |
@@ -88,7 +89,7 @@
 | `core-api` | `services/core-api/` | ✅ Go 1.21, prod |
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
-| Migrations | `services/core-api/migrations/` | Última: `000032_rls_public_booking_consent` |
+| Migrations | `services/core-api/migrations/` | Última: `000033_booking_voucher` |
 | Claude skills | `~/.claude/commands/` | Sincronizadas en sesión 2026-06-22 |
 
 ---
