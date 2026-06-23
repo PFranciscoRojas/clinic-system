@@ -8,6 +8,7 @@ import {
   CalendarClock, Pause, RotateCcw,
 } from 'lucide-react';
 import { appointmentsApi, type AppointmentStatus } from '@/api/appointments';
+import { ApiError } from '@/api/client';
 import { patientsApi, type Patient } from '@/api/patients';
 import { EditPatientModal } from '@/components/patients/EditPatientModal';
 import { PatientSearchBox } from '@/components/patients/PatientSearchBox';
@@ -559,8 +560,10 @@ export function AppointmentPage() {
       });
       await appointmentsApi.cancel(id!, 'Reagendado');
       navigate('/');
-    } catch {
-      setReagendarErr('No se pudo reagendar. Intenta de nuevo.');
+    } catch (e) {
+      setReagendarErr(e instanceof ApiError && e.status === 409
+        ? 'Ese horario tiene una reserva pendiente de pago. Quedará libre cuando venza el plazo.'
+        : 'No se pudo reagendar. Intenta de nuevo.');
       setReagendaring(false);
     }
   };

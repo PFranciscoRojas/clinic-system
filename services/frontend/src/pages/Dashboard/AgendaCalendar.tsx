@@ -7,6 +7,7 @@ import {
   CalendarClock, AlertTriangle,
 } from 'lucide-react';
 import { appointmentsApi, type Appointment } from '@/api/appointments';
+import { ApiError } from '@/api/client';
 import { patientsApi, type Patient } from '@/api/patients';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
@@ -370,8 +371,10 @@ function DetailPanel({ appt, panelRef, onClose }: { appt: Appointment; panelRef:
       await appointmentsApi.cancel(appt.id, 'Reagendado');
       qc.invalidateQueries({ queryKey: ['cal-range'] });
       onClose();
-    } catch {
-      setActionErr('No se pudo reagendar. Intenta de nuevo.');
+    } catch (e) {
+      setActionErr(e instanceof ApiError && e.status === 409
+        ? 'Ese horario tiene una reserva pendiente de pago. Quedará libre cuando venza el plazo.'
+        : 'No se pudo reagendar. Intenta de nuevo.');
       setReagendaring(false);
     }
   };

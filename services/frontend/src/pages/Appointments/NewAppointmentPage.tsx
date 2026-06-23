@@ -11,6 +11,7 @@ import {
 
 import { appointmentsApi, Appointment } from '../../api/appointments';
 import { patientsApi, Patient } from '../../api/patients';
+import { ApiError } from '../../api/client';
 import { Spinner } from '../../components/ui/Spinner';
 import { PatientSearchBox } from '../../components/patients/PatientSearchBox';
 import { useAuth } from '../../context/AuthContext';
@@ -1120,7 +1121,9 @@ export function NewAppointmentPage() {
             display: 'flex', alignItems: 'center', gap: 6,
           }}>
             <AlertCircle size={13} />
-            Error al agendar la cita. Intenta de nuevo.
+            {mutation.error instanceof ApiError && mutation.error.status === 409
+              ? 'Este horario tiene una reserva pendiente de pago (Efecty/efectivo). Quedará libre cuando venza el plazo de pago.'
+              : 'Error al agendar la cita. Intenta de nuevo.'}
           </div>
         )}
       </div>
