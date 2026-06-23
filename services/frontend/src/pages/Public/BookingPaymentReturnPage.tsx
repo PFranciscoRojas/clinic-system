@@ -154,6 +154,7 @@ export function BookingPaymentReturnPage() {
                 <Receipt size={16} /> Ver / pagar mi comprobante
               </a>
             ) : null}
+            <a href={homeHref} style={{ ...calBtn }}>Finalizar</a>
             <p style={{ fontSize: 12, color: INK_FAINT, lineHeight: 1.5, margin: '16px 0 0' }}>
               Si no pagas a tiempo, el horario se liberará automáticamente.
             </p>

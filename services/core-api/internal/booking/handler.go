@@ -210,6 +210,17 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 
 	amount := h.cfg.BookingSessionPrice
 	title := "Sesión psicológica · " + when.Format("02/01 03:04 pm") + " · " + modalityLabel(modality)
+
+	// Cash/voucher (offline) payments only make sense when there's enough lead
+	// time to physically pay before the session. When allowed, bound the
+	// checkout/voucher deadline to a bit before the appointment so an offline
+	// payment can't accredit after it has already passed.
+	const minOfflineLead = 24 * time.Hour
+	allowOffline := time.Until(when) >= minOfflineLead
+	var prefExpiry time.Time
+	if allowOffline {
+		prefExpiry = when.Add(-2 * time.Hour)
+	}
 	var bookingID, initPoint string
 
 	// Public route: pin the resolved org's RLS scope for every bookings
@@ -248,6 +259,7 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 			ctx, title, amount, bookingID, body.Email,
 			h.cfg.AppBaseURL+"/book/return?slug="+url.QueryEscape(body.OrgSlug),
 			h.cfg.AppBaseURL+"/api/v1/public/pay/webhook",
+			prefExpiry, allowOffline,
 		)
 		if err != nil {
 			// Release the hold so a failed gateway call doesn't block the slot.
@@ -429,7 +441,10 @@ func (h *Handler) holdDeferred(ctx context.Context, bookingID, paymentID string,
 			UPDATE bookings
 			SET mp_payment_id = $2,
 			    mp_payment_type = NULLIF($3, ''), mp_payment_method = NULLIF($4, ''),
-			    payment_voucher_url = NULLIF($5, ''), hold_expires_at = $6, updated_at = NOW()
+			    payment_voucher_url = NULLIF($5, ''),
+			    -- Never hold past the appointment: cap the deadline at 2h before it.
+			    hold_expires_at = LEAST($6, scheduled_at - interval '2 hours'),
+			    updated_at = NOW()
 			WHERE id = $1 AND status = 'PENDING_PAYMENT'
 		`, bookingID, paymentID, pay.PaymentTypeID, pay.PaymentMethodID,
 			pay.TransactionDetails.ExternalResourceURL, expires)

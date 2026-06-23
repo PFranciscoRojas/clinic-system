@@ -130,7 +130,13 @@ func (c *Client) GetPreapproval(ctx context.Context, id string) (*Preapproval, e
 
 // CreatePreference creates a one-time Checkout Pro preference (used for patient
 // appointment payments) and returns its id and hosted checkout URL.
-func (c *Client) CreatePreference(ctx context.Context, title string, amountCOP int, externalRef, payerEmail, backURL, notificationURL string) (prefID, initPoint string, err error) {
+//
+// allowOffline controls whether cash/voucher methods (Efecty etc.) are offered:
+// false when the appointment is too close to pay a voucher in time. When set,
+// expiration bounds the checkout/voucher deadline (we put it before the
+// appointment so an offline payment can't accredit after the session); a zero
+// expiration omits the bound.
+func (c *Client) CreatePreference(ctx context.Context, title string, amountCOP int, externalRef, payerEmail, backURL, notificationURL string, expiration time.Time, allowOffline bool) (prefID, initPoint string, err error) {
 	payload := map[string]any{
 		"items": []map[string]any{{
 			"title": title, "quantity": 1, "unit_price": amountCOP, "currency_id": "COP",
@@ -141,6 +147,15 @@ func (c *Client) CreatePreference(ctx context.Context, title string, amountCOP i
 		// its success screen instead of an automatic countdown redirect.
 		"notification_url": notificationURL,
 		"payer":              map[string]string{"email": payerEmail},
+	}
+	if !allowOffline {
+		payload["payment_methods"] = map[string]any{
+			"excluded_payment_types": []map[string]string{{"id": "ticket"}, {"id": "atm"}},
+		}
+	}
+	if !expiration.IsZero() {
+		payload["expires"] = true
+		payload["expiration_date_to"] = expiration.Format("2006-01-02T15:04:05.000-07:00")
 	}
 	var out struct {
 		ID        string `json:"id"`
