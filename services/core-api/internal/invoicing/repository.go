@@ -135,3 +135,52 @@ func (r *Repository) SetActive(ctx context.Context, orgID, id string, active boo
 	}
 	return rt, nil
 }
+
+// ListBookingPayments returns bookings for the org: PAID ones in the period
+// window (or all if from/to are nil), plus active PENDING_PAYMENT holds.
+func (r *Repository) ListBookingPayments(ctx context.Context, orgID, status string, from, to *time.Time) ([]BookingPayment, error) {
+	q := `
+		SELECT id, scheduled_at, COALESCE(guest_name,''), COALESCE(email,''), COALESCE(modality,''),
+		       amount, status,
+		       COALESCE(mp_payment_type,''), COALESCE(mp_payment_method,''),
+		       COALESCE(payment_voucher_url,''), hold_expires_at,
+		       CASE WHEN status = 'PAID' THEN updated_at ELSE NULL END
+		FROM bookings
+		WHERE organization_id = $1
+		  AND (
+		    ($2::text = '' AND (
+		      (status = 'PAID' AND ($3::timestamptz IS NULL OR updated_at >= $3) AND ($4::timestamptz IS NULL OR updated_at < $4))
+		      OR (status = 'PENDING_PAYMENT' AND hold_expires_at > NOW())
+		    ))
+		    OR ($2::text = 'PAID'             AND status = 'PAID' AND ($3::timestamptz IS NULL OR updated_at >= $3) AND ($4::timestamptz IS NULL OR updated_at < $4))
+		    OR ($2::text = 'PENDING_PAYMENT'  AND status = 'PENDING_PAYMENT' AND hold_expires_at > NOW())
+		  )
+		ORDER BY scheduled_at DESC`
+
+	var fromP, toP *time.Time
+	if from != nil {
+		fromP = from
+	}
+	if to != nil {
+		toP = to
+	}
+	rows, err := r.q(ctx).Query(ctx, q, orgID, status, fromP, toP)
+	if err != nil {
+		return nil, fmt.Errorf("list booking payments: %w", err)
+	}
+	defer rows.Close()
+	var out []BookingPayment
+	for rows.Next() {
+		var bp BookingPayment
+		if err := rows.Scan(
+			&bp.ID, &bp.ScheduledAt, &bp.GuestName, &bp.Email, &bp.Modality,
+			&bp.Amount, &bp.Status,
+			&bp.PaymentType, &bp.PaymentMethod,
+			&bp.VoucherURL, &bp.HoldExpiresAt, &bp.PaidAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan booking payment: %w", err)
+		}
+		out = append(out, bp)
+	}
+	return out, rows.Err()
+}

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Receipt, Wallet, Clock, SearchX, ArrowUp, ArrowDown, Globe, HandCoins, FileText, BarChart3, AlertTriangle, Download, Send, CheckCircle, AlertCircle, Users } from 'lucide-react';
+import { Receipt, Wallet, Clock, SearchX, ArrowUp, ArrowDown, Globe, HandCoins, FileText, BarChart3, AlertTriangle, Download, Send, CheckCircle, AlertCircle, Users, CalendarCheck } from 'lucide-react';
 import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
 import { InvoiceDetailModal } from '@/components/billing/InvoiceDetailModal';
@@ -373,15 +373,122 @@ function PacientesTab({ period }: { period: BillingPeriod }) {
 }
 
 // ── Page shell ────────────────────────────────────────────────────────────────
-type Tab = 'facturas' | 'resumen' | 'pacientes';
+// ── Reservas online tab ───────────────────────────────────────────────────────
+const BOOKING_STATUS_LABEL: Record<string, string> = {
+  PAID: 'Pagada', PENDING_PAYMENT: 'Pendiente de pago',
+};
+const BOOKING_STATUS_COLOR: Record<string, string> = {
+  PAID: '#059669', PENDING_PAYMENT: '#d97706',
+};
+const MODALITY_LABEL: Record<string, string> = { IN_PERSON: 'Presencial', VIRTUAL: 'Virtual', HYBRID: 'Híbrida' };
+const MP_TYPE_LABEL: Record<string, string> = {
+  credit_card: 'Tarjeta crédito', debit_card: 'Tarjeta débito',
+  bank_transfer: 'PSE', ticket: 'Efecty', atm: 'ATM', account_money: 'Cuenta MP',
+};
+
+function ReservasTab({ period }: { period: BillingPeriod }) {
+  const [filter, setFilter] = useState<'' | 'PAID' | 'PENDING_PAYMENT'>('');
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['bookings-revenue', filter, period],
+    queryFn: () => invoicesApi.listBookings(filter || undefined, period),
+  });
+  const list = data ?? [];
+
+  const fmtDT = (s: string) => new Date(s).toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const fmtD  = (s: string) => new Date(s).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  const totalPaid = list.filter(b => b.status === 'PAID').reduce((s, b) => s + b.amount, 0);
+
+  const BOOKING_FILTERS = [
+    { id: '' as const, label: 'Todas' },
+    { id: 'PAID' as const, label: 'Pagadas' },
+    { id: 'PENDING_PAYMENT' as const, label: 'Pendientes' },
+  ];
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {BOOKING_FILTERS.map(f => (
+            <button key={f.id} onClick={() => setFilter(f.id)} style={{
+              padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12.5,
+              fontWeight: filter === f.id ? 700 : 500,
+              background: filter === f.id ? 'var(--teal)' : 'var(--s100)',
+              color: filter === f.id ? '#fff' : 'var(--s600)',
+            }}>{f.label}</button>
+          ))}
+        </div>
+        {totalPaid > 0 && (
+          <span style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 700, color: '#059669' }}>
+            Total cobrado: {formatMoney(String(totalPaid), 'COP')}
+          </span>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}><Spinner size={24} /></div>
+      ) : list.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--s400)' }}>
+          <SearchX size={32} style={{ marginBottom: 8, opacity: 0.4 }} />
+          <p style={{ margin: 0, fontSize: 13 }}>Sin reservas en este período.</p>
+        </div>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr style={{ borderBottom: '2px solid var(--s200)' }}>
+              {['Cita', 'Paciente / invitado', 'Modalidad', 'Método', 'Monto', 'Estado', 'Vence / pagó'].map(h => (
+                <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11.5, fontWeight: 700, color: 'var(--s500)', whiteSpace: 'nowrap' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {list.map(b => (
+              <tr key={b.id} style={{ borderBottom: '1px solid var(--s100)' }}>
+                <td style={{ padding: '10px 10px' }}>{fmtDT(b.scheduled_at)}</td>
+                <td style={{ padding: '10px 10px' }}>
+                  <span style={{ fontWeight: 600 }}>{b.guest_name || '—'}</span>
+                  {b.email && <span style={{ display: 'block', fontSize: 11, color: 'var(--s400)' }}>{b.email}</span>}
+                </td>
+                <td style={{ padding: '10px 10px', color: 'var(--s500)' }}>{MODALITY_LABEL[b.modality] ?? (b.modality || '—')}</td>
+                <td style={{ padding: '10px 10px', color: 'var(--s600)' }}>
+                  {b.payment_type ? (MP_TYPE_LABEL[b.payment_type] ?? b.payment_type) : '—'}
+                  {b.voucher_url && b.status === 'PENDING_PAYMENT' && (
+                    <a href={b.voucher_url} target="_blank" rel="noreferrer" style={{ display: 'block', fontSize: 11, color: '#0ea5e9' }}>Ver comprobante</a>
+                  )}
+                </td>
+                <td style={{ padding: '10px 10px', fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>
+                  {formatMoney(String(b.amount), 'COP')}
+                </td>
+                <td style={{ padding: '10px 10px' }}>
+                  <span style={{ padding: '3px 8px', borderRadius: 6, fontSize: 11.5, fontWeight: 700,
+                    background: BOOKING_STATUS_COLOR[b.status] + '18',
+                    color: BOOKING_STATUS_COLOR[b.status] }}>
+                    {BOOKING_STATUS_LABEL[b.status] ?? b.status}
+                  </span>
+                </td>
+                <td style={{ padding: '10px 10px', fontSize: 12, color: 'var(--s500)' }}>
+                  {b.paid_at ? fmtD(b.paid_at) : b.hold_expires_at ? `vence ${fmtD(b.hold_expires_at)}` : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+type Tab = 'facturas' | 'resumen' | 'pacientes' | 'reservas';
 
 export function BillingPage() {
-  const [tab, setTab] = useState<Tab>('facturas');
+  const [tab, setTab] = useState<Tab>('reservas');
   const [period, setPeriod] = useState<BillingPeriod>('month');
 
   const { data: ov } = useQuery<BillingOverview>({ queryKey: ['billing-overview', period], queryFn: () => invoicesApi.overview(period) });
 
   const TABS: { id: Tab; label: string; Icon: React.ElementType }[] = [
+    { id: 'reservas',  label: 'Reservas online', Icon: CalendarCheck },
     { id: 'facturas',  label: 'Facturas', Icon: FileText },
     { id: 'resumen',   label: 'Resumen financiero', Icon: BarChart3 },
     { id: 'pacientes', label: 'Balance por paciente', Icon: Users },
@@ -424,8 +531,9 @@ export function BillingPage() {
         })}
       </div>
 
-      {tab === 'facturas' && <FacturasTab period={period} />}
-      {tab === 'resumen' && <ResumenTab ov={ov} />}
+      {tab === 'reservas'  && <ReservasTab period={period} />}
+      {tab === 'facturas'  && <FacturasTab period={period} />}
+      {tab === 'resumen'   && <ResumenTab ov={ov} />}
       {tab === 'pacientes' && <PacientesTab period={period} />}
 
       <p style={{ fontSize: 11.5, color: 'var(--s400)', marginTop: 16, lineHeight: 1.5 }}>

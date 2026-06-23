@@ -109,6 +109,21 @@ export interface PatientBalance {
   paid_pct: number;
 }
 
+export interface BookingPayment {
+  id: string;
+  scheduled_at: string;
+  guest_name: string;
+  email: string;
+  modality: string;
+  amount: number;
+  status: 'PAID' | 'PENDING_PAYMENT';
+  payment_type: string;
+  payment_method: string;
+  voucher_url: string;
+  hold_expires_at: string | null;
+  paid_at: string | null;
+}
+
 export const invoicesApi = {
   listByPatient: (patientId: string) => api.get<Invoice[]>(`/invoices?patient_id=${patientId}`),
   patientsBalance: (period: BillingPeriod = 'all') =>
@@ -116,6 +131,8 @@ export const invoicesApi = {
   listAll: (status?: string, period?: BillingPeriod) =>
     api.get<Invoice[]>(`/invoices?with_patient=true${status ? `&status=${status}` : ''}${period && period !== 'all' ? `&period=${period}` : ''}`),
   overview: (period: BillingPeriod = 'month') => api.get<BillingOverview>(`/invoices/overview?period=${period}`),
+  listBookings: (status?: string, period?: BillingPeriod) =>
+    api.get<BookingPayment[]>(`/invoices/bookings${status || (period && period !== 'all') ? '?' : ''}${status ? `status=${status}` : ''}${status && period && period !== 'all' ? '&' : ''}${period && period !== 'all' ? `period=${period}` : ''}`),
   sendReminders: () => api.post<{ sent: number; skipped: number; pending: number }>('/invoices/send-reminders', {}),
   get: (id: string) => api.get<Invoice>(`/invoices/${id}`),
   create: (input: CreateInvoiceInput) => api.post<Invoice>('/invoices', input),

@@ -23,6 +23,7 @@ func (h *Handler) InvoiceRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.With(middleware.RequirePermission("billing:reports")).Get("/overview", h.overview)
 	r.With(middleware.RequirePermission("billing:reports")).Get("/patients-balance", h.patientsBalance)
+	r.With(middleware.RequirePermission("billing:read")).Get("/bookings", h.listBookingPayments)
 	r.With(middleware.RequirePermission("billing:read")).Get("/", h.listInvoices)
 	r.With(middleware.RequirePermission("billing:read")).Get("/{invoice_id}", h.getInvoice)
 	r.With(middleware.RequirePermission("billing:read")).Get("/{invoice_id}/receipt", h.receipt)
@@ -33,6 +34,38 @@ func (h *Handler) InvoiceRoutes() chi.Router {
 	r.With(middleware.RequirePermission("billing:create")).Post("/send-reminders", h.sendReminders)
 	r.With(middleware.RequirePermission("billing:record_payment")).Post("/{invoice_id}/payments", h.recordPayment)
 	return r
+}
+
+// BookingPayment is one row returned by GET /invoices/bookings.
+type BookingPayment struct {
+	ID             string     `json:"id"`
+	ScheduledAt    time.Time  `json:"scheduled_at"`
+	GuestName      string     `json:"guest_name"`
+	Email          string     `json:"email"`
+	Modality       string     `json:"modality"`
+	Amount         int        `json:"amount"`
+	Status         string     `json:"status"`
+	PaymentType    string     `json:"payment_type"`
+	PaymentMethod  string     `json:"payment_method"`
+	VoucherURL     string     `json:"voucher_url"`
+	HoldExpiresAt  *time.Time `json:"hold_expires_at"`
+	PaidAt         *time.Time `json:"paid_at"`
+}
+
+// GET /invoices/bookings — list booking payments (PAID and active PENDING_PAYMENT holds).
+func (h *Handler) listBookingPayments(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	claims := middleware.ClaimsFromContext(ctx)
+	q := r.URL.Query()
+	from, to := periodBounds(q.Get("period"))
+	status := q.Get("status")
+
+	rows, err := h.svc.repo.ListBookingPayments(ctx, claims.OrganizationID, status, from, to)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "no se pudieron cargar las reservas")
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, rows)
 }
 
 // parseTime turns an optional RFC3339 string into a *time.Time (nil when empty).
