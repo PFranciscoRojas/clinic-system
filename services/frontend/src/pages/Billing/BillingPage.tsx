@@ -6,7 +6,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
 import { InvoiceDetailModal } from '@/components/billing/InvoiceDetailModal';
 import {
-  invoicesApi, formatMoney, balanceOf, invoiceLabel,
+  invoicesApi, formatMoney, invoiceLabel,
   INVOICE_STATUS_META, type Invoice, type InvoiceStatus,
   type BillingOverview, type BillingPeriod, type SeriesPoint, type MethodStat,
   type BookingPayment,
@@ -22,8 +22,9 @@ const FILTERS: { id: string; label: string }[] = [
   { id: 'CANCELLED',        label: 'Anuladas'          },
 ];
 
-type SortField = 'scheduled_at' | 'hold_expires_at' | 'amount';
+type SortField = 'number' | 'name' | 'service' | 'date' | 'expires' | 'amount' | 'status';
 type SortDir   = 'asc' | 'desc';
+type AnyRow    = { _t: 'inv'; inv: Invoice } | { _t: 'bk'; bk: BookingPayment };
 
 const bookingLabel = (n: number) => `R-${String(n).padStart(6, '0')}`;
 
@@ -158,7 +159,7 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
   const [filter, setFilter]               = useState('');
   const [selected, setSelected]           = useState<Invoice | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<BookingPayment | null>(null);
-  const [sortField, setSortField]         = useState<SortField>('scheduled_at');
+  const [sortField, setSortField]         = useState<SortField>('date');
   const [sortDir, setSortDir]             = useState<SortDir>('desc');
 
   const isPendingFilter = filter === 'PENDING_PAYMENT';
@@ -180,18 +181,43 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
   const invList = isPendingFilter ? [] : (invoices ?? []);
   const bkList  = showBookings ? (bookings ?? []) : [];
 
-  const sortedBkList = [...bkList].sort((a, b) => {
-    let av = 0, bv = 0;
-    if (sortField === 'scheduled_at') {
-      av = new Date(a.scheduled_at).getTime();
-      bv = new Date(b.scheduled_at).getTime();
-    } else if (sortField === 'hold_expires_at') {
-      av = a.hold_expires_at ? new Date(a.hold_expires_at).getTime() : 0;
-      bv = b.hold_expires_at ? new Date(b.hold_expires_at).getTime() : 0;
+  const allRows: AnyRow[] = [
+    ...invList.map(inv => ({ _t: 'inv' as const, inv })),
+    ...bkList.map(bk  => ({ _t: 'bk'  as const, bk  })),
+  ];
+
+  const rowVal = (r: AnyRow): string | number => {
+    if (r._t === 'inv') {
+      const inv = r.inv;
+      switch (sortField) {
+        case 'number':  return inv.invoice_number ?? 0;
+        case 'name':    return (inv.patient_name ?? '').toLowerCase();
+        case 'service': return (inv.service ?? '').toLowerCase();
+        case 'date':    return new Date(inv.issued_at ?? inv.created_at).getTime();
+        case 'expires': return inv.due_at ? new Date(inv.due_at).getTime() : 0;
+        case 'amount':  return parseFloat(inv.total_due);
+        case 'status':  return inv.status;
+      }
     } else {
-      av = a.amount; bv = b.amount;
+      const bk = r.bk;
+      switch (sortField) {
+        case 'number':  return bk.booking_number;
+        case 'name':    return bk.guest_name.toLowerCase();
+        case 'service': return bk.payment_type.toLowerCase();
+        case 'date':    return new Date(bk.scheduled_at).getTime();
+        case 'expires': return bk.hold_expires_at ? new Date(bk.hold_expires_at).getTime() : 0;
+        case 'amount':  return bk.amount;
+        case 'status':  return bk.status;
+      }
     }
-    return sortDir === 'asc' ? av - bv : bv - av;
+  };
+
+  const sortedRows = [...allRows].sort((a, b) => {
+    const av = rowVal(a), bv = rowVal(b);
+    const cmp = typeof av === 'number' && typeof bv === 'number'
+      ? av - bv
+      : String(av).localeCompare(String(bv), 'es');
+    return sortDir === 'asc' ? cmp : -cmp;
   });
 
   const toggleSort = (field: SortField) => {
@@ -203,20 +229,21 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
   const sortIcon = (field: SortField) => sortField === field ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '';
 
   const exportCsv = () => {
-    const invRows = invList.map(inv => [
-      invoiceLabel(inv), inv.patient_name || '', inv.service || '',
-      fmtDate(inv.issued_at ?? inv.created_at), inv.total_due, inv.total_paid,
-      balanceOf(inv), INVOICE_STATUS_META[inv.status as InvoiceStatus].label, '',
-    ]);
-    const bkRows = sortedBkList.map(b => [
-      bookingLabel(b.booking_number), b.guest_name, b.email,
-      fmtDate(b.scheduled_at), String(b.amount), b.status === 'PAID' ? String(b.amount) : '0',
-      b.status === 'PAID' ? '0' : String(b.amount), b.status === 'PAID' ? 'Pagada' : 'Pendiente de pago',
-      b.mp_payment_id,
-    ]);
+    const rows = sortedRows.map(r => {
+      if (r._t === 'inv') {
+        const inv = r.inv;
+        return [invoiceLabel(inv), inv.patient_name || '', inv.service || '',
+          fmtDate(inv.issued_at ?? inv.created_at), fmtDate(inv.due_at),
+          inv.total_due, INVOICE_STATUS_META[inv.status as InvoiceStatus].label, ''];
+      }
+      const b = r.bk;
+      return [bookingLabel(b.booking_number), b.guest_name, b.email,
+        fmtDate(b.scheduled_at), fmtDate(b.hold_expires_at),
+        String(b.amount), b.status === 'PAID' ? 'Pagada' : 'Pendiente de pago', b.mp_payment_id];
+    });
     downloadCsv(`facturas-${new Date().toISOString().slice(0, 10)}.csv`, [
-      ['N.º', 'Invitado', 'Correo', 'Fecha cita', 'Total', 'Pagado', 'Saldo', 'Estado', 'Ref. pago'],
-      ...invRows, ...bkRows,
+      ['N.º', 'Paciente / Invitado', 'Servicio / Método', 'Fecha cita', 'Vence', 'Monto', 'Estado', 'Ref. pago'],
+      ...rows,
     ]);
   };
 
@@ -253,40 +280,45 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: 'var(--s50)', textAlign: 'left', color: 'var(--s500)', fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '.03em' }}>
-                <th style={{ padding: '11px 16px', fontWeight: 700 }}>N.º</th>
-                <th style={{ padding: '11px 16px', fontWeight: 700 }}>Paciente / Invitado</th>
-                <th style={{ padding: '11px 16px', fontWeight: 700 }}>Servicio / Método</th>
-                <th onClick={() => toggleSort('scheduled_at')} style={{ padding: '11px 16px', fontWeight: 700, cursor: 'pointer', userSelect: 'none' }}>
-                  Fecha cita{sortIcon('scheduled_at')}
-                </th>
-                <th onClick={() => toggleSort('hold_expires_at')} style={{ padding: '11px 16px', fontWeight: 700, cursor: 'pointer', userSelect: 'none' }}>
-                  Vence{sortIcon('hold_expires_at')}
-                </th>
-                <th onClick={() => toggleSort('amount')} style={{ padding: '11px 16px', fontWeight: 700, textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>
-                  Monto{sortIcon('amount')}
-                </th>
-                <th style={{ padding: '11px 16px', fontWeight: 700 }}>Estado</th>
+                {([
+                  ['number',  'N.º',                  false],
+                  ['name',    'Paciente / Invitado',   false],
+                  ['service', 'Servicio / Método',     false],
+                  ['date',    'Fecha cita',            false],
+                  ['expires', 'Vence',                 false],
+                  ['amount',  'Monto',                 true ],
+                  ['status',  'Estado',                false],
+                ] as [SortField, string, boolean][]).map(([f, label, right]) => (
+                  <th key={f} onClick={() => toggleSort(f)}
+                    style={{ padding: '11px 16px', fontWeight: 700, cursor: 'pointer', userSelect: 'none',
+                      textAlign: right ? 'right' : 'left',
+                      color: sortField === f ? 'var(--s700)' : 'var(--s500)' }}>
+                    {label}{sortIcon(f)}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {invList.map((inv: Invoice) => {
-                const meta = INVOICE_STATUS_META[inv.status as InvoiceStatus];
-                return (
-                  <tr key={inv.id} onClick={() => setSelected(inv)}
-                    style={{ borderTop: '1px solid var(--s100)', cursor: 'pointer' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--s50)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                    <td style={{ padding: '12px 16px', fontFamily: "'DM Mono', monospace", color: 'var(--s600)', whiteSpace: 'nowrap' }}>{invoiceLabel(inv)}</td>
-                    <td style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--s800)' }}>{inv.patient_name || '—'}</td>
-                    <td style={{ padding: '12px 16px', color: 'var(--s600)' }}>{inv.service || '—'}</td>
-                    <td style={{ padding: '12px 16px', color: 'var(--s500)', whiteSpace: 'nowrap' }}>{fmtDate(inv.issued_at ?? inv.created_at)}</td>
-                    <td style={{ padding: '12px 16px', color: 'var(--s400)', whiteSpace: 'nowrap', fontSize: 12 }}>{inv.due_at ? fmtDate(inv.due_at) : '—'}</td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: 'var(--s700)' }}>{formatMoney(inv.total_due, inv.currency)}</td>
-                    <td style={{ padding: '12px 16px' }}><Badge label={meta.label} color={meta.color} bg={meta.bg} /></td>
-                  </tr>
-                );
-              })}
-              {sortedBkList.map(b => {
+              {sortedRows.map(r => {
+                if (r._t === 'inv') {
+                  const inv = r.inv;
+                  const meta = INVOICE_STATUS_META[inv.status as InvoiceStatus];
+                  return (
+                    <tr key={inv.id} onClick={() => setSelected(inv)}
+                      style={{ borderTop: '1px solid var(--s100)', cursor: 'pointer' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--s50)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                      <td style={{ padding: '12px 16px', fontFamily: "'DM Mono', monospace", color: 'var(--s600)', whiteSpace: 'nowrap' }}>{invoiceLabel(inv)}</td>
+                      <td style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--s800)' }}>{inv.patient_name || '—'}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--s600)' }}>{inv.service || '—'}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--s500)', whiteSpace: 'nowrap' }}>{fmtDate(inv.issued_at ?? inv.created_at)}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--s400)', whiteSpace: 'nowrap', fontSize: 12 }}>{inv.due_at ? fmtDate(inv.due_at) : '—'}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: 'var(--s700)' }}>{formatMoney(inv.total_due, inv.currency)}</td>
+                      <td style={{ padding: '12px 16px' }}><Badge label={meta.label} color={meta.color} bg={meta.bg} /></td>
+                    </tr>
+                  );
+                }
+                const b = r.bk;
                 const paid = b.status === 'PAID';
                 return (
                   <tr key={b.id} onClick={() => setSelectedBooking(b)}
