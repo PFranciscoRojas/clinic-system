@@ -82,6 +82,64 @@ func (n *ResendNotifier) BookingConfirmed(ctx context.Context, b BookingDetails)
 	}
 }
 
+// BookingDeferredAdmin tells the clinic's admins that a slot has been held for a
+// deferred (cash/voucher) payment awaiting collection by the patient.
+func (n *ResendNotifier) BookingDeferredAdmin(ctx context.Context, d BookingVoucherDetails, adminEmails []string) {
+	if len(adminEmails) == 0 {
+		return
+	}
+	greeting := d.GuestName
+	if greeting == "" {
+		greeting = "Paciente sin nombre"
+	}
+	deadline := ""
+	if d.Deadline != "" {
+		deadline = fmt.Sprintf(` Límite de pago: <strong>%s</strong>.`, d.Deadline)
+	}
+	html := fmt.Sprintf(
+		`<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#1f2937">`+
+			`<h2 style="margin:0 0 12px;font-size:18px">Reserva apartada — pago pendiente</h2>`+
+			`<p style="font-size:14px;line-height:1.6;margin:0 0 8px"><strong>%s</strong> apartó un horario mediante comprobante de pago diferido.</p>`+
+			`<p style="font-size:14px;line-height:1.6;margin:0 0 8px">Cita: <strong>%s</strong> · %s.%s</p>`+
+			`<p style="font-size:13px;color:#6b7280;line-height:1.6;margin:8px 0 0">El sistema confirmará la cita automáticamente al acreditarse el pago. Si el paciente no paga a tiempo, el horario se liberará solo.</p>`+
+			`</div>`,
+		greeting, d.AppointmentAt, d.Modality, deadline)
+
+	subj := fmt.Sprintf("Reserva apartada (pago pendiente): %s", greeting)
+	for _, adminEmail := range adminEmails {
+		if err := n.send(ctx, adminEmail, subj, html); err != nil {
+			slog.Default().Warn("notify: booking-deferred-admin email failed", "to", adminEmail, "err", err)
+		}
+	}
+}
+
+// BookingConflictAdmin alerts the clinic's admins that a deferred payment was
+// credited but the slot is no longer available — manual resolution required.
+func (n *ResendNotifier) BookingConflictAdmin(ctx context.Context, d BookingVoucherDetails, adminEmails []string) {
+	if len(adminEmails) == 0 {
+		return
+	}
+	greeting := d.GuestName
+	if greeting == "" {
+		greeting = "Paciente sin nombre"
+	}
+	html := fmt.Sprintf(
+		`<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#1f2937">`+
+			`<h2 style="margin:0 0 12px;font-size:18px;color:#dc2626">⚠️ Pago acreditado — horario ya ocupado</h2>`+
+			`<p style="font-size:14px;line-height:1.6;margin:0 0 8px">El pago diferido de <strong>%s</strong> se acreditó, pero el horario <strong>%s</strong> (%s) ya está ocupado por otra cita.</p>`+
+			`<p style="font-size:14px;line-height:1.6;margin:0 0 8px"><strong>La cita NO fue creada.</strong> Es necesario contactar al paciente para reagendar o gestionar el reembolso manualmente.</p>`+
+			`<p style="font-size:13px;color:#6b7280;line-height:1.6;margin:8px 0 0">Correo del paciente: %s</p>`+
+			`</div>`,
+		greeting, d.AppointmentAt, d.Modality, d.PatientEmail)
+
+	subj := fmt.Sprintf("⚠️ Conflicto de horario — requiere acción: %s", greeting)
+	for _, adminEmail := range adminEmails {
+		if err := n.send(ctx, adminEmail, subj, html); err != nil {
+			slog.Default().Warn("notify: booking-conflict-admin email failed", "to", adminEmail, "err", err)
+		}
+	}
+}
+
 // BookingVoucher tells the patient their slot is held pending a cash/voucher
 // payment (Efecty etc.) and gives them the deadline and link to pay.
 func (n *ResendNotifier) BookingVoucher(ctx context.Context, d BookingVoucherDetails) {

@@ -366,20 +366,53 @@ func (h *Handler) confirm(ctx context.Context, bookingID, paymentID, paymentType
 		return
 	}
 
+	var conflictData *notify.BookingVoucherDetails
 	scopeErr := dbctx.WithOrgScope(ctx, h.pool, orgID, func(ctx context.Context) error {
 		q := dbctx.From(ctx, h.pool)
-		var staffID, guest, modality string
+		var staffID, guest, email, modality string
 		var scheduledAt time.Time
 		var durationMin int
 		err := q.QueryRow(ctx, `
-			SELECT staff_id, scheduled_at, duration_min, modality, guest_name
+			SELECT staff_id, scheduled_at, duration_min, modality, guest_name, email
 			FROM bookings WHERE id = $1 AND status = 'PENDING_PAYMENT'
-		`, bookingID).Scan(&staffID, &scheduledAt, &durationMin, &modality, &guest)
+		`, bookingID).Scan(&staffID, &scheduledAt, &durationMin, &modality, &guest, &email)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil // already confirmed or unknown
 		}
 		if err != nil {
 			return err
+		}
+
+		// Re-verify the slot is still free before inserting — a deferred payment
+		// can be credited days after the booking was held, giving another patient
+		// time to take the same slot.
+		busy, err := h.resolver.BusyAppointments(ctx, orgID, staffID,
+			scheduledAt.Add(-time.Second), scheduledAt.Add(time.Second))
+		if err != nil {
+			return err
+		}
+		if len(busy) > 0 {
+			// Slot taken: mark the booking for manual resolution instead of
+			// creating a duplicate appointment.
+			_, err = q.Exec(ctx, `
+				UPDATE bookings
+				SET status = 'PAID_CONFLICT', mp_payment_id = $2,
+				    mp_payment_type = NULLIF($3, ''), mp_payment_method = NULLIF($4, ''),
+				    updated_at = NOW()
+				WHERE id = $1
+			`, bookingID, paymentID, paymentType, paymentMethod)
+			if err != nil {
+				return err
+			}
+			local := scheduledAt.In(bogota)
+			conflictData = &notify.BookingVoucherDetails{
+				OrgID:         orgID,
+				GuestName:     guest,
+				PatientEmail:  email,
+				Modality:      modalityLabel(modality),
+				AppointmentAt: local.Format("Monday, 2 de January, 3:04 pm"),
+			}
+			return nil
 		}
 
 		var apptID string
@@ -402,6 +435,14 @@ func (h *Handler) confirm(ctx context.Context, bookingID, paymentID, paymentType
 	})
 	if scopeErr != nil {
 		slog.Error("booking.confirm", "err", scopeErr)
+		return
+	}
+
+	if conflictData != nil {
+		go func() {
+			admins, _ := h.orgAdminEmails(context.Background(), orgID)
+			h.notifier.BookingConflictAdmin(context.Background(), *conflictData, admins)
+		}()
 		return
 	}
 
@@ -459,7 +500,7 @@ func (h *Handler) holdDeferred(ctx context.Context, bookingID, paymentID string,
 	go func() {
 		local := scheduledAt.In(bogota)
 		deadline := holdUntil.In(bogota)
-		h.notifier.BookingVoucher(context.Background(), notify.BookingVoucherDetails{
+		d := notify.BookingVoucherDetails{
 			OrgID:         orgID,
 			GuestName:     guest,
 			PatientEmail:  email,
@@ -467,7 +508,10 @@ func (h *Handler) holdDeferred(ctx context.Context, bookingID, paymentID string,
 			AppointmentAt: local.Format("Monday, 2 de January, 3:04 pm"),
 			Deadline:      deadline.Format("Monday, 2 de January, 3:04 pm"),
 			VoucherURL:    pay.TransactionDetails.ExternalResourceURL,
-		})
+		}
+		h.notifier.BookingVoucher(context.Background(), d)
+		admins, _ := h.orgAdminEmails(context.Background(), orgID)
+		h.notifier.BookingDeferredAdmin(context.Background(), d, admins)
 	}()
 }
 

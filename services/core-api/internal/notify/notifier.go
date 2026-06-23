@@ -73,6 +73,8 @@ type BookingVoucherDetails struct {
 type Notifier interface {
 	NewBooking(ctx context.Context, b BookingDetails, adminEmails []string)
 	BookingPaidAdmin(ctx context.Context, b BookingDetails, adminEmails []string)
+	BookingDeferredAdmin(ctx context.Context, d BookingVoucherDetails, adminEmails []string)
+	BookingConflictAdmin(ctx context.Context, d BookingVoucherDetails, adminEmails []string)
 	BookingConfirmed(ctx context.Context, b BookingDetails)
 	BookingRejected(ctx context.Context, b BookingDetails)
 	BookingVoucher(ctx context.Context, d BookingVoucherDetails)
@@ -90,11 +92,13 @@ type Notifier interface {
 // Used when RESEND_API_KEY is absent (dev/CI environments).
 type NoopNotifier struct{}
 
-func (NoopNotifier) NewBooking(_ context.Context, _ BookingDetails, _ []string)             {}
-func (NoopNotifier) BookingPaidAdmin(_ context.Context, _ BookingDetails, _ []string)       {}
-func (NoopNotifier) BookingConfirmed(_ context.Context, _ BookingDetails)                   {}
-func (NoopNotifier) BookingRejected(_ context.Context, _ BookingDetails)                    {}
-func (NoopNotifier) BookingVoucher(_ context.Context, _ BookingVoucherDetails)              {}
+func (NoopNotifier) NewBooking(_ context.Context, _ BookingDetails, _ []string)                    {}
+func (NoopNotifier) BookingPaidAdmin(_ context.Context, _ BookingDetails, _ []string)              {}
+func (NoopNotifier) BookingDeferredAdmin(_ context.Context, _ BookingVoucherDetails, _ []string)   {}
+func (NoopNotifier) BookingConflictAdmin(_ context.Context, _ BookingVoucherDetails, _ []string)   {}
+func (NoopNotifier) BookingConfirmed(_ context.Context, _ BookingDetails)                          {}
+func (NoopNotifier) BookingRejected(_ context.Context, _ BookingDetails)                           {}
+func (NoopNotifier) BookingVoucher(_ context.Context, _ BookingVoucherDetails)                     {}
 func (NoopNotifier) AppointmentReminder(_ context.Context, _ BookingDetails, _ int)         {}
 func (NoopNotifier) ConsentSignLink(_ context.Context, _ string, _ ConsentLinkDetails)      {}
 func (NoopNotifier) PasswordReset(_ context.Context, _ string, _ PasswordResetDetails)      {}

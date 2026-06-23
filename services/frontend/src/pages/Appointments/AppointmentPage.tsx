@@ -13,6 +13,7 @@ import { patientsApi, type Patient } from '@/api/patients';
 import { EditPatientModal } from '@/components/patients/EditPatientModal';
 import { PatientSearchBox } from '@/components/patients/PatientSearchBox';
 import { calcAge } from '@/lib/age';
+import { recordingStore } from '@/lib/recordingStore';
 import { useIsCompact } from '@/lib/useMediaQuery';
 import { CLR_DANGER, CLR_WARN, CLR_SUCCESS, CLR_INFO, CLR_PROC, CLR_NEUTRAL } from '@/lib/tokens';
 import { clinicalRecordsApi, consentsApi, type RecordMeta, type RecordType } from '@/api/clinicalRecords';
@@ -360,6 +361,9 @@ export function AppointmentPage() {
   // true between "Finalizar sesión" and the draft appearing — drives the
   // "procesando grabación" feedback instead of the upload dropzone
   const [processingAudio, setProcessingAudio] = useState(false);
+  // Chunks recovered from IndexedDB after a page refresh mid-recording
+  const [recoveredChunks, setRecoveredChunks] = useState<Blob[]>([]);
+  const [uploadingRecovery, setUploadingRecovery] = useState(false);
 
   const teardownAudio = () => {
     audioCtxRef.current?.close().catch(() => {});
@@ -375,7 +379,12 @@ export function AppointmentPage() {
       const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
       const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
       chunksRef.current = [];
-      rec.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      rec.ondataavailable = e => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+          recordingStore.appendChunk(id!, e.data).catch(() => {});
+        }
+      };
       rec.start(1000);
       mediaRef.current = rec;
 
@@ -447,6 +456,23 @@ export function AppointmentPage() {
     teardownAudio();
   }, []);
 
+  // Recover audio chunks saved to IndexedDB from a previous recording that was
+  // interrupted by a page refresh.
+  useEffect(() => {
+    if (!id) return;
+    recordingStore.load(id).then(chunks => {
+      if (chunks.length > 0) setRecoveredChunks(chunks);
+    }).catch(() => {});
+  }, [id]);
+
+  // Warn the user before reloading while a recording is in progress.
+  useEffect(() => {
+    if (!recording) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [recording]);
+
   const { data: patient } = useQuery({
     queryKey: ['patient', appt?.patient_id],
     queryFn: () => patientsApi.get(appt!.patient_id),
@@ -514,6 +540,8 @@ export function AppointmentPage() {
       try {
         const res = await appointmentsApi.uploadAudio(id!, appt.patient_id, audio, aiRecordType);
         handleDraftCreated(res.draft_id);
+        recordingStore.clear(id!).catch(() => {});
+        setRecoveredChunks([]);
       } catch {
         setProcessingAudio(false);
         setRecNote('La grabación terminó pero no se pudo subir — usa "Subir grabación" en Borrador IA.');
@@ -521,6 +549,28 @@ export function AppointmentPage() {
     } else {
       setProcessingAudio(false);
     }
+  };
+
+  const handleUploadRecovery = async () => {
+    if (!appt?.patient_id || recoveredChunks.length === 0) return;
+    setUploadingRecovery(true);
+    try {
+      const blob = new Blob(recoveredChunks, { type: 'audio/webm' });
+      const file = new File([blob], `session-${id}.webm`, { type: 'audio/webm' });
+      const res = await appointmentsApi.uploadAudio(id!, appt.patient_id, file, aiRecordType);
+      handleDraftCreated(res.draft_id);
+      recordingStore.clear(id!).catch(() => {});
+      setRecoveredChunks([]);
+    } catch {
+      setRecNote('No se pudo subir la grabación recuperada — intenta de nuevo.');
+    } finally {
+      setUploadingRecovery(false);
+    }
+  };
+
+  const handleDiscardRecovery = () => {
+    recordingStore.clear(id!).catch(() => {});
+    setRecoveredChunks([]);
   };
 
   const handleCancel = async () => {
@@ -714,6 +764,25 @@ export function AppointmentPage() {
             {recNote && (
               <div role="alert" style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, fontSize: 12.5, color: '#92400e' }}>
                 <AlertTriangle size={13} /> {recNote}
+              </div>
+            )}
+            {recoveredChunks.length > 0 && !recording && (
+              <div role="alert" style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', background: '#fefce8', border: '1px solid #fde047', borderRadius: 9, fontSize: 13, color: '#713f12' }}>
+                <Mic size={15} style={{ flexShrink: 0 }} />
+                <span style={{ flex: 1 }}>Hay una grabación sin finalizar de esta sesión (interrumpida por recarga).</span>
+                <button
+                  onClick={handleUploadRecovery}
+                  disabled={uploadingRecovery}
+                  style={{ padding: '5px 12px', background: '#ca8a04', color: '#fff', border: 'none', borderRadius: 6, cursor: uploadingRecovery ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}
+                >
+                  {uploadingRecovery ? 'Subiendo…' : 'Subir grabación'}
+                </button>
+                <button
+                  onClick={handleDiscardRecovery}
+                  style={{ padding: '5px 10px', background: 'none', color: '#92400e', border: '1px solid #fcd34d', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}
+                >
+                  Descartar
+                </button>
               </div>
             )}
           </div>
