@@ -6,6 +6,10 @@ import { AuthProvider } from '@/context/AuthContext';
 import { App } from './App';
 import './styles/global.css';
 
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload());
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
