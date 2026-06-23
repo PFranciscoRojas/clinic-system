@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   UserRound, Clock, Bell, Sparkles, ShieldCheck,
   FileText, Settings, CalendarDays, Send, AlertCircle,
-  PenLine, Lock, Key, CheckCircle,
+  PenLine, Lock, Key, CheckCircle, Mail,
   Upload, Palette, Users, Trash2, Save,
   Shield, LogOut, Plus, Receipt, Pencil, X,
 } from 'lucide-react';
@@ -857,6 +857,11 @@ function SecuritySection({ setDirty }: { setDirty: (v: boolean) => void }) {
   const [pwdSaved,  setPwdSaved]  = useState(false);
   const [pwdSaving, setPwdSaving] = useState(false);
 
+  const [newEmail,      setNewEmail]      = useState('');
+  const [emailErr,      setEmailErr]      = useState('');
+  const [emailSaved,    setEmailSaved]    = useState('');
+  const [emailSaving,   setEmailSaving]   = useState(false);
+
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setPwdErr(''); setPwdSaved(false);
@@ -974,6 +979,31 @@ function SecuritySection({ setDirty }: { setDirty: (v: boolean) => void }) {
               ? <><span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: 99, animation: 'spin .7s linear infinite', display: 'inline-block' }} />Cambiando…</>
               : <><Key size={14} />Cambiar contraseña</>}
           </button>
+        </form>
+      </SectionCard>
+
+      <SectionCard title="Cambiar correo" icon={Mail} color="#0369a1">
+        <form onSubmit={async e => {
+          e.preventDefault();
+          setEmailErr(''); setEmailSaved(''); setEmailSaving(true);
+          try {
+            await authApi.requestEmailChange(newEmail.trim());
+            setEmailSaved(`Enviamos un enlace de confirmación a ${newEmail.trim()}. Haz clic en él para confirmar el cambio.`);
+            setNewEmail('');
+          } catch (ex) {
+            setEmailErr(ex instanceof Error && ex.message ? ex.message : 'No se pudo enviar el enlace.');
+          } finally { setEmailSaving(false); }
+        }} style={{ padding: '14px 0' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <input value={newEmail} onChange={e => setNewEmail(e.target.value)} type="email" required placeholder="nuevo@correo.com"
+              style={{ padding: '9px 12px', borderRadius: 9, border: '1.5px solid var(--s200)', fontSize: 13, color: 'var(--s800)', outline: 'none' }} />
+            {emailErr  && <div style={{ fontSize: 12.5, color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 5 }}><AlertCircle size={13} />{emailErr}</div>}
+            {emailSaved && <div style={{ fontSize: 12.5, color: '#065f46', display: 'flex', alignItems: 'center', gap: 5 }}><CheckCircle size={13} />{emailSaved}</div>}
+            <button type="submit" disabled={emailSaving || !newEmail.trim()}
+              style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 9, border: 'none', background: emailSaving ? 'var(--s200)' : '#0369a1', color: '#fff', fontSize: 13, fontWeight: 700, cursor: emailSaving ? 'wait' : 'pointer' }}>
+              <Mail size={14} />{emailSaving ? 'Enviando…' : 'Enviar enlace de confirmación'}
+            </button>
+          </div>
         </form>
       </SectionCard>
 
@@ -1170,6 +1200,77 @@ const ROLES = [
   { value: 'RECEPTIONIST',  label: 'Recepcionista' },
 ];
 
+const ASSIGNABLE_ROLES = [
+  { value: 'CLINIC_ADMIN',   label: 'Administrador' },
+  { value: 'PROFESSIONAL',   label: 'Psicólogo/a profesional' },
+  { value: 'INTERN',         label: 'Practicante supervisado' },
+  { value: 'RECEPTIONIST',   label: 'Recepcionista' },
+];
+
+const ROLE_BADGE: Record<string, { label: string; color: string; bg: string }> = {
+  CLINIC_ADMIN:  { label: 'Admin',          color: '#0369a1', bg: '#e0f2fe' },
+  PROFESSIONAL:  { label: 'Profesional',    color: '#065f46', bg: '#d1fae5' },
+  INTERN:        { label: 'Practicante',    color: '#92400e', bg: '#fef3c7' },
+  RECEPTIONIST:  { label: 'Recepcionista',  color: '#475569', bg: '#f1f5f9' },
+};
+
+function TeamCard({ selfId }: { selfId: string }) {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ['org-users'],
+    queryFn: () => authApi.listOrgUsers(),
+  });
+  const users = data?.items ?? [];
+  const [rowErr, setRowErr] = useState<Record<string, string>>({});
+
+  const changeRole = async (userId: string, roleName: string) => {
+    setRowErr(e => ({ ...e, [userId]: '' }));
+    try {
+      await authApi.changeUserRole(userId, roleName);
+      qc.invalidateQueries({ queryKey: ['org-users'] });
+    } catch (ex) {
+      setRowErr(e => ({ ...e, [userId]: ex instanceof Error ? ex.message : 'Error al cambiar rol' }));
+    }
+  };
+
+  return (
+    <SectionCard title="Equipo" icon={Users} color="#0ea5e9">
+      {isLoading ? (
+        <div style={{ padding: 20, display: 'flex', justifyContent: 'center' }}><Spinner /></div>
+      ) : users.length === 0 ? (
+        <div style={{ padding: '12px 0', fontSize: 13, color: 'var(--s400)' }}>No hay usuarios en la organización.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 8 }}>
+          {users.map(u => {
+            const isSelf = u.id === selfId;
+            const badge = ROLE_BADGE[u.role_name] ?? { label: u.role_name, color: '#475569', bg: '#f1f5f9' };
+            return (
+              <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--s100)' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--s800)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {u.display_name || u.email}
+                  </div>
+                  {u.display_name && <div style={{ fontSize: 11.5, color: 'var(--s400)' }}>{u.email}</div>}
+                </div>
+                <Badge label={badge.label} color={badge.color} bg={badge.bg} />
+                <select
+                  disabled={isSelf}
+                  value={u.role_name}
+                  onChange={e => changeRole(u.id, e.target.value)}
+                  title={isSelf ? 'No puedes cambiar tu propio rol' : 'Cambiar rol'}
+                  style={{ padding: '5px 8px', borderRadius: 7, border: '1.5px solid var(--s200)', fontSize: 12.5, color: 'var(--s700)', cursor: isSelf ? 'not-allowed' : 'pointer', background: isSelf ? 'var(--s100)' : '#fff' }}>
+                  {ASSIGNABLE_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+                {rowErr[u.id] && <div style={{ fontSize: 11.5, color: 'var(--red)' }}>{rowErr[u.id]}</div>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
 function UsersSection() {
   const { user } = useAuth();
   const isAdmin = user?.roles?.includes('CLINIC_ADMIN') ?? false;
@@ -1321,6 +1422,8 @@ function UsersSection() {
           </div>
         </SectionCard>
       )}
+
+      {isAdmin && <TeamCard selfId={user?.user_id ?? ''} />}
     </>
   );
 }

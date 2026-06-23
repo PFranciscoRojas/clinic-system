@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"sghcp/core-api/internal/auth"
 	authsvc "sghcp/core-api/internal/auth/service"
 	"sghcp/core-api/internal/shared/token"
 )
@@ -27,6 +28,14 @@ type svcPort interface {
 	CompleteOnboarding(ctx context.Context, userID string) error
 	OnboardingCompleted(ctx context.Context, userID string) (bool, error)
 	OrgInfo(ctx context.Context, orgID string) (name, status string, trialEndsAt, currentPeriodEnd *time.Time, err error)
+
+	// Email change.
+	RequestEmailChange(ctx context.Context, userID, newEmail string) error
+	ConfirmEmailChange(ctx context.Context, rawToken string) error
+
+	// Team management.
+	ListOrgUsers(ctx context.Context, orgID string) ([]auth.OrgUser, error)
+	ChangeUserRole(ctx context.Context, orgID, callerUserID, targetUserID, roleName string) error
 }
 
 // compile-time guard: *authsvc.Service must satisfy svcPort.

@@ -260,3 +260,76 @@ func (r *Repository) OnboardingCompleted(ctx context.Context, userID string) (bo
 	}
 	return done, nil
 }
+
+// UpdateEmail replaces the user's email and its hash, stamping email_verified_at.
+func (r *Repository) UpdateEmail(ctx context.Context, userID, newEmail string) error {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE users
+		SET email             = $2,
+		    email_hash        = $3,
+		    email_verified_at = NOW(),
+		    updated_at        = NOW()
+		WHERE id = $1
+	`, userID, newEmail, hash.Normalize(newEmail))
+	if err != nil {
+		if isUniqueViolation(err, "users_email_hash_global_uq") {
+			return auth.ErrEmailAlreadyExists
+		}
+		return fmt.Errorf("update email: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return auth.ErrUserNotFound
+	}
+	return nil
+}
+
+// ListOrgUsers returns all users in the org with their current role name.
+func (r *Repository) ListOrgUsers(ctx context.Context, orgID string) ([]auth.OrgUser, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT u.id, u.display_name, u.email, ro.name AS role_name
+		FROM   users u
+		JOIN   user_roles ur ON ur.user_id = u.id AND ur.organization_id = $1
+		JOIN   roles ro      ON ro.id = ur.role_id
+		WHERE  u.organization_id = $1
+		ORDER  BY u.created_at
+	`, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("list org users: %w", err)
+	}
+	defer rows.Close()
+	var out []auth.OrgUser
+	for rows.Next() {
+		var u auth.OrgUser
+		if err := rows.Scan(&u.ID, &u.DisplayName, &u.Email, &u.RoleName); err != nil {
+			return nil, fmt.Errorf("scan org user: %w", err)
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// ReplaceUserRole atomically removes all org role grants for the target user and
+// assigns a single new role, inside a transaction.
+func (r *Repository) ReplaceUserRole(ctx context.Context, orgID, targetUserID, newRoleID, callerUserID string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin role-replace tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err = tx.Exec(ctx,
+		`DELETE FROM user_roles WHERE user_id = $1 AND organization_id = $2`,
+		targetUserID, orgID,
+	); err != nil {
+		return fmt.Errorf("delete old roles: %w", err)
+	}
+
+	if _, err = tx.Exec(ctx, `
+		INSERT INTO user_roles (organization_id, user_id, role_id, assigned_by)
+		VALUES ($1, $2, $3, $4)
+	`, orgID, targetUserID, newRoleID, callerUserID); err != nil {
+		return fmt.Errorf("insert new role: %w", err)
+	}
+
+	return tx.Commit(ctx)
+}

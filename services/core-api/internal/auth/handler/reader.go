@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"math"
 	"net/http"
 	"time"
@@ -66,4 +67,16 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, resp)
+}
+
+// GET /api/v1/users — lists all org users with their current role (requires users:read).
+func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	users, err := h.svc.ListOrgUsers(r.Context(), claims.OrganizationID)
+	if err != nil {
+		slog.Error("auth.list-users", "err", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "could not list users")
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"items": users})
 }

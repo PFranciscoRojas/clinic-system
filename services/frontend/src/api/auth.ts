@@ -70,4 +70,21 @@ export const authApi = {
     api.post<void>('/auth/onboarding-complete', {}),
   updateProfile: (display_name: string) =>
     api.patch<TokenPair>('/auth/profile', { display_name }),
+
+  requestEmailChange: (new_email: string) =>
+    api.patch<{ status: string }>('/auth/me/email', { new_email }),
+  verifyEmailChange: (token: string) =>
+    api.post<void>('/auth/verify-email-change', { token }),
+
+  listOrgUsers: () =>
+    api.get<{ items: OrgUser[] }>('/users'),
+  changeUserRole: (user_id: string, role_name: string) =>
+    api.patch<void>(`/users/${user_id}/role`, { role_name }),
 };
+
+export interface OrgUser {
+  id: string;
+  display_name: string | null;
+  email: string;
+  role_name: string;
+}

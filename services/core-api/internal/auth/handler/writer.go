@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"sghcp/core-api/internal/auth"
 	authdto "sghcp/core-api/internal/auth/dto"
 	"sghcp/core-api/internal/shared/httputil"
@@ -270,6 +271,64 @@ func (h *Handler) confirmReset(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.Error("auth.reset-password-confirm", "err", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "could not reset password")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// PATCH /api/v1/auth/me/email — initiates the email-change flow for the authenticated user.
+func (h *Handler) requestEmailChange(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	var body struct {
+		NewEmail string `json:"new_email"`
+	}
+	if err := httputil.DecodeJSON(r, &body); err != nil || body.NewEmail == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "new_email is required")
+		return
+	}
+	if err := h.svc.RequestEmailChange(r.Context(), claims.UserID, body.NewEmail); err != nil {
+		slog.Error("auth.request-email-change", "err", err)
+		writeErr(w, err)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "verification_sent"})
+}
+
+// POST /api/v1/auth/verify-email-change — public; consumes the one-time token.
+func (h *Handler) verifyEmailChange(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Token string `json:"token"`
+	}
+	if err := httputil.DecodeJSON(r, &body); err != nil || body.Token == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "token is required")
+		return
+	}
+	if err := h.svc.ConfirmEmailChange(r.Context(), body.Token); err != nil {
+		slog.Error("auth.verify-email-change", "err", err)
+		writeErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// PATCH /api/v1/users/{user_id}/role — replaces a user's org role (CLINIC_ADMIN only).
+func (h *Handler) changeUserRole(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	targetUserID := chi.URLParam(r, "user_id")
+	if targetUserID == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "user_id is required")
+		return
+	}
+	var body struct {
+		RoleName string `json:"role_name"`
+	}
+	if err := httputil.DecodeJSON(r, &body); err != nil || body.RoleName == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "role_name is required")
+		return
+	}
+	if err := h.svc.ChangeUserRole(r.Context(), claims.OrganizationID, claims.UserID, targetUserID, body.RoleName); err != nil {
+		slog.Error("auth.change-user-role", "err", err)
+		writeErr(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

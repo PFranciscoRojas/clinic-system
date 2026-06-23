@@ -18,6 +18,7 @@ import { ConsentSignPage } from '@/pages/Public/ConsentSignPage';
 import { ResetPasswordPage } from '@/pages/Public/ResetPasswordPage';
 import { SignupPage } from '@/pages/Public/SignupPage';
 import { VerifyEmailPage } from '@/pages/Public/VerifyEmailPage';
+import { VerifyEmailChangePage } from '@/pages/Public/VerifyEmailChangePage';
 import { BillingReturnPage } from '@/pages/Public/BillingReturnPage';
 import { BookingWizardPage } from '@/pages/Public/BookingWizardPage';
 import { BookingPaymentReturnPage } from '@/pages/Public/BookingPaymentReturnPage';
@@ -68,6 +69,7 @@ export function App() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
+      <Route path="/verify-email-change" element={<VerifyEmailChangePage />} />
       <Route path="/billing/return" element={<BillingReturnPage />} />
       <Route path="/book/return" element={<BookingPaymentReturnPage />} />
       <Route path="/book/:slug" element={<BookingWizardPage />} />

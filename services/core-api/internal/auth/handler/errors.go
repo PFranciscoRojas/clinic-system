@@ -26,6 +26,10 @@ var authErrors = httputil.ErrorMapper(func(err error) (int, string) {
 		return http.StatusNotFound, "user not found"
 	case errors.Is(err, auth.ErrRoleNotFound):
 		return http.StatusBadRequest, "role not found"
+	case errors.Is(err, auth.ErrEmailChangePending):
+		return http.StatusBadRequest, "el enlace es inválido o expiró"
+	case errors.Is(err, auth.ErrSelfRoleChange):
+		return http.StatusForbidden, "no puedes cambiar tu propio rol"
 	default:
 		return 0, ""
 	}

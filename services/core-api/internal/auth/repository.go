@@ -29,6 +29,13 @@ type Repository interface {
 	UpdateDisplayName(ctx context.Context, userID, displayName string) error
 	SetOnboardingCompleted(ctx context.Context, userID string) error
 	OnboardingCompleted(ctx context.Context, userID string) (bool, error)
+
+	// Email change flow.
+	UpdateEmail(ctx context.Context, userID, newEmail string) error
+
+	// Team management.
+	ListOrgUsers(ctx context.Context, orgID string) ([]OrgUser, error)
+	ReplaceUserRole(ctx context.Context, orgID, targetUserID, newRoleID, callerUserID string) error
 }
 
 // CreateOrgParams carries everything CreateOrgWithOwner needs to provision a

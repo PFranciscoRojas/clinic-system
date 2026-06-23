@@ -12,4 +12,6 @@ var (
 	ErrUserNotFound       = errors.New("user not found")
 	ErrRoleNotFound       = errors.New("role not found")
 	ErrEmailNotVerified   = errors.New("email address not verified")
+	ErrEmailChangePending = errors.New("email change token invalid or expired")
+	ErrSelfRoleChange     = errors.New("cannot change your own role")
 )

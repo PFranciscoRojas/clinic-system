@@ -13,6 +13,7 @@ func (h *Handler) Routes(jwtSecret []byte) chi.Router {
 	r.Post("/login", h.login)
 	r.Post("/signup", h.signup)
 	r.Post("/verify-email", h.verifyEmail)
+	r.Post("/verify-email-change", h.verifyEmailChange)
 	r.Post("/resend-verification", h.resendVerification)
 	r.Post("/refresh", h.refresh)
 	r.Post("/logout", h.logout)
@@ -25,6 +26,7 @@ func (h *Handler) Routes(jwtSecret []byte) chi.Router {
 		r.Use(middleware.RequireAuth(jwtSecret))
 		r.Get("/me", h.me)
 		r.Patch("/profile", h.updateProfile)
+		r.Patch("/me/email", h.requestEmailChange)
 		r.Post("/change-password", h.changePassword)
 		r.Post("/onboarding-complete", h.onboardingComplete)
 		// Authorization is role-scoped inside the handler: a CLINIC_ADMIN may

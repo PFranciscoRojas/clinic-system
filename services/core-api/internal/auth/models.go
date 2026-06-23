@@ -20,6 +20,14 @@ type User struct {
 	Permissions     []string
 }
 
+// OrgUser is the read model for team management (list + role assignment).
+type OrgUser struct {
+	ID          string  `json:"id"`
+	DisplayName *string `json:"display_name"`
+	Email       string  `json:"email"`
+	RoleName    string  `json:"role_name"`
+}
+
 // AuditEntry carries the fields written to audit_log on each auth event.
 type AuditEntry struct {
 	OrgID        *string
