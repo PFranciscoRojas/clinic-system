@@ -4,6 +4,6 @@
 
 Basándome en STATUS.md (bloqueantes + roadmap) y BACKLOG.md, lo más valioso a atacar ahora es:
 
-1. **Cerrar `MP_WEBHOOK_ENFORCE=true`** (bloqueante 🔴 — bloquea el go-live 1.0.0) — El secreto del webhook está configurado en VPS pero `enforce=false` por seguridad mientras se verifica. Hacer un pago real con tarjeta en producción, capturar `docker logs sghcp_core_api 2>&1 | grep "signature check failed"`, comparar los campos `manifest`/`expected`/`got` para identificar el mismatch, corregir el secreto y activar `MP_WEBHOOK_ENFORCE=true`. Sin esto los webhooks corren sin verificación de firma.
+1. **MP_WEBHOOK_ENFORCE=true** (🔴 bloqueante go-live) — hacer un pago real de prueba desde el booking público, capturar el header `x-signature` del log de core-api, verificar que el secreto en `.env` coincida y cambiar la variable a `true`. Sin esto el webhook de MercadoPago no valida firmas y no se puede lanzar en producción real.
 
-2. **Botón "Cambiar correo del admin" en Configuración** (bloqueante 🟡 UI) — La pantalla de Configuración no tiene esta opción. Necesita `PATCH /me/email` con re-verificación + formulario en frontend.
+2. **Exportar lista de pacientes a CSV** — datos disponibles en BD (nombre cifrado / HC / fecha apertura / teléfono); valor inmediato para Marcela sin dependencias externas.

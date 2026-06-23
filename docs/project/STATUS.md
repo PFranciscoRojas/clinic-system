@@ -20,11 +20,11 @@
 
 ### Últimos commits a `main` — todos desplegados
 
-- `2377272` feat(billing): booking detail modal + filter sync + `hold_expires_at` en fila reservas (2026-06-23)
-- `c9b542e` fix(billing): cast `modality::text` en query `ListBookingPayments` — enum vacío causaba 500 (2026-06-23)
-- `dc7be41` fix(frontend): listener `controllerchange` en main.tsx → SW propaga deploys sin doble-refresh (2026-06-23)
-- `823107e` refactor(billing): reservas online integradas en tab Facturas (quita tab Reservas separada) (2026-06-23)
-- `6ef20b2` fix(booking): bloqueo atómico de citas internas sobre holds de pago diferido activos (CTE) (2026-06-23)
+- `a9048ab` feat(auth): cambiar correo admin + gestión de roles del equipo — 2026-06-23
+- `8891f0c` fix(billing): comprobante PDF muestra F-number en vez de UUID — 2026-06-23
+- `1de3a0a` fix(admin): "limpiar datos" incluye invoices/payments/bookings (FK cascade) — 2026-06-23
+- `52c9efb` feat(billing): tabla unificada facturas+reservas con sort por columna — 2026-06-23
+- `466786b` feat(billing): número R-XXXXXX, referencia MP, filtro pendientes, sort reservas — 2026-06-23
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 
@@ -34,7 +34,6 @@
 
 | ID | Descripción | Estado |
 |---|---|---|
-| **UI** | Botón "Cambiar correo del admin" en Configuración | 🟡 pendiente |
 | **MP webhook** | `MP_WEBHOOK_ENFORCE=false` en VPS — secreto mal configurado; hacer un pago real y capturar log de firma para corregir y volver a `true` | 🔴 pendiente |
 
 ---
@@ -68,7 +67,7 @@
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción (rebuild 2026-06-23 ×2, migración 000033 aplicada) |
+| `core-api:8080` | ✅ producción (rebuild 2026-06-23 ×3, migración 000033 aplicada) |
 | `ai-service` | ✅ producción (`Dockerfile.patch` rebuild #79) |
 | `frontend` (Caddy :80/:443) | ✅ producción |
 | Backups | `pg_dump` cifrado GPG → Backblaze B2 |
