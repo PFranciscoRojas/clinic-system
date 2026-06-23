@@ -10,6 +10,7 @@ type Repository interface {
 	FindByID(ctx context.Context, orgID, patientID string) (*RawPatient, error)
 	FindEncKey(ctx context.Context, dekID string) (*EncKeyRow, error)
 	List(ctx context.Context, orgID string, limit, offset int) ([]*RawPatient, error)
+	ListAll(ctx context.Context, orgID string) ([]*RawPatient, error)
 	Search(ctx context.Context, orgID string, filter SearchFilter) ([]*RawPatient, error)
 	Update(ctx context.Context, p UpdateParams) error
 	Deactivate(ctx context.Context, orgID, patientID string) error

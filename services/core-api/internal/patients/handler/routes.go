@@ -11,6 +11,7 @@ func (h *Handler) Routes() chi.Router {
 
 	r.With(middleware.RequirePermission("patients:create")).Post("/", h.create)
 	r.With(middleware.RequirePermission("patients:read")).Get("/", h.search)
+	r.With(middleware.RequirePermission("patients:read")).Get("/export.csv", h.exportCSV)
 	r.With(middleware.RequirePermission("patients:read")).Get("/{id}", h.get)
 	r.With(middleware.RequirePermission("patients:update")).Put("/{id}", h.update)
 	r.With(middleware.RequirePermission("patients:delete")).Delete("/{id}", h.deactivate)

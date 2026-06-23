@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -67,4 +69,19 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 		resp = append(resp, patientsdto.ToResponse(p))
 	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"patients": resp})
+}
+
+// GET /api/v1/patients/export.csv — streams a UTF-8 CSV of all active patients.
+func (h *Handler) exportCSV(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	data, err := h.svc.ExportCSV(r.Context(), claims.OrganizationID)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "no se pudo generar el CSV")
+		return
+	}
+	filename := fmt.Sprintf("pacientes-%s.csv", time.Now().Format("2006-01-02"))
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
 }

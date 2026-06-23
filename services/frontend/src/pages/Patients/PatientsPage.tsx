@@ -6,7 +6,7 @@ import {
   AlertCircle, X, CreditCard,
   LayoutGrid, List, Eye, CalendarPlus,
   Mail, Phone, Heart, UserPlus, ClipboardList,
-  MapPin,
+  MapPin, Download,
 } from 'lucide-react';
 import { patientsApi, type Patient } from '@/api/patients';
 import { calcAge } from '@/lib/age';
@@ -393,6 +393,25 @@ export function PatientsPage() {
   const isMobile = useIsMobile();
   const compact  = useIsCompact();
 
+  const [csvBusy, setCsvBusy] = useState(false);
+
+  const downloadCSV = async () => {
+    setCsvBusy(true);
+    try {
+      const blob = await patientsApi.exportCSV();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `pacientes-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('No se pudo generar el CSV. Intenta de nuevo.');
+    } finally {
+      setCsvBusy(false);
+    }
+  };
+
   const [viewMode,      setViewMode]      = useState<ViewMode>(
     () => (localStorage.getItem('sghcp_patients_view') as ViewMode) || 'grid'
   );
@@ -474,6 +493,18 @@ export function PatientsPage() {
             </button>
           ))}
         </div>
+
+        {/* Export CSV */}
+        <button
+          onClick={downloadCSV}
+          disabled={csvBusy}
+          title="Exportar lista de pacientes a CSV"
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: '1.5px solid var(--s200)', background: '#fff', color: 'var(--s700)', fontSize: 13, fontWeight: 600, cursor: csvBusy ? 'wait' : 'pointer', whiteSpace: 'nowrap', transition: 'all .15s' }}
+          onMouseEnter={e => { if (!csvBusy) e.currentTarget.style.borderColor = 'var(--teal)'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--s200)'; }}
+        >
+          <Download size={14} />{csvBusy ? 'Generando…' : 'Exportar CSV'}
+        </button>
 
         {/* New patient */}
         <button
