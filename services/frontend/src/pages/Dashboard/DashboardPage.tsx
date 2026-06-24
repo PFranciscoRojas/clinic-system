@@ -383,7 +383,6 @@ export function DashboardPage() {
   const { data: appointments = [], isLoading } = useQuery({
     queryKey: ['appointments-day', selectedDate, user?.user_id],
     queryFn: () => appointmentsApi.list({
-      staff_id:  user?.user_id,
       date_from: localISO(selectedDate, '00:00'),
       date_to:   localISO(selectedDate, '23:59'),
       limit: 50,
@@ -398,7 +397,6 @@ export function DashboardPage() {
   const { data: todayAppointments = [] } = useQuery({
     queryKey: ['appointments-day', today, user?.user_id],
     queryFn: () => appointmentsApi.list({
-      staff_id:  user?.user_id,
       date_from: localISO(today, '00:00'),
       date_to:   localISO(today, '23:59'),
       limit: 50,

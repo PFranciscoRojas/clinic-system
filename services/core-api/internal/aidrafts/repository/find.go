@@ -54,7 +54,7 @@ func (r *Repository) ListByOrg(ctx context.Context, orgID, status string) ([]*ai
 		FROM ai_drafts d
 		LEFT JOIN patients p ON p.id = d.patient_id
 		WHERE d.organization_id = $1
-		  AND ($2 = '' OR d.status = $2)
+		  AND ($2 = '' OR d.status::text = $2)
 		ORDER BY d.created_at DESC
 		LIMIT 100
 	`, orgID, status)

@@ -781,7 +781,6 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
   const { data: appts = [], isLoading } = useQuery({
     queryKey: ['cal-range', rangeDays[0], rangeDays[rangeDays.length - 1], user?.user_id],
     queryFn:  () => appointmentsApi.list({
-      staff_id:  user?.user_id,
       date_from: localISO(rangeDays[0], '00:00'),
       date_to:   localISO(rangeDays[rangeDays.length - 1], '23:59'),
       limit:     100,
