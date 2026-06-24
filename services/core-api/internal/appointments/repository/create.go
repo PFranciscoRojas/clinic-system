@@ -19,12 +19,12 @@ func (r *Repository) Create(ctx context.Context, p appointments.CreateParams) (s
 			WHERE staff_id = $4
 			  AND status = 'PENDING_PAYMENT'
 			  AND hold_expires_at > NOW()
-			  AND scheduled_at < $5 + ($6 * interval '1 minute')
-			  AND scheduled_at + (duration_min * interval '1 minute') > $5
+			  AND scheduled_at < $5::timestamptz + ($6::integer * interval '1 minute')
+			  AND scheduled_at + (duration_min * interval '1 minute') > $5::timestamptz
 			LIMIT 1
 		)
 		INSERT INTO appointments (organization_id, patient_id, guest_name, staff_id, scheduled_at, duration_min, modality)
-		SELECT $1, $2, $3, $4, $5, $6, $7::appointment_modality
+		SELECT $1, $2, $3, $4, $5::timestamptz, $6::integer, $7::appointment_modality
 		WHERE NOT EXISTS (SELECT 1 FROM hold_conflict)
 		RETURNING id`
 
