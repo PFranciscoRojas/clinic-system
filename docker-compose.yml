@@ -50,9 +50,7 @@ services:
         condition: service_healthy
 
   ai-service:
-    build:
-      context: ./services/ai-service
-      dockerfile: Dockerfile
+    image: ghcr.io/pfranciscorojas/clinic-system-ai-service:latest
     container_name: sghcp_ai_service
     restart: unless-stopped
     # Opt-in until ANTHROPIC_API_KEY exists in prod: docker compose --profile ai up -d

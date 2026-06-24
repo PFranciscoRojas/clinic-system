@@ -21,8 +21,8 @@ REPLACEMENT_PHONE = "[TELÉFONO]"
 
 @lru_cache(maxsize=1)
 def _load_model() -> Language:
-    logger.info("loading spacy model es_core_news_lg")
-    return spacy.load("es_core_news_lg")
+    logger.info("loading spacy model es_core_news_sm")
+    return spacy.load("es_core_news_sm")
 
 
 def anonymize(text: str) -> str:

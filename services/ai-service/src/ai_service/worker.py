@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import os
+import pathlib
 from typing import Any
 
 import asyncpg
@@ -178,6 +179,15 @@ class AIWorker:
             transcription_enc,
             draft_content_enc,
         )
+
+        # Delete audio file — it has been transcribed and the text is now
+        # stored encrypted. Keeping the raw audio indefinitely is both a
+        # privacy risk (PHI) and a disk space problem.
+        try:
+            pathlib.Path(audio_path).unlink(missing_ok=True)
+            logger.info("audio deleted after transcription", extra={"audio_path": audio_path})
+        except OSError as exc:
+            logger.warning("could not delete audio file", extra={"audio_path": audio_path, "err": str(exc)})
 
     async def _process_suggestion(self, suggestion_id: str, org_id: str, patient_id: str, kind: str) -> None:
         assert self._db is not None
