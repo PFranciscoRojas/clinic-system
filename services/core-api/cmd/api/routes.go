@@ -161,7 +161,7 @@ func (a *app) buildRouter() http.Handler {
 
 		// Operator console: SYSTEM_ADMIN billing endpoints are always mounted;
 		// the destructive data-reset route only exists while ALLOW_DATA_RESET is on.
-		r.Mount("/api/v1/admin", adminhandler.New(a.pool, a.cfg.AllowDataReset).Routes())
+		r.Mount("/api/v1/admin", adminhandler.New(a.pool, a.rdb, a.cfg.AllowDataReset).Routes())
 	})
 
 	return r

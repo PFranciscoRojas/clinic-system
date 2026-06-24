@@ -1,9 +1,11 @@
 package handler
 
 import (
-	"github.com/jackc/pgx/v5/pgxpool"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"sghcp/core-api/internal/shared/middleware"
 )
@@ -13,11 +15,13 @@ import (
 // opts in via ALLOW_DATA_RESET).
 type Handler struct {
 	pool           *pgxpool.Pool
+	rdb            *redis.Client
+	startedAt      time.Time
 	allowDataReset bool
 }
 
-func New(pool *pgxpool.Pool, allowDataReset bool) *Handler {
-	return &Handler{pool: pool, allowDataReset: allowDataReset}
+func New(pool *pgxpool.Pool, rdb *redis.Client, allowDataReset bool) *Handler {
+	return &Handler{pool: pool, rdb: rdb, startedAt: time.Now(), allowDataReset: allowDataReset}
 }
 
 func (h *Handler) Routes() chi.Router {
@@ -29,6 +33,7 @@ func (h *Handler) Routes() chi.Router {
 		r.Use(middleware.RequireRole("SYSTEM_ADMIN"))
 		r.Get("/orgs", h.listOrgs)
 		r.Post("/orgs/{id}/activate", h.activateOrg)
+		r.Get("/system/health", h.systemHealth)
 	})
 
 	// Destructive per-org wipe — exists only during the testing phase.
