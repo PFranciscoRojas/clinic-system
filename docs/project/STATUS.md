@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-06-24)
+## Estado actual (2026-06-23)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -22,15 +22,14 @@
 
 ### Últimos commits a `main` — todos desplegados
 
-- `cab4182` fix(admin): limpiar ai_suggestions y auto-FK antes de borrar pacientes/citas — 2026-06-24
-- `954a137` feat(gcal): sync automático al conectar + limpieza al desconectar — 2026-06-24
-- `8299a76` fix(gcal): excluir /api/* del navigateFallback del service worker — 2026-06-24
-- `45426b6` chore(gcal): debug logging en OAuth callback — 2026-06-24
-- `82de8b1` feat(gcal): backfill de citas existentes al conectar — 2026-06-24
-- `915305a` chore(core-api): upgrade Dockerfile Go 1.22→1.25-alpine — 2026-06-24
-- `f416010` feat(gcal): integración Google Calendar — OAuth per-profesional + sync — 2026-06-24
-- `e44b008` fix(booking): notificar admins en reserva diferida y evitar doble-booking — 2026-06-24
-- `ae34b68` feat(agenda): recordatorios y confirmación por WhatsApp (Meta Cloud API) — 2026-06-24
+- `99ba8a0` feat(booking): eliminar flujo de solicitudes web (booking_requests) — 2026-06-23
+- `9a38fbb` fix(appointments): casts explícitos en CTE hold_conflict para evitar ambigüedad de tipos — 2026-06-23
+- `1127937` fix(appointments): cast modality a appointment_modality ENUM en INSERT — 2026-06-23
+- `c6a7470` chore: log unhandled handler errors at ERROR level — 2026-06-23
+- `cab4182` fix(admin): limpiar ai_suggestions y auto-FK antes de borrar pacientes/citas — 2026-06-23
+- `954a137` feat(gcal): sync automático al conectar + limpieza al desconectar — 2026-06-23
+- `8299a76` fix(gcal): excluir /api/* del navigateFallback del service worker — 2026-06-23
+- `82de8b1` feat(gcal): backfill de citas existentes al conectar — 2026-06-23
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 
@@ -74,7 +73,7 @@
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción (rebuild 2026-06-24, migración 000035 aplicada) |
+| `core-api:8080` | ✅ producción (rebuild 2026-06-23, migración 000036 aplicada) |
 | `ai-service` | ✅ producción (`Dockerfile.patch` rebuild #79) |
 | `frontend` (Caddy :80/:443) | ✅ producción |
 | Backups | `pg_dump` cifrado GPG → Backblaze B2 |
@@ -96,7 +95,7 @@
 | `core-api` | `services/core-api/` | ✅ Go 1.25, prod |
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
-| Migrations | `services/core-api/migrations/` | Última: `000035_professional_google_calendar` |
+| Migrations | `services/core-api/migrations/` | Última: `000036_drop_booking_requests` |
 | Claude skills | `~/.claude/commands/` | Sincronizadas 2026-06-24 |
 
 ---

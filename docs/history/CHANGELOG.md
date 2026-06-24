@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-06-23
+
+- feat(booking): eliminado flujo "Solicitudes web" completo — tabla `booking_requests` (migración 000036), paquete Go `bookingrequests`, rutas `POST /api/v1/public/booking` y `/api/v1/booking-requests`, `BookingRequestsPage`, `BookingPage` (formulario viejo), widget inbox del dashboard y nav item. El flujo `/book/:slug` + MercadoPago (`BookingWizardPage`) queda intacto (`99ba8a0`).
+- fix(appointments): casts explícitos `$5::timestamptz`, `$6::integer`, `$7::appointment_modality` en CTE `hold_conflict` — resuelve inferencia de tipo errónea cuando `bookings` está vacía (`9a38fbb`, `1127937`).
+- fix(admin): reset de datos de prueba 500 — orden de DELETE corregido: `ai_suggestions` (FK a patients) y NULL de `appointments.rescheduled_to` antes de DELETE (`cab4182`).
+- feat(gcal): backfill automático al conectar + limpieza de eventos en Google al desconectar + fix crítico SW Workbox (`navigateFallbackDenylist`) que impedía que el callback OAuth llegara al backend (`82de8b1`–`954a137`).
+
+---
+
 ## 2026-06-24
 
 - feat(gcal): integración Google Calendar completa — OAuth per-profesional (HMAC state, tokens cifrados con `km.SealSecret`), tablas `professional_google_calendar` + `appointment_gcal_events` (migración 000035), sync SGHCP→Google en create/cancel, backfill automático al conectar, limpieza de eventos al desconectar, `GoogleCalendarCard` en Settings. Bug crítico resuelto: service worker Workbox interceptaba la navegación al callback OAuth (`navigateFallbackDenylist: [/^\/api\//]`). Dockerfile Go 1.22→1.25 (`f416010`–`954a137`).
