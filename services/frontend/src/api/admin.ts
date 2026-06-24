@@ -12,6 +12,7 @@ export interface AdminOrg {
 
 export interface SystemHealth {
   disk: { total_gb: number; used_gb: number; free_gb: number; used_pct: number };
+  mem: { total_gb: number; used_gb: number; free_gb: number; used_pct: number };
   db: {
     size_mb: number;
     total_conns: number;
@@ -31,6 +32,15 @@ export interface SystemHealth {
   ai_queue: { pending: number; processing: number; draft_ready: number; error: number };
   uptime_sec: number;
   collected_at: string;
+  alerts: { level: string; code: string; message: string; tip: string }[];
+}
+
+export interface ActionResult {
+  action: string;
+  description: string;
+  output: string;
+  ok: boolean;
+  duration_ms: number;
 }
 
 // Admin-only maintenance. resetClinicalData only exists on the server when
@@ -52,4 +62,7 @@ export const adminApi = {
     ),
 
   systemHealth: () => api.get<SystemHealth>('/admin/system/health'),
+
+  systemAction: (action: string) =>
+    api.post<ActionResult>('/admin/system/actions', { action }),
 };

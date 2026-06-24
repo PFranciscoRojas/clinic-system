@@ -39,6 +39,7 @@ services:
       AUDIO_DIR: /data/audio
     volumes:
       - audio_data:/data/audio
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - sghcp_net
     depends_on:

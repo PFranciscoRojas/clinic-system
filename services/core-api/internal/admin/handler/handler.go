@@ -34,6 +34,7 @@ func (h *Handler) Routes() chi.Router {
 		r.Get("/orgs", h.listOrgs)
 		r.Post("/orgs/{id}/activate", h.activateOrg)
 		r.Get("/system/health", h.systemHealth)
+		r.Post("/system/actions", h.systemAction)
 	})
 
 	// Destructive per-org wipe — exists only during the testing phase.
