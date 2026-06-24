@@ -927,81 +927,53 @@ const NOTE_STYLES = [
 ];
 
 function AISection({ setDirty, saveRef }: { setDirty: (v: boolean) => void; saveRef: React.MutableRefObject<(() => Promise<void>) | null> }) {
-  const tog = (fn: (v: boolean) => void) => (v: boolean) => { fn(v); setDirty(true); };
   const mrk = <T,>(fn: (v: T) => void) => (v: T) => { fn(v); setDirty(true); };
 
-  const [enabled,    setEnabled]    = useState(true);
-  const [autoGen,    setAutoGen]    = useState(true);
-  const [confidence, setConfidence] = useState(85);
   const [style,      setStyle]      = useState('structured');
   const [tone,       setTone]       = useState('formal');
-  const [lang,       setLang]       = useState('es');
-  const [auditLog,   setAuditLog]   = useState(true);
-  const [dataRetain, setDataRetain] = useState('90');
+  const [dataRetain, setDataRetain] = useState('180');
 
-  // Load prefs from backend on mount
   useEffect(() => {
     profilesApi.getAIPrefs()
       .then(r => {
-        if (r.ai_prefs.note_style) setStyle(r.ai_prefs.note_style);
-        if (r.ai_prefs.tone)       setTone(r.ai_prefs.tone);
+        if (r.ai_prefs.note_style)   setStyle(r.ai_prefs.note_style);
+        if (r.ai_prefs.tone)         setTone(r.ai_prefs.tone);
+        if ((r.ai_prefs as any).data_retain) setDataRetain((r.ai_prefs as any).data_retain);
       })
-      .catch(() => {/* profile might not exist yet */});
+      .catch(() => {});
   }, []);
 
-  // Register save function so the global SaveBar can trigger it
   useEffect(() => {
     saveRef.current = async () => {
-      await profilesApi.saveAIPrefs({ note_style: style, tone });
+      await profilesApi.saveAIPrefs({ note_style: style, tone, data_retain: dataRetain } as any);
     };
     return () => { saveRef.current = null; };
-  }, [style, tone, saveRef]);
+  }, [style, tone, dataRetain, saveRef]);
 
   return (
     <>
       <SectionCard title="Asistente IA de redacción" icon={Sparkles} color="#f59e0b">
-        <div style={{ padding: '14px 0', borderBottom: '1px solid var(--s100)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', background: '#fffbeb', borderRadius: 11, border: '1.5px solid #fde68a' }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Sparkles size={20} color="#f59e0b" />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: '#78350f' }}>SGHCP-IA v2.1</div>
-              <div style={{ fontSize: 12, color: '#92400e', marginTop: 2 }}>Genera borradores de nota clínica desde el audio de sesión. Requiere aprobación del profesional.</div>
-            </div>
-            <button
-              onClick={() => { setEnabled((v: boolean) => !v); setDirty(true); }}
-              style={{ width: 44, height: 26, borderRadius: 99, border: 'none', background: enabled ? 'var(--teal)' : 'var(--s200)', position: 'relative', transition: 'background .2s', cursor: 'pointer', flexShrink: 0 }}
-            >
-              <div style={{ position: 'absolute', top: 3, left: enabled ? 21 : 3, width: 20, height: 20, borderRadius: 99, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.2)', transition: 'left .2s' }} />
-            </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 0', borderBottom: '1px solid var(--s100)' }}>
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: '#fffbeb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Sparkles size={20} color="#f59e0b" />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#78350f' }}>SGHCP-IA v2.1 · Activo</div>
+            <div style={{ fontSize: 12, color: '#92400e', marginTop: 2 }}>Genera borradores de nota clínica desde el audio de sesión. El profesional aprueba explícitamente antes de incorporar al registro.</div>
           </div>
         </div>
-        <Toggle value={autoGen} onChange={tog(setAutoGen)} label="Generación automática post-sesión" sub="El borrador se crea en segundo plano al terminar la consulta" disabled={!enabled} />
-        <FieldRow label="Umbral mínimo de confianza" sub="El sistema sólo muestra borradores por encima de este umbral">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, opacity: enabled ? 1 : 0.5 }}>
-            <input
-              type="range" min={50} max={99} value={confidence}
-              onChange={e => { setConfidence(+e.target.value); setDirty(true); }}
-              disabled={!enabled}
-              style={{ flex: 1, accentColor: '#f59e0b' } as React.CSSProperties}
-            />
-            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 14, fontWeight: 700, color: '#f59e0b', minWidth: 40 }}>{confidence}%</span>
-          </div>
-        </FieldRow>
       </SectionCard>
 
       <SectionCard title="Estilo y tono de los borradores" icon={PenLine} color="#f59e0b">
         <FieldRow label="Formato de nota" sub="Cómo estructura el texto la IA">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 7, opacity: enabled ? 1 : 0.5 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
             {NOTE_STYLES.map(opt => {
               const sel = style === opt.id;
               return (
                 <button
                   key={opt.id}
                   onClick={() => { setStyle(opt.id); setDirty(true); }}
-                  disabled={!enabled}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 13px', borderRadius: 9, border: `1.5px solid ${sel ? 'var(--teal)' : 'var(--s200)'}`, background: sel ? 'var(--teal-l)' : '#fff', textAlign: 'left', transition: 'all .12s', cursor: enabled ? 'pointer' : 'not-allowed' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 13px', borderRadius: 9, border: `1.5px solid ${sel ? 'var(--teal)' : 'var(--s200)'}`, background: sel ? 'var(--teal-l)' : '#fff', textAlign: 'left', transition: 'all .12s', cursor: 'pointer' }}
                 >
                   <div style={{ width: 18, height: 18, borderRadius: 99, border: `2px solid ${sel ? 'var(--teal)' : 'var(--s300)'}`, background: sel ? 'var(--teal)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     {sel && <div style={{ width: 7, height: 7, borderRadius: 99, background: '#fff' }} />}
@@ -1022,24 +994,25 @@ function AISection({ setDirty, saveRef }: { setDirty: (v: boolean) => void; save
             <option value="plain">Simple y directo</option>
           </FSelect>
         </FieldRow>
-        <FieldRow label="Idioma de los borradores">
-          <FSelect value={lang} onChange={mrk(setLang)}>
-            <option value="es">Español (Colombia)</option>
-            <option value="es_mx">Español (México)</option>
-            <option value="es_es">Español (España)</option>
-            <option value="en">English</option>
-          </FSelect>
-        </FieldRow>
       </SectionCard>
 
-      <SectionCard title="Privacidad y auditoría IA" icon={ShieldCheck} color="#f59e0b">
-        <Toggle value={auditLog} onChange={tog(setAuditLog)} label="Registro de auditoría IA" sub="Guarda quién revisó y aprobó cada borrador generado" />
-        <FieldRow label="Retención de borradores pendientes" sub="Los borradores no aprobados se eliminan automáticamente">
+      <SectionCard title="Auditoría y retención" icon={ShieldCheck} color="#f59e0b">
+        {/* Audit log is mandatory — Res. 1995/1999 & Ley 1581/2012 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 0', borderBottom: '1px solid var(--s100)' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--s800)' }}>Registro de auditoría IA</div>
+            <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>Queda constancia de quién revisó y aprobó cada borrador. Obligatorio según Res. 1995/1999.</div>
+          </div>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#059669', background: '#d1fae5', borderRadius: 20, padding: '3px 10px', flexShrink: 0 }}>Siempre activo</span>
+        </div>
+        <FieldRow
+          label="Retención de borradores no aprobados"
+          sub="Borradores rechazados o sin revisar. La Res. 1995/1999 exige 15 años para la HC oficial; estos borradores no son HC, pero se recomienda ≥ 6 meses para auditoría interna."
+        >
           <FSelect value={dataRetain} onChange={mrk(setDataRetain)}>
-            <option value="30">30 días</option>
-            <option value="60">60 días</option>
-            <option value="90">90 días</option>
-            <option value="180">6 meses</option>
+            <option value="180">6 meses (mínimo recomendado)</option>
+            <option value="365">1 año</option>
+            <option value="730">2 años</option>
           </FSelect>
         </FieldRow>
       </SectionCard>
