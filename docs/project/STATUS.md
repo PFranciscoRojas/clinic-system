@@ -22,15 +22,15 @@
 
 ### Últimos commits a `main` — todos desplegados
 
-- `ac2c501` feat(clinical,settings): code-debt cleanup — eliminaciones, bloqueo persistente, retención IA — 2026-06-24
-- `03d4c78` docs: actualizar contexto sesión 2026-06-24 — fixes agenda, prefs IA, incidente disco + CI ai-service — 2026-06-24
-- `c213763` ci: actualizar actions a Node.js 24 + git pull en deploy — 2026-06-24
-- `87489b0` chore(infra): reducir imagen ai-service + lifecycle de audio + CI build — 2026-06-24
-- `3e96211` feat(settings): limpiar sección IA — eliminar controles decorativos — 2026-06-24
-- `5dc3b0e` feat(ai): preferencias de IA persistentes por profesional (estilo + tono) — 2026-06-24
+- `68a19ee` docs: registrar Prometheus+Grafana en backlog — 2026-06-24
+- `cc0b1ff` feat(admin): métricas PostgreSQL avanzadas — buffer hit, deadlocks, slow queries, locks — 2026-06-24
+- `109ac43` fix(admin): alerts null → [] cuando no hay alertas activas — 2026-06-24
+- `1c8d478` feat(admin): monitor sistema v2 — alertas, RAM, mantenimiento self-service — 2026-06-24
+- `398bf95` ci: migrar build de core-api a GitHub Actions + ghcr.io — 2026-06-24
+- `74319a6` feat(admin): tablero de monitoreo del sistema para SYSTEM_ADMIN — 2026-06-24
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
-> **Nuevo:** CI/CD GitHub Actions construye y despliega `ai-service` (ghcr.io) en cada push a `services/ai-service/`.
+> **CI/CD:** `core-api` y `ai-service` se construyen en GitHub Actions y se despliegan a ghcr.io. El VPS solo hace `docker pull` — sin builds locales.
 
 ---
 
@@ -72,11 +72,11 @@
 |---|---|
 | `postgres:5432` | ✅ corriendo (recuperado del incidente de disco 2026-06-24) |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción (rebuild 2026-06-24, migración 000037, sweeper retención IA activo) |
-| `ai-service` | ✅ producción — ahora desde `ghcr.io/pfranciscorojas/clinic-system-ai-service:latest` (whisper.tiny + spaCy sm) |
+| `core-api:8080` | ✅ producción — imagen `ghcr.io/pfranciscorojas/clinic-system-core-api:latest` (build en CI) |
+| `ai-service` | ✅ producción — `ghcr.io/pfranciscorojas/clinic-system-ai-service:latest` (whisper.tiny + spaCy sm) |
 | `frontend` (Caddy :80/:443) | ✅ producción |
 | Backups | `pg_dump` cifrado GPG → Backblaze B2 |
-| **Disco** | 88% usado (32/38 GB) — journald capado a 200 MB; crons: `docker prune` semanal + alerta email si >80% |
+| **Disco** | ~40% (15/38 GB) — liberados 21 GB de build cache hoy. Cron semanal: `docker builder prune -af` + `system prune`. Alerta email si >80% |
 
 **Env crítico en VPS:**
 - `MASTER_KEY` — clave maestra de cifrado PII
@@ -96,7 +96,7 @@
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
 | Migrations | `services/core-api/migrations/` | Última: `000037_professional_ai_prefs` |
-| CI/CD | `.github/workflows/build-ai-service.yml` | Build+push ghcr.io + deploy SSH al VPS (secrets: `VPS_HOST`, `VPS_SSH_KEY`, `GHCR_TOKEN`) |
+| CI/CD | `.github/workflows/build-ai-service.yml` + `build-core-api.yml` | Build+push ghcr.io + deploy SSH al VPS (secrets: `VPS_HOST`, `VPS_SSH_KEY`, `GHCR_TOKEN`) |
 | Claude skills | `~/.claude/commands/` | Sincronizadas 2026-06-24 |
 
 ---

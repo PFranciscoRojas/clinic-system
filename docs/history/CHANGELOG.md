@@ -13,6 +13,13 @@
 
 ---
 
+## 2026-06-24 (sesión 3)
+
+- feat(admin): tablero de monitoreo del sistema para SYSTEM_ADMIN (`74319a6`–`cc0b1ff`) — nueva pestaña "Sistema" en SuperAdminPage con: disco+RAM (barra de color verde/amarillo/rojo), BD (tamaño, pool, top tablas), PostgreSQL avanzado (buffer hit %, deadlocks, commits, rollbacks, slow queries, locks en espera), Redis (ping, memoria), Tenants (badges por estado), Cola IA; alertas server-side con recomendaciones de upgrade y botón "¿qué hago?"; panel Mantenimiento con 3 acciones Docker seguras (builder_prune, image_prune, system_prune) ejecutables desde la UI con confirmación y output en tiempo real; tooltips en cada métrica; refresh automático cada 10s con countdown.
+- ci: migrar build de `core-api` a GitHub Actions (`398bf95`) — el VPS ya no compila Go localmente; Dockerfile añade `docker-cli`; docker-compose usa `image: ghcr.io/...`. Libera ~25 GB de build cache acumulado (disco 100%→40%). Cron semanal actualizado a `docker builder prune -af`.
+- fix(admin): slice nil → JSON null en alertas vacías (`109ac43`).
+- decisión arquitectura: confirmado multi-tenant compartido (no VPS por cliente). Prometheus+Grafana diferido al backlog para cuando haya clientes reales pagando.
+
 ## 2026-06-24 (sesión 2)
 
 - chore(debt): limpieza de code-debt completa (`ac2c501`) — eliminado módulo Evaluaciones (852 líneas, sin backend y sin planes de implementación), eliminado StubPage muerto, quitado formato "Con viñetas" de la UI de IA (solo structured/narrative soportados). Bloqueo de pantalla ahora persiste config real por usuario en localStorage (`sghcp_lock_enabled/minutes_${userId}`) vía nuevo `lib/screenLock.ts`; AppShell reacciona sin reload via custom event `sghcp-lock-config`. Nuevo sweeper `internal/aidrafts/retention` en core-api: goroutine que cada 6 h borra `ai_drafts` no aprobados según `ai_prefs.data_retain` del profesional (default 180 días). Desplegado: core-api rebuild + frontend rebuild en VPS.
