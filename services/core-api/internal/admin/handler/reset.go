@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"sghcp/core-api/internal/shared/dbctx"
@@ -45,6 +46,7 @@ func (h *Handler) resetClinicalData(w http.ResponseWriter, r *http.Request) {
 
 	deleted, err := h.wipeOrg(r.Context(), claims.OrganizationID)
 	if err != nil {
+		slog.Default().Error("admin: reset-clinical-data failed", "org_id", claims.OrganizationID, "err", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "no se pudo limpiar los datos")
 		return
 	}
@@ -99,6 +101,7 @@ func (h *Handler) wipeOrg(ctx context.Context, orgID string) (map[string]int64, 
 		{"patient_assessments", `DELETE FROM patient_assessments WHERE organization_id = $1`},
 		{"patient_diagnoses", `DELETE FROM patient_diagnoses WHERE patient_id IN (SELECT id FROM patients WHERE organization_id = $1)`},
 		{"ai_drafts", `DELETE FROM ai_drafts WHERE organization_id = $1`},
+		{"ai_suggestions", `DELETE FROM ai_suggestions WHERE patient_id IN (SELECT id FROM patients WHERE organization_id = $1)`},
 		{"consent_sign_tokens", `DELETE FROM consent_sign_tokens WHERE patient_id IN (SELECT id FROM patients WHERE organization_id = $1)`},
 		{"consents", `DELETE FROM consents WHERE organization_id = $1`},
 		{"patient_staff_rel", `DELETE FROM patient_staff_rel WHERE patient_id IN (SELECT id FROM patients WHERE organization_id = $1)`},
@@ -108,6 +111,8 @@ func (h *Handler) wipeOrg(ctx context.Context, orgID string) (map[string]int64, 
 		{"payments", `DELETE FROM payments p USING invoices i WHERE p.invoice_id = i.id AND i.organization_id = $1`},
 		{"invoices", `DELETE FROM invoices WHERE organization_id = $1`},
 		{"bookings", `DELETE FROM bookings WHERE organization_id = $1`},
+		// Null out the self-referential rescheduled_to before deleting appointments.
+		{"appointments_unlink", `UPDATE appointments SET rescheduled_to = NULL WHERE organization_id = $1`},
 		{"appointments", `DELETE FROM appointments WHERE organization_id = $1`},
 		{"patients", `DELETE FROM patients WHERE organization_id = $1`},
 	}
