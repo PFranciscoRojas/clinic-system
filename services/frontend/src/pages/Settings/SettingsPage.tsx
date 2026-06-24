@@ -525,6 +525,7 @@ function GoogleCalendarCard() {
   const [connected, setConnected] = useState(false);
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [msg, setMsg] = useState('');
 
   useEffect(() => {
@@ -533,12 +534,20 @@ function GoogleCalendarCard() {
       setEmail(s.google_email ?? '');
     }).catch(() => {});
 
-    // Show result toast after OAuth redirect
     const params = new URLSearchParams(window.location.search);
     const result = params.get('google');
     if (result === 'connected') {
-      setMsg('Google Calendar conectado correctamente.');
       window.history.replaceState({}, '', window.location.pathname);
+      // Auto-sync existing appointments right after connecting
+      setSyncing(true);
+      gcalApi.sync()
+        .then(r => {
+          setMsg(r.queued > 0
+            ? `Conectado. Sincronizando ${r.queued} cita${r.queued !== 1 ? 's' : ''} en Google Calendar…`
+            : 'Google Calendar conectado correctamente.');
+        })
+        .catch(() => setMsg('Google Calendar conectado.'))
+        .finally(() => setSyncing(false));
     } else if (result === 'error') {
       setMsg('No se pudo conectar con Google. Intenta de nuevo.');
       window.history.replaceState({}, '', window.location.pathname);
@@ -562,7 +571,7 @@ function GoogleCalendarCard() {
       await gcalApi.disconnect();
       setConnected(false);
       setEmail('');
-      setMsg('Google Calendar desconectado.');
+      setMsg('Google Calendar desconectado y eventos eliminados.');
     } catch {
       setMsg('Error al desconectar.');
     } finally {
@@ -574,39 +583,23 @@ function GoogleCalendarCard() {
     <SectionCard title="Google Calendar" icon={Calendar} color="#4285f4">
       <div style={{ padding: '14px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {msg && (
-          <p style={{ margin: 0, fontSize: 13, color: msg.includes('correctamente') || msg.includes('desconectado') ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
+          <p style={{ margin: 0, fontSize: 13, color: msg.includes('Error') || msg.includes('pudo') ? '#dc2626' : '#16a34a', fontWeight: 600 }}>
             {msg}
           </p>
         )}
         {connected ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <span style={{ fontSize: 13, color: '#16a34a', fontWeight: 600 }}>
-              ✓ Conectado como <strong>{email || 'cuenta Google'}</strong>
+              {syncing ? '⏳ Sincronizando citas…' : `✓ Conectado como `}
+              {!syncing && <strong>{email || 'cuenta Google'}</strong>}
             </span>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button
-                onClick={async () => {
-                  setBusy(true);
-                  try {
-                    const r = await gcalApi.sync();
-                    setMsg(`Sincronizando ${r.queued} cita${r.queued !== 1 ? 's' : ''} en segundo plano…`);
-                  } catch {
-                    setMsg('Error al sincronizar.');
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-                disabled={busy}
-                style={{ padding: '7px 14px', background: '#4285f4', color: '#fff', border: 'none', borderRadius: 8, cursor: busy ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}
-              >
-                {busy ? 'Sincronizando…' : 'Sincronizar citas existentes'}
-              </button>
-              <button
                 onClick={handleDisconnect}
-                disabled={busy}
-                style={{ padding: '7px 14px', background: '#fff', color: '#dc2626', border: '1.5px solid #fecaca', borderRadius: 8, cursor: busy ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}
+                disabled={busy || syncing}
+                style={{ padding: '7px 14px', background: '#fff', color: '#dc2626', border: '1.5px solid #fecaca', borderRadius: 8, cursor: (busy || syncing) ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}
               >
-                Desconectar
+                {busy ? 'Desconectando…' : 'Desconectar'}
               </button>
             </div>
           </div>

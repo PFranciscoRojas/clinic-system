@@ -183,7 +183,45 @@ func (s *Syncer) loadRefreshToken(ctx context.Context, userID string) (calendarI
 	return calID, &oauth2.Token{RefreshToken: string(plain)}, nil
 }
 
+// DeleteConnection removes all synced Google Calendar events for the user and then
+// deletes the stored connection. Errors deleting individual events are logged but
+// do not abort the disconnect — the local connection is always removed.
 func (s *Syncer) DeleteConnection(ctx context.Context, userID string) error {
+	if s.Enabled() {
+		if _, token, err := s.loadRefreshToken(ctx, userID); err == nil && token != nil {
+			rows, err := s.pool.Query(ctx, `
+				SELECT event_id FROM appointment_gcal_events WHERE staff_id = $1
+			`, userID)
+			if err == nil {
+				var eventIDs []string
+				for rows.Next() {
+					var id string
+					if rows.Scan(&id) == nil {
+						eventIDs = append(eventIDs, id)
+					}
+				}
+				rows.Close()
+
+				if len(eventIDs) > 0 {
+					conn, _ := s.GetConnection(ctx, userID)
+					calID := conn.CalendarID
+					if calID == "" {
+						calID = "primary"
+					}
+					svc, err := gcalapi.NewService(ctx, option.WithTokenSource(s.cfg.TokenSource(ctx, token)))
+					if err == nil {
+						for _, eid := range eventIDs {
+							if err := svc.Events.Delete(calID, eid).Do(); err != nil {
+								s.logger.Warn("gcal: disconnect cleanup event", "event_id", eid, "err", err)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	s.pool.Exec(ctx, `DELETE FROM appointment_gcal_events WHERE staff_id = $1`, userID) //nolint:errcheck
 	_, err := s.pool.Exec(ctx, `DELETE FROM professional_google_calendar WHERE user_id = $1`, userID)
 	return err
 }
