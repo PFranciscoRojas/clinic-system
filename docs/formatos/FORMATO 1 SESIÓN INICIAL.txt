@@ -1,0 +1,126 @@
+HISTORIA CLÍNICA PSICOLÓGICA INICIAL
+
+Número de HC: ___________ 
+Fecha de Apertura: DD/MM/AAAA
+
+I. DATOS DE IDENTIFICACIÓN
+Nombre Completo: __________________________________________________________________
+Documento de Identidad: _______________________ Edad: ______ Fecha de Nac: DD/MM/AAAA
+Estado Civil: ____________________ Escolaridad: ___________________________
+Ocupación Actual: ___________________________ Teléfono: ____________________________
+Contacto de Emergencia (Nombre / Parentesco / Teléfono): ____________________________
+¿Cuenta con Consentimiento Informado firmado y archivado?:  [ ] SÍ   [ ] NO
+
+II. MOTIVO DE CONSULTA
+• Reporte Textual (Lo que refiere el consultante):
+"___________________________________________________________________________________"
+
+• Análisis Clínico del Motivo de Consulta:
+¿Cuál es el problema principal actual? 
+¿Frecuencia, intensidad y duración de los síntomas? 
+¿Qué factores lo detonan o lo mitigan? 
+¿Cómo afecta sus áreas de ajuste?)
+____________________________________________________________________________________
+____________________________________________________________________________________
+ 
+• Nivel de malestar subjetivo actual (Escala 1 al 10): _____
+
+III. HISTORIA DE VIDA Y CONTEXTO
+
+1. Historia Familiar y Dinámica de Crianza:
+(Preguntas guía: ¿Cómo fue la relación con sus padres/cuidadores en la infancia? 
+¿Qué estilo de crianza predominó? 
+¿Existen eventos traumáticos, pérdidas significativas o violencia intrafamiliar?)
+____________________________________________________________________________________
+
+2. Historia Académica y Laboral:
+(Preguntas guía: ¿Cómo ha sido su rendimiento y adaptación escolar/universitaria? 
+¿Cómo es su estabilidad laboral actual? 
+¿Tiene dificultades con figuras de autoridad o compañeros?)
+____________________________________________________________________________________
+
+3. Historia Relacional, Social y Red de Apoyo:
+(Preguntas guía: ¿Cómo son sus relaciones interpersonales actuales? 
+¿Tiene amigos cercanos o personas en quienes confiar? 
+¿Cómo han sido sus relaciones de pareja pasadas y presente?)
+____________________________________________________________________________________
+
+IV. ANTECEDENTES RELEVANTES (Marcar con X)
+- Médicos / Orgánicos: ___________________________________________________________
+- Psicológicos previos: _____________________________________________
+- Psiquiátricos previos: _____________________________________________
+- Farmacológicos (Medicamentos y dosis actuales): ____________________________________
+- Consumo de SPA: Si[ ] No  [ ] 
+  [ ]Alcohol Frecuencia: _________ 
+  [ ] Tabaco  Frecuencia: _________
+  [ ] Otras Sustancias Cuál:_______ Frecuencia: _________
+- Antecedentes Familiares en Salud Mental: 
+  [ ] Ansiedad 
+  [ ] Depresión 
+  [ ] Suicidio 
+  [ ] Psicosis
+
+V. FORMULACIÓN CLÍNICA MACRO (Modelo de los 5 Factores)
+(Marcar con X las opciones que apliquen según la historia recolectada).
+
+1. PREDISPOSICIÓN (Vulnerabilidades previas)
+   [ ] Antecedentes familiares de salud mental     [ ] Estilo parental sobreprotector
+   [ ] Estilo parental autoritario / rígido        [ ] Negligencia, abusos o abandono temprano
+   [ ] Rasgo: Alta evitación al daño / Temor       [ ] Rasgo: Perfeccionismo / Rigidez
+   [ ] Rasgo: Dependencia afectiva / Inseguridad   [ ] Enfermedad médica o crónica previa
+   • Notas específicas: _____________________________________________________________
+
+2. ADQUISICIÓN (Origen o aprendizaje inicial del problema)
+   • Época de inicio: 
+     [ ] Infancia
+     [ ] Adolescencia
+     [ ] Adultez temprana
+     [ ] Evento reciente
+   • Vía de aprendizaje:
+     [ ] Condicionamiento directo (Vivió una experiencia altamente estresante o traumática)
+     [ ] Aprendizaje vicario (Lo observó en sus padres, cuidadores o entorno cercano)
+     [ ] Transmisión de información (Reglas verbales inculcadas: "el mundo es peligroso")
+   • Notas específicas: _____________________________________________________________
+
+3. DESENCADENANTES (Estresores precipitantes recientes)
+   [ ] Ruptura de pareja / Divorcio                [ ] Duelo / Muerte de un ser querido
+   [ ] Conflictos familiares inmediatos            [ ] Mudanza / Cambio de ciudad o entorno
+   [ ] Cambio de ciclo vital (Graduación, vejez)   [ ] Despido / Desempleo / Crisis económica
+   [ ] Aumento drástico de carga laboral / Estrés  [ ] Enfermedad o accidente reciente
+   • Notas específicas: _____________________________________________________________
+
+4. MANTENIMIENTO (Factores que perpetúan el problema hoy)
+   [ ] Evitación / Escape (El paciente huye de lo que le genera malestar)
+   [ ] Ganancia secundaria (Recibe atención, cuidado o evita responsabilidades por el síntoma)
+   [ ] Déficit de habilidades (Falta de asertividad, mala resolución de conflictos)
+   [ ] Entorno invalidante o permisivo (La familia o pareja refuerza o sostiene la queja)
+   [ ] Ambiente laboral o académico hostil activo
+   • Notas específicas: _____________________________________________________________
+
+5. PROTECCIÓN (Recursos y fortalezas a favor)
+   [ ] Alta capacidad de introspección (Insight)   
+   [ ] Alta motivación manifiesta al cambio
+   [ ] Adherencia, disciplina y puntualidad         
+   [ ] Red de apoyo familiar / pareja activa
+   [ ] Estabilidad económica    
+   [ ] Estilo de vida saludable (ej. ejercicio)
+   • Notas específicas: _____________________________________________________________
+
+VI. EXAMEN MENTAL EN CONSULTA (Marcar con X los hallazgos observados)
+
+• Porte y Actitud:  [ ] Adecuado  [ ] Colaborador  [ ] Ansioso  [ ] Hostil  [ ] Inhibido
+• Orientación:      [ ] Orientado globalmente  [ ] Desorientado en: [ ] Tiempo [ ] Espacio [ ] Persona
+• Afecto:           [ ] Eutímico (Estable) [ ] Depresivo [ ] Ansioso [ ] Irritable [ ] Aplanado
+• Pensamiento:      [ ] Lógico/Coherente   [ ] Ideas de minusvalía [ ] Ideas obsesivas [ ] Ideas delirantes
+• Percepción:       [ ] Sin alteraciones   [ ] Alucinaciones (especificar): ____________________
+• Indicadores de Riesgo:
+  Ideación Suicida: [ ] Ausente  [ ] Pasiva (deseos de morir)  [ ] Activa con plan estructurado
+  Antecedente de intento previo: [ ] SÍ   [ ] NO
+
+VII. IMPRESIÓN DIAGNÓSTICA O HIPÓTESIS CLÍNICA PROVISIONAL
+(Basado en criterios DSM-5/CIE-11 o análisis funcional: conductas problema, antecedentes y consecuentes).
+____________________________________________________________________________________
+
+__________________________________________
+
+Firma del Profesional e Registro/Tarjeta Profesional

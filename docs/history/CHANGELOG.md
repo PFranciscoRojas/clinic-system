@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-06-24
+
+- feat(gcal): integración Google Calendar completa — OAuth per-profesional (HMAC state, tokens cifrados con `km.SealSecret`), tablas `professional_google_calendar` + `appointment_gcal_events` (migración 000035), sync SGHCP→Google en create/cancel, backfill automático al conectar, limpieza de eventos al desconectar, `GoogleCalendarCard` en Settings. Bug crítico resuelto: service worker Workbox interceptaba la navegación al callback OAuth (`navigateFallbackDenylist: [/^\/api\//]`). Dockerfile Go 1.22→1.25 (`f416010`–`954a137`).
+- feat(booking): email a admins al apartar reserva diferida (`BookingDeferredAdmin`) + guard anti doble-booking en `confirm()` con estado `PAID_CONFLICT` y notificación de conflicto a admins (`e44b008`).
+- feat(agenda): recordatorios WhatsApp 24h/2h + confirmación al reservar via Meta Cloud API; 3 plantillas HSM en revisión con Meta (`ae34b68`).
+- feat(recording): grabación de sesión sobrevive F5 — IndexedDB store `recordingStore.ts` (DB `sghcp_recordings`), chunks por appointmentId, banner de recuperación al remontarse, `beforeunload` guard.
+- fix(admin): reset de datos de prueba fallaba 500 por FK de `ai_suggestions→patients` (no estaba en delete order) y `appointments.rescheduled_to` auto-referencial; ambos corregidos (`cab4182`).
+
 ## 2026-06-23
 
 - feat(patients): exportar lista completa a CSV — GET /patients/export.csv (UTF-8 + BOM, columnas: Nº HC, apellidos, nombres, doc., teléfono, correo, fecha nacimiento, género, fecha apertura); botón "Exportar CSV" en barra superior de PatientsPage; descarga via fetch+blob con JWT (`adfe153`).

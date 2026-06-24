@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-06-23)
+## Estado actual (2026-06-24)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -17,14 +17,20 @@
 | Ola Booking | ✅ producción | `/book/:slug` público, tarjeta/PSE/Efecty, diferidos, emails, agenda integrada |
 | Ola 3 — IA | ✅ producción | Recap pre-sesión, borrador SOAP, plan TCC, detección de riesgo — activo en VPS |
 | BC-6 Facturación | ✅ producción | Tarjeta/PSE/Efecty/Nequi, semana/mes/3meses/año, balance-por-paciente |
+| Ola Notificaciones | ✅ producción | Email diferido/conflicto a admins, WhatsApp templates (en revisión Meta) |
+| Ola Integraciones | ✅ producción | Google Calendar OAuth per-profesional, sync SGHCP→Google, grabación con IndexedDB |
 
 ### Últimos commits a `main` — todos desplegados
 
-- `adfe153` feat(patients): exportar lista completa a CSV — botón en PatientsPage, endpoint GET /patients/export.csv — 2026-06-23
-- `a9048ab` feat(auth): cambiar correo admin + gestión de roles del equipo — 2026-06-23
-- `8891f0c` fix(billing): comprobante PDF muestra F-number en vez de UUID — 2026-06-23
-- `1de3a0a` fix(admin): "limpiar datos" incluye invoices/payments/bookings (FK cascade) — 2026-06-23
-- `52c9efb` feat(billing): tabla unificada facturas+reservas con sort por columna — 2026-06-23
+- `cab4182` fix(admin): limpiar ai_suggestions y auto-FK antes de borrar pacientes/citas — 2026-06-24
+- `954a137` feat(gcal): sync automático al conectar + limpieza al desconectar — 2026-06-24
+- `8299a76` fix(gcal): excluir /api/* del navigateFallback del service worker — 2026-06-24
+- `45426b6` chore(gcal): debug logging en OAuth callback — 2026-06-24
+- `82de8b1` feat(gcal): backfill de citas existentes al conectar — 2026-06-24
+- `915305a` chore(core-api): upgrade Dockerfile Go 1.22→1.25-alpine — 2026-06-24
+- `f416010` feat(gcal): integración Google Calendar — OAuth per-profesional + sync — 2026-06-24
+- `e44b008` fix(booking): notificar admins en reserva diferida y evitar doble-booking — 2026-06-24
+- `ae34b68` feat(agenda): recordatorios y confirmación por WhatsApp (Meta Cloud API) — 2026-06-24
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 
@@ -35,6 +41,7 @@
 | ID | Descripción | Estado |
 |---|---|---|
 | **MP webhook** | `MP_WEBHOOK_ENFORCE=false` en VPS — secreto mal configurado; hacer un pago real y capturar log de firma para corregir y volver a `true` | 🔴 pendiente |
+| **WhatsApp templates** | 3 plantillas `recordatorio_cita_24h`, `recordatorio_cita_2h`, `cita_confirmada` en revisión con Meta. Una vez aprobadas, configurar en Ajustes → Notificaciones con Phone Number ID `1138431989358649`. Necesita System User token permanente (el temporal caduca en 24h) | 🟡 en revisión Meta |
 
 ---
 
@@ -42,9 +49,9 @@
 
 | Versión | Hito |
 |---|---|
-| `1.0.0` | Go-live real: token MP producción, precio real, `ALLOW_DATA_RESET=false` |
-| post-1.0 | Google Calendar OAuth + sync |
-| post-1.0 | Recordatorios WhatsApp (Meta API / Twilio) |
+| `1.0.0` | Go-live real: token MP producción, precio real, `ALLOW_DATA_RESET=false`, `MP_WEBHOOK_ENFORCE=true` |
+| post-1.0 | Google Calendar bidireccional (Google→SGHCP): webhooks de push, sync_token, reconciliación |
+| post-1.0 | Google Calendar: verificación de app con Google para >100 usuarios (actualmente testing mode) |
 | post-1.0 | Videollamada / Zoom nativa |
 | post-1.0 | RIPS/ADRES export |
 | post-1.0 | PHQ-9 y escalas de evaluación clínica integradas |
@@ -53,7 +60,7 @@
 
 ## Punto de integración — Booking público
 
-- Ruta pública: `GET /book/:org_slug` → React booking page → `POST /appointments` (status `PENDING_PAYMENT`)
+- Ruta pública: `GET /book/:slug` → React booking page → `POST /appointments` (status `PENDING_PAYMENT`)
 - MP webhook → `PAID` → status `SCHEDULED` → email 24h/2h
 - Cita puede ser guest (sin paciente) o ligada a paciente registrado
 - Asignación de paciente: `POST /appointments/:id/patient` (desde `NewPatientPage?appointment_id=`)
@@ -67,7 +74,7 @@
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción (rebuild 2026-06-23 ×4, migración 000033 aplicada) |
+| `core-api:8080` | ✅ producción (rebuild 2026-06-24, migración 000035 aplicada) |
 | `ai-service` | ✅ producción (`Dockerfile.patch` rebuild #79) |
 | `frontend` (Caddy :80/:443) | ✅ producción |
 | Backups | `pg_dump` cifrado GPG → Backblaze B2 |
@@ -76,6 +83,7 @@
 - `MASTER_KEY` — clave maestra de cifrado PII
 - `MP_ACCESS_TOKEN` — MercadoPago producción (actualmente token de prueba)
 - `MP_WEBHOOK_SECRET` — ✅ configurado y obligatorio (B-11 cerrado 2026-06-22)
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google Calendar OAuth (añadidos 2026-06-24)
 - `ALLOW_DATA_RESET=true` → cambiar a `false` en go-live (1.0.0)
 - Demo: `admin@demo.clinica.co` / `Admin1234!` · tenant ID `005e349d2fbc5d30000000003`
 
@@ -85,11 +93,11 @@
 
 | Componente | Path | Estado |
 |---|---|---|
-| `core-api` | `services/core-api/` | ✅ Go 1.21, prod |
+| `core-api` | `services/core-api/` | ✅ Go 1.25, prod |
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
-| Migrations | `services/core-api/migrations/` | Última: `000033_booking_voucher` |
-| Claude skills | `~/.claude/commands/` | Sincronizadas en sesión 2026-06-22 (sin cambios hoy) |
+| Migrations | `services/core-api/migrations/` | Última: `000035_professional_google_calendar` |
+| Claude skills | `~/.claude/commands/` | Sincronizadas 2026-06-24 |
 
 ---
 
