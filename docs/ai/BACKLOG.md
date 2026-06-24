@@ -1,5 +1,10 @@
 # Ideas y Tareas Futuras (No procesar aún)
 
+## Gobernanza clínica / Control de acceso
+- **Visor de accesos break-the-glass en Settings (2026-06-24)** — C.3 del plan de sesión 6 diferida (el registro en audit_log ya funciona, lo urgente es el audit trail). Backend necesario: `GET /audit/clinical-access` → últimas N entradas con `action IN ('CLINICAL_RECORD_READ','CLINICAL_RECORD_LIST')` y `metadata.reason IS NOT NULL`, gated por `audit_log:read`. Frontend: tarjeta en Settings → Auditoría mostrando quién, qué HC, cuándo y con qué motivo (CLINIC_ADMIN accedió).
+- **Re-aceptación forzada al publicar versión legal nueva (2026-06-24)** — El usuario eligió "solo registrar versión". Si alguna vez se requiere re-aceptación (cambio material en ToS/DPA): limpiar `terms_accepted_at` / `dpa_accepted_at` para usuarios activos + mostrar modal bloqueante al siguiente login. Considerar notificación por email con 10 días de antelación (Ley 1480, art. 53).
+- **Pseudoanonimización de datos de contacto de pacientes (2026-06-24)** — Si un paciente con historia clínica ejerce derecho de supresión (Ley 1581): no se puede borrar la HC (Res. 1995/1999, 15 años), pero sí se pueden blanquear nombre, DNI, teléfono, correo (campos `_enc` + hash SHA-256 reemplazados por valor neutro). Complejidad: requiere re-cifrar los blobs + invalidar el hash de búsqueda. Implementar como "Anonimizar datos de contacto" con justificación y trazabilidad de quién y cuándo.
+
 ## Legal / Cumplimiento (Colombia)
 - **Validación por abogado de ToS y Política de Privacidad (2026-06-24)** — Los documentos publicados en `/legal/terminos` y `/legal/privacidad` son borradores funcionales redactados como base. Antes del primer cliente pagando real, revisar con un abogado colombiano especializado en derecho digital/protección de datos. Costo estimado: COP $500k–$1.5M para revisión y firma.
 - **Registro SIC (RNBD) (2026-06-24)** — Verificar el estado actual del Registro Nacional de Bases de Datos ante la SIC (actualizado en 2022). Aplica cuando haya tracción real (5+ clientes pagando).

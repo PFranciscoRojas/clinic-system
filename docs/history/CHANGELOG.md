@@ -13,6 +13,10 @@
 
 ---
 
+## 2026-06-24 (sesión 6)
+
+- feat(governance): gobernanza de acceso y CMS legal — 4 partes en un commit (`ccae867`). (A) Usuario desactivado recibe 403 con mensaje en español al login; la verificación de inactividad ocurre DESPUÉS del bcrypt (no filtra existencia de cuenta). (B) Eliminación de miembro del equipo requiere tipear el email exacto (`ConfirmByTextModal`); usuarios inactivos muestran badge + selector de rol + botón "Reincorporar" tanto en Settings como en SuperAdmin. (C) Migración 000039 quita permisos de escritura clínica a CLINIC_ADMIN (solo-lectura pura); break-the-glass: admin sin perfil profesional debe justificar acceso a HC via `X-Access-Reason` header — razón queda en `audit_log.metadata` + `user_roles_snapshot` (Ley 23/1981, Res. 1995/1999); `BreakGlassModal` en `PatientProfilePage` y `ClinicalRecordPage`. (D) Tabla `legal_documents` (migración 000040, seed Markdown con versión 2026-06-24); API pública `GET /api/v1/legal/documents/{type}` + `PUT /api/v1/admin/legal/{type}` (SYSTEM_ADMIN); `TermsPage`/`PrivacyPage`/DPA modal leen desde BD; componente `Markdown.tsx` (~50 líneas, sin dependencia); editor con preview en pestaña "Legal" de SuperAdminPage. Desplegado: migraciones 000039+000040 aplicadas, core-api rebuild, frontend rebuild.
+
 ## 2026-06-24 (sesión 5)
 
 - feat(legal): cumplimiento go-live Colombia (`666ba06`) — páginas públicas `/legal/terminos` y `/legal/privacidad` (borradores Ley 1481/Ley 1580, contenido en español versionado como `LEGAL_VERSION`); checkbox de aceptación obligatorio en `/signup` con links a ambas páginas; migración 000038 añade `terms_accepted_at`, `terms_version`, `dpa_accepted_at` a `users`; backend valida `accepted_terms=true` y persiste `terms_version` como audit trail; nuevo endpoint `POST /auth/accept-dpa`; `/auth/me` expone `dpa_accepted`; modal DPA bloqueante en AppShell para CLINIC_ADMIN/PROFESSIONAL sin aceptación previa (Contrato Encargado-Responsable Ley 1581); banner IA reforzado en `AIDraftPage` con texto de responsabilidad clínica (Ley 23/1981). Desplegado: migración aplicada en VPS, core-api pull, frontend rebuild.
