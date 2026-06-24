@@ -3,7 +3,8 @@
 ## Infraestructura / DevOps (pre go-live o post-1.0)
 - **Proteger rama `main` en GitHub** — antes o al llegar a 1.0.0: activar branch protection (require PR + 1 approval, no direct push, no force-push). Complementar con pipeline CI (GitHub Actions) que corra `go build ./...` + `tsc --noEmit` en cada PR antes de permitir merge. Hoy el flujo manual funciona pero no escala ni protege ante errores de madrugada.
 - **Disco VPS — Capa 2 (2026-06-24)** — Deferred (el usuario prefiere no aumentar el plan por ahora, no es producción real). Si el disco vuelve a apretar: añadir Hetzner Volume de 50 GB (~€2.5/mes) y mover el volumen `audio_data` ahí. Capa 1 (crons de limpieza + alerta email >80%) y Capa 3 (imagen ai-service a ghcr.io, whisper.tiny + spaCy sm, borrado de audio post-transcripción) ya implementadas.
-- **Migrar más servicios a build CI (2026-06-24)** — `ai-service` ya se construye en GitHub Actions y se despliega a ghcr.io. Considerar lo mismo para `core-api` (hoy `docker compose up --build` en el VPS) si el build local vuelve a llenar disco.
+- **Migrar más servicios a build CI (2026-06-24)** — ✅ `core-api` y `ai-service` ya se construyen en GitHub Actions. El VPS solo hace `docker pull`.
+- **Prometheus + Grafana (cuando haya clientes reales pagando)** — añadir 2 contenedores al VPS: `prometheus` + `grafana` + `postgres_exporter`. Da gráficas de series de tiempo (conexiones, latencia, IOPS, etc.) con historial de días/semanas. ~300 MB RAM adicional. Diferir hasta tener carga real que justifique el overhead operativo.
 
 ## Code-debt — features mockeadas sin backend (auditoría 2026-06-24)
 - **Evaluaciones psicométricas (ALTO)** — módulo eliminado completamente (decisión producto 2026-06-24: no se implementa por ahora). Cuando se retome: tabla `patient_evaluations` (cifrada), endpoints BC-5, persistir score+band+respuestas, listar histórico en perfil de paciente. Roadmap post-1.0 "PHQ-9 y escalas".
