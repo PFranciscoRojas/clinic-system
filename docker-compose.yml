@@ -20,9 +20,7 @@ services:
         condition: service_started
 
   core-api:
-    build:
-      context: ./services/core-api
-      dockerfile: Dockerfile
+    image: ghcr.io/pfranciscorojas/clinic-system-core-api:latest
     container_name: sghcp_core_api
     restart: unless-stopped
     # Not published to the host — Caddy reaches it via the internal network
