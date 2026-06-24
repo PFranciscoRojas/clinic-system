@@ -30,6 +30,10 @@ var authErrors = httputil.ErrorMapper(func(err error) (int, string) {
 		return http.StatusBadRequest, "el enlace es inválido o expiró"
 	case errors.Is(err, auth.ErrSelfRoleChange):
 		return http.StatusForbidden, "no puedes cambiar tu propio rol"
+	case errors.Is(err, auth.ErrSelfDeactivate):
+		return http.StatusForbidden, "no puedes desactivar tu propia cuenta"
+	case errors.Is(err, auth.ErrLastAdmin):
+		return http.StatusConflict, "no puedes eliminar al único administrador de la organización"
 	default:
 		return 0, ""
 	}

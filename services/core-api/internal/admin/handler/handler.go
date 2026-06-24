@@ -36,6 +36,8 @@ func (h *Handler) Routes() chi.Router {
 		r.Post("/orgs/{id}/suspend", h.suspendOrg)
 		r.Post("/orgs/{id}/cancel", h.cancelOrg)
 		r.Post("/orgs/{id}/extend-trial", h.extendTrial)
+		r.Get("/orgs/{id}/users", h.listOrgUsers)
+		r.Delete("/orgs/{id}/users/{user_id}", h.removeOrgUser)
 		r.Get("/system/health", h.systemHealth)
 		r.Post("/system/actions", h.systemAction)
 	})

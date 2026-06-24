@@ -1426,6 +1426,7 @@ function TeamCard({ selfId }: { selfId: string }) {
   });
   const users = data?.items ?? [];
   const [rowErr, setRowErr] = useState<Record<string, string>>({});
+  const [removing, setRemoving] = useState<string | null>(null);
 
   const changeRole = async (userId: string, roleName: string) => {
     setRowErr(e => ({ ...e, [userId]: '' }));
@@ -1434,6 +1435,21 @@ function TeamCard({ selfId }: { selfId: string }) {
       qc.invalidateQueries({ queryKey: ['org-users'] });
     } catch (ex) {
       setRowErr(e => ({ ...e, [userId]: ex instanceof Error ? ex.message : 'Error al cambiar rol' }));
+    }
+  };
+
+  const handleRemove = async (u: { id: string; display_name: string | null; email: string }) => {
+    const name = u.display_name || u.email;
+    if (!window.confirm(`¿Eliminar a "${name}" del equipo?\n\nSu historial clínico se conserva pero no podrá volver a iniciar sesión.`)) return;
+    setRemoving(u.id);
+    setRowErr(e => ({ ...e, [u.id]: '' }));
+    try {
+      await authApi.deactivateUser(u.id);
+      qc.invalidateQueries({ queryKey: ['org-users'] });
+    } catch (ex) {
+      setRowErr(e => ({ ...e, [u.id]: ex instanceof Error ? ex.message : 'Error al eliminar' }));
+    } finally {
+      setRemoving(null);
     }
   };
 
@@ -1465,6 +1481,15 @@ function TeamCard({ selfId }: { selfId: string }) {
                   style={{ padding: '5px 8px', borderRadius: 7, border: '1.5px solid var(--s200)', fontSize: 12.5, color: 'var(--s700)', cursor: isSelf ? 'not-allowed' : 'pointer', background: isSelf ? 'var(--s100)' : '#fff' }}>
                   {ASSIGNABLE_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                 </select>
+                {!isSelf && (
+                  <button
+                    onClick={() => handleRemove(u)}
+                    disabled={removing === u.id}
+                    title="Eliminar del equipo"
+                    style={{ border: 'none', background: 'transparent', color: removing === u.id ? 'var(--s300)' : '#dc2626', cursor: removing === u.id ? 'wait' : 'pointer', padding: '4px 6px', borderRadius: 6, fontSize: 15, lineHeight: 1 }}>
+                    ✕
+                  </button>
+                )}
                 {rowErr[u.id] && <div style={{ fontSize: 11.5, color: 'var(--red)' }}>{rowErr[u.id]}</div>}
               </div>
             );

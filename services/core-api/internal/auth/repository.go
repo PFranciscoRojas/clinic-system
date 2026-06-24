@@ -36,6 +36,8 @@ type Repository interface {
 	// Team management.
 	ListOrgUsers(ctx context.Context, orgID string) ([]OrgUser, error)
 	ReplaceUserRole(ctx context.Context, orgID, targetUserID, newRoleID, callerUserID string) error
+	DeactivateUser(ctx context.Context, orgID, targetUserID string) (int64, error)
+	CountAdminsExcluding(ctx context.Context, orgID, excludeUserID string) (int, error)
 }
 
 // CreateOrgParams carries everything CreateOrgWithOwner needs to provision a

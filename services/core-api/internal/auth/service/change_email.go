@@ -74,6 +74,29 @@ func (s *Service) ListOrgUsers(ctx context.Context, orgID string) ([]auth.OrgUse
 	return s.repo.ListOrgUsers(ctx, orgID)
 }
 
+// DeactivateUser soft-deletes a user from the org. Guards: can't deactivate
+// yourself, can't remove the last CLINIC_ADMIN.
+func (s *Service) DeactivateUser(ctx context.Context, orgID, callerUserID, targetUserID string) error {
+	if callerUserID == targetUserID {
+		return auth.ErrSelfDeactivate
+	}
+	remaining, err := s.repo.CountAdminsExcluding(ctx, orgID, targetUserID)
+	if err != nil {
+		return fmt.Errorf("count admins: %w", err)
+	}
+	if remaining == 0 {
+		return auth.ErrLastAdmin
+	}
+	n, err := s.repo.DeactivateUser(ctx, orgID, targetUserID)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return auth.ErrUserNotFound
+	}
+	return nil
+}
+
 // ChangeUserRole replaces a user's org role. A user cannot change their own role,
 // and SYSTEM_ADMIN cannot be assigned via this endpoint.
 func (s *Service) ChangeUserRole(ctx context.Context, orgID, callerUserID, targetUserID, roleName string) error {

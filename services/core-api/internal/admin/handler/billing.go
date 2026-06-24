@@ -10,6 +10,15 @@ import (
 	"sghcp/core-api/internal/shared/httputil"
 )
 
+type adminOrgUser struct {
+	ID          string  `json:"id"`
+	DisplayName *string `json:"display_name"`
+	Email       string  `json:"email"`
+	RoleName    string  `json:"role_name"`
+	IsActive    bool    `json:"is_active"`
+	LastLoginAt *time.Time `json:"last_login_at"`
+}
+
 type orgRow struct {
 	ID                 string     `json:"id"`
 	Name               string     `json:"name"`
@@ -172,4 +181,63 @@ func (h *Handler) extendTrial(w http.ResponseWriter, r *http.Request) {
 		"subscription_status": newStatus,
 		"trial_ends_at":       trialEnd.UTC().Format(time.RFC3339),
 	})
+}
+
+// GET /admin/orgs/{id}/users — SYSTEM_ADMIN: lista los usuarios de un tenant.
+// Incluye inactivos para poder ver quién fue eliminado.
+func (h *Handler) listOrgUsers(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "id")
+	rows, err := h.pool.Query(r.Context(), `
+		SELECT u.id, u.display_name, u.email, COALESCE(ro.name, 'sin rol') AS role_name,
+		       u.is_active, u.last_login_at
+		FROM   users u
+		LEFT JOIN user_roles ur ON ur.user_id = u.id AND ur.organization_id = $1
+		LEFT JOIN roles ro      ON ro.id = ur.role_id
+		WHERE  u.organization_id = $1
+		ORDER  BY u.created_at
+	`, orgID)
+	if err != nil {
+		slog.Error("admin.list-org-users", "err", err, "org", orgID)
+		httputil.WriteError(w, http.StatusInternalServerError, "could not list users")
+		return
+	}
+	defer rows.Close()
+	users := []adminOrgUser{}
+	for rows.Next() {
+		var u adminOrgUser
+		if err := rows.Scan(&u.ID, &u.DisplayName, &u.Email, &u.RoleName, &u.IsActive, &u.LastLoginAt); err != nil {
+			httputil.WriteError(w, http.StatusInternalServerError, "scan error")
+			return
+		}
+		users = append(users, u)
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"items": users})
+}
+
+// DELETE /admin/orgs/{id}/users/{user_id} — SYSTEM_ADMIN: desactiva un usuario
+// de cualquier tenant. Mismo soft-delete que el endpoint de equipo, sin guards
+// de "último admin" (el operador puede necesitar forzar el acceso).
+func (h *Handler) removeOrgUser(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "id")
+	userID := chi.URLParam(r, "user_id")
+
+	tx, err := h.pool.Begin(r.Context())
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "db error")
+		return
+	}
+	defer tx.Rollback(r.Context()) //nolint:errcheck
+
+	tx.Exec(r.Context(), `DELETE FROM user_roles WHERE user_id = $1 AND organization_id = $2`, userID, orgID)           //nolint:errcheck
+	tag, err := tx.Exec(r.Context(), `UPDATE users SET is_active = false, updated_at = NOW() WHERE id = $1 AND organization_id = $2`, userID, orgID) //nolint:errcheck
+	if err != nil || tag.RowsAffected() == 0 {
+		httputil.WriteError(w, http.StatusNotFound, "user not found in this organization")
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "commit error")
+		return
+	}
+	slog.Info("admin.remove-org-user", "org", orgID, "user", userID)
+	w.WriteHeader(http.StatusNoContent)
 }

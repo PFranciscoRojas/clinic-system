@@ -5,7 +5,7 @@ import {
   Cpu, Users, Bot, RefreshCw, AlertTriangle, Info,
   AlertCircle, Wrench, MemoryStick,
 } from 'lucide-react';
-import { adminApi, type AdminOrg, type SystemHealth, type ActionResult } from '@/api/admin';
+import { adminApi, type AdminOrg, type AdminOrgUser, type SystemHealth, type ActionResult } from '@/api/admin';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -477,6 +477,80 @@ function SistemaTab() {
 
 // ── Tenants tab ───────────────────────────────────────────────────────────────
 
+function OrgUsersPanel({ orgId }: { orgId: string }) {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-org-users', orgId],
+    queryFn: () => adminApi.listOrgUsers(orgId),
+  });
+  const [removing, setRemoving] = useState<string | null>(null);
+
+  const handleRemove = async (u: AdminOrgUser) => {
+    const name = u.display_name || u.email;
+    if (!window.confirm(`¿Desactivar a "${name}"?\n\nNo podrá iniciar sesión. Sus registros clínicos se conservan.`)) return;
+    setRemoving(u.id);
+    try {
+      await adminApi.removeOrgUser(orgId, u.id);
+      qc.invalidateQueries({ queryKey: ['admin-org-users', orgId] });
+      qc.invalidateQueries({ queryKey: ['admin-orgs'] });
+    } finally {
+      setRemoving(null);
+    }
+  };
+
+  if (isLoading) return <div style={{ fontSize: 12, color: 'var(--s400)', padding: '8px 0' }}>Cargando usuarios…</div>;
+  const users = data?.items ?? [];
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--s500)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+        Usuarios ({users.length})
+      </div>
+      {users.length === 0 ? (
+        <div style={{ fontSize: 12, color: 'var(--s400)' }}>Sin usuarios.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {users.map(u => {
+            const fmtLogin = u.last_login_at
+              ? new Date(u.last_login_at).toLocaleDateString('es-CO')
+              : 'nunca';
+            return (
+              <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8,
+                background: u.is_active ? '#fff' : '#fef2f2', border: '1px solid var(--s100)', fontSize: 12.5 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontWeight: 600, color: u.is_active ? 'var(--s800)' : '#9ca3af' }}>
+                    {u.display_name || u.email}
+                  </span>
+                  {u.display_name && <span style={{ color: 'var(--s400)', marginLeft: 6 }}>{u.email}</span>}
+                </div>
+                <span style={{ fontSize: 11, background: '#f1f5f9', borderRadius: 10, padding: '2px 8px', color: 'var(--s500)', whiteSpace: 'nowrap' }}>
+                  {u.role_name}
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--s400)', whiteSpace: 'nowrap' }}>
+                  login: {fmtLogin}
+                </span>
+                {!u.is_active && (
+                  <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 600 }}>inactivo</span>
+                )}
+                {u.is_active && (
+                  <button
+                    onClick={() => handleRemove(u)}
+                    disabled={removing === u.id}
+                    title="Desactivar usuario"
+                    style={{ border: 'none', background: 'transparent', color: removing === u.id ? 'var(--s300)' : '#dc2626',
+                      cursor: removing === u.id ? 'wait' : 'pointer', fontSize: 14, padding: '2px 4px', borderRadius: 4 }}>
+                    ✕
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   active:    { label: 'Activo',    color: '#16a34a' },
   trialing:  { label: 'Trial',     color: '#0f766e' },
@@ -560,8 +634,12 @@ function TenantsTab() {
 
                 {/* Panel expandible de acciones */}
                 {expanded && (
-                  <div style={{ borderTop: '1px solid var(--s100)', padding: '12px 16px', background: 'var(--s50)',
-                    display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                  <div style={{ borderTop: '1px solid var(--s100)', padding: '12px 16px', background: 'var(--s50)' }}>
+                    {/* Usuarios de la org */}
+                    <OrgUsersPanel orgId={o.id} />
+                    <div style={{ height: 12 }} />
+                    {/* Acciones */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                     <span style={{ fontSize: 12, color: 'var(--s500)', marginRight: 4 }}>Acciones:</span>
 
                     <button style={btnStyle('var(--teal)')} disabled={busy} onClick={() => handleActivate(o)}>
@@ -593,6 +671,7 @@ function TenantsTab() {
                     )}
 
                     {busy && <span style={{ fontSize: 12, color: 'var(--s400)' }}>Procesando…</span>}
+                    </div>
                   </div>
                 )}
               </div>

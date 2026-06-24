@@ -14,4 +14,6 @@ var (
 	ErrEmailNotVerified   = errors.New("email address not verified")
 	ErrEmailChangePending = errors.New("email change token invalid or expired")
 	ErrSelfRoleChange     = errors.New("cannot change your own role")
+	ErrSelfDeactivate     = errors.New("cannot deactivate your own account")
+	ErrLastAdmin          = errors.New("cannot remove the last admin of the organization")
 )

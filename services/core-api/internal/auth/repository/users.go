@@ -308,6 +308,59 @@ func (r *Repository) ListOrgUsers(ctx context.Context, orgID string) ([]auth.Org
 	return out, rows.Err()
 }
 
+// DeactivateUser soft-deletes a user: removes their role grants (so they lose all
+// permissions immediately) and sets is_active=false (so login is rejected). The
+// user row and all historical FK references remain intact for legal retention.
+// Returns the number of rows affected (0 = user not found in this org).
+func (r *Repository) DeactivateUser(ctx context.Context, orgID, targetUserID string) (int64, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("begin deactivate-user tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	_, err = tx.Exec(ctx,
+		`DELETE FROM user_roles WHERE user_id = $1 AND organization_id = $2`,
+		targetUserID, orgID,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("delete user_roles: %w", err)
+	}
+
+	tag, err := tx.Exec(ctx,
+		`UPDATE users SET is_active = false, updated_at = NOW() WHERE id = $1 AND organization_id = $2`,
+		targetUserID, orgID,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("deactivate user: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("commit deactivate-user: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
+// AdminDeactivateUser is the same as DeactivateUser but scoped to any org,
+// for use by the SYSTEM_ADMIN operator console (no org isolation needed).
+func (r *Repository) AdminDeactivateUser(ctx context.Context, orgID, targetUserID string) (int64, error) {
+	return r.DeactivateUser(ctx, orgID, targetUserID)
+}
+
+// CountAdminsExcluding returns how many CLINIC_ADMIN users the org has,
+// excluding the given user. Used to prevent removing the last admin.
+func (r *Repository) CountAdminsExcluding(ctx context.Context, orgID, excludeUserID string) (int, error) {
+	var count int
+	err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM user_roles ur
+		JOIN roles ro ON ro.id = ur.role_id
+		WHERE ur.organization_id = $1
+		  AND ro.name = 'CLINIC_ADMIN'
+		  AND ur.user_id != $2
+	`, orgID, excludeUserID).Scan(&count)
+	return count, err
+}
+
 // ReplaceUserRole atomically removes all org role grants for the target user and
 // assigns a single new role, inside a transaction.
 func (r *Repository) ReplaceUserRole(ctx context.Context, orgID, targetUserID, newRoleID, callerUserID string) error {

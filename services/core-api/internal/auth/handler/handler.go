@@ -28,5 +28,6 @@ func (h *Handler) UserRoutes(jwtSecret []byte) chi.Router {
 	r.Use(middleware.RequireAuth(jwtSecret))
 	r.With(middleware.RequirePermission("users:read")).Get("/", h.listUsers)
 	r.With(middleware.RequirePermission("users:update")).Patch("/{user_id}/role", h.changeUserRole)
+	r.With(middleware.RequirePermission("users:deactivate")).Delete("/{user_id}", h.deactivateUser)
 	return r
 }

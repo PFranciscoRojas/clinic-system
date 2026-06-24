@@ -80,6 +80,8 @@ export const authApi = {
     api.get<{ items: OrgUser[] }>('/users'),
   changeUserRole: (user_id: string, role_name: string) =>
     api.patch<void>(`/users/${user_id}/role`, { role_name }),
+  deactivateUser: (user_id: string) =>
+    api.delete<void>(`/users/${user_id}`),
 };
 
 export interface OrgUser {

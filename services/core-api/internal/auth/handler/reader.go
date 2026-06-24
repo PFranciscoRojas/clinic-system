@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
 )
@@ -79,4 +80,18 @@ func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"items": users})
+}
+
+// DELETE /api/v1/users/{user_id} — soft-deactivates a team member.
+// Requires users:deactivate. Cannot target yourself or the last admin.
+func (h *Handler) deactivateUser(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	targetID := chi.URLParam(r, "user_id")
+
+	if err := h.svc.DeactivateUser(r.Context(), claims.OrganizationID, claims.UserID, targetID); err != nil {
+		slog.Warn("auth.deactivate-user", "err", err, "target", targetID)
+		writeErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -36,6 +36,7 @@ type svcPort interface {
 	// Team management.
 	ListOrgUsers(ctx context.Context, orgID string) ([]auth.OrgUser, error)
 	ChangeUserRole(ctx context.Context, orgID, callerUserID, targetUserID, roleName string) error
+	DeactivateUser(ctx context.Context, orgID, callerUserID, targetUserID string) error
 }
 
 // compile-time guard: *authsvc.Service must satisfy svcPort.

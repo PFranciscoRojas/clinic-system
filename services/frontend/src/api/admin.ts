@@ -1,5 +1,14 @@
 import { api } from './client';
 
+export interface AdminOrgUser {
+  id: string;
+  display_name: string | null;
+  email: string;
+  role_name: string;
+  is_active: boolean;
+  last_login_at: string | null;
+}
+
 export interface AdminOrg {
   id: string;
   name: string;
@@ -90,4 +99,10 @@ export const adminApi = {
       `/admin/orgs/${id}/extend-trial`,
       { days },
     ),
+
+  listOrgUsers: (id: string) =>
+    api.get<{ items: AdminOrgUser[] }>(`/admin/orgs/${id}/users`),
+
+  removeOrgUser: (orgId: string, userId: string) =>
+    api.delete<void>(`/admin/orgs/${orgId}/users/${userId}`),
 };
