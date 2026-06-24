@@ -361,6 +361,27 @@ func (r *Repository) CountAdminsExcluding(ctx context.Context, orgID, excludeUse
 	return count, err
 }
 
+// AcceptDPA stamps dpa_accepted_at for a user. Idempotent — re-accepting is a no-op.
+func (r *Repository) AcceptDPA(ctx context.Context, userID string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE users SET dpa_accepted_at = NOW(), updated_at = NOW()
+		 WHERE id = $1 AND dpa_accepted_at IS NULL`,
+		userID,
+	)
+	return err
+}
+
+// DPAAccepted reports whether the user has accepted the Data Processing Agreement.
+// Returns true on any lookup error so a transient DB hiccup never blocks the UI.
+func (r *Repository) DPAAccepted(ctx context.Context, userID string) (bool, error) {
+	var accepted bool
+	err := r.db.QueryRow(ctx,
+		`SELECT dpa_accepted_at IS NOT NULL FROM users WHERE id = $1`,
+		userID,
+	).Scan(&accepted)
+	return accepted, err
+}
+
 // ReplaceUserRole atomically removes all org role grants for the target user and
 // assigns a single new role, inside a transaction.
 func (r *Repository) ReplaceUserRole(ctx context.Context, orgID, targetUserID, newRoleID, callerUserID string) error {

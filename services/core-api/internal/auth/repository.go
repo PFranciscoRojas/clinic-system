@@ -38,6 +38,10 @@ type Repository interface {
 	ReplaceUserRole(ctx context.Context, orgID, targetUserID, newRoleID, callerUserID string) error
 	DeactivateUser(ctx context.Context, orgID, targetUserID string) (int64, error)
 	CountAdminsExcluding(ctx context.Context, orgID, excludeUserID string) (int, error)
+
+	// Legal / DPA.
+	AcceptDPA(ctx context.Context, userID string) error
+	DPAAccepted(ctx context.Context, userID string) (bool, error)
 }
 
 // CreateOrgParams carries everything CreateOrgWithOwner needs to provision a
@@ -52,6 +56,9 @@ type CreateOrgParams struct {
 	// IsProfessional grants the owner the PROFESSIONAL role (bookable agenda).
 	// False = manager-only admin, who then invites the practitioners.
 	IsProfessional bool
+	// TermsVersion is the accepted legal-document version (e.g. "2026-06-24").
+	// Stored alongside terms_accepted_at = now() as a Ley 1581/2012 audit trail.
+	TermsVersion string
 }
 
 // InvitePayload is serialised to/from Redis for the 48-hour invite window.

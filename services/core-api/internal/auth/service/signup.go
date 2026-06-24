@@ -26,7 +26,7 @@ const (
 // and its slug); adminName is the owner's own name (becomes their display name
 // and, after onboarding, their professional profile). The account exists
 // immediately but cannot log in until the address is confirmed.
-func (s *Service) Signup(ctx context.Context, orgName, adminName, email, password string, isProfessional bool) error {
+func (s *Service) Signup(ctx context.Context, orgName, adminName, email, password, termsVersion string, isProfessional bool) error {
 	orgName = strings.TrimSpace(orgName)
 	adminName = strings.TrimSpace(adminName)
 	email = strings.TrimSpace(email)
@@ -50,6 +50,7 @@ func (s *Service) Signup(ctx context.Context, orgName, adminName, email, passwor
 		DisplayName:    adminName,
 		TrialDays:      trialDays,
 		IsProfessional: isProfessional,
+		TermsVersion:   termsVersion,
 	})
 	if errors.Is(err, auth.ErrEmailAlreadyExists) {
 		return err

@@ -222,10 +222,17 @@ export function AIDraftPage() {
       {/* Draft content */}
       {(isReady || draft.status === 'APPROVED') && content && (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <Sparkles size={16} color="#f59e0b" />
-            <p style={{ margin: 0, fontSize: 13, color: 'var(--s500)', fontStyle: 'italic' }}>
-              Generado por IA · Revisa y edita antes de aprobar
+          <div style={{
+            display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 16,
+            background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10,
+            padding: '11px 14px',
+          }}>
+            <Sparkles size={15} color="#d97706" style={{ flexShrink: 0, marginTop: 1 }} />
+            <p style={{ margin: 0, fontSize: 12.5, color: '#78350f', lineHeight: 1.65 }}>
+              <strong>Borrador generado por IA.</strong> Este texto es una sugerencia elaborada a partir de
+              texto anonimizado. La responsabilidad clínica, diagnóstica y terapéutica es exclusiva del
+              profesional habilitado. Revisa, edita y aprueba antes de incorporarlo a la historia clínica
+              (Ley 23/1981 · Res. 1995/1999).
             </p>
           </div>
 

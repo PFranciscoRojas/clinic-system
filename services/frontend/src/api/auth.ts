@@ -16,6 +16,7 @@ export interface Me {
   roles: string[];
   permissions?: string[];
   onboarding_completed?: boolean;
+  dpa_accepted?: boolean;        // false = show DPA modal on first login (Ley 1581/2012)
   data_reset_enabled?: boolean;  // admin-only test-data wipe is available
   subscription_status?: string;  // trialing | active | past_due | canceled
   trial_ends_at?: string;        // RFC3339, when subscription_status = trialing
@@ -29,9 +30,10 @@ export const authApi = {
 
   // Self-serve signup = create a new organization. org_name is the clinic, and
   // full_name is the admin's own name. Emails a verification link; the account
-  // can't log in until the email is confirmed.
-  signup: (org_name: string, full_name: string, email: string, password: string, is_professional: boolean) =>
-    api.post<void>('/auth/signup', { org_name, full_name, email, password, is_professional }),
+  // can't log in until the email is confirmed. accepted_terms/terms_version are
+  // stored in users for Ley 1581/2012 audit trail.
+  signup: (org_name: string, full_name: string, email: string, password: string, is_professional: boolean, accepted_terms: boolean) =>
+    api.post<void>('/auth/signup', { org_name, full_name, email, password, is_professional, accepted_terms, terms_version: '2026-06-24' }),
 
   // Confirms the address from the one-time token in the verification email link.
   verifyEmail: (token: string) =>
@@ -82,6 +84,11 @@ export const authApi = {
     api.patch<void>(`/users/${user_id}/role`, { role_name }),
   deactivateUser: (user_id: string) =>
     api.delete<void>(`/users/${user_id}`),
+
+  // Records the caller's explicit acceptance of the Data Processing Agreement
+  // (Contrato Encargado-Responsable, Ley 1581/2012). Idempotent.
+  acceptDpa: () =>
+    api.post<void>('/auth/accept-dpa', {}),
 };
 
 export interface OrgUser {

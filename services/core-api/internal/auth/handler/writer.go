@@ -100,8 +100,12 @@ func (h *Handler) signup(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusBadRequest, "org_name, full_name, email and password are required")
 		return
 	}
+	if !req.AcceptedTerms {
+		httputil.WriteError(w, http.StatusBadRequest, "terms and privacy policy must be accepted")
+		return
+	}
 
-	err := h.svc.Signup(r.Context(), req.OrgName, req.FullName, req.Email, req.Password, req.IsProfessional)
+	err := h.svc.Signup(r.Context(), req.OrgName, req.FullName, req.Email, req.Password, req.TermsVersion, req.IsProfessional)
 	switch {
 	case err == nil:
 		w.WriteHeader(http.StatusCreated)
@@ -271,6 +275,18 @@ func (h *Handler) confirmReset(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.Error("auth.reset-password-confirm", "err", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "could not reset password")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// POST /api/v1/auth/accept-dpa — records the caller's acceptance of the Data Processing
+// Agreement (Contrato Encargado-Responsable under Ley 1581/2012). Idempotent.
+func (h *Handler) acceptDpa(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	if err := h.svc.AcceptDPA(r.Context(), claims.UserID); err != nil {
+		slog.Error("auth.accept-dpa", "err", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "could not record DPA acceptance")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

@@ -13,7 +13,7 @@ import (
 // Defined here so the handler owns its dependency boundary — DIP.
 type svcPort interface {
 	Login(ctx context.Context, email, password, ip, userAgent string) (*token.Pair, error)
-	Signup(ctx context.Context, orgName, adminName, email, password string, isProfessional bool) error
+	Signup(ctx context.Context, orgName, adminName, email, password, termsVersion string, isProfessional bool) error
 	VerifyEmail(ctx context.Context, token string) error
 	ResendVerification(ctx context.Context, email string) error
 	Refresh(ctx context.Context, refreshToken string) (*token.Pair, error)
@@ -37,6 +37,10 @@ type svcPort interface {
 	ListOrgUsers(ctx context.Context, orgID string) ([]auth.OrgUser, error)
 	ChangeUserRole(ctx context.Context, orgID, callerUserID, targetUserID, roleName string) error
 	DeactivateUser(ctx context.Context, orgID, callerUserID, targetUserID string) error
+
+	// Legal / DPA.
+	AcceptDPA(ctx context.Context, userID string) error
+	DPAAccepted(ctx context.Context, userID string) (bool, error)
 }
 
 // compile-time guard: *authsvc.Service must satisfy svcPort.

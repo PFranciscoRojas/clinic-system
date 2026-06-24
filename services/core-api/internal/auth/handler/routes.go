@@ -29,6 +29,7 @@ func (h *Handler) Routes(jwtSecret []byte) chi.Router {
 		r.Patch("/me/email", h.requestEmailChange)
 		r.Post("/change-password", h.changePassword)
 		r.Post("/onboarding-complete", h.onboardingComplete)
+		r.Post("/accept-dpa", h.acceptDpa)
 		// Authorization is role-scoped inside the handler: a CLINIC_ADMIN may
 		// invite any staff role, while a PROFESSIONAL may invite only support
 		// roles (INTERN, RECEPTIONIST) for their own practice.

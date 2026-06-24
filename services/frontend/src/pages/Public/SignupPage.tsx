@@ -19,6 +19,7 @@ export function SignupPage() {
   const [email, setEmail] = useState('');
   const [pwd, setPwd] = useState('');
   const [isProfessional, setIsProfessional] = useState(true);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [show, setShow] = useState(false);
   const [state, setState] = useState<PageState>('form');
   const [err, setErr] = useState('');
@@ -37,9 +38,10 @@ export function SignupPage() {
     if (!name.trim())                    { setErr('Ingresa tu nombre completo.'); return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { setErr('Ingresa un correo válido.'); return; }
     if (pwd.length < 8)                  { setErr('La contraseña debe tener al menos 8 caracteres.'); return; }
+    if (!acceptedTerms)                  { setErr('Debes aceptar los Términos y la Política de Privacidad para continuar.'); return; }
     setState('saving');
     try {
-      await authApi.signup(orgName.trim(), name.trim(), email.trim(), pwd, isProfessional);
+      await authApi.signup(orgName.trim(), name.trim(), email.trim(), pwd, isProfessional, acceptedTerms);
       setState('done');
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
@@ -135,6 +137,27 @@ export function SignupPage() {
                   </div>
                 </button>
               ))}
+
+              {/* Terms acceptance — Ley 1581/2012 requires explicit consent */}
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, margin: '16px 0 4px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={e => setAcceptedTerms(e.target.checked)}
+                  style={{ marginTop: 2, accentColor: 'var(--teal)', width: 15, height: 15, flexShrink: 0 }}
+                />
+                <span style={{ fontSize: 12.5, color: 'var(--s600)', lineHeight: 1.6 }}>
+                  He leído y acepto los{' '}
+                  <a href="/legal/terminos" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--teal)', fontWeight: 600 }}>
+                    Términos y Condiciones
+                  </a>
+                  {' '}y la{' '}
+                  <a href="/legal/privacidad" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--teal)', fontWeight: 600 }}>
+                    Política de Privacidad
+                  </a>
+                  , incluyendo el tratamiento de datos personales conforme a la Ley 1581 de 2012.
+                </span>
+              </label>
 
               {err && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 9, padding: '9px 12px', marginBottom: 14 }}>

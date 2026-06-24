@@ -54,11 +54,14 @@ func (r *Repository) CreateOrgWithOwner(ctx context.Context, p auth.CreateOrgPar
 		return "", "", "", fmt.Errorf("scope signup tx: %w", err)
 	}
 
+	// terms_accepted_at = now() records the moment of acceptance; terms_version
+	// captures which revision of the legal documents was accepted (Ley 1581 audit trail).
 	err = tx.QueryRow(ctx, `
-		INSERT INTO users (organization_id, email, email_hash, password_hash, display_name)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO users (organization_id, email, email_hash, password_hash, display_name,
+		                   terms_accepted_at, terms_version)
+		VALUES ($1, $2, $3, $4, $5, now(), $6)
 		RETURNING id
-	`, orgID, p.Email, hashEmail(p.Email), p.PasswordHash, p.DisplayName).Scan(&userID)
+	`, orgID, p.Email, hashEmail(p.Email), p.PasswordHash, p.DisplayName, p.TermsVersion).Scan(&userID)
 	if err != nil {
 		if isUniqueViolation(err, "users_email_hash_global_uq") {
 			return "", "", "", auth.ErrEmailAlreadyExists

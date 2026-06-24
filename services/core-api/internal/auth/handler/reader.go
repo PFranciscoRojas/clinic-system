@@ -25,6 +25,11 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		onboarded = true // fail open: never re-show onboarding by accident
 	}
 
+	dpaAccepted, err := h.svc.DPAAccepted(r.Context(), claims.UserID)
+	if err != nil {
+		dpaAccepted = true // fail open: a lookup hiccup must never block the UI
+	}
+
 	resp := map[string]any{
 		"user_id":              claims.UserID,
 		"org_id":               claims.OrganizationID,
@@ -33,6 +38,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		"roles":                claims.Roles,
 		"permissions":          claims.Permissions,
 		"onboarding_completed": onboarded,
+		"dpa_accepted":         dpaAccepted,
 		"data_reset_enabled":   h.dataResetOpen,
 	}
 

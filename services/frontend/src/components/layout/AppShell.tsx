@@ -13,6 +13,8 @@ import { patientsApi, type Patient } from '@/api/patients';
 import { startCheckout } from '@/api/billing';
 import { profilesApi } from '@/api/profiles';
 import { getLockConfig, onLockConfigChange } from '@/lib/screenLock';
+import { authApi } from '@/api/auth';
+import { dpaContent } from '@/pages/Public/legal/content';
 
 // Facturación is shown to CLINIC_ADMIN (billing:reports) — see the conditional
 // nav entry below.
@@ -33,6 +35,7 @@ export function AppShell({ children }: Props) {
   const [locked,      setLocked]      = useState(false);
   const [collapsed,   setCollapsed]   = useState(() => localStorage.getItem('sghcp_sidebar_collapsed') === '1');
   const [brainHover,  setBrainHover]  = useState(false);
+  const [dpaOpen,     setDpaOpen]     = useState(false);
   const isMobile = useIsMobile();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   // On phones the sidebar is an overlay drawer — always full width when open.
@@ -75,6 +78,16 @@ export function AppShell({ children }: Props) {
     setSearch(''); setSearchOpen(false);
     navigate(`/patients/${p.id}`);
   };
+
+  // Show the DPA modal once to CLINIC_ADMIN/PROFESSIONAL who haven't accepted yet.
+  useEffect(() => {
+    if (
+      user?.dpa_accepted === false &&
+      (user.roles?.includes('CLINIC_ADMIN') || user.roles?.includes('PROFESSIONAL'))
+    ) {
+      setDpaOpen(true);
+    }
+  }, [user?.dpa_accepted, user?.roles]);
 
   // Re-arm the auto-lock effect whenever the user changes the lock config in Settings.
   useEffect(() => onLockConfigChange(() => setLockCfgTick(t => t + 1)), []);
@@ -152,6 +165,14 @@ export function AppShell({ children }: Props) {
 
   return (
     <>
+      {dpaOpen && (
+        <DpaModal
+          onAccept={async () => {
+            await authApi.acceptDpa();
+            setDpaOpen(false);
+          }}
+        />
+      )}
       {locked && <LockScreen userId={user?.user_id} onUnlock={() => setLocked(false)} />}
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
 
@@ -523,6 +544,103 @@ function SubscriptionExpired({ onLogout }: { onLogout: () => void }) {
         <button onClick={onLogout} style={{ border: 'none', background: 'none', fontSize: 13, color: 'var(--s500)', fontWeight: 600, cursor: 'pointer' }}>
           Cerrar sesión
         </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── DPA Modal ──────────────────────────────────────────────────── */
+// Shown once to CLINIC_ADMIN / PROFESSIONAL who haven't accepted the
+// Data Processing Agreement (Contrato Encargado-Responsable, Ley 1581/2012).
+// Blocking — cannot be dismissed without accepting.
+function DpaModal({ onAccept }: { onAccept: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+
+  const handle = async () => {
+    if (!accepted || busy) return;
+    setBusy(true);
+    try { await onAccept(); } finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(15,23,42,.72)',
+      backdropFilter: 'blur(6px)', zIndex: 9990,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }}>
+      <div style={{
+        background: '#fff', borderRadius: 18, width: '100%', maxWidth: 560,
+        maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 24px 80px rgba(0,0,0,.25)',
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      }}>
+        {/* Header */}
+        <div style={{ padding: '22px 26px 16px', borderBottom: '1px solid var(--s200)' }}>
+          <div style={{ fontWeight: 800, fontSize: 17, color: 'var(--s900)', marginBottom: 4 }}>
+            Acuerdo de Tratamiento de Datos
+          </div>
+          <div style={{ fontSize: 12.5, color: 'var(--s500)', lineHeight: 1.5 }}>
+            Como profesional o administrador de una organización en SGHCP, debes aceptar este
+            acuerdo para continuar. Solo se muestra una vez.
+          </div>
+        </div>
+
+        {/* Scrollable content */}
+        <div style={{ overflowY: 'auto', padding: '16px 26px', flex: 1 }}>
+          {dpaContent.map((section, i) => (
+            <div key={i} style={{ marginBottom: 20 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--s800)', marginBottom: 8 }}>
+                {section.title}
+              </div>
+              {section.paragraphs.map((p, j) => (
+                <p key={j} style={{
+                  fontSize: 13, color: 'var(--s600)', lineHeight: 1.7,
+                  marginBottom: j < section.paragraphs.length - 1 ? 8 : 0,
+                  whiteSpace: 'pre-line',
+                }}>
+                  {p}
+                </p>
+              ))}
+            </div>
+          ))}
+          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--s400)', lineHeight: 1.6 }}>
+            Puedes leer el texto completo en{' '}
+            <a href="/legal/privacidad" target="_blank" rel="noopener noreferrer"
+              style={{ color: 'var(--teal)' }}>Política de Privacidad</a>{' '}
+            y{' '}
+            <a href="/legal/terminos" target="_blank" rel="noopener noreferrer"
+              style={{ color: 'var(--teal)' }}>Términos y Condiciones</a>.
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '16px 26px', borderTop: '1px solid var(--s100)' }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 16, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={accepted}
+              onChange={e => setAccepted(e.target.checked)}
+              style={{ marginTop: 2, accentColor: 'var(--teal)', width: 15, height: 15, flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 12.5, color: 'var(--s700)', lineHeight: 1.6 }}>
+              Entiendo y acepto que SGHCP actúa como Encargado del tratamiento de los datos personales de
+              mis pacientes, conforme a la Ley 1581 de 2012. Mi organización es el Responsable del tratamiento.
+            </span>
+          </label>
+          <button
+            onClick={handle}
+            disabled={!accepted || busy}
+            style={{
+              width: '100%', padding: 13, borderRadius: 11, border: 'none',
+              background: accepted ? 'var(--teal)' : 'var(--s300)',
+              color: '#fff', fontSize: 14, fontWeight: 700,
+              cursor: accepted && !busy ? 'pointer' : 'not-allowed',
+            }}
+          >
+            {busy ? 'Guardando…' : 'Acepto el Acuerdo de Tratamiento de Datos'}
+          </button>
+        </div>
       </div>
     </div>
   );

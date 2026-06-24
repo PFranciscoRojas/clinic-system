@@ -16,6 +16,11 @@ type SignupRequest struct {
 	Email          string `json:"email"`
 	Password       string `json:"password"`
 	IsProfessional bool   `json:"is_professional"` // true = owner also practices (bookable agenda)
+	// AcceptedTerms must be true; if false the handler rejects the request.
+	// TermsVersion is the legal document version accepted (e.g. "2026-06-24"),
+	// stored in users.terms_version for Ley 1581/2012 audit trail purposes.
+	AcceptedTerms bool   `json:"accepted_terms"`
+	TermsVersion  string `json:"terms_version"`
 }
 
 // VerifyEmailRequest is the JSON body for POST /api/v1/auth/verify-email (public).

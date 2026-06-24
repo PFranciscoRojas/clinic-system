@@ -21,6 +21,8 @@ import { VerifyEmailChangePage } from '@/pages/Public/VerifyEmailChangePage';
 import { BillingReturnPage } from '@/pages/Public/BillingReturnPage';
 import { BookingWizardPage } from '@/pages/Public/BookingWizardPage';
 import { BookingPaymentReturnPage } from '@/pages/Public/BookingPaymentReturnPage';
+import { TermsPage } from '@/pages/Public/legal/TermsPage';
+import { PrivacyPage } from '@/pages/Public/legal/PrivacyPage';
 import { ClinicalPage } from '@/pages/Clinical/ClinicalPage';
 import { BillingPage } from '@/pages/Billing/BillingPage';
 import { SettingsPage } from '@/pages/Settings/SettingsPage';
@@ -69,6 +71,8 @@ export function App() {
       <Route path="/billing/return" element={<BillingReturnPage />} />
       <Route path="/book/return" element={<BookingPaymentReturnPage />} />
       <Route path="/book/:slug" element={<BookingWizardPage />} />
+      <Route path="/legal/terminos" element={<TermsPage />} />
+      <Route path="/legal/privacidad" element={<PrivacyPage />} />
 
       <Route
         path="/*"
