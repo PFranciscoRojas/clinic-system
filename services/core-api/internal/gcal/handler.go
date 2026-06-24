@@ -62,6 +62,7 @@ func (s *Syncer) callback(w http.ResponseWriter, r *http.Request) {
 
 	code := r.URL.Query().Get("code")
 	state := r.URL.Query().Get("state")
+	s.logger.Info("gcal: callback hit", "has_code", code != "", "has_state", state != "", "has_error", r.URL.Query().Get("error") != "", "google_error", r.URL.Query().Get("error"))
 	if code == "" || state == "" {
 		http.Redirect(w, r, settingsURL+"?google=error", http.StatusFound)
 		return
