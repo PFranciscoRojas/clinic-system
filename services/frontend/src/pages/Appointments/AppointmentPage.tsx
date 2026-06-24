@@ -24,6 +24,7 @@ import { RecapCard } from '@/components/clinical/RecapCard';
 import { RiskBanner } from '@/components/clinical/RiskBanner';
 import { aiDraftsApi } from '@/api/aiDrafts';
 import { useAuth } from '@/context/AuthContext';
+import { authApi } from '@/api/auth';
 import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
 import { SlotPicker } from '@/components/appointments/SlotPicker';
@@ -491,6 +492,14 @@ export function AppointmentPage() {
     queryFn: () => consentsApi.list(appt!.patient_id),
     enabled: !!appt?.patient_id,
   });
+
+  const { data: orgUsers = [] } = useQuery({
+    queryKey: ['org-users'],
+    queryFn: () => authApi.listOrgUsers().then(r => r.items),
+    staleTime: 5 * 60_000,
+  });
+  const staffMember = orgUsers.find(u => u.id === appt?.staff_id);
+  const staffName = staffMember?.display_name ?? staffMember?.email ?? null;
   const activeConsents = (consentsData?.items ?? []).filter(c => !c.revoked_at);
   const treatmentConsent = activeConsents.find(c => c.consent_type === 'TREATMENT');
   const [viewConsentId, setViewConsentId] = useState<string | null>(null);
@@ -942,7 +951,7 @@ export function AppointmentPage() {
               text={MODALITY_LABEL[appt.modality] ?? appt.modality}
               color={isVirtual ? '#6366f1' : undefined}
             />
-            {user && <InfoChip icon={<User size={13} />} text={user.display_name ?? user.email ?? 'Terapeuta'} />}
+            {(staffName || user) && <InfoChip icon={<User size={13} />} text={staffName ?? user?.display_name ?? user?.email ?? 'Terapeuta'} />}
             {appt.paid && (
               <InfoChip
                 icon={<Wallet size={13} />}
