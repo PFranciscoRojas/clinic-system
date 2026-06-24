@@ -283,13 +283,15 @@ func (r *Repository) UpdateEmail(ctx context.Context, userID, newEmail string) e
 	return nil
 }
 
-// ListOrgUsers returns all users in the org with their current role name.
+// ListOrgUsers returns all users in the org (including inactive) with their current role name.
 func (r *Repository) ListOrgUsers(ctx context.Context, orgID string) ([]auth.OrgUser, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT u.id, u.display_name, u.email, ro.name AS role_name
+		SELECT u.id, u.display_name, u.email,
+		       COALESCE(ro.name, 'sin rol') AS role_name,
+		       u.is_active, u.last_login_at
 		FROM   users u
-		JOIN   user_roles ur ON ur.user_id = u.id AND ur.organization_id = $1
-		JOIN   roles ro      ON ro.id = ur.role_id
+		LEFT JOIN user_roles ur ON ur.user_id = u.id AND ur.organization_id = $1
+		LEFT JOIN roles ro      ON ro.id = ur.role_id
 		WHERE  u.organization_id = $1
 		ORDER  BY u.created_at
 	`, orgID)
@@ -300,12 +302,42 @@ func (r *Repository) ListOrgUsers(ctx context.Context, orgID string) ([]auth.Org
 	var out []auth.OrgUser
 	for rows.Next() {
 		var u auth.OrgUser
-		if err := rows.Scan(&u.ID, &u.DisplayName, &u.Email, &u.RoleName); err != nil {
+		if err := rows.Scan(&u.ID, &u.DisplayName, &u.Email, &u.RoleName, &u.IsActive, &u.LastLoginAt); err != nil {
 			return nil, fmt.Errorf("scan org user: %w", err)
 		}
 		out = append(out, u)
 	}
 	return out, rows.Err()
+}
+
+// ReactivateUser restores is_active=true and assigns a new role.
+func (r *Repository) ReactivateUser(ctx context.Context, orgID, targetUserID, roleID, callerUserID string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin reactivate-user tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	tag, err := tx.Exec(ctx,
+		`UPDATE users SET is_active = true, updated_at = NOW() WHERE id = $1 AND organization_id = $2`,
+		targetUserID, orgID,
+	)
+	if err != nil {
+		return fmt.Errorf("reactivate user: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return auth.ErrUserNotFound
+	}
+
+	if _, err = tx.Exec(ctx, `
+		INSERT INTO user_roles (organization_id, user_id, role_id, assigned_by)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT DO NOTHING
+	`, orgID, targetUserID, roleID, callerUserID); err != nil {
+		return fmt.Errorf("assign role on reactivate: %w", err)
+	}
+
+	return tx.Commit(ctx)
 }
 
 // DeactivateUser soft-deletes a user: removes their role grants (so they lose all

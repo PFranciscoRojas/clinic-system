@@ -22,6 +22,7 @@ import (
 	consentshandler "sghcp/core-api/internal/consents/handler"
 	diagnoseshandler "sghcp/core-api/internal/diagnoses/handler"
 	invoicinghandler "sghcp/core-api/internal/invoicing"
+	legalhandler "sghcp/core-api/internal/legal"
 	"sghcp/core-api/internal/notify"
 	"sghcp/core-api/internal/orgs"
 	patientshandler "sghcp/core-api/internal/patients/handler"
@@ -39,7 +40,7 @@ func (a *app) buildRouter() http.Handler {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   a.cfg.CORSAllowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID", "X-Access-Reason"},
 		ExposedHeaders:   []string{"X-Request-ID"},
 		AllowCredentials: false,
 		MaxAge:           300,
@@ -90,6 +91,10 @@ func (a *app) buildRouter() http.Handler {
 		r.Use(middleware.RateLimit(10, time.Minute))
 		r.Mount("/api/v1/public/consents", consentsH.PublicRoutes())
 	})
+
+	// Legal documents — public read, no auth required.
+	legalH := legalhandler.New(a.pool)
+	legalH.RegisterPublicRoutes(r)
 
 	// MercadoPago webhook — public (the gateway calls it), no JWT.
 	billingH := billinghandler.New(a.pool, a.cfg)
@@ -162,6 +167,9 @@ func (a *app) buildRouter() http.Handler {
 		// Operator console: SYSTEM_ADMIN billing endpoints are always mounted;
 		// the destructive data-reset route only exists while ALLOW_DATA_RESET is on.
 		r.Mount("/api/v1/admin", adminhandler.New(a.pool, a.rdb, a.cfg.AllowDataReset).Routes())
+
+		// Legal document CMS — SYSTEM_ADMIN write (public reads are above).
+		legalH.RegisterAdminRoutes(r.With(middleware.RequireRole("SYSTEM_ADMIN")))
 	})
 
 	return r

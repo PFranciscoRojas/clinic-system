@@ -105,4 +105,7 @@ export const adminApi = {
 
   removeOrgUser: (orgId: string, userId: string) =>
     api.delete<void>(`/admin/orgs/${orgId}/users/${userId}`),
+
+  reactivateOrgUser: (orgId: string, userId: string, role_name: string) =>
+    api.post<void>(`/admin/orgs/${orgId}/users/${userId}/reactivate`, { role_name }),
 };

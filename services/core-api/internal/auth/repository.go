@@ -37,6 +37,7 @@ type Repository interface {
 	ListOrgUsers(ctx context.Context, orgID string) ([]OrgUser, error)
 	ReplaceUserRole(ctx context.Context, orgID, targetUserID, newRoleID, callerUserID string) error
 	DeactivateUser(ctx context.Context, orgID, targetUserID string) (int64, error)
+	ReactivateUser(ctx context.Context, orgID, targetUserID, roleID, callerUserID string) error
 	CountAdminsExcluding(ctx context.Context, orgID, excludeUserID string) (int, error)
 
 	// Legal / DPA.

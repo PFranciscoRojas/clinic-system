@@ -27,15 +27,6 @@ func (s *Service) Login(ctx context.Context, email, password, ip, userAgent stri
 		return nil, auth.ErrInvalidCredentials
 	}
 
-	if !user.IsActive {
-		s.repo.WriteAuditLog(ctx, auth.AuditEntry{
-			OrgID: &user.OrganizationID, UserID: &user.ID, EmailHash: emailHash,
-			Action: "auth.login", ResourceType: "user",
-			IP: ip, UserAgent: userAgent, Success: false, ErrorCode: ptr("ACCOUNT_INACTIVE"),
-		})
-		return nil, auth.ErrInvalidCredentials
-	}
-
 	if user.LockedUntil != nil && time.Now().Before(*user.LockedUntil) {
 		s.repo.WriteAuditLog(ctx, auth.AuditEntry{
 			OrgID: &user.OrganizationID, UserID: &user.ID, EmailHash: emailHash,
@@ -60,8 +51,17 @@ func (s *Service) Login(ctx context.Context, email, password, ip, userAgent stri
 
 	_ = s.repo.ClearFailedAttempts(ctx, user.ID)
 
-	// Checked only after the password is correct, so an unverified account can't
-	// be enumerated by anyone who merely guesses an email.
+	// Both checks below are gated after a correct password so that a wrong
+	// guess never reveals whether the email exists, is unverified, or inactive.
+	if !user.IsActive {
+		s.repo.WriteAuditLog(ctx, auth.AuditEntry{
+			OrgID: &user.OrganizationID, UserID: &user.ID, EmailHash: emailHash,
+			Action: "auth.login", ResourceType: "user",
+			IP: ip, UserAgent: userAgent, Success: false, ErrorCode: ptr("ACCOUNT_INACTIVE"),
+		})
+		return nil, auth.ErrAccountInactive
+	}
+
 	if user.EmailVerifiedAt == nil {
 		s.repo.WriteAuditLog(ctx, auth.AuditEntry{
 			OrgID: &user.OrganizationID, UserID: &user.ID, EmailHash: emailHash,

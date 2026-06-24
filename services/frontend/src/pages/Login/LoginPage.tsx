@@ -296,11 +296,13 @@ export function LoginPage() {
         navigate('/');
       }
     } catch (err) {
-      // 403 = the account exists and the password is right, but the email
-      // hasn't been confirmed yet (fresh self-serve signup).
       if (err instanceof ApiError && err.status === 403) {
-        setLoginErr('Confirma tu correo antes de iniciar sesión. Revisa tu bandeja (y el spam).');
-        setNeedsVerify(true);
+        if (err.message.includes('desactivada')) {
+          setLoginErr(err.message);
+        } else {
+          setLoginErr('Confirma tu correo antes de iniciar sesión. Revisa tu bandeja (y el spam).');
+          setNeedsVerify(true);
+        }
       } else {
         setLoginErr('Credenciales incorrectas. Verifica tu correo y contraseña.');
       }

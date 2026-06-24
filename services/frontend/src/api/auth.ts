@@ -85,6 +85,9 @@ export const authApi = {
   deactivateUser: (user_id: string) =>
     api.delete<void>(`/users/${user_id}`),
 
+  reactivateUser: (user_id: string, role_name: string) =>
+    api.post<void>(`/users/${user_id}/reactivate`, { role_name }),
+
   // Records the caller's explicit acceptance of the Data Processing Agreement
   // (Contrato Encargado-Responsable, Ley 1581/2012). Idempotent.
   acceptDpa: () =>
@@ -96,4 +99,6 @@ export interface OrgUser {
   display_name: string | null;
   email: string;
   role_name: string;
+  is_active: boolean;
+  last_login_at: string | null;
 }

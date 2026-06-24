@@ -13,7 +13,7 @@ var authErrors = httputil.ErrorMapper(func(err error) (int, string) {
 	case errors.Is(err, auth.ErrInvalidCredentials) || errors.Is(err, auth.ErrAccountLocked):
 		return http.StatusUnauthorized, "invalid credentials"
 	case errors.Is(err, auth.ErrAccountInactive):
-		return http.StatusUnauthorized, "account inactive"
+		return http.StatusForbidden, "Tu cuenta fue desactivada. Contacta al administrador de tu consultorio."
 	case errors.Is(err, auth.ErrInviteInvalid):
 		return http.StatusBadRequest, "invite code is invalid or expired"
 	case errors.Is(err, auth.ErrEmailAlreadyExists):

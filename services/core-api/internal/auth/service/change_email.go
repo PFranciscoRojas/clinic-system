@@ -97,6 +97,18 @@ func (s *Service) DeactivateUser(ctx context.Context, orgID, callerUserID, targe
 	return nil
 }
 
+// ReactivateUser restores a previously deactivated user and assigns them a role.
+func (s *Service) ReactivateUser(ctx context.Context, orgID, callerUserID, targetUserID, roleName string) error {
+	if roleName == "SYSTEM_ADMIN" {
+		return auth.ErrRoleNotFound
+	}
+	roleID, err := s.repo.FindRoleIDByName(ctx, roleName)
+	if err != nil {
+		return err
+	}
+	return s.repo.ReactivateUser(ctx, orgID, targetUserID, roleID, callerUserID)
+}
+
 // ChangeUserRole replaces a user's org role. A user cannot change their own role,
 // and SYSTEM_ADMIN cannot be assigned via this endpoint.
 func (s *Service) ChangeUserRole(ctx context.Context, orgID, callerUserID, targetUserID, roleName string) error {

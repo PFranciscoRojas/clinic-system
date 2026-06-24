@@ -3,9 +3,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Building2, Activity, HardDrive, Database,
   Cpu, Users, Bot, RefreshCw, AlertTriangle, Info,
-  AlertCircle, Wrench, MemoryStick,
+  AlertCircle, Wrench, MemoryStick, FileText,
 } from 'lucide-react';
 import { adminApi, type AdminOrg, type AdminOrgUser, type SystemHealth, type ActionResult } from '@/api/admin';
+import { legalApi, type LegalDoc } from '@/api/legal';
+import { ConfirmByTextModal } from '@/components/ui/ConfirmByTextModal';
+import { Markdown } from '@/components/common/Markdown';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -477,24 +480,35 @@ function SistemaTab() {
 
 // ── Tenants tab ───────────────────────────────────────────────────────────────
 
+const REACTIVATE_ROLES = ['CLINIC_ADMIN', 'PROFESSIONAL', 'INTERN', 'RECEPTIONIST'] as const;
+
 function OrgUsersPanel({ orgId }: { orgId: string }) {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ['admin-org-users', orgId],
     queryFn: () => adminApi.listOrgUsers(orgId),
   });
-  const [removing, setRemoving] = useState<string | null>(null);
+  const [pendingRemove, setPendingRemove] = useState<AdminOrgUser | null>(null);
+  const [reactivatingRole, setReactivatingRole] = useState<Record<string, string>>({});
+  const [reactivating, setReactivating] = useState<string | null>(null);
 
-  const handleRemove = async (u: AdminOrgUser) => {
-    const name = u.display_name || u.email;
-    if (!window.confirm(`¿Desactivar a "${name}"?\n\nNo podrá iniciar sesión. Sus registros clínicos se conservan.`)) return;
-    setRemoving(u.id);
+  const confirmRemove = async () => {
+    if (!pendingRemove) return;
+    await adminApi.removeOrgUser(orgId, pendingRemove.id);
+    qc.invalidateQueries({ queryKey: ['admin-org-users', orgId] });
+    qc.invalidateQueries({ queryKey: ['admin-orgs'] });
+    setPendingRemove(null);
+  };
+
+  const handleReactivate = async (u: AdminOrgUser) => {
+    const role = reactivatingRole[u.id] ?? 'PROFESSIONAL';
+    setReactivating(u.id);
     try {
-      await adminApi.removeOrgUser(orgId, u.id);
+      await adminApi.reactivateOrgUser(orgId, u.id, role);
       qc.invalidateQueries({ queryKey: ['admin-org-users', orgId] });
       qc.invalidateQueries({ queryKey: ['admin-orgs'] });
     } finally {
-      setRemoving(null);
+      setReactivating(null);
     }
   };
 
@@ -503,6 +517,16 @@ function OrgUsersPanel({ orgId }: { orgId: string }) {
 
   return (
     <div style={{ marginTop: 12 }}>
+      {pendingRemove && (
+        <ConfirmByTextModal
+          title="Desactivar usuario"
+          description={`"${pendingRemove.display_name || pendingRemove.email}" no podrá iniciar sesión. Sus registros clínicos se conservan y puede reincorporarse después.`}
+          confirmText={pendingRemove.email}
+          confirmLabel="Desactivar"
+          onConfirm={confirmRemove}
+          onCancel={() => setPendingRemove(null)}
+        />
+      )}
       <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--s500)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
         Usuarios ({users.length})
       </div>
@@ -530,15 +554,30 @@ function OrgUsersPanel({ orgId }: { orgId: string }) {
                   login: {fmtLogin}
                 </span>
                 {!u.is_active && (
-                  <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 600 }}>inactivo</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 600 }}>inactivo</span>
+                    <select
+                      value={reactivatingRole[u.id] ?? 'PROFESSIONAL'}
+                      onChange={e => setReactivatingRole(prev => ({ ...prev, [u.id]: e.target.value }))}
+                      style={{ fontSize: 11, border: '1px solid var(--s200)', borderRadius: 6, padding: '2px 4px', background: '#fff' }}
+                    >
+                      {REACTIVATE_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                    <button
+                      onClick={() => handleReactivate(u)}
+                      disabled={reactivating === u.id}
+                      title="Reincorporar usuario"
+                      style={{ border: 'none', background: '#dcfce7', color: '#16a34a', cursor: reactivating === u.id ? 'wait' : 'pointer', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6 }}>
+                      {reactivating === u.id ? '…' : 'Reincorporar'}
+                    </button>
+                  </div>
                 )}
                 {u.is_active && (
                   <button
-                    onClick={() => handleRemove(u)}
-                    disabled={removing === u.id}
+                    onClick={() => setPendingRemove(u)}
                     title="Desactivar usuario"
-                    style={{ border: 'none', background: 'transparent', color: removing === u.id ? 'var(--s300)' : '#dc2626',
-                      cursor: removing === u.id ? 'wait' : 'pointer', fontSize: 14, padding: '2px 4px', borderRadius: 4 }}>
+                    style={{ border: 'none', background: 'transparent', color: '#dc2626',
+                      cursor: 'pointer', fontSize: 14, padding: '2px 4px', borderRadius: 4 }}>
                     ✕
                   </button>
                 )}
@@ -688,9 +727,114 @@ function TenantsTab() {
   );
 }
 
+// ── Legal CMS ─────────────────────────────────────────────────────────────────
+
+type LegalDocType = 'terms' | 'privacy' | 'dpa';
+
+const LEGAL_LABELS: Record<LegalDocType, string> = {
+  terms:   'Términos y Condiciones',
+  privacy: 'Política de Privacidad',
+  dpa:     'Acuerdo de Tratamiento (DPA)',
+};
+
+function LegalEditor({ docType }: { docType: LegalDocType }) {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery<LegalDoc>({
+    queryKey: ['legal', docType],
+    queryFn: () => legalApi.get(docType),
+  });
+  const [body, setBody] = useState('');
+  const [version, setVersion] = useState('');
+  const [preview, setPreview] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    if (data) { setBody(data.body_md); setVersion(data.version); }
+  }, [data]);
+
+  const handlePublish = async () => {
+    if (!body.trim() || !version.trim()) return;
+    setSaving(true); setMsg('');
+    try {
+      await legalApi.publish(docType, version, body);
+      qc.invalidateQueries({ queryKey: ['legal', docType] });
+      setMsg('Publicado correctamente.');
+    } catch { setMsg('Error al publicar.'); }
+    finally { setSaving(false); }
+  };
+
+  if (isLoading) return <div style={{ padding: 20, color: 'var(--s400)', fontSize: 13 }}>Cargando…</div>;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--s600)', display: 'block', marginBottom: 4 }}>Versión (YYYY-MM-DD o semver)</label>
+          <input
+            value={version}
+            onChange={e => setVersion(e.target.value)}
+            style={{ width: '100%', boxSizing: 'border-box', padding: '7px 10px', borderRadius: 8, border: '1.5px solid var(--s200)', fontSize: 13 }}
+          />
+        </div>
+        <button
+          onClick={() => setPreview(p => !p)}
+          style={{ marginTop: 20, padding: '7px 14px', borderRadius: 8, border: '1.5px solid var(--s200)', background: preview ? 'var(--s100)' : '#fff', fontSize: 12.5, cursor: 'pointer', fontWeight: 600 }}>
+          {preview ? 'Editar' : 'Preview'}
+        </button>
+      </div>
+
+      {preview ? (
+        <div style={{ border: '1.5px solid var(--s200)', borderRadius: 10, padding: '16px 20px', minHeight: 300, background: '#fafafa' }}>
+          <Markdown content={body} />
+        </div>
+      ) : (
+        <textarea
+          value={body}
+          onChange={e => setBody(e.target.value)}
+          rows={22}
+          placeholder="Escribe el contenido en Markdown…"
+          style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1.5px solid var(--s200)', fontSize: 13, fontFamily: 'monospace', resize: 'vertical', outline: 'none' }}
+        />
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button
+          onClick={handlePublish}
+          disabled={saving || !body.trim() || !version.trim()}
+          style={{ padding: '8px 20px', borderRadius: 9, border: 'none', background: saving ? 'var(--s300)' : 'var(--teal)', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: saving ? 'wait' : 'pointer' }}>
+          {saving ? 'Publicando…' : 'Publicar nueva versión'}
+        </button>
+        {msg && <span style={{ fontSize: 13, color: msg.startsWith('Error') ? '#dc2626' : '#16a34a' }}>{msg}</span>}
+      </div>
+    </div>
+  );
+}
+
+function LegalTab() {
+  const [docType, setDocType] = useState<LegalDocType>('terms');
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 24 }}>
+        {(['terms', 'privacy', 'dpa'] as LegalDocType[]).map(t => (
+          <button key={t} onClick={() => setDocType(t)}
+            style={{ padding: '6px 14px', borderRadius: 99, border: '1.5px solid', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+              borderColor: docType === t ? 'var(--teal)' : 'var(--s200)',
+              background: docType === t ? '#f0fdfa' : '#fff',
+              color: docType === t ? 'var(--teal)' : 'var(--s500)' }}>
+            {LEGAL_LABELS[t]}
+          </button>
+        ))}
+      </div>
+      <LegalEditor docType={docType} />
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-type Tab = 'tenants' | 'sistema';
+type Tab = 'tenants' | 'sistema' | 'legal';
 
 export function SuperAdminPage() {
   const [tab, setTab] = useState<Tab>('sistema');
@@ -698,6 +842,7 @@ export function SuperAdminPage() {
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'sistema', label: 'Sistema', icon: <Activity size={14} /> },
     { id: 'tenants', label: 'Tenants', icon: <Building2 size={14} /> },
+    { id: 'legal',   label: 'Legal',   icon: <FileText size={14} /> },
   ];
 
   return (
@@ -731,6 +876,7 @@ export function SuperAdminPage() {
 
       {tab === 'sistema' && <SistemaTab />}
       {tab === 'tenants' && <TenantsTab />}
+      {tab === 'legal'   && <LegalTab />}
     </div>
   );
 }

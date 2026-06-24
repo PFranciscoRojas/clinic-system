@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -25,6 +25,8 @@ import { TreatmentPlanPanel } from '@/components/clinical/TreatmentPlanPanel';
 import { RiskBanner } from '@/components/clinical/RiskBanner';
 import { riskMeta } from '@/components/clinical/constants';
 import { BillingPanel } from '@/components/billing/BillingPanel';
+import { BreakGlassModal } from '@/components/clinical/BreakGlassModal';
+import { ApiError } from '@/api/client';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -482,6 +484,8 @@ export function PatientProfilePage() {
   const [tab, setTab] = useState<Tab>('historial');
   const [editOpen, setEditOpen] = useState(false);
   const [lateOpen, setLateOpen] = useState(false);
+  const [breakGlassReason, setBreakGlassReason] = useState<string | null>(null);
+  const [showBreakGlass, setShowBreakGlass] = useState(false);
 
   // Patient query
   const { data: patient, isLoading: patLoading, isError } = useQuery({
@@ -498,12 +502,19 @@ export function PatientProfilePage() {
   });
 
   // Clinical records list (metadata only — no decryption)
-  const { data: recordsData } = useQuery({
-    queryKey: ['clinical-records', 'patient', id],
-    queryFn: () => clinicalRecordsApi.list(id!),
+  const { data: recordsData, error: recordsError } = useQuery({
+    queryKey: ['clinical-records', 'patient', id, breakGlassReason],
+    queryFn: () => clinicalRecordsApi.list(id!, breakGlassReason ?? undefined),
     enabled: !!id,
+    retry: false,
   });
   const records: RecordMeta[] = recordsData?.items ?? [];
+
+  useEffect(() => {
+    if (recordsError instanceof ApiError && recordsError.status === 403 && recordsError.message === 'BREAK_GLASS_REASON_REQUIRED') {
+      setShowBreakGlass(true);
+    }
+  }, [recordsError]);
 
   // Active principal diagnosis feeds the header chip (was a hardcoded demo label)
   const { data: dxData } = useQuery({
@@ -569,6 +580,12 @@ export function PatientProfilePage() {
 
   return (
     <div>
+      {showBreakGlass && (
+        <BreakGlassModal
+          onConfirm={reason => { setBreakGlassReason(reason); setShowBreakGlass(false); }}
+          onCancel={() => navigate('/patients')}
+        />
+      )}
       {/* ── Topbar breadcrumb ───────────────────────────────────────────────── */}
       <div style={{ background: '#fff', borderBottom: '1px solid var(--s200)', padding: '0 28px', height: 52, display: 'flex', alignItems: 'center', gap: 10 }}>
         <button

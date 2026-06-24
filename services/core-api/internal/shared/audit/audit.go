@@ -26,6 +26,13 @@ func New(pool *pgxpool.Pool) *Writer {
 // Record writes one audit entry derived from an authenticated request.
 // resourceID may be empty when the action is not tied to a single resource.
 func (w *Writer) Record(r *http.Request, action, resourceType, resourceID string) {
+	w.RecordWithReason(r, action, resourceType, resourceID, "")
+}
+
+// RecordWithReason is like Record but also stores the accessing user's roles
+// snapshot and an explicit justification string in the audit_log metadata.
+// Used for break-the-glass access (Ley 23/1981 — Res. 1995/1999 audit trail).
+func (w *Writer) RecordWithReason(r *http.Request, action, resourceType, resourceID, reason string) {
 	if w == nil || w.pool == nil {
 		return
 	}
@@ -38,9 +45,8 @@ func (w *Writer) Record(r *http.Request, action, resourceType, resourceID string
 	userID := claims.UserID
 	emailHash := hash.Normalize(claims.Email)
 	userAgent := r.UserAgent()
+	roles := claims.Roles
 
-	// Without a reverse proxy, RemoteAddr is "ip:port" and the ::inet cast
-	// rejects it — strip the port so audits never silently vanish.
 	ip := r.RemoteAddr
 	if host, _, err := net.SplitHostPort(ip); err == nil {
 		ip = host
@@ -51,12 +57,20 @@ func (w *Writer) Record(r *http.Request, action, resourceType, resourceID string
 		if resourceID != "" {
 			resID = &resourceID
 		}
+		var metadata *string
+		if reason != "" {
+			s := `{"reason":"` + reason + `"}`
+			metadata = &s
+		}
 		_, err := w.pool.Exec(context.Background(), `
 			INSERT INTO audit_log
 				(organization_id, user_id, user_email_hash, action, resource_type,
-				 resource_id, ip_address, user_agent, success)
-			VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, $7::inet, $8, true)
-		`, orgID, userID, emailHash, action, resourceType, resID, ip, userAgent)
+				 resource_id, ip_address, user_agent, success,
+				 user_roles_snapshot, metadata)
+			VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, $7::inet, $8, true,
+			        $9, $10::jsonb)
+		`, orgID, userID, emailHash, action, resourceType, resID, ip, userAgent,
+			roles, metadata)
 		if err != nil {
 			slog.Error("audit write failed", "action", action, "resource_type", resourceType, "err", err)
 		}

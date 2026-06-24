@@ -14,7 +14,8 @@ import { startCheckout } from '@/api/billing';
 import { profilesApi } from '@/api/profiles';
 import { getLockConfig, onLockConfigChange } from '@/lib/screenLock';
 import { authApi } from '@/api/auth';
-import { dpaContent } from '@/pages/Public/legal/content';
+import { legalApi } from '@/api/legal';
+import { Markdown } from '@/components/common/Markdown';
 
 // Facturación is shown to CLINIC_ADMIN (billing:reports) — see the conditional
 // nav entry below.
@@ -549,6 +550,18 @@ function SubscriptionExpired({ onLogout }: { onLogout: () => void }) {
   );
 }
 
+/* ── DPA content fetched from API ───────────────────────────────── */
+function DpaContent() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['legal', 'dpa'],
+    queryFn: () => legalApi.get('dpa'),
+    staleTime: 5 * 60 * 1000,
+  });
+  if (isLoading) return <div style={{ padding: 20, textAlign: 'center', color: 'var(--s400)', fontSize: 13 }}>Cargando…</div>;
+  if (!data) return null;
+  return <Markdown content={data.body_md} />;
+}
+
 /* ── DPA Modal ──────────────────────────────────────────────────── */
 // Shown once to CLINIC_ADMIN / PROFESSIONAL who haven't accepted the
 // Data Processing Agreement (Contrato Encargado-Responsable, Ley 1581/2012).
@@ -588,22 +601,7 @@ function DpaModal({ onAccept }: { onAccept: () => Promise<void> }) {
 
         {/* Scrollable content */}
         <div style={{ overflowY: 'auto', padding: '16px 26px', flex: 1 }}>
-          {dpaContent.map((section, i) => (
-            <div key={i} style={{ marginBottom: 20 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--s800)', marginBottom: 8 }}>
-                {section.title}
-              </div>
-              {section.paragraphs.map((p, j) => (
-                <p key={j} style={{
-                  fontSize: 13, color: 'var(--s600)', lineHeight: 1.7,
-                  marginBottom: j < section.paragraphs.length - 1 ? 8 : 0,
-                  whiteSpace: 'pre-line',
-                }}>
-                  {p}
-                </p>
-              ))}
-            </div>
-          ))}
+          <DpaContent />
           <div style={{ marginTop: 8, fontSize: 12, color: 'var(--s400)', lineHeight: 1.6 }}>
             Puedes leer el texto completo en{' '}
             <a href="/legal/privacidad" target="_blank" rel="noopener noreferrer"

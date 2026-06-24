@@ -327,6 +327,29 @@ func (h *Handler) verifyEmailChange(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// POST /api/v1/users/{user_id}/reactivate — restores a deactivated team member and assigns a role.
+func (h *Handler) reactivateUser(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	targetUserID := chi.URLParam(r, "user_id")
+	if targetUserID == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "user_id is required")
+		return
+	}
+	var body struct {
+		RoleName string `json:"role_name"`
+	}
+	if err := httputil.DecodeJSON(r, &body); err != nil || body.RoleName == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "role_name is required")
+		return
+	}
+	if err := h.svc.ReactivateUser(r.Context(), claims.OrganizationID, claims.UserID, targetUserID, body.RoleName); err != nil {
+		slog.Warn("auth.reactivate-user", "err", err, "target", targetUserID)
+		writeErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // PATCH /api/v1/users/{user_id}/role — replaces a user's org role (CLINIC_ADMIN only).
 func (h *Handler) changeUserRole(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())

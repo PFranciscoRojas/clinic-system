@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -6,7 +6,9 @@ import {
   Edit3, Save, Shield, Download, Plus, X, PenLine,
 } from 'lucide-react';
 import { clinicalRecordsApi, type ClinicalRecord, type Addendum } from '@/api/clinicalRecords';
+import { ApiError } from '@/api/client';
 import { useAuth } from '@/context/AuthContext';
+import { BreakGlassModal } from '@/components/clinical/BreakGlassModal';
 import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
 import { RecordSectionsForm, recordToDraft, draftToPayload, validateDraft, toUIRecordType, type ClinicalDraft } from '@/components/clinical/RecordSectionsForm';
@@ -26,12 +28,21 @@ export function ClinicalRecordPage() {
   const [cosigning, setCosigning] = useState(false);
   const [exportingPDF, setExportingPDF] = useState(false);
   const [err, setErr] = useState('');
+  const [breakGlassReason, setBreakGlassReason] = useState<string | null>(null);
+  const [showBreakGlass, setShowBreakGlass] = useState(false);
 
-  const { data: record, isLoading, isError } = useQuery({
-    queryKey: ['clinical-record', id],
-    queryFn: () => clinicalRecordsApi.get(id!),
+  const { data: record, isLoading, isError, error: recordError } = useQuery({
+    queryKey: ['clinical-record', id, breakGlassReason],
+    queryFn: () => clinicalRecordsApi.get(id!, breakGlassReason ?? undefined),
     enabled: !!id,
+    retry: false,
   });
+
+  useEffect(() => {
+    if (recordError instanceof ApiError && recordError.status === 403 && recordError.message === 'BREAK_GLASS_REASON_REQUIRED') {
+      setShowBreakGlass(true);
+    }
+  }, [recordError]);
 
   const startEditing = () => {
     if (record) {
@@ -100,6 +111,13 @@ export function ClinicalRecordPage() {
       setExportingPDF(false);
     }
   };
+
+  if (showBreakGlass) return (
+    <BreakGlassModal
+      onConfirm={reason => { setBreakGlassReason(reason); setShowBreakGlass(false); }}
+      onCancel={() => navigate(-1)}
+    />
+  );
 
   if (isLoading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><Spinner size={28} color="var(--teal)" /></div>;
   if (isError || !record) return (

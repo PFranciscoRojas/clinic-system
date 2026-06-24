@@ -11,6 +11,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
+import { ConfirmByTextModal } from '@/components/ui/ConfirmByTextModal';
 import { authApi } from '@/api/auth';
 import { adminApi } from '@/api/admin';
 import { consentTemplatesApi, type ConsentType } from '@/api/clinicalRecords';
@@ -1426,7 +1427,9 @@ function TeamCard({ selfId }: { selfId: string }) {
   });
   const users = data?.items ?? [];
   const [rowErr, setRowErr] = useState<Record<string, string>>({});
-  const [removing, setRemoving] = useState<string | null>(null);
+  const [pendingRemove, setPendingRemove] = useState<typeof users[0] | null>(null);
+  const [reactivatingRole, setReactivatingRole] = useState<Record<string, string>>({});
+  const [reactivating, setReactivating] = useState<string | null>(null);
 
   const changeRole = async (userId: string, roleName: string) => {
     setRowErr(e => ({ ...e, [userId]: '' }));
@@ -1438,23 +1441,45 @@ function TeamCard({ selfId }: { selfId: string }) {
     }
   };
 
-  const handleRemove = async (u: { id: string; display_name: string | null; email: string }) => {
-    const name = u.display_name || u.email;
-    if (!window.confirm(`¿Eliminar a "${name}" del equipo?\n\nSu historial clínico se conserva pero no podrá volver a iniciar sesión.`)) return;
-    setRemoving(u.id);
-    setRowErr(e => ({ ...e, [u.id]: '' }));
+  const confirmRemove = async () => {
+    if (!pendingRemove) return;
+    setRowErr(e => ({ ...e, [pendingRemove.id]: '' }));
     try {
-      await authApi.deactivateUser(u.id);
+      await authApi.deactivateUser(pendingRemove.id);
       qc.invalidateQueries({ queryKey: ['org-users'] });
     } catch (ex) {
-      setRowErr(e => ({ ...e, [u.id]: ex instanceof Error ? ex.message : 'Error al eliminar' }));
+      setRowErr(e => ({ ...e, [pendingRemove.id]: ex instanceof Error ? ex.message : 'Error al eliminar' }));
     } finally {
-      setRemoving(null);
+      setPendingRemove(null);
+    }
+  };
+
+  const handleReactivate = async (u: typeof users[0]) => {
+    const role = reactivatingRole[u.id] ?? 'PROFESSIONAL';
+    setReactivating(u.id);
+    setRowErr(e => ({ ...e, [u.id]: '' }));
+    try {
+      await authApi.reactivateUser(u.id, role);
+      qc.invalidateQueries({ queryKey: ['org-users'] });
+    } catch (ex) {
+      setRowErr(e => ({ ...e, [u.id]: ex instanceof Error ? ex.message : 'Error al reincorporar' }));
+    } finally {
+      setReactivating(null);
     }
   };
 
   return (
     <SectionCard title="Equipo" icon={Users} color="#0ea5e9">
+      {pendingRemove && (
+        <ConfirmByTextModal
+          title="Eliminar del equipo"
+          description={`"${pendingRemove.display_name || pendingRemove.email}" no podrá iniciar sesión. Su historial clínico se conserva y puede reincorporarse después.`}
+          confirmText={pendingRemove.email}
+          confirmLabel="Eliminar"
+          onConfirm={confirmRemove}
+          onCancel={() => setPendingRemove(null)}
+        />
+      )}
       {isLoading ? (
         <div style={{ padding: 20, display: 'flex', justifyContent: 'center' }}><Spinner /></div>
       ) : users.length === 0 ? (
@@ -1463,32 +1488,52 @@ function TeamCard({ selfId }: { selfId: string }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 8 }}>
           {users.map(u => {
             const isSelf = u.id === selfId;
+            const isActive = u.is_active;
             const badge = ROLE_BADGE[u.role_name] ?? { label: u.role_name, color: '#475569', bg: '#f1f5f9' };
             return (
-              <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--s100)' }}>
+              <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--s100)', opacity: isActive ? 1 : 0.65 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--s800)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: isActive ? 'var(--s800)' : 'var(--s400)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {u.display_name || u.email}
+                    {!isActive && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: '#dc2626', background: '#fef2f2', padding: '1px 6px', borderRadius: 99 }}>Inactivo</span>}
                   </div>
                   {u.display_name && <div style={{ fontSize: 11.5, color: 'var(--s400)' }}>{u.email}</div>}
                 </div>
-                <Badge label={badge.label} color={badge.color} bg={badge.bg} />
-                <select
-                  disabled={isSelf}
-                  value={u.role_name}
-                  onChange={e => changeRole(u.id, e.target.value)}
-                  title={isSelf ? 'No puedes cambiar tu propio rol' : 'Cambiar rol'}
-                  style={{ padding: '5px 8px', borderRadius: 7, border: '1.5px solid var(--s200)', fontSize: 12.5, color: 'var(--s700)', cursor: isSelf ? 'not-allowed' : 'pointer', background: isSelf ? 'var(--s100)' : '#fff' }}>
-                  {ASSIGNABLE_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                </select>
-                {!isSelf && (
-                  <button
-                    onClick={() => handleRemove(u)}
-                    disabled={removing === u.id}
-                    title="Eliminar del equipo"
-                    style={{ border: 'none', background: 'transparent', color: removing === u.id ? 'var(--s300)' : '#dc2626', cursor: removing === u.id ? 'wait' : 'pointer', padding: '4px 6px', borderRadius: 6, fontSize: 15, lineHeight: 1 }}>
-                    ✕
-                  </button>
+                {isActive ? (
+                  <>
+                    <Badge label={badge.label} color={badge.color} bg={badge.bg} />
+                    <select
+                      disabled={isSelf}
+                      value={u.role_name}
+                      onChange={e => changeRole(u.id, e.target.value)}
+                      title={isSelf ? 'No puedes cambiar tu propio rol' : 'Cambiar rol'}
+                      style={{ padding: '5px 8px', borderRadius: 7, border: '1.5px solid var(--s200)', fontSize: 12.5, color: 'var(--s700)', cursor: isSelf ? 'not-allowed' : 'pointer', background: isSelf ? 'var(--s100)' : '#fff' }}>
+                      {ASSIGNABLE_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                    </select>
+                    {!isSelf && (
+                      <button
+                        onClick={() => setPendingRemove(u)}
+                        title="Eliminar del equipo"
+                        style={{ border: 'none', background: 'transparent', color: '#dc2626', cursor: 'pointer', padding: '4px 6px', borderRadius: 6, fontSize: 15, lineHeight: 1 }}>
+                        ✕
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <select
+                      value={reactivatingRole[u.id] ?? 'PROFESSIONAL'}
+                      onChange={e => setReactivatingRole(prev => ({ ...prev, [u.id]: e.target.value }))}
+                      style={{ padding: '5px 8px', borderRadius: 7, border: '1.5px solid var(--s200)', fontSize: 12.5, color: 'var(--s700)', background: '#fff' }}>
+                      {ASSIGNABLE_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                    </select>
+                    <button
+                      onClick={() => handleReactivate(u)}
+                      disabled={reactivating === u.id}
+                      style={{ border: 'none', background: '#dcfce7', color: '#16a34a', cursor: reactivating === u.id ? 'wait' : 'pointer', fontSize: 12, fontWeight: 700, padding: '5px 10px', borderRadius: 7 }}>
+                      {reactivating === u.id ? '…' : 'Reincorporar'}
+                    </button>
+                  </div>
                 )}
                 {rowErr[u.id] && <div style={{ fontSize: 11.5, color: 'var(--red)' }}>{rowErr[u.id]}</div>}
               </div>

@@ -92,8 +92,12 @@ export const clinicalRecordsApi = {
     const q = status ? `?status=${status}` : '';
     return api.get<{ items: RecordMeta[] }>(`/clinical-records${q}`).then(r => r.items ?? []);
   },
-  list:      (patientId: string) => api.get<{ items: RecordMeta[] }>(`/patients/${patientId}/records`),
-  get:       (id: string)        => api.get<ClinicalRecord>(`/clinical-records/${id}`),
+  list: (patientId: string, reason?: string) =>
+    api.get<{ items: RecordMeta[] }>(`/patients/${patientId}/records`,
+      reason ? { headers: { 'X-Access-Reason': reason } } : undefined),
+  get: (id: string, reason?: string) =>
+    api.get<ClinicalRecord>(`/clinical-records/${id}`,
+      reason ? { headers: { 'X-Access-Reason': reason } } : undefined),
   create:    (patientId: string, body: CreateRecordInput) =>
     api.post<{ id: string }>(`/patients/${patientId}/records`, body),
   update:    (id: string, body: UpdateRecordInput) =>

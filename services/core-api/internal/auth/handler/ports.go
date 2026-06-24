@@ -37,6 +37,7 @@ type svcPort interface {
 	ListOrgUsers(ctx context.Context, orgID string) ([]auth.OrgUser, error)
 	ChangeUserRole(ctx context.Context, orgID, callerUserID, targetUserID, roleName string) error
 	DeactivateUser(ctx context.Context, orgID, callerUserID, targetUserID string) error
+	ReactivateUser(ctx context.Context, orgID, callerUserID, targetUserID, roleName string) error
 
 	// Legal / DPA.
 	AcceptDPA(ctx context.Context, userID string) error

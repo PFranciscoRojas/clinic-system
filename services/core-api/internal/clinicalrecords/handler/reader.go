@@ -11,10 +11,32 @@ import (
 	"sghcp/core-api/internal/shared/middleware"
 )
 
+// isAdminOnly returns true when the caller holds CLINIC_ADMIN but NOT PROFESSIONAL.
+// These accounts need break-the-glass justification to read clinical data.
+func isAdminOnly(roles []string) bool {
+	hasAdmin := false
+	hasPro := false
+	for _, r := range roles {
+		if r == "CLINIC_ADMIN" {
+			hasAdmin = true
+		}
+		if r == "PROFESSIONAL" || r == "INTERN" {
+			hasPro = true
+		}
+	}
+	return hasAdmin && !hasPro
+}
+
 // GET /api/v1/clinical-records/{id}
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	recordID := chi.URLParam(r, "id")
+
+	reason := r.Header.Get("X-Access-Reason")
+	if isAdminOnly(claims.Roles) && reason == "" {
+		httputil.WriteError(w, http.StatusForbidden, "BREAK_GLASS_REASON_REQUIRED")
+		return
+	}
 
 	rec, err := h.svc.Get(r.Context(), claims.OrganizationID, recordID)
 	if err != nil {
@@ -22,7 +44,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.audit.Record(r, "CLINICAL_RECORD_READ", "clinical_record", recordID)
+	h.audit.RecordWithReason(r, "CLINICAL_RECORD_READ", "clinical_record", recordID, reason)
 	httputil.WriteJSON(w, http.StatusOK, toResponse(rec))
 }
 
@@ -30,6 +52,12 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	patientID := chi.URLParam(r, "patient_id")
+
+	reason := r.Header.Get("X-Access-Reason")
+	if isAdminOnly(claims.Roles) && reason == "" {
+		httputil.WriteError(w, http.StatusForbidden, "BREAK_GLASS_REASON_REQUIRED")
+		return
+	}
 
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
@@ -48,7 +76,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.audit.Record(r, "CLINICAL_RECORD_LIST", "patient", patientID)
+	h.audit.RecordWithReason(r, "CLINICAL_RECORD_LIST", "patient", patientID, reason)
 	items := make([]map[string]any, 0, len(metas))
 	for _, m := range metas {
 		items = append(items, toMetaResponse(m))

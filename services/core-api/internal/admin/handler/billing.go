@@ -214,6 +214,55 @@ func (h *Handler) listOrgUsers(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"items": users})
 }
 
+// POST /admin/orgs/{id}/users/{user_id}/reactivate — SYSTEM_ADMIN: reactivates a
+// previously deactivated user and assigns them a role.
+func (h *Handler) reactivateOrgUser(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "id")
+	userID := chi.URLParam(r, "user_id")
+
+	var body struct {
+		RoleName string `json:"role_name"`
+	}
+	if err := httputil.DecodeJSON(r, &body); err != nil || body.RoleName == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "role_name is required")
+		return
+	}
+
+	tx, err := h.pool.Begin(r.Context())
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "db error")
+		return
+	}
+	defer tx.Rollback(r.Context()) //nolint:errcheck
+
+	var roleID string
+	if err := tx.QueryRow(r.Context(), `SELECT id FROM roles WHERE name = $1`, body.RoleName).Scan(&roleID); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "role not found")
+		return
+	}
+
+	tag, err := tx.Exec(r.Context(), `UPDATE users SET is_active = true, updated_at = NOW() WHERE id = $1 AND organization_id = $2`, userID, orgID)
+	if err != nil || tag.RowsAffected() == 0 {
+		httputil.WriteError(w, http.StatusNotFound, "user not found in this organization")
+		return
+	}
+
+	if _, err = tx.Exec(r.Context(), `
+		INSERT INTO user_roles (organization_id, user_id, role_id)
+		VALUES ($1, $2, $3) ON CONFLICT DO NOTHING
+	`, orgID, userID, roleID); err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "could not assign role")
+		return
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "commit error")
+		return
+	}
+	slog.Info("admin.reactivate-org-user", "org", orgID, "user", userID, "role", body.RoleName)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // DELETE /admin/orgs/{id}/users/{user_id} — SYSTEM_ADMIN: desactiva un usuario
 // de cualquier tenant. Mismo soft-delete que el endpoint de equipo, sin guards
 // de "último admin" (el operador puede necesitar forzar el acceso).
