@@ -1,6 +1,9 @@
 package httputil
 
-import "net/http"
+import (
+	"log/slog"
+	"net/http"
+)
 
 // ErrorMapper translates a domain error into an HTTP status code and message.
 // Each bounded context defines its own ErrorMapper in its handler package.
@@ -11,6 +14,7 @@ type ErrorMapper func(err error) (status int, msg string)
 func WriteErrorFrom(w http.ResponseWriter, err error, mapper ErrorMapper) {
 	status, msg := mapper(err)
 	if status == 0 {
+		slog.Default().Error("unhandled handler error", "err", err)
 		status = http.StatusInternalServerError
 		msg = "internal error"
 	}
