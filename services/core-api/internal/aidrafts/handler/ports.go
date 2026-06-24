@@ -12,6 +12,7 @@ import (
 type svcPort interface {
 	UploadAudio(ctx context.Context, in aidraftssvc.UploadAudioInput) (string, error)
 	GetDraft(ctx context.Context, orgID, draftID string) (*aidrafts.AIDraft, error)
+	ListDrafts(ctx context.Context, orgID, status string) ([]*aidrafts.DraftMeta, error)
 	DecryptDraftContent(ctx context.Context, orgID, draftID string) (*aidrafts.AIDraft, string, error)
 	DecryptForReview(ctx context.Context, orgID, draftID string) (*aidrafts.AIDraft, string, string, error)
 	ResolveDraft(ctx context.Context, orgID, draftID, clinicalRecordID, resolvedBy string) error

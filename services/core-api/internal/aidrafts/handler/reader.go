@@ -10,6 +10,38 @@ import (
 	"sghcp/core-api/internal/shared/middleware"
 )
 
+// GET /api/v1/ai-drafts?status=DRAFT_READY
+func (h *Handler) listDrafts(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	status := r.URL.Query().Get("status")
+	drafts, err := h.svc.ListDrafts(r.Context(), claims.OrganizationID, status)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+
+	type item struct {
+		ID               string `json:"id"`
+		Status           string `json:"status"`
+		PatientID        string `json:"patient_id"`
+		PatientCode      *int   `json:"patient_code"`
+		ClinicalRecordID string `json:"clinical_record_id,omitempty"`
+		CreatedAt        string `json:"created_at"`
+	}
+	items := make([]item, 0, len(drafts))
+	for _, d := range drafts {
+		items = append(items, item{
+			ID:               d.ID,
+			Status:           d.Status,
+			PatientID:        d.PatientID,
+			PatientCode:      d.PatientCode,
+			ClinicalRecordID: d.ClinicalRecordID,
+			CreatedAt:        d.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		})
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
 // GET /api/v1/ai-drafts/{id}
 func (h *Handler) getDraft(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())

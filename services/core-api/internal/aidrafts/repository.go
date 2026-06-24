@@ -8,4 +8,5 @@ type Repository interface {
 	FindByID(ctx context.Context, orgID, draftID string) (*AIDraft, error)
 	FindEncKey(ctx context.Context, dekID string) (*EncKeyRow, error)
 	Resolve(ctx context.Context, orgID, draftID, clinicalRecordID, resolvedBy string) error
+	ListByOrg(ctx context.Context, orgID, status string) ([]*DraftMeta, error)
 }

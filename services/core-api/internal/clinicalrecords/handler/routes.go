@@ -14,9 +14,10 @@ func (h *Handler) PatientRoutes() chi.Router {
 	return r
 }
 
-// Routes returns routes for /api/v1/clinical-records/{id}.
+// Routes returns routes for /api/v1/clinical-records.
 func (h *Handler) Routes() chi.Router {
 	r := chi.NewRouter()
+	r.With(middleware.RequirePermission("clinical_records:read")).Get("/", h.listByOrg)
 	r.With(middleware.RequirePermission("clinical_records:read")).Get("/{id}", h.get)
 	r.With(middleware.RequirePermission("clinical_records:read")).Get("/{id}/export", h.exportPDF)
 	r.With(middleware.RequirePermission("clinical_records:read")).Get("/{id}/addenda", h.listAddenda)

@@ -47,6 +47,33 @@ func (r *Repository) FindByID(ctx context.Context, orgID, draftID string) (*aidr
 	return &d, nil
 }
 
+func (r *Repository) ListByOrg(ctx context.Context, orgID, status string) ([]*aidrafts.DraftMeta, error) {
+	rows, err := dbctx.From(ctx, r.db).Query(ctx, `
+		SELECT d.id, d.status, d.patient_id, p.patient_code,
+		       COALESCE(d.clinical_record_id::text, ''), d.created_at
+		FROM ai_drafts d
+		LEFT JOIN patients p ON p.id = d.patient_id
+		WHERE d.organization_id = $1
+		  AND ($2 = '' OR d.status = $2)
+		ORDER BY d.created_at DESC
+		LIMIT 100
+	`, orgID, status)
+	if err != nil {
+		return nil, fmt.Errorf("list ai_drafts: %w", err)
+	}
+	defer rows.Close()
+
+	var result []*aidrafts.DraftMeta
+	for rows.Next() {
+		var m aidrafts.DraftMeta
+		if err := rows.Scan(&m.ID, &m.Status, &m.PatientID, &m.PatientCode, &m.ClinicalRecordID, &m.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan draft_meta: %w", err)
+		}
+		result = append(result, &m)
+	}
+	return result, rows.Err()
+}
+
 func (r *Repository) FindEncKey(ctx context.Context, dekID string) (*aidrafts.EncKeyRow, error) {
 	var k aidrafts.EncKeyRow
 	err := dbctx.From(ctx, r.db).QueryRow(ctx,

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  CalendarDays, Users, Settings,
+  CalendarDays, Users, Settings, Stethoscope,
   Brain, Search, Plus, ChevronDown, Lock, LogOut, Menu,
   UserCircle, Calendar, X, Clock, Building2, Receipt,
   PanelLeftClose, PanelLeftOpen,
@@ -16,9 +16,10 @@ import { profilesApi } from '@/api/profiles';
 // Facturación is shown to CLINIC_ADMIN (billing:reports) — see the conditional
 // nav entry below. Evaluaciones postponed by decision 2026-06-09 (backlog).
 const NAV = [
-  { to: '/',                  label: 'Agenda',          Icon: CalendarDays,  perm: 'appointments:read', badge: null },
-  { to: '/patients',          label: 'Pacientes',        Icon: Users,         perm: 'patients:read',     badge: null },
-  { to: '/settings',          label: 'Configuración',    Icon: Settings,      perm: null,                badge: null },
+  { to: '/',          label: 'Agenda',         Icon: CalendarDays,  perm: 'appointments:read', badge: null },
+  { to: '/patients',  label: 'Pacientes',       Icon: Users,         perm: 'patients:read',     badge: null },
+  { to: '/clinical',  label: 'Clínico',         Icon: Stethoscope,   perm: 'clinical_records:read', badge: null },
+  { to: '/settings',  label: 'Configuración',   Icon: Settings,      perm: null,                badge: null },
 ];
 
 interface Props { children: ReactNode }

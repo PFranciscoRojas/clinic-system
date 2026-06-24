@@ -26,15 +26,15 @@ import { useIsCompact } from '@/lib/useMediaQuery';
 
 type SectionId = 'profile' | 'schedule' | 'notifications' | 'ai' | 'security' | 'templates' | 'billing' | 'users';
 
-const SECTIONS: { id: SectionId; icon: React.ElementType; label: string; color?: string }[] = [
-  { id: 'profile',       icon: UserRound,  label: 'Perfil profesional' },
-  { id: 'schedule',      icon: Clock,       label: 'Horario y agenda'   },
-  { id: 'notifications', icon: Bell,        label: 'Notificaciones'     },
-  { id: 'ai',            icon: Sparkles,    label: 'Asistente IA',       color: '#f59e0b' },
-  { id: 'security',      icon: ShieldCheck, label: 'Seguridad',          color: '#ef4444' },
-  { id: 'templates',     icon: FileText,    label: 'Plantillas clínicas',color: '#8b5cf6' },
-  { id: 'billing',       icon: Receipt,     label: 'Tarifas',             color: '#10b981' },
-  { id: 'users',         icon: Users,       label: 'Usuarios',            color: '#0ea5e9' },
+const SECTIONS: { id: SectionId; icon: React.ElementType; label: string; color?: string; group: string }[] = [
+  { id: 'profile',       icon: UserRound,  label: 'Perfil profesional',  group: 'Personal'     },
+  { id: 'schedule',      icon: Clock,       label: 'Horario y agenda',    group: 'Personal'     },
+  { id: 'security',      icon: ShieldCheck, label: 'Seguridad',            group: 'Personal',    color: '#ef4444' },
+  { id: 'ai',            icon: Sparkles,    label: 'Asistente IA',         group: 'Herramientas',color: '#f59e0b' },
+  { id: 'notifications', icon: Bell,        label: 'Notificaciones',       group: 'Herramientas' },
+  { id: 'templates',     icon: FileText,    label: 'Plantillas clínicas',  group: 'Herramientas',color: '#8b5cf6' },
+  { id: 'billing',       icon: Receipt,     label: 'Tarifas',              group: 'Equipo',      color: '#10b981' },
+  { id: 'users',         icon: Users,       label: 'Usuarios',             group: 'Equipo',      color: '#0ea5e9' },
 ];
 
 const ROLE_COLORS: Record<string, { color: string; bg: string }> = {
@@ -1873,21 +1873,34 @@ export function SettingsPage() {
           </div>
         </div>
         <nav style={{ flex: 1, overflow: 'auto', padding: '10px' }}>
-          {visibleSections.map(item => {
-            const on = section === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setSection(item.id)}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', borderRadius: 9, border: 'none', background: on ? 'var(--teal-l)' : 'transparent', color: on ? 'var(--teal-d)' : 'var(--s600)', fontSize: 13.5, fontWeight: on ? 700 : 400, fontFamily: "'DM Sans', sans-serif", marginBottom: 2, textAlign: 'left', transition: 'all .12s', cursor: 'pointer' }}
-                onMouseEnter={e => { if (!on) e.currentTarget.style.background = 'var(--s50)'; }}
-                onMouseLeave={e => { if (!on) e.currentTarget.style.background = 'transparent'; }}
-              >
-                <item.icon size={15} color={on ? 'var(--teal)' : 'var(--s400)'} />
-                {item.label}
-              </button>
-            );
-          })}
+          {(() => {
+            const groups: string[] = [];
+            return visibleSections.map(item => {
+              const on = section === item.id;
+              const showLabel = !groups.includes(item.group);
+              if (showLabel) groups.push(item.group);
+              return (
+                <div key={item.id}>
+                  {showLabel && (
+                    <div style={{
+                      fontSize: 10, fontWeight: 700, color: 'var(--s300)',
+                      letterSpacing: '.08em', textTransform: 'uppercase',
+                      padding: '10px 12px 4px', marginTop: groups.length > 1 ? 6 : 0,
+                    }}>{item.group}</div>
+                  )}
+                  <button
+                    onClick={() => setSection(item.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', borderRadius: 9, border: 'none', background: on ? 'var(--teal-l)' : 'transparent', color: on ? 'var(--teal-d)' : 'var(--s600)', fontSize: 13.5, fontWeight: on ? 700 : 400, fontFamily: "'DM Sans', sans-serif", marginBottom: 2, textAlign: 'left', transition: 'all .12s', cursor: 'pointer' }}
+                    onMouseEnter={e => { if (!on) e.currentTarget.style.background = 'var(--s50)'; }}
+                    onMouseLeave={e => { if (!on) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <item.icon size={15} color={on ? 'var(--teal)' : (item.color ?? 'var(--s400)')} />
+                    {item.label}
+                  </button>
+                </div>
+              );
+            });
+          })()}
         </nav>
         <div style={{ padding: '12px 16px', borderTop: '1px solid var(--s100)' }}>
           <div style={{ fontSize: 11.5, color: 'var(--s400)' }}>SGHCP v0.5.0 · 2026</div>

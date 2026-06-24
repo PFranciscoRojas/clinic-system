@@ -9,6 +9,7 @@ type Repository interface {
 	Create(ctx context.Context, p CreateParams) (string, error)
 	FindByID(ctx context.Context, orgID, recordID string) (*RawRecord, error)
 	List(ctx context.Context, f ListFilter) ([]*RecordMeta, error)
+	ListByOrg(ctx context.Context, f OrgListFilter) ([]*RecordMeta, error)
 	GetProcessDates(ctx context.Context, orgID, patientID string) (ProcessDates, error)
 	Update(ctx context.Context, p UpdateParams) error
 	Approve(ctx context.Context, orgID, recordID, approvedBy string) error

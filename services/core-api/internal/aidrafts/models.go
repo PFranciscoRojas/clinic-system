@@ -33,6 +33,16 @@ type CreateParams struct {
 	WhisperModel   string
 }
 
+// DraftMeta is the lightweight row returned by the list endpoint (no decryption).
+type DraftMeta struct {
+	ID               string
+	Status           string
+	PatientID        string
+	PatientCode      *int
+	ClinicalRecordID string
+	CreatedAt        time.Time
+}
+
 // EncKeyRow is the raw row from encryption_keys used to decrypt the draft's DEK.
 type EncKeyRow struct {
 	ID           string

@@ -21,6 +21,7 @@ import { VerifyEmailChangePage } from '@/pages/Public/VerifyEmailChangePage';
 import { BillingReturnPage } from '@/pages/Public/BillingReturnPage';
 import { BookingWizardPage } from '@/pages/Public/BookingWizardPage';
 import { BookingPaymentReturnPage } from '@/pages/Public/BookingPaymentReturnPage';
+import { ClinicalPage } from '@/pages/Clinical/ClinicalPage';
 import { EvaluationsPage } from '@/pages/Evaluations/EvaluationsPage';
 import { BillingPage } from '@/pages/Billing/BillingPage';
 import { SettingsPage } from '@/pages/Settings/SettingsPage';
@@ -82,6 +83,7 @@ export function App() {
                 <Route path="patients/:id" element={<PatientProfilePage />} />
                 <Route path="appointments/new" element={<NewAppointmentPage />} />
                 <Route path="appointments/:id" element={<AppointmentPage />} />
+                <Route path="clinical" element={<ClinicalPage />} />
                 <Route path="ai-drafts/:id" element={<AIDraftPage />} />
                 <Route path="clinical-records/:id" element={<ClinicalRecordPage />} />
                 <Route path="evaluations" element={<EvaluationsPage />} />

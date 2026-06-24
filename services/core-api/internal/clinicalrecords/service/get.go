@@ -49,3 +49,7 @@ func (s *Service) Get(ctx context.Context, orgID, recordID string) (*clinicalrec
 func (s *Service) List(ctx context.Context, f clinicalrecords.ListFilter) ([]*clinicalrecords.RecordMeta, error) {
 	return s.repo.List(ctx, f)
 }
+
+func (s *Service) ListByOrg(ctx context.Context, f clinicalrecords.OrgListFilter) ([]*clinicalrecords.RecordMeta, error) {
+	return s.repo.ListByOrg(ctx, f)
+}

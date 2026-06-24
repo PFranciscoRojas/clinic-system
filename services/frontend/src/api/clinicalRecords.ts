@@ -35,6 +35,7 @@ export interface ClinicalRecord {
 export interface RecordMeta {
   id: string;
   patient_id: string;
+  patient_code: number | null;
   responsible_staff_id: string;
   created_by: string;
   appointment_id: string;
@@ -87,6 +88,10 @@ export interface Addendum {
 }
 
 export const clinicalRecordsApi = {
+  listAll:   (status?: string) => {
+    const q = status ? `?status=${status}` : '';
+    return api.get<{ items: RecordMeta[] }>(`/clinical-records${q}`).then(r => r.items ?? []);
+  },
   list:      (patientId: string) => api.get<{ items: RecordMeta[] }>(`/patients/${patientId}/records`),
   get:       (id: string)        => api.get<ClinicalRecord>(`/clinical-records/${id}`),
   create:    (patientId: string, body: CreateRecordInput) =>

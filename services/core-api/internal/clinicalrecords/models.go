@@ -72,6 +72,7 @@ type RawRecord struct {
 type RecordMeta struct {
 	ID                 string
 	PatientID          string
+	PatientCode        *int
 	ResponsibleStaffID string
 	CreatedBy          string
 	AppointmentID      string
@@ -135,6 +136,14 @@ type EncKeyRow struct {
 	ID           string
 	EncryptedDEK []byte
 	KeySource    string
+}
+
+// OrgListFilter specifies filters for the org-wide clinical records list.
+type OrgListFilter struct {
+	OrganizationID string
+	Status         string // optional: "DRAFT" | "APPROVED"
+	Limit          int
+	Offset         int
 }
 
 // ListFilter specifies query filters for listing records.

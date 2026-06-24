@@ -27,7 +27,20 @@ export interface ApproveDraftInput {
   risk_level?: string;
 }
 
+export interface DraftMeta {
+  id: string;
+  status: DraftStatus;
+  patient_id: string;
+  patient_code: number | null;
+  clinical_record_id?: string;
+  created_at: string;
+}
+
 export const aiDraftsApi = {
+  list:    (status?: DraftStatus) => {
+    const q = status ? `?status=${status}` : '';
+    return api.get<{ items: DraftMeta[] }>(`/ai-drafts${q}`).then(r => r.items ?? []);
+  },
   get:     (id: string) => api.get<AIDraft>(`/ai-drafts/${id}`),
   approve: (id: string, body: ApproveDraftInput) =>
     api.post<{ clinical_record_id: string }>(`/ai-drafts/${id}/approve`, body),

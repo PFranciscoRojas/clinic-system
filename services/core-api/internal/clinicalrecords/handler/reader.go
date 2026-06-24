@@ -83,6 +83,7 @@ func toMetaResponse(m *clinicalrecords.RecordMeta) map[string]any {
 	return map[string]any{
 		"id":                   m.ID,
 		"patient_id":           m.PatientID,
+		"patient_code":         m.PatientCode,
 		"responsible_staff_id": m.ResponsibleStaffID,
 		"created_by":           m.CreatedBy,
 		"appointment_id":       m.AppointmentID,
@@ -95,4 +96,32 @@ func toMetaResponse(m *clinicalrecords.RecordMeta) map[string]any {
 		"supervisor_id":        m.SupervisorID,
 		"created_at":           m.CreatedAt,
 	}
+}
+
+// GET /api/v1/clinical-records?status=DRAFT&limit=50
+func (h *Handler) listByOrg(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	status := r.URL.Query().Get("status")
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+
+	metas, err := h.svc.ListByOrg(r.Context(), clinicalrecords.OrgListFilter{
+		OrganizationID: claims.OrganizationID,
+		Status:         status,
+		Limit:          limit,
+		Offset:         offset,
+	})
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+
+	items := make([]map[string]any, 0, len(metas))
+	for _, m := range metas {
+		items = append(items, toMetaResponse(m))
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"items": items})
 }
