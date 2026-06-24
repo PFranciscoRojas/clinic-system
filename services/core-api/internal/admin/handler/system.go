@@ -63,6 +63,16 @@ type aiQueueStats struct {
 	Error      int `json:"error"`
 }
 
+type pgAdvanced struct {
+	BufferHitPct   float64 `json:"buffer_hit_pct"`   // idealmente >99%
+	Commits        int64   `json:"commits"`           // transacciones confirmadas desde último reset
+	Rollbacks      int64   `json:"rollbacks"`         // transacciones revertidas
+	Deadlocks      int64   `json:"deadlocks"`         // debería ser 0
+	SlowQueries    int     `json:"slow_queries"`      // queries activas >5s ahora mismo
+	ActiveLocks    int     `json:"active_locks"`      // locks en espera ahora mismo
+	StatsAgeHours  float64 `json:"stats_age_hours"`   // horas desde último reset de stats
+}
+
 type alertItem struct {
 	Level   string `json:"level"`   // info | warning | critical
 	Code    string `json:"code"`
@@ -74,6 +84,7 @@ type systemHealthResponse struct {
 	Disk        diskStats    `json:"disk"`
 	Mem         memStats     `json:"mem"`
 	DB          dbStats      `json:"db"`
+	PG          pgAdvanced   `json:"pg"`
 	Redis       redisStats   `json:"redis"`
 	Tenants     tenantCounts `json:"tenants"`
 	AIQueue     aiQueueStats `json:"ai_queue"`
@@ -150,6 +161,45 @@ func (h *Handler) systemHealth(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		rows.Close()
+	}
+
+	// --- PostgreSQL avanzado ---
+	var blksHit, blksRead, commits, rollbacks, deadlocks int64
+	var statsReset *time.Time
+	h.pool.QueryRow(ctx, `
+		SELECT blks_hit, blks_read, xact_commit, xact_rollback, deadlocks, stats_reset
+		FROM pg_stat_database WHERE datname = current_database()
+	`).Scan(&blksHit, &blksRead, &commits, &rollbacks, &deadlocks, &statsReset) //nolint:errcheck
+
+	var bufHit float64 = 100
+	if total := blksHit + blksRead; total > 0 {
+		bufHit = round2(float64(blksHit) / float64(total) * 100)
+	}
+	var statsAgeH float64
+	if statsReset != nil {
+		statsAgeH = round2(time.Since(*statsReset).Hours())
+	}
+
+	var slowQ int
+	h.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM pg_stat_activity
+		WHERE state = 'active' AND query_start < now() - interval '5 seconds'
+		  AND query NOT LIKE '%pg_stat%'
+	`).Scan(&slowQ) //nolint:errcheck
+
+	var activeLocks int
+	h.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM pg_locks WHERE NOT granted
+	`).Scan(&activeLocks) //nolint:errcheck
+
+	out.PG = pgAdvanced{
+		BufferHitPct:  bufHit,
+		Commits:       commits,
+		Rollbacks:     rollbacks,
+		Deadlocks:     deadlocks,
+		SlowQueries:   slowQ,
+		ActiveLocks:   activeLocks,
+		StatsAgeHours: statsAgeH,
 	}
 
 	// --- Redis ---
@@ -287,6 +337,32 @@ func computeAlerts(h systemHealthResponse) []alertItem {
 			Code:    "ai_congested",
 			Message: "Cola IA congestionada — más de 8 borradores procesando simultáneamente",
 			Tip:     "El ai-service puede estar lento o colgado. Revisa sus logs.",
+		})
+	}
+
+	// PostgreSQL avanzado
+	if h.PG.Deadlocks > 0 {
+		alerts = append(alerts, alertItem{
+			Level:   "warning",
+			Code:    "pg_deadlocks",
+			Message: "Se detectaron deadlocks en PostgreSQL — dos operaciones se bloquearon mutuamente",
+			Tip:     "Revisa si hay transacciones largas o escrituras simultáneas sobre los mismos registros.",
+		})
+	}
+	if h.PG.BufferHitPct < 95 && (h.PG.Commits+h.PG.Rollbacks) > 100 {
+		alerts = append(alerts, alertItem{
+			Level:   "warning",
+			Code:    "pg_cache_low",
+			Message: "Cache de BD bajo (hit ratio < 95%) — PostgreSQL está leyendo del disco con frecuencia",
+			Tip:     "Considera aumentar shared_buffers en PostgreSQL o hacer upgrade de RAM.",
+		})
+	}
+	if h.PG.SlowQueries > 0 {
+		alerts = append(alerts, alertItem{
+			Level:   "warning",
+			Code:    "pg_slow",
+			Message: "Hay queries lentas ejecutándose (>5s) — el sistema puede estar respondiendo lento",
+			Tip:     "Revisa los logs de PostgreSQL para identificar qué query está tardando.",
 		})
 	}
 

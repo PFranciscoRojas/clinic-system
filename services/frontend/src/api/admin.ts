@@ -29,6 +29,15 @@ export interface SystemHealth {
     total_users: number;
     total_patients: number;
   };
+  pg: {
+    buffer_hit_pct: number;
+    commits: number;
+    rollbacks: number;
+    deadlocks: number;
+    slow_queries: number;
+    active_locks: number;
+    stats_age_hours: number;
+  };
   ai_queue: { pending: number; processing: number; draft_ready: number; error: number };
   uptime_sec: number;
   collected_at: string;

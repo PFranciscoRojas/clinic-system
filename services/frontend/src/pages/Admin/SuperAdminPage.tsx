@@ -334,6 +334,38 @@ function SistemaTab() {
           )}
         </MetricCard>
 
+        {/* PostgreSQL avanzado */}
+        <MetricCard icon={<Database size={16} />} title="PostgreSQL — Rendimiento" subtitle="Métricas de salud interna del motor de base de datos">
+          {(() => {
+            const pg = h.pg;
+            const hitColor = pg.buffer_hit_pct >= 99 ? '#16a34a' : pg.buffer_hit_pct >= 95 ? '#d97706' : '#dc2626';
+            const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(1)}K` : String(n);
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <StatRow label="Buffer cache hit ratio" value={`${pg.buffer_hit_pct}%`} accent={hitColor}
+                  tip={`Porcentaje de lecturas respondidas desde RAM sin tocar el disco.\n\n✅ >99% = excelente (RAM suficiente)\n⚠️ 95–99% = aceptable\n🔴 <95% = PostgreSQL lee del disco frecuentemente → lento\n\nSin carga real este dato no es significativo.`} />
+                <StatRow label="Transacciones confirmadas" value={fmtNum(pg.commits)}
+                  tip={`Total de operaciones exitosas (INSERT, UPDATE, DELETE, SELECT en transacción) desde el último reset de estadísticas (hace ${pg.stats_age_hours}h).\n\nEsto es el "contador de trabajo" de la BD.`} />
+                <StatRow label="Transacciones revertidas" value={fmtNum(pg.rollbacks)}
+                  accent={pg.rollbacks > 0 ? '#d97706' : undefined}
+                  tip={`Operaciones que fallaron y se deshicieron. Algunos rollbacks son normales (ej. validaciones). Si es muy alto en proporción a los commits, puede indicar errores frecuentes en la app.`} />
+                <StatRow label="Deadlocks históricos" value={pg.deadlocks}
+                  accent={pg.deadlocks > 0 ? '#dc2626' : '#16a34a'}
+                  tip={`Número de veces que dos operaciones se bloquearon mutuamente desde el último reset.\n\n✅ 0 = perfecto\n🔴 >0 = hubo conflictos — dos procesos querían escribir el mismo registro al mismo tiempo.`} />
+                <StatRow label="Queries lentas ahora (>5s)" value={pg.slow_queries}
+                  accent={pg.slow_queries > 0 ? '#dc2626' : '#16a34a'}
+                  tip={`Queries que llevan más de 5 segundos ejecutándose en este momento.\n\n✅ 0 = normal\n🔴 >0 = hay una consulta que está tardando — puede estar bloqueando otros requests.`} />
+                <StatRow label="Locks en espera" value={pg.active_locks}
+                  accent={pg.active_locks > 0 ? '#d97706' : '#16a34a'}
+                  tip={`Operaciones bloqueadas esperando que otra libere un recurso (fila o tabla).\n\n✅ 0 = sin bloqueos\n⚠️ >0 = hay contención — una operación está esperando a otra.\n\nAlgo temporal es normal; si persiste indica un problema de concurrencia.`} />
+                <div style={{ fontSize: 11, color: 'var(--s400)', marginTop: 6 }}>
+                  Estadísticas desde hace {pg.stats_age_hours}h
+                </div>
+              </div>
+            );
+          })()}
+        </MetricCard>
+
         {/* Redis */}
         <MetricCard icon={<Cpu size={16} />} title="Redis" subtitle="Caché y cola de jobs de IA">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
