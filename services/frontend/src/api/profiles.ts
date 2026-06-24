@@ -46,6 +46,10 @@ export const profilesApi = {
     api.get<{ schedule: unknown }>('/me/professional-profile/schedule'),
   saveSchedule: (schedule: unknown) =>
     api.put<{ status: string }>('/me/professional-profile/schedule', { schedule }),
+  getAIPrefs: () =>
+    api.get<{ ai_prefs: { note_style: string; tone: string } }>('/me/professional-profile/ai-prefs'),
+  saveAIPrefs: (prefs: { note_style: string; tone: string }) =>
+    api.put<{ status: string }>('/me/professional-profile/ai-prefs', { ai_prefs: prefs }),
 };
 
 // splitName breaks a free-text name into (first, rest) on the first space —

@@ -37,6 +37,17 @@ _SECTION_SCHEMAS: dict[str, dict[str, str]] = {
     },
 }
 
+_TONE_INSTRUCTIONS: dict[str, str] = {
+    "formal":  "Usa terminología psicológica precisa y lenguaje formal clínico, en tercera persona.",
+    "neutral": "Usa lenguaje neutro y accesible, evitando jerga innecesaria, en tercera persona.",
+    "plain":   "Usa lenguaje simple y directo, comprensible para el profesional sin tecnicismos excesivos, en tercera persona.",
+}
+
+_STYLE_INSTRUCTIONS: dict[str, str] = {
+    "structured": "Redacta cada sección como un párrafo conciso y bien delimitado.",
+    "narrative":  "Redacta en forma narrativa fluida, manteniendo el hilo cronológico. Prosa continua, sin listas.",
+}
+
 _SYSTEM_PROMPT = """Eres un asistente clínico especializado en psicología. Tu única tarea es
 estructurar la transcripción de una sesión clínica en las secciones del registro clínico.
 
@@ -44,9 +55,10 @@ REGLAS ESTRICTAS:
 1. No inventes información que no esté en la transcripción.
 2. Si una sección no tiene contenido en la transcripción, usa null en ese campo.
 3. Nunca incluyas nombres, documentos o datos de contacto — el texto ya fue anonimizado.
-4. Usa terminología psicológica precisa y lenguaje formal clínico, en tercera persona.
-5. Responde ÚNICAMENTE con el objeto JSON, sin texto adicional ni marcas de formato.
-6. Añade además la clave "suggested_icd10": una SUGERENCIA (no un diagnóstico definitivo)
+4. {tone_instruction}
+5. {style_instruction}
+6. Responde ÚNICAMENTE con el objeto JSON, sin texto adicional ni marcas de formato.
+7. Añade además la clave "suggested_icd10": una SUGERENCIA (no un diagnóstico definitivo)
    del código CIE-10 más probable según lo expresado en la sesión, como objeto
    {{"code": "F41.1", "description": "Trastorno de ansiedad generalizada"}}.
    Usa códigos de salud mental (capítulo F). Si no hay base suficiente, usa null.
@@ -61,7 +73,12 @@ def _schema_for(record_type: str) -> tuple[str, dict[str, str]]:
     return rt, _SECTION_SCHEMAS[rt]
 
 
-async def generate_clinical_draft(anonymized_transcription: str, record_type: str = "EVOLUTION") -> str:
+async def generate_clinical_draft(
+    anonymized_transcription: str,
+    record_type: str = "EVOLUTION",
+    note_style: str = "structured",
+    tone: str = "formal",
+) -> str:
     """Send anonymized transcription to Claude and return the draft as a JSON string.
 
     The input has already been processed by anonymize() — no PII should reach here.
@@ -73,14 +90,17 @@ async def generate_clinical_draft(anonymized_transcription: str, record_type: st
     if not anonymized_transcription.strip():
         return json.dumps({"record_type": rt, "sections": {}, "suggested_icd10": None}, ensure_ascii=False)
 
-    logger.info("generating clinical draft", extra={"chars": len(anonymized_transcription), "record_type": rt})
+    tone_instr  = _TONE_INSTRUCTIONS.get(tone, _TONE_INSTRUCTIONS["formal"])
+    style_instr = _STYLE_INSTRUCTIONS.get(note_style, _STYLE_INSTRUCTIONS["structured"])
+
+    logger.info("generating clinical draft", extra={"chars": len(anonymized_transcription), "record_type": rt, "note_style": note_style, "tone": tone})
 
     schema_json = json.dumps({k: f"string | null — {v}" for k, v in schema.items()}, ensure_ascii=False, indent=2)
 
     message = await _client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=3072,
-        system=_SYSTEM_PROMPT.format(schema=schema_json),
+        system=_SYSTEM_PROMPT.format(schema=schema_json, tone_instruction=tone_instr, style_instruction=style_instr),
         messages=[
             {
                 "role": "user",

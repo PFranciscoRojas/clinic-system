@@ -23,5 +23,7 @@ func (h *Handler) Routes() chi.Router {
 	r.Delete("/avatar", h.deleteAvatar)
 	r.Get("/schedule", h.getSchedule)
 	r.Put("/schedule", h.putSchedule)
+	r.Get("/ai-prefs", h.getAIPrefs)
+	r.Put("/ai-prefs", h.putAIPrefs)
 	return r
 }

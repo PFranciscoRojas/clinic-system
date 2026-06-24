@@ -14,6 +14,7 @@ import (
 type Handler struct {
 	svc svcPort
 	crr crrPort
+	db  *pgxpool.Pool
 }
 
 func New(db *pgxpool.Pool, km *crypto.KeyManager, rdb *redis.Client, audioDir string) *Handler {
@@ -21,5 +22,6 @@ func New(db *pgxpool.Pool, km *crypto.KeyManager, rdb *redis.Client, audioDir st
 	return &Handler{
 		svc: aidraftssvc.New(repo, km, rdb, audioDir),
 		crr: crrsvc.New(crrrepo.New(db), km),
+		db:  db,
 	}
 }

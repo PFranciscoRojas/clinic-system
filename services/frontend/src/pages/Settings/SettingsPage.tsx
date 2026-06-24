@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   UserRound, Clock, Bell, Sparkles, ShieldCheck,
   FileText, Settings, CalendarDays, Send, AlertCircle,
@@ -926,19 +926,36 @@ const NOTE_STYLES = [
   { id: 'bullet',     label: 'Con viñetas',  desc: 'Puntos concisos'          },
 ];
 
-function AISection({ setDirty }: { setDirty: (v: boolean) => void }) {
+function AISection({ setDirty, saveRef }: { setDirty: (v: boolean) => void; saveRef: React.MutableRefObject<(() => Promise<void>) | null> }) {
   const tog = (fn: (v: boolean) => void) => (v: boolean) => { fn(v); setDirty(true); };
   const mrk = <T,>(fn: (v: T) => void) => (v: T) => { fn(v); setDirty(true); };
 
-  const savedAI = (() => { try { return JSON.parse(localStorage.getItem('sghcp_ai_prefs') ?? '{}'); } catch { return {}; } })();
-  const [enabled,    setEnabled]    = useState(savedAI.aiEnabled ?? true);
+  const [enabled,    setEnabled]    = useState(true);
   const [autoGen,    setAutoGen]    = useState(true);
   const [confidence, setConfidence] = useState(85);
-  const [style,      setStyle]      = useState(savedAI.noteStyle ?? 'structured');
+  const [style,      setStyle]      = useState('structured');
   const [tone,       setTone]       = useState('formal');
   const [lang,       setLang]       = useState('es');
   const [auditLog,   setAuditLog]   = useState(true);
   const [dataRetain, setDataRetain] = useState('90');
+
+  // Load prefs from backend on mount
+  useEffect(() => {
+    profilesApi.getAIPrefs()
+      .then(r => {
+        if (r.ai_prefs.note_style) setStyle(r.ai_prefs.note_style);
+        if (r.ai_prefs.tone)       setTone(r.ai_prefs.tone);
+      })
+      .catch(() => {/* profile might not exist yet */});
+  }, []);
+
+  // Register save function so the global SaveBar can trigger it
+  useEffect(() => {
+    saveRef.current = async () => {
+      await profilesApi.saveAIPrefs({ note_style: style, tone });
+    };
+    return () => { saveRef.current = null; };
+  }, [style, tone, saveRef]);
 
   return (
     <>
@@ -1819,6 +1836,9 @@ export function SettingsPage() {
   const [saving,  setSaving]  = useState(false);
   const [saved,   setSaved]   = useState(false);
 
+  // Section-specific save functions registered via ref
+  const aiSaveRef = React.useRef<(() => Promise<void>) | null>(null);
+
   // Interns and receptionists can't manage staff or edit clinical templates, so
   // those sections aren't shown to them at all (the backend also gates them).
   const roles = user?.roles ?? [];
@@ -1832,10 +1852,15 @@ export function SettingsPage() {
     return true;
   });
 
-  const handleSave = (doSave: boolean) => {
+  const handleSave = async (doSave: boolean) => {
     if (!doSave) { setDirty(false); return; }
     setSaving(true);
-    setTimeout(() => { setSaving(false); setDirty(false); setSaved(true); }, 1200);
+    try {
+      if (section === 'ai' && aiSaveRef.current) await aiSaveRef.current();
+    } catch { /* ignore — section shows its own error state */ }
+    setSaving(false);
+    setDirty(false);
+    setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
 
@@ -1933,7 +1958,7 @@ export function SettingsPage() {
             {section === 'profile'       && <ProfileSection       setDirty={markDirty} />}
             {section === 'schedule'      && <ScheduleSection />}
             {section === 'notifications' && <NotificationsSection setDirty={markDirty} />}
-            {section === 'ai'            && <AISection            setDirty={markDirty} />}
+            {section === 'ai'            && <AISection            setDirty={markDirty} saveRef={aiSaveRef} />}
             {section === 'security'      && <SecuritySection      setDirty={markDirty} />}
             {section === 'templates'     && <ConsentTemplatesSection />}
             {section === 'billing'       && <RatesSection />}

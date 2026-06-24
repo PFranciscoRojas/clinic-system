@@ -209,6 +209,68 @@ func (h *Handler) putSchedule(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
+// GET /api/v1/me/professional-profile/ai-prefs
+func (h *Handler) getAIPrefs(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+
+	var raw []byte
+	err := h.db.QueryRow(r.Context(), `
+		SELECT COALESCE(pp.ai_prefs, '{"note_style":"structured","tone":"formal"}'::jsonb)
+		FROM professional_profiles pp
+		JOIN users u ON u.id = pp.user_id
+		WHERE pp.user_id = $1 AND u.organization_id = $2
+	`, claims.UserID, claims.OrganizationID).Scan(&raw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Profile not created yet — return defaults
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ai_prefs":{"note_style":"structured","tone":"formal"}}`))
+		return
+	}
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "could not load ai prefs")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`{"ai_prefs":` + string(raw) + `}`))
+}
+
+// PUT /api/v1/me/professional-profile/ai-prefs
+func (h *Handler) putAIPrefs(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+
+	var body struct {
+		AIPrefs json.RawMessage `json:"ai_prefs"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.AIPrefs) == 0 {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	var probe map[string]any
+	if err := json.Unmarshal(body.AIPrefs, &probe); err != nil {
+		httputil.WriteError(w, http.StatusUnprocessableEntity, "ai_prefs must be a JSON object")
+		return
+	}
+
+	tag, err := h.db.Exec(r.Context(), `
+		UPDATE professional_profiles pp
+		SET ai_prefs = $3, updated_at = NOW()
+		FROM users u
+		WHERE pp.user_id = $1 AND u.id = pp.user_id AND u.organization_id = $2
+	`, claims.UserID, claims.OrganizationID, body.AIPrefs)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "could not save ai prefs")
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		httputil.WriteError(w, http.StatusNotFound, "professional profile not found — complete it first")
+		return
+	}
+	h.audit.Record(r, "AI_PREFS_UPDATE", "professional_profile", claims.UserID)
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
 func toResponse(p *profiles.Profile) map[string]any {
 	return map[string]any{
 		"user_id":            p.UserID,

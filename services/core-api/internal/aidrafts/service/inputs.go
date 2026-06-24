@@ -8,6 +8,8 @@ type UploadAudioInput struct {
 	PatientID      string
 	RequestedBy    string
 	RecordType     string
+	NoteStyle      string
+	Tone           string
 	Filename       string
 	Audio          io.Reader
 	AudioSize      int64

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -55,6 +56,24 @@ func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 		recordType = "EVOLUTION"
 	}
 
+	// Load professional's AI preferences; fall back to defaults if no profile yet
+	noteStyle, tone := "structured", "formal"
+	var prefsRaw []byte
+	if err := h.db.QueryRow(r.Context(), `
+		SELECT COALESCE(ai_prefs, '{"note_style":"structured","tone":"formal"}'::jsonb)
+		FROM professional_profiles WHERE user_id = $1
+	`, claims.UserID).Scan(&prefsRaw); err == nil {
+		var prefs map[string]string
+		if json.Unmarshal(prefsRaw, &prefs) == nil {
+			if v := prefs["note_style"]; v != "" {
+				noteStyle = v
+			}
+			if v := prefs["tone"]; v != "" {
+				tone = v
+			}
+		}
+	}
+
 	filename := fmt.Sprintf("%s%s", appointmentID, ext)
 
 	draftID, err := h.svc.UploadAudio(r.Context(), aidraftssvc.UploadAudioInput{
@@ -63,6 +82,8 @@ func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 		PatientID:      patientID,
 		RequestedBy:    claims.UserID,
 		RecordType:     recordType,
+		NoteStyle:      noteStyle,
+		Tone:           tone,
 		Filename:       filename,
 		Audio:          file,
 		AudioSize:      header.Size,

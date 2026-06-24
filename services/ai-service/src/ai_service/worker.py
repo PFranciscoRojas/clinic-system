@@ -99,6 +99,8 @@ class AIWorker:
         draft_id = fields.get("draft_id")
         audio_path = fields.get("audio_path")
         record_type = fields.get("record_type") or "EVOLUTION"
+        note_style = fields.get("note_style") or "structured"
+        tone = fields.get("tone") or "formal"
 
         if not draft_id or not audio_path:
             logger.warning("ai_job missing fields", extra={"message_id": message_id, "fields": list(fields.keys())})
@@ -108,7 +110,7 @@ class AIWorker:
         logger.info("processing ai draft", extra={"draft_id": draft_id})
         try:
             await self._set_status(draft_id, "PROCESSING")
-            await self._process_draft(draft_id, audio_path, record_type)
+            await self._process_draft(draft_id, audio_path, record_type, note_style, tone)
             await self._ack(message_id)
         except Exception as exc:
             logger.error("draft processing failed", extra={"draft_id": draft_id, "err": str(exc)})
@@ -135,7 +137,7 @@ class AIWorker:
             await self._set_suggestion_error(suggestion_id, str(exc))
             # Do NOT ack — message stays in PEL for retry or manual inspection
 
-    async def _process_draft(self, draft_id: str, audio_path: str, record_type: str) -> None:
+    async def _process_draft(self, draft_id: str, audio_path: str, record_type: str, note_style: str = "structured", tone: str = "formal") -> None:
         # 1. Transcribe locally — audio never leaves the server
         transcription = await asyncio.to_thread(transcribe_audio, audio_path)
 
@@ -143,7 +145,7 @@ class AIWorker:
         anonymized = anonymize(transcription)
 
         # 3. Generate the clinical-record sections via Claude API with anonymized text only
-        clinical_draft = await generate_clinical_draft(anonymized, record_type)
+        clinical_draft = await generate_clinical_draft(anonymized, record_type, note_style, tone)
 
         # 4. Encrypt both outputs with the draft's DEK before storing
         assert self._db is not None
