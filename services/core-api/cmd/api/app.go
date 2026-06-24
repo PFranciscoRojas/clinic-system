@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"sghcp/core-api/internal/aidrafts/retention"
 	"sghcp/core-api/internal/gcal"
 	"sghcp/core-api/internal/notify"
 	"sghcp/core-api/internal/orgs"
@@ -97,6 +98,7 @@ func (a *app) run(ctx context.Context) error {
 		notifier = notify.NewResend(a.cfg.ResendAPIKey, a.cfg.ResendFrom, orgs.New(a.pool).ResolveBranding)
 	}
 	go reminders.New(a.pool, a.km, notifier, a.wa, slog.Default()).Run(ctx)
+	go retention.New(a.pool, slog.Default()).Run(ctx)
 
 	// ListenAndServe blocks forever, so it runs in a goroutine.
 	// We capture unexpected errors (anything other than ErrServerClosed,

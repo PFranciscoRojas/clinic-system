@@ -22,7 +22,6 @@ import { BillingReturnPage } from '@/pages/Public/BillingReturnPage';
 import { BookingWizardPage } from '@/pages/Public/BookingWizardPage';
 import { BookingPaymentReturnPage } from '@/pages/Public/BookingPaymentReturnPage';
 import { ClinicalPage } from '@/pages/Clinical/ClinicalPage';
-import { EvaluationsPage } from '@/pages/Evaluations/EvaluationsPage';
 import { BillingPage } from '@/pages/Billing/BillingPage';
 import { SettingsPage } from '@/pages/Settings/SettingsPage';
 import { SuperAdminPage } from '@/pages/Admin/SuperAdminPage';
@@ -86,7 +85,6 @@ export function App() {
                 <Route path="clinical" element={<ClinicalPage />} />
                 <Route path="ai-drafts/:id" element={<AIDraftPage />} />
                 <Route path="clinical-records/:id" element={<ClinicalRecordPage />} />
-                <Route path="evaluations" element={<EvaluationsPage />} />
                 <Route path="billing" element={<BillingPage />} />
                 <Route path="settings" element={<SettingsPage />} />
                 <Route path="admin" element={<SuperAdminPage />} />

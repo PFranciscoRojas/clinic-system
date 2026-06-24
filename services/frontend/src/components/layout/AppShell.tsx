@@ -12,9 +12,10 @@ import { useIsMobile } from '@/lib/useMediaQuery';
 import { patientsApi, type Patient } from '@/api/patients';
 import { startCheckout } from '@/api/billing';
 import { profilesApi } from '@/api/profiles';
+import { getLockConfig, onLockConfigChange } from '@/lib/screenLock';
 
 // Facturación is shown to CLINIC_ADMIN (billing:reports) — see the conditional
-// nav entry below. Evaluaciones postponed by decision 2026-06-09 (backlog).
+// nav entry below.
 const NAV = [
   { to: '/',          label: 'Agenda',         Icon: CalendarDays,  perm: 'appointments:read', badge: null },
   { to: '/patients',  label: 'Pacientes',       Icon: Users,         perm: 'patients:read',     badge: null },
@@ -43,7 +44,8 @@ export function AppShell({ children }: Props) {
   const profileRef  = useRef<HTMLDivElement>(null);
   const searchRef   = useRef<HTMLDivElement>(null);
   const idleTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const IDLE_MS     = 5 * 60 * 1000; // 5 minutes
+  // Bumped whenever the screen-lock config changes, to re-arm the idle effect.
+  const [lockCfgTick, setLockCfgTick] = useState(0);
 
   useEffect(() => {
     function handle(e: MouseEvent) {
@@ -74,14 +76,22 @@ export function AppShell({ children }: Props) {
     navigate(`/patients/${p.id}`);
   };
 
-  // Auto-lock after IDLE_MS of inactivity — only when PIN is set.
+  // Re-arm the auto-lock effect whenever the user changes the lock config in Settings.
+  useEffect(() => onLockConfigChange(() => setLockCfgTick(t => t + 1)), []);
+
+  // Auto-lock after the configured idle window — only when a PIN is set (without
+  // a PIN there is nothing to unlock with) and the lock is enabled.
   useEffect(() => {
     const hasPin = !!localStorage.getItem(`sghcp_pin_${user?.user_id}`);
     if (!hasPin) return;
 
+    const { enabled, minutes } = getLockConfig(user?.user_id);
+    if (!enabled) return;
+    const idleMs = minutes * 60 * 1000;
+
     const resetTimer = () => {
       if (idleTimer.current) clearTimeout(idleTimer.current);
-      idleTimer.current = setTimeout(() => setLocked(true), IDLE_MS);
+      idleTimer.current = setTimeout(() => setLocked(true), idleMs);
     };
 
     const events = ['mousemove', 'keydown', 'touchstart', 'click'] as const;
@@ -92,7 +102,7 @@ export function AppShell({ children }: Props) {
       if (idleTimer.current) clearTimeout(idleTimer.current);
       events.forEach(ev => window.removeEventListener(ev, resetTimer));
     };
-  }, []);
+  }, [user?.user_id, lockCfgTick]);
 
   const emailPrefix = user?.email?.split('@')[0] ?? '';
   const displayName = user?.display_name || emailPrefix || user?.email || '';

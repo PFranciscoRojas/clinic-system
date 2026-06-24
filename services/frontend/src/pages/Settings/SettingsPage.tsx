@@ -21,6 +21,7 @@ import { serviceRatesApi, type ServiceRate, type RateModality } from '@/api/serv
 import { ACCENT_COLORS, saveAccentColor } from '@/lib/theme';
 import { loadSchedule, persistSchedule, fetchScheduleFromServer } from '@/lib/schedule';
 import { useIsCompact } from '@/lib/useMediaQuery';
+import { getLockConfig, setLockConfig } from '@/lib/screenLock';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -923,7 +924,6 @@ function NotificationsSection({ setDirty }: { setDirty: (v: boolean) => void }) 
 const NOTE_STYLES = [
   { id: 'structured', label: 'Estructurado', desc: 'Técnico-clínico estándar' },
   { id: 'narrative',  label: 'Narrativo',    desc: 'Redacción fluida'         },
-  { id: 'bullet',     label: 'Con viñetas',  desc: 'Puntos concisos'          },
 ];
 
 function AISection({ setDirty, saveRef }: { setDirty: (v: boolean) => void; saveRef: React.MutableRefObject<(() => Promise<void>) | null> }) {
@@ -1022,12 +1022,14 @@ function AISection({ setDirty, saveRef }: { setDirty: (v: boolean) => void; save
 
 // ── Security section ──────────────────────────────────────────────────────────
 
-function SecuritySection({ setDirty }: { setDirty: (v: boolean) => void }) {
+function SecuritySection() {
   const { user } = useAuth();
-  const tog = (fn: (v: boolean) => void) => (v: boolean) => { fn(v); setDirty(true); };
 
+  // Screen-lock config persists immediately to localStorage (device-local, like
+  // the PIN) — it does NOT go through the global SaveBar, so no false "guardado".
   const [autoLock,    setAutoLock]    = useState(true);
   const [lockMin,     setLockMin]     = useState(5);
+  const [lockSaved,   setLockSaved]   = useState(false);
   const [pin,         setPin]         = useState('');
   const [pin2,        setPin2]        = useState('');
   const [pinErr,      setPinErr]      = useState('');
@@ -1063,12 +1065,28 @@ function SecuritySection({ setDirty }: { setDirty: (v: boolean) => void }) {
     }
   };
 
+  // Load the device-local lock config on mount.
+  useEffect(() => {
+    const cfg = getLockConfig(user?.user_id);
+    setAutoLock(cfg.enabled);
+    setLockMin(cfg.minutes);
+  }, [user?.user_id]);
+
+  // Persist lock config immediately and flash an inline "guardado".
+  const persistLock = (enabled: boolean, minutes: number) => {
+    setLockConfig(user?.user_id, { enabled, minutes });
+    setLockSaved(true);
+    setTimeout(() => setLockSaved(false), 2000);
+  };
+
+  const handleAutoLockToggle = (v: boolean) => { setAutoLock(v); persistLock(v, lockMin); };
+  const handleLockMin = (m: number) => { setLockMin(m); persistLock(autoLock, m); };
+
   const handlePinSave = () => {
     if (pin.length !== 4 || pin !== pin2) { setPinErr('Los PINs no coinciden o son muy cortos'); return; }
     setPinErr('');
     if (user?.user_id) localStorage.setItem(`sghcp_pin_${user.user_id}`, pin);
     setPinSaved(true);
-    setDirty(true);
     setTimeout(() => setPinSaved(false), 2500);
     setPin(''); setPin2('');
   };
@@ -1076,14 +1094,17 @@ function SecuritySection({ setDirty }: { setDirty: (v: boolean) => void }) {
   return (
     <>
       <SectionCard title="Bloqueo de pantalla" icon={Lock} color="#ef4444">
-        <Toggle value={autoLock} onChange={tog(setAutoLock)} label="Bloqueo automático por inactividad" sub="Protege la pantalla cuando no hay actividad" />
+        <Toggle value={autoLock} onChange={handleAutoLockToggle} label="Bloqueo automático por inactividad" sub="Bloquea la pantalla tras inactividad. Requiere un PIN configurado abajo." />
         <FieldRow label="Tiempo hasta bloqueo" sub="Minutos de inactividad antes del bloqueo">
-          <div style={{ display: 'flex', gap: 7, opacity: autoLock ? 1 : 0.5 }}>
-            {[2, 5, 10, 15, 30].map(m => (
-              <ChipBtn key={m} active={lockMin === m} color="#ef4444" onClick={() => { if (autoLock) { setLockMin(m); setDirty(true); } }}>
-                {m}m
-              </ChipBtn>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 7, opacity: autoLock ? 1 : 0.5 }}>
+              {[2, 5, 10, 15, 30].map(m => (
+                <ChipBtn key={m} active={lockMin === m} color="#ef4444" onClick={() => { if (autoLock) handleLockMin(m); }}>
+                  {m}m
+                </ChipBtn>
+              ))}
+            </div>
+            {lockSaved && <span style={{ fontSize: 12, color: '#10b981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}><CheckCircle size={12} />Guardado</span>}
           </div>
         </FieldRow>
 
@@ -1932,7 +1953,7 @@ export function SettingsPage() {
             {section === 'schedule'      && <ScheduleSection />}
             {section === 'notifications' && <NotificationsSection setDirty={markDirty} />}
             {section === 'ai'            && <AISection            setDirty={markDirty} saveRef={aiSaveRef} />}
-            {section === 'security'      && <SecuritySection      setDirty={markDirty} />}
+            {section === 'security'      && <SecuritySection />}
             {section === 'templates'     && <ConsentTemplatesSection />}
             {section === 'billing'       && <RatesSection />}
             {section === 'users'         && <UsersSection />}
