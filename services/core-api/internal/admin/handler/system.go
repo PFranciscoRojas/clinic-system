@@ -225,7 +225,7 @@ func (h *Handler) systemHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func computeAlerts(h systemHealthResponse) []alertItem {
-	var alerts []alertItem
+	alerts := []alertItem{}
 
 	// Disco
 	switch {

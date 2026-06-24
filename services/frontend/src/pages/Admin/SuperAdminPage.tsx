@@ -275,9 +275,9 @@ function SistemaTab() {
       </div>
 
       {/* Alerts */}
-      {h.alerts.length > 0 && (
+      {(h.alerts ?? []).length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
-          {h.alerts.map(a => <AlertBanner key={a.code} level={a.level} message={a.message} tip={a.tip} />)}
+          {(h.alerts ?? []).map(a => <AlertBanner key={a.code} level={a.level} message={a.message} tip={a.tip} />)}
         </div>
       )}
 
