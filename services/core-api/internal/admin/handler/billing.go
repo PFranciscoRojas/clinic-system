@@ -31,8 +31,8 @@ func (h *Handler) listOrgs(w http.ResponseWriter, r *http.Request) {
 		       COUNT(DISTINCT u.id)::int AS total_users,
 		       COUNT(DISTINCT p.id)::int AS total_patients
 		FROM organizations o
-		LEFT JOIN users u ON u.org_id = o.id
-		LEFT JOIN patients p ON p.org_id = o.id
+		LEFT JOIN users u ON u.organization_id = o.id
+		LEFT JOIN patients p ON p.organization_id = o.id
 		GROUP BY o.id
 		ORDER BY o.created_at DESC
 	`)
