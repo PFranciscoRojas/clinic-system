@@ -23,6 +23,9 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Never intercept direct navigation to /api/* paths (e.g. OAuth callbacks
+        // like /api/v1/integrations/google/callback that must reach the backend).
+        navigateFallbackDenylist: [/^\/api\//],
         // Cache API responses for offline graceful degradation
         runtimeCaching: [
           {
