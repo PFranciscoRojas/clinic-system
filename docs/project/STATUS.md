@@ -22,11 +22,11 @@
 
 ### Últimos commits a `main` — todos desplegados
 
-- `68a19ee` docs: registrar Prometheus+Grafana en backlog — 2026-06-24
+- `4642d7b` feat(users): eliminar miembro del equipo — CLINIC_ADMIN + SYSTEM_ADMIN con lista por org — 2026-06-24
+- `858c445` fix(admin): org_id → organization_id en JOIN de listOrgs — 2026-06-24
+- `acd74d3` feat(admin): CPU, backup status, tenant actions (suspend/cancel/extend-trial) — 2026-06-24
+- `bb5ac3e` docs: actualizar contexto sesión 3 2026-06-24 — 2026-06-24
 - `cc0b1ff` feat(admin): métricas PostgreSQL avanzadas — buffer hit, deadlocks, slow queries, locks — 2026-06-24
-- `109ac43` fix(admin): alerts null → [] cuando no hay alertas activas — 2026-06-24
-- `1c8d478` feat(admin): monitor sistema v2 — alertas, RAM, mantenimiento self-service — 2026-06-24
-- `398bf95` ci: migrar build de core-api a GitHub Actions + ghcr.io — 2026-06-24
 - `74319a6` feat(admin): tablero de monitoreo del sistema para SYSTEM_ADMIN — 2026-06-24
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).

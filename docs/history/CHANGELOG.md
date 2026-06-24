@@ -13,6 +13,11 @@
 
 ---
 
+## 2026-06-24 (sesión 4)
+
+- feat(admin): CPU + backup status en tablero sistema (`acd74d3`) — CPU vía `/proc/stat` (muestreado 150ms), card con barra de color; backup: script escribe `/var/lib/sghcp/last_backup_ok`, container lee vía volume mount `:ro`, card con último timestamp + tamaño + alerta si >26h; tenant list expandible (▼) con conteo usuarios/pacientes y acciones Suspender/Cancelar/Extender-trial. Fix: `org_id` → `organization_id` en JOIN (`858c445`).
+- feat(users): eliminar miembro del equipo (`4642d7b`) — soft delete (`is_active=false` + remove `user_roles`); guards: no self, no último admin; `DELETE /api/v1/users/{id}` (CLINIC_ADMIN, permiso `users:deactivate`); `GET/DELETE /admin/orgs/{id}/users/{uid}` (SYSTEM_ADMIN, sin guard de último admin); botón ✕ en TeamCard (Settings) + panel `OrgUsersPanel` en SuperAdmin expandido. Decisión: no acceso a datos clínicos por tenant (legal + trust).
+
 ## 2026-06-24 (sesión 3)
 
 - feat(admin): tablero de monitoreo del sistema para SYSTEM_ADMIN (`74319a6`–`cc0b1ff`) — nueva pestaña "Sistema" en SuperAdminPage con: disco+RAM (barra de color verde/amarillo/rojo), BD (tamaño, pool, top tablas), PostgreSQL avanzado (buffer hit %, deadlocks, commits, rollbacks, slow queries, locks en espera), Redis (ping, memoria), Tenants (badges por estado), Cola IA; alertas server-side con recomendaciones de upgrade y botón "¿qué hago?"; panel Mantenimiento con 3 acciones Docker seguras (builder_prune, image_prune, system_prune) ejecutables desde la UI con confirmación y output en tiempo real; tooltips en cada métrica; refresh automático cada 10s con countdown.
