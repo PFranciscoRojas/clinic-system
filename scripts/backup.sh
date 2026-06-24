@@ -51,6 +51,12 @@ if ! grep -q "pubkey enc packet" <<< "$packets"; then
     exit 1
 fi
 
+# Escribir marker de éxito — el dashboard lo lee desde /backup-status/last_backup_ok.
+# Formato: epoch_unix|tamaño_legible  (ej: 1750000000|4.2M)
+MARKER_DIR="/var/lib/sghcp"
+mkdir -p "$MARKER_DIR"
+printf '%s|%s\n' "$(date +%s)" "$SIZE" > "${MARKER_DIR}/last_backup_ok"
+
 # Sync to Backblaze B2 — only when an rclone remote named "b2" is configured.
 # Until then the encrypted backup stays local; the warning keeps the gap visible.
 if command -v rclone > /dev/null && rclone listremotes 2>/dev/null | grep -q '^b2:'; then

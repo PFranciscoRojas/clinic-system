@@ -40,6 +40,7 @@ services:
     volumes:
       - audio_data:/data/audio
       - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/sghcp:/backup-status:ro
     networks:
       - sghcp_net
     depends_on:

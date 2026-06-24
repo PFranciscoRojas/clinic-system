@@ -2,10 +2,14 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -73,6 +77,13 @@ type pgAdvanced struct {
 	StatsAgeHours  float64 `json:"stats_age_hours"`   // horas desde último reset de stats
 }
 
+type backupStatus struct {
+	LastOkAt  *time.Time `json:"last_ok_at"`
+	SizeHuman string     `json:"size_human"`
+	HoursAgo  float64    `json:"hours_ago"`
+	Ok        bool       `json:"ok"`
+}
+
 type alertItem struct {
 	Level   string `json:"level"`   // info | warning | critical
 	Code    string `json:"code"`
@@ -81,6 +92,7 @@ type alertItem struct {
 }
 
 type systemHealthResponse struct {
+	CPUPct      float64      `json:"cpu_pct"`
 	Disk        diskStats    `json:"disk"`
 	Mem         memStats     `json:"mem"`
 	DB          dbStats      `json:"db"`
@@ -88,6 +100,7 @@ type systemHealthResponse struct {
 	Redis       redisStats   `json:"redis"`
 	Tenants     tenantCounts `json:"tenants"`
 	AIQueue     aiQueueStats `json:"ai_queue"`
+	Backup      backupStatus `json:"backup"`
 	UptimeSec   int64        `json:"uptime_sec"`
 	CollectedAt time.Time    `json:"collected_at"`
 	Alerts      []alertItem  `json:"alerts"`
@@ -104,6 +117,9 @@ func (h *Handler) systemHealth(w http.ResponseWriter, r *http.Request) {
 		UptimeSec:   int64(time.Since(h.startedAt).Seconds()),
 		CollectedAt: time.Now().UTC(),
 	}
+
+	// --- CPU (muestrea /proc/stat dos veces con 150ms de separación) ---
+	out.CPUPct = sampleCPU()
 
 	// --- Disco ---
 	var fs syscall.Statfs_t
@@ -268,6 +284,9 @@ func (h *Handler) systemHealth(w http.ResponseWriter, r *http.Request) {
 		qRows.Close()
 	}
 
+	// --- Backup ---
+	out.Backup = readBackupStatus()
+
 	// --- Alertas calculadas ---
 	out.Alerts = computeAlerts(out)
 
@@ -364,6 +383,17 @@ func computeAlerts(h systemHealthResponse) []alertItem {
 			Message: "Hay queries lentas ejecutándose (>5s) — el sistema puede estar respondiendo lento",
 			Tip:     "Revisa los logs de PostgreSQL para identificar qué query está tardando.",
 		})
+	}
+
+	// Backup
+	if !h.Backup.Ok {
+		msg := "No se encontró registro de backup — puede que nunca se haya ejecutado"
+		tip := "Verifica que el cron de backup corre a las 2am (crontab -l en el VPS) y que /var/lib/sghcp/last_backup_ok existe."
+		if h.Backup.LastOkAt != nil {
+			msg = fmt.Sprintf("El último backup exitoso fue hace %.0fh — cron posiblemente fallido", h.Backup.HoursAgo)
+			tip = "Revisa /var/log/sghcp-backup.log en el VPS para ver el error."
+		}
+		alerts = append(alerts, alertItem{Level: "critical", Code: "backup_stale", Message: msg, Tip: tip})
 	}
 
 	// Tenants vencidos
@@ -465,3 +495,71 @@ func (h *Handler) systemAction(w http.ResponseWriter, r *http.Request) {
 func round2(v float64) float64 {
 	return float64(int(v*100+0.5)) / 100
 }
+
+// ── CPU helpers ────────────────────────────────────────────────────────────────
+
+type procStatSample struct{ total, idle uint64 }
+
+func readProcStat() procStatSample {
+	data, err := os.ReadFile("/proc/stat")
+	if err != nil {
+		return procStatSample{}
+	}
+	line := strings.SplitN(string(data), "\n", 2)[0] // primera línea: "cpu  ..."
+	fields := strings.Fields(line)
+	if len(fields) < 5 {
+		return procStatSample{}
+	}
+	var vals [10]uint64
+	for i, f := range fields[1:] {
+		if i >= 10 {
+			break
+		}
+		vals[i], _ = strconv.ParseUint(f, 10, 64)
+	}
+	idle := vals[3] + vals[4] // idle + iowait
+	total := vals[0] + vals[1] + vals[2] + vals[3] + vals[4] + vals[5] + vals[6] + vals[7]
+	return procStatSample{total: total, idle: idle}
+}
+
+func sampleCPU() float64 {
+	s1 := readProcStat()
+	time.Sleep(150 * time.Millisecond)
+	s2 := readProcStat()
+	dt := s2.total - s1.total
+	if dt == 0 {
+		return 0
+	}
+	return round2(float64(dt-(s2.idle-s1.idle)) / float64(dt) * 100)
+}
+
+// ── backup status helper ───────────────────────────────────────────────────────
+
+// readBackupStatus lee /backup-status/last_backup_ok (montado desde el host
+// /var/lib/sghcp). El script backup.sh escribe "epoch|size" al finalizar con
+// éxito. Si el archivo no existe o tiene >26h → backup fallido.
+func readBackupStatus() backupStatus {
+	data, err := os.ReadFile("/backup-status/last_backup_ok")
+	if err != nil {
+		return backupStatus{Ok: false}
+	}
+	parts := strings.SplitN(strings.TrimSpace(string(data)), "|", 2)
+	if len(parts) < 2 {
+		return backupStatus{Ok: false}
+	}
+	epoch, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return backupStatus{Ok: false}
+	}
+	t := time.Unix(epoch, 0)
+	hoursAgo := round2(time.Since(t).Hours())
+	return backupStatus{
+		LastOkAt:  &t,
+		SizeHuman: parts[1],
+		HoursAgo:  hoursAgo,
+		Ok:        hoursAgo <= 26,
+	}
+}
+
+// compile-time check that fmt is used (used in computeAlerts Sprintf)
+var _ = fmt.Sprintf

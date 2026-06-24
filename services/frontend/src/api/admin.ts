@@ -8,9 +8,12 @@ export interface AdminOrg {
   trial_ends_at: string | null;
   current_period_end: string | null;
   created_at: string;
+  total_users: number;
+  total_patients: number;
 }
 
 export interface SystemHealth {
+  cpu_pct: number;
   disk: { total_gb: number; used_gb: number; free_gb: number; used_pct: number };
   mem: { total_gb: number; used_gb: number; free_gb: number; used_pct: number };
   db: {
@@ -39,6 +42,7 @@ export interface SystemHealth {
     stats_age_hours: number;
   };
   ai_queue: { pending: number; processing: number; draft_ready: number; error: number };
+  backup: { last_ok_at: string | null; size_human: string; hours_ago: number; ok: boolean };
   uptime_sec: number;
   collected_at: string;
   alerts: { level: string; code: string; message: string; tip: string }[];
@@ -74,4 +78,16 @@ export const adminApi = {
 
   systemAction: (action: string) =>
     api.post<ActionResult>('/admin/system/actions', { action }),
+
+  suspendOrg: (id: string) =>
+    api.post<{ subscription_status: string }>(`/admin/orgs/${id}/suspend`, {}),
+
+  cancelOrg: (id: string) =>
+    api.post<{ subscription_status: string }>(`/admin/orgs/${id}/cancel`, {}),
+
+  extendTrial: (id: string, days = 30) =>
+    api.post<{ subscription_status: string; trial_ends_at: string }>(
+      `/admin/orgs/${id}/extend-trial`,
+      { days },
+    ),
 };

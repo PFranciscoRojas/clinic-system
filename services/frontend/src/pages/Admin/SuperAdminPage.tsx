@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Building2, CheckCircle2, Activity, HardDrive, Database,
+  Building2, Activity, HardDrive, Database,
   Cpu, Users, Bot, RefreshCw, AlertTriangle, Info,
   AlertCircle, Wrench, MemoryStick,
 } from 'lucide-react';
@@ -252,6 +252,7 @@ function SistemaTab() {
 
   const diskColor = pctColor(h.disk.used_pct);
   const memColor  = pctColor(h.mem.used_pct);
+  const cpuColor  = pctColor(h.cpu_pct);
   const aiAlert   = h.ai_queue.error > 0 || h.ai_queue.processing > 8;
 
   return (
@@ -283,6 +284,17 @@ function SistemaTab() {
 
       {/* Metrics grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14, marginBottom: 14 }}>
+
+        {/* CPU */}
+        <MetricCard icon={<Cpu size={16} />} title="CPU" subtitle="Uso del procesador del VPS (1 vCPU Hetzner CX21)">
+          <UsageBar pct={h.cpu_pct} color={cpuColor} />
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <StatRow label="Uso actual" value={`${h.cpu_pct}%`} accent={cpuColor}
+              tip={`Porcentaje de CPU consumido en este momento (promedio 150ms).\n\n✅ <30% = sin carga\n⚠️ 50–80% = carga moderada\n🔴 >80% = saturado — los requests pueden empezar a encolarse\n\nCon 1 sola vCPU, picos cortos son normales. Preocúpate si se mantiene alto por más de 1–2 minutos.`} />
+            <StatRow label="Núcleos" value="1 vCPU"
+              tip="Hetzner CX21 tiene 1 vCPU compartida. Si necesitas más capacidad de cómputo, el upgrade a CX31 da 2 vCPUs." />
+          </div>
+        </MetricCard>
 
         {/* Disco */}
         <MetricCard icon={<HardDrive size={16} />} title="Disco" subtitle="Almacenamiento del VPS (SSD de 40 GB total)">
@@ -412,6 +424,47 @@ function SistemaTab() {
           </div>
         </MetricCard>
 
+        {/* Backup */}
+        {(() => {
+          const bk = h.backup;
+          const fmtDate = bk.last_ok_at
+            ? new Date(bk.last_ok_at).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })
+            : null;
+          return (
+            <MetricCard
+              icon={<HardDrive size={16} />}
+              title={`Backup${bk.ok ? '' : ' ⚠️'}`}
+              subtitle="pg_dump diario cifrado GPG → Backblaze B2 (cron 2am)"
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <StatRow
+                  label="Estado"
+                  value={bk.ok ? '✅ Al día' : '🔴 Sin backup reciente'}
+                  accent={bk.ok ? '#16a34a' : '#dc2626'}
+                  tip={`El script backup.sh corre cada noche a las 2am UTC:\n1. pg_dump → gzip → GPG encrypt (sin tocar texto plano)\n2. Valida el paquete GPG\n3. Sube a Backblaze B2 (retención 15 años por lifecycle rule)\n\n✅ Al día = backup de hace <26h\n🔴 Sin backup = no corrió o falló`}
+                />
+                {bk.last_ok_at ? (
+                  <>
+                    <StatRow
+                      label="Último exitoso"
+                      value={fmtDate ?? '—'}
+                      tip={`Hace ${bk.hours_ago}h — el backup se completó y fue validado.`}
+                    />
+                    <StatRow
+                      label="Tamaño"
+                      value={bk.size_human}
+                      tip="Tamaño del archivo .sql.gz.gpg en disco local antes de subir a B2. El cifrado GPG añade ~5% de overhead." />
+                  </>
+                ) : (
+                  <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
+                    Sin datos — el backup aún no ha corrido desde el último despliegue.
+                  </div>
+                )}
+              </div>
+            </MetricCard>
+          );
+        })()}
+
       </div>
 
       {/* Maintenance */}
@@ -424,76 +477,132 @@ function SistemaTab() {
 
 // ── Tenants tab ───────────────────────────────────────────────────────────────
 
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  active:    { label: 'Activo',    color: '#16a34a' },
+  trialing:  { label: 'Trial',     color: '#0f766e' },
+  past_due:  { label: 'Vencido',   color: '#b45309' },
+  suspended: { label: 'Suspendido',color: '#d97706' },
+  canceled:  { label: 'Cancelado', color: '#dc2626' },
+};
+
 function TenantsTab() {
   const qc = useQueryClient();
   const { data: orgs, isLoading } = useQuery({ queryKey: ['admin-orgs'], queryFn: adminApi.listOrgs });
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const activate = useMutation({
-    mutationFn: ({ id, months }: { id: string; months: number }) => adminApi.activateOrg(id, months),
-    onSettled: () => { setBusyId(null); qc.invalidateQueries({ queryKey: ['admin-orgs'] }); },
-  });
+  const invalidate = () => { setBusyId(null); qc.invalidateQueries({ queryKey: ['admin-orgs'] }); };
+
+  const activate    = useMutation({ mutationFn: ({ id, months }: { id: string; months: number }) => adminApi.activateOrg(id, months), onSettled: invalidate });
+  const suspend     = useMutation({ mutationFn: (id: string) => adminApi.suspendOrg(id), onSettled: invalidate });
+  const cancel      = useMutation({ mutationFn: (id: string) => adminApi.cancelOrg(id), onSettled: invalidate });
+  const extendTrial = useMutation({ mutationFn: ({ id, days }: { id: string; days: number }) => adminApi.extendTrial(id, days), onSettled: invalidate });
 
   const handleActivate = (o: AdminOrg) => {
     const input = window.prompt(`Activar "${o.name}" — ¿cuántos meses?`, '1');
     if (!input) return;
     const months = parseInt(input, 10);
-    if (!Number.isInteger(months) || months < 1 || months > 36) { alert('Ingresa un número de meses entre 1 y 36.'); return; }
-    setBusyId(o.id);
-    activate.mutate({ id: o.id, months });
+    if (!Number.isInteger(months) || months < 1 || months > 36) { alert('Ingresa entre 1 y 36.'); return; }
+    setBusyId(o.id); activate.mutate({ id: o.id, months });
+  };
+  const handleSuspend = (o: AdminOrg) => {
+    if (!window.confirm(`¿Suspender "${o.name}"? Los usuarios no podrán ingresar hasta que se reactiven.`)) return;
+    setBusyId(o.id); suspend.mutate(o.id);
+  };
+  const handleCancel = (o: AdminOrg) => {
+    if (!window.confirm(`¿CANCELAR "${o.name}"? Esto es definitivo — usa Suspender si solo quieres bloquear temporalmente.`)) return;
+    setBusyId(o.id); cancel.mutate(o.id);
+  };
+  const handleExtendTrial = (o: AdminOrg) => {
+    const input = window.prompt(`Extender trial de "${o.name}" — ¿cuántos días?`, '30');
+    if (!input) return;
+    const days = parseInt(input, 10);
+    if (!Number.isInteger(days) || days < 1 || days > 365) { alert('Ingresa entre 1 y 365.'); return; }
+    setBusyId(o.id); extendTrial.mutate({ id: o.id, days });
   };
 
-  const statusColor: Record<string, string> = { active: '#16a34a', trialing: '#0f766e', past_due: '#b45309', canceled: '#dc2626' };
+  const btnStyle = (color: string): React.CSSProperties => ({
+    border: 'none', background: color, color: '#fff', fontSize: 11.5, fontWeight: 600,
+    borderRadius: 7, padding: '5px 10px', cursor: 'pointer', whiteSpace: 'nowrap',
+  });
 
   return (
     <>
       {isLoading ? (
         <div style={{ fontSize: 14, color: 'var(--s400)' }}>Cargando…</div>
       ) : (
-        <div style={{ background: '#fff', borderRadius: 14, border: '1px solid var(--s200)', overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
-            <thead>
-              <tr style={{ background: 'var(--s50)', color: 'var(--s500)', textAlign: 'left' }}>
-                <th style={{ padding: '11px 16px', fontWeight: 600 }}>Consultorio</th>
-                <th style={{ padding: '11px 16px', fontWeight: 600 }}>Estado</th>
-                <th style={{ padding: '11px 16px', fontWeight: 600 }}>Acceso hasta</th>
-                <th style={{ padding: '11px 16px', fontWeight: 600 }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {(orgs ?? []).map(o => {
-                const until = o.current_period_end ?? o.trial_ends_at;
-                return (
-                  <tr key={o.id} style={{ borderTop: '1px solid var(--s100)' }}>
-                    <td style={{ padding: '12px 16px' }}>
-                      <div style={{ fontWeight: 600, color: 'var(--s800)' }}>{o.name}</div>
-                      <div style={{ fontSize: 11.5, color: 'var(--s400)' }}>{o.slug}</div>
-                    </td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <span style={{ fontWeight: 600, color: statusColor[o.subscription_status] ?? 'var(--s600)' }}>{o.subscription_status}</span>
-                    </td>
-                    <td style={{ padding: '12px 16px', color: 'var(--s600)' }}>{fmtDate(until)}</td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                      <button onClick={() => handleActivate(o)} disabled={busyId === o.id} style={{
-                        border: 'none', background: 'var(--teal)', color: '#fff', fontSize: 12.5, fontWeight: 700,
-                        borderRadius: 9, padding: '7px 14px', cursor: busyId === o.id ? 'wait' : 'pointer',
-                      }}>
-                        {busyId === o.id ? 'Activando…' : 'Activar meses'}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {(orgs ?? []).map(o => {
+            const st = STATUS_LABELS[o.subscription_status] ?? { label: o.subscription_status, color: '#9ca3af' };
+            const until = o.current_period_end ?? o.trial_ends_at;
+            const busy = busyId === o.id;
+            const expanded = expandedId === o.id;
+            return (
+              <div key={o.id} style={{ background: '#fff', borderRadius: 14, border: '1px solid var(--s200)', overflow: 'hidden' }}>
+                {/* Row principal */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', cursor: 'pointer' }}
+                  onClick={() => setExpandedId(expanded ? null : o.id)}>
+                  {/* Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, color: 'var(--s800)', fontSize: 14 }}>{o.name}</div>
+                    <div style={{ fontSize: 11.5, color: 'var(--s400)' }}>{o.slug}</div>
+                  </div>
+                  {/* Badges */}
+                  <span style={{ fontWeight: 700, fontSize: 12, color: st.color, background: st.color + '18',
+                    borderRadius: 20, padding: '3px 10px', whiteSpace: 'nowrap' }}>{st.label}</span>
+                  <div style={{ fontSize: 12, color: 'var(--s500)', whiteSpace: 'nowrap' }}>
+                    <span title="Usuarios">👥 {o.total_users}</span>
+                    <span style={{ marginLeft: 8 }} title="Pacientes">🗂 {o.total_patients}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--s400)', whiteSpace: 'nowrap' }}>{fmtDate(until)}</div>
+                  <span style={{ fontSize: 16, color: 'var(--s300)', userSelect: 'none' }}>{expanded ? '▲' : '▼'}</span>
+                </div>
+
+                {/* Panel expandible de acciones */}
+                {expanded && (
+                  <div style={{ borderTop: '1px solid var(--s100)', padding: '12px 16px', background: 'var(--s50)',
+                    display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                    <span style={{ fontSize: 12, color: 'var(--s500)', marginRight: 4 }}>Acciones:</span>
+
+                    <button style={btnStyle('var(--teal)')} disabled={busy} onClick={() => handleActivate(o)}>
+                      ✅ Activar meses
+                    </button>
+
+                    {o.subscription_status !== 'active' && (
+                      <button style={btnStyle('#0f766e')} disabled={busy} onClick={() => handleExtendTrial(o)}>
+                        ⏱ Extender trial
                       </button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {(orgs ?? []).length === 0 && (
-                <tr><td colSpan={4} style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--s400)' }}>Aún no hay organizaciones.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {activate.isSuccess && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, fontSize: 13, color: '#16a34a' }}>
-          <CheckCircle2 size={15} /> Activación aplicada.
+                    )}
+
+                    {o.subscription_status !== 'suspended' && o.subscription_status !== 'canceled' && (
+                      <button style={btnStyle('#d97706')} disabled={busy} onClick={() => handleSuspend(o)}>
+                        ⏸ Suspender
+                      </button>
+                    )}
+
+                    {o.subscription_status === 'suspended' && (
+                      <button style={btnStyle('#0f766e')} disabled={busy} onClick={() => handleExtendTrial(o)}>
+                        ▶ Reactivar (extender trial)
+                      </button>
+                    )}
+
+                    {o.subscription_status !== 'canceled' && (
+                      <button style={btnStyle('#dc2626')} disabled={busy} onClick={() => handleCancel(o)}>
+                        ✕ Cancelar cuenta
+                      </button>
+                    )}
+
+                    {busy && <span style={{ fontSize: 12, color: 'var(--s400)' }}>Procesando…</span>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {(orgs ?? []).length === 0 && (
+            <div style={{ textAlign: 'center', color: 'var(--s400)', padding: '24px 0', fontSize: 14 }}>
+              Aún no hay organizaciones.
+            </div>
+          )}
         </div>
       )}
     </>
