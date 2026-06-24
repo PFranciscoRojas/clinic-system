@@ -5,7 +5,7 @@ import {
   PenLine, Lock, Key, CheckCircle, Mail,
   Upload, Palette, Users, Trash2, Save,
   Shield, LogOut, Plus, Receipt, Pencil, X,
-  MessageCircle,
+  MessageCircle, Calendar,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
@@ -15,6 +15,7 @@ import { authApi } from '@/api/auth';
 import { adminApi } from '@/api/admin';
 import { consentTemplatesApi, type ConsentType } from '@/api/clinicalRecords';
 import { orgApi, type WhatsAppSettings } from '@/api/org';
+import { gcalApi } from '@/api/gcal';
 import { profilesApi, splitName, type Specialty } from '@/api/profiles';
 import { serviceRatesApi, type ServiceRate, type RateModality } from '@/api/serviceRates';
 import { ACCENT_COLORS, saveAccentColor } from '@/lib/theme';
@@ -502,6 +503,8 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
         </div>
       </SectionCard>
 
+      <GoogleCalendarCard />
+
       <SectionCard title="Sesión" icon={LogOut} color="#ef4444">
         <div style={{ padding: '14px 0' }}>
           <button
@@ -513,6 +516,98 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
         </div>
       </SectionCard>
     </>
+  );
+}
+
+// ── Google Calendar card ──────────────────────────────────────────────────────
+
+function GoogleCalendarCard() {
+  const [connected, setConnected] = useState(false);
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    gcalApi.status().then(s => {
+      setConnected(s.connected);
+      setEmail(s.google_email ?? '');
+    }).catch(() => {});
+
+    // Show result toast after OAuth redirect
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get('google');
+    if (result === 'connected') {
+      setMsg('Google Calendar conectado correctamente.');
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (result === 'error') {
+      setMsg('No se pudo conectar con Google. Intenta de nuevo.');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  const handleConnect = async () => {
+    setBusy(true);
+    try {
+      const { auth_url } = await gcalApi.connectURL();
+      window.location.href = auth_url;
+    } catch {
+      setMsg('No se pudo obtener la URL de autorización.');
+      setBusy(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    setBusy(true);
+    try {
+      await gcalApi.disconnect();
+      setConnected(false);
+      setEmail('');
+      setMsg('Google Calendar desconectado.');
+    } catch {
+      setMsg('Error al desconectar.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <SectionCard title="Google Calendar" icon={Calendar} color="#4285f4">
+      <div style={{ padding: '14px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {msg && (
+          <p style={{ margin: 0, fontSize: 13, color: msg.includes('correctamente') || msg.includes('desconectado') ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
+            {msg}
+          </p>
+        )}
+        {connected ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, color: '#16a34a', fontWeight: 600 }}>
+              ✓ Conectado como <strong>{email || 'cuenta Google'}</strong>
+            </span>
+            <button
+              onClick={handleDisconnect}
+              disabled={busy}
+              style={{ padding: '7px 14px', background: '#fff', color: '#dc2626', border: '1.5px solid #fecaca', borderRadius: 8, cursor: busy ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}
+            >
+              {busy ? 'Desconectando…' : 'Desconectar'}
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--s500)', lineHeight: 1.5 }}>
+              Sincroniza tus citas automáticamente con tu Google Calendar personal.
+            </p>
+            <button
+              onClick={handleConnect}
+              disabled={busy}
+              style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 8, padding: '9px 18px', background: '#4285f4', color: '#fff', border: 'none', borderRadius: 9, cursor: busy ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 600, opacity: busy ? 0.7 : 1 }}
+            >
+              <Calendar size={15} />
+              {busy ? 'Redirigiendo…' : 'Conectar Google Calendar'}
+            </button>
+          </div>
+        )}
+      </div>
+    </SectionCard>
   );
 }
 

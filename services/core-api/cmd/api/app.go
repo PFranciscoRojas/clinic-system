@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"sghcp/core-api/internal/gcal"
 	"sghcp/core-api/internal/notify"
 	"sghcp/core-api/internal/orgs"
 	"sghcp/core-api/internal/reminders"
@@ -29,6 +30,7 @@ type app struct {
 	rdb    *redis.Client
 	km     *crypto.KeyManager
 	wa     *whatsapp.Sender
+	gcal   *gcal.Syncer
 	server *http.Server
 }
 
@@ -62,6 +64,7 @@ func newApp(cfg config.Config) (*app, error) {
 
 	a := &app{cfg: cfg, pool: pool, rdb: rdb, km: km}
 	a.wa = whatsapp.New(pool, km, slog.Default())
+	a.gcal = gcal.New(pool, km, cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.AppBaseURL, []byte(cfg.JWTSecret), slog.Default())
 	a.server = &http.Server{
 		Addr:    ":" + cfg.Port,
 		Handler: a.buildRouter(),

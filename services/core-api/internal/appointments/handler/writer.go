@@ -41,6 +41,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	h.cal.PushCreate(r.Context(), id, body.StaffID, body.Modality, scheduledAt, body.DurationMin)
 	httputil.WriteJSON(w, http.StatusCreated, map[string]string{"id": id})
 }
 
@@ -64,6 +65,7 @@ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	h.cal.PushCancel(r.Context(), appointmentID)
 	w.WriteHeader(http.StatusNoContent)
 }
 

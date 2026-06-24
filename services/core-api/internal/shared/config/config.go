@@ -53,6 +53,10 @@ type Config struct {
 	// BookingSessionPrice is the whole-COP price a patient pays per appointment
 	// through the public booking page.
 	BookingSessionPrice int
+
+	// Google Calendar OAuth — optional. When empty, the integration is disabled.
+	GoogleClientID     string
+	GoogleClientSecret string
 }
 
 func Load() Config {
@@ -106,6 +110,9 @@ func Load() Config {
 		MPPlanReason:    getEnv("MP_PLAN_REASON", "SGHCP · Plan mensual"),
 
 		BookingSessionPrice: getEnvInt("BOOKING_SESSION_PRICE", 180000),
+
+		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
+		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
 	}
 }
 

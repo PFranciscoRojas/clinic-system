@@ -101,6 +101,9 @@ func (a *app) buildRouter() http.Handler {
 	billingH := billinghandler.New(a.pool, a.cfg)
 	r.Mount("/api/v1/public/billing", billingH.PublicRoutes())
 
+	// Google Calendar OAuth callback — public (Google redirects here after consent).
+	r.Mount("/api/v1/integrations/google", a.gcal.PublicRoutes())
+
 	// ── Protected routes — valid JWT required on every request ────────────────
 	// RequireAuth validates the Bearer token and injects claims into context.
 	// RequirePermission (per-endpoint) checks a specific permission code from those claims.
@@ -113,7 +116,7 @@ func (a *app) buildRouter() http.Handler {
 		r.Use(middleware.SubscriptionGate(a.pool))
 
 		r.Mount("/api/v1/patients", patientshandler.New(a.pool, a.km).Routes())
-		r.Mount("/api/v1/appointments", apptshandler.New(a.pool).Routes())
+		r.Mount("/api/v1/appointments", apptshandler.New(a.pool, a.gcal).Routes())
 
 		// Shared so approving a clinical record can refresh the patient's AI
 		// risk read through the same enqueue path the on-demand routes use.
@@ -142,6 +145,7 @@ func (a *app) buildRouter() http.Handler {
 		r.Mount("/api/v1/specialties", profH.SpecialtyRoutes())
 		r.Mount("/api/v1/me/professional-profile", profH.Routes())
 		r.Mount("/api/v1/me/availability", availabilityH.PrivateRoutes())
+		r.Mount("/api/v1/me/google", a.gcal.Routes())
 
 		aiDrafts := aidraftshandler.New(a.pool, a.km, a.rdb, a.cfg.AudioDir)
 		r.Mount("/api/v1/ai-drafts", aiDrafts.Routes())
