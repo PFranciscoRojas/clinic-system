@@ -579,17 +579,36 @@ function GoogleCalendarCard() {
           </p>
         )}
         {connected ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <span style={{ fontSize: 13, color: '#16a34a', fontWeight: 600 }}>
               ✓ Conectado como <strong>{email || 'cuenta Google'}</strong>
             </span>
-            <button
-              onClick={handleDisconnect}
-              disabled={busy}
-              style={{ padding: '7px 14px', background: '#fff', color: '#dc2626', border: '1.5px solid #fecaca', borderRadius: 8, cursor: busy ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}
-            >
-              {busy ? 'Desconectando…' : 'Desconectar'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    const r = await gcalApi.sync();
+                    setMsg(`Sincronizando ${r.queued} cita${r.queued !== 1 ? 's' : ''} en segundo plano…`);
+                  } catch {
+                    setMsg('Error al sincronizar.');
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                disabled={busy}
+                style={{ padding: '7px 14px', background: '#4285f4', color: '#fff', border: 'none', borderRadius: 8, cursor: busy ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}
+              >
+                {busy ? 'Sincronizando…' : 'Sincronizar citas existentes'}
+              </button>
+              <button
+                onClick={handleDisconnect}
+                disabled={busy}
+                style={{ padding: '7px 14px', background: '#fff', color: '#dc2626', border: '1.5px solid #fecaca', borderRadius: 8, cursor: busy ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}
+              >
+                Desconectar
+              </button>
+            </div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

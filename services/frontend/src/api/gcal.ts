@@ -9,5 +9,6 @@ export interface GoogleCalendarStatus {
 export const gcalApi = {
   status: () => api.get<GoogleCalendarStatus>('/me/google/status'),
   connectURL: () => api.get<{ auth_url: string }>('/me/google/connect'),
+  sync: () => api.post<{ queued: number }>('/me/google/sync', {}),
   disconnect: () => api.delete<void>('/me/google'),
 };

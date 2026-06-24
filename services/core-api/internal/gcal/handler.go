@@ -1,14 +1,17 @@
 package gcal
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
+	"sghcp/core-api/internal/shared/dbctx"
 	"sghcp/core-api/internal/shared/middleware"
 )
 
@@ -18,6 +21,7 @@ func (s *Syncer) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/status", s.getStatus)
 	r.Get("/connect", s.getConnectURL)
+	r.Post("/sync", s.syncExisting)
 	r.Delete("/", s.disconnect)
 	return r
 }
@@ -71,6 +75,54 @@ func (s *Syncer) callback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, settingsURL+"?google=connected", http.StatusFound)
+}
+
+// POST /api/v1/me/google/sync — pushes all existing SCHEDULED appointments that
+// haven't been synced yet to the professional's Google Calendar. Returns 202
+// immediately and runs the sync in the background.
+func (s *Syncer) syncExisting(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+
+	type apptRow struct {
+		id       string
+		modality string
+		at       time.Time
+		dur      int
+	}
+
+	rows, err := dbctx.From(r.Context(), s.pool).Query(r.Context(), `
+		SELECT a.id, a.modality, a.scheduled_at, a.duration_min
+		FROM appointments a
+		WHERE a.staff_id = $1
+		  AND a.status = 'SCHEDULED'
+		  AND NOT EXISTS (
+		      SELECT 1 FROM appointment_gcal_events e WHERE e.appointment_id = a.id
+		  )
+	`, claims.UserID)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	var pending []apptRow
+	for rows.Next() {
+		var a apptRow
+		if err := rows.Scan(&a.id, &a.modality, &a.at, &a.dur); err == nil {
+			pending = append(pending, a)
+		}
+	}
+	rows.Close()
+
+	staffID := claims.UserID
+	go func() {
+		for _, a := range pending {
+			s.PushCreate(context.Background(), a.id, staffID, a.modality, a.at, a.dur)
+		}
+		s.logger.Info("gcal: backfill queued", "staff_id", staffID, "count", len(pending))
+	}()
+
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"queued": len(pending),
+	})
 }
 
 // DELETE /api/v1/me/google
