@@ -18,7 +18,6 @@ import (
 	availabilityhandler "sghcp/core-api/internal/availability"
 	billinghandler "sghcp/core-api/internal/billing/handler"
 	bookinghandler "sghcp/core-api/internal/booking"
-	bookingrequestshandler "sghcp/core-api/internal/bookingrequests/handler"
 	crrhandler "sghcp/core-api/internal/clinicalrecords/handler"
 	consentshandler "sghcp/core-api/internal/consents/handler"
 	diagnoseshandler "sghcp/core-api/internal/diagnoses/handler"
@@ -72,12 +71,7 @@ func (a *app) buildRouter() http.Handler {
 		brandingResolver := orgs.New(a.pool).ResolveBranding
 		notifier = notify.NewResend(a.cfg.ResendAPIKey, a.cfg.ResendFrom, brandingResolver)
 	}
-	bookingH := bookingrequestshandler.New(a.pool, a.km, notifier, a.wa)
 	availabilityH := availabilityhandler.NewHandler(a.pool)
-	r.Group(func(r chi.Router) {
-		r.Use(middleware.RateLimit(5, time.Minute))
-		r.Mount("/api/v1/public/booking", bookingH.PublicRoutes())
-	})
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RateLimit(30, time.Minute))
 		r.Mount("/api/v1/public/availability", availabilityH.PublicRoutes())
@@ -152,8 +146,6 @@ func (a *app) buildRouter() http.Handler {
 		r.Method(http.MethodPost, "/api/v1/appointments/{appointment_id}/audio", aiDrafts.AppointmentAudioRoute())
 
 		r.Mount("/api/v1/patients/{patient_id}/ai", aisuggestionshandler.NewWithService(aiSugSvc).PatientRoutes())
-
-		r.Mount("/api/v1/booking-requests", bookingH.Routes())
 
 		// BC-6 internal billing — service-rate catalogue + patient invoices/payments.
 		invoicingH := invoicinghandler.New(a.pool, a.km, notifier)

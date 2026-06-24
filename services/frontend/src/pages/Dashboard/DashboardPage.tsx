@@ -9,7 +9,6 @@ import {
 
 import { appointmentsApi, type Appointment } from '@/api/appointments';
 import { patientsApi, type Patient } from '@/api/patients';
-import { bookingRequestsApi } from '@/api/bookingRequests';
 import { clinicalRecordsApi } from '@/api/clinicalRecords';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
@@ -60,16 +59,6 @@ function shiftDate(iso: string, days: number) {
   const d = new Date(iso + 'T12:00:00');
   d.setDate(d.getDate() + days);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function fmtRelative(iso: string) {
-  const diffMin = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (diffMin < 1)  return 'Ahora';
-  if (diffMin < 60) return `Hace ${diffMin} min`;
-  const h = Math.floor(diffMin / 60);
-  if (h < 24) return `Hace ${h} h`;
-  const d = Math.floor(h / 24);
-  return d === 1 ? 'Ayer' : `Hace ${d} días`;
 }
 
 function fmtTime(isoOrHHMM: string) {
@@ -418,14 +407,6 @@ export function DashboardPage() {
     refetchInterval: 60_000,
   });
 
-  // ── Inbox: pending web booking requests ──────────────────────────────────
-  const { data: pendingBookings = [] } = useQuery({
-    queryKey: ['booking-requests', 'PENDING'],
-    queryFn: () => bookingRequestsApi.list('PENDING'),
-    enabled: !!user,
-    refetchInterval: 60_000,
-  });
-
   // Sort by scheduled_at
   const sorted = useMemo(() =>
     [...appointments].sort((a, b) =>
@@ -464,7 +445,7 @@ export function DashboardPage() {
   const notedApptIds = new Set(recordQueries.flatMap(q => q.data?.items?.map(r => r.appointment_id) ?? []));
   const pendingNotes = recordsReady ? completedApptsToday.filter(a => !notedApptIds.has(a.id)) : [];
 
-  const inboxCount = pendingBookings.length + unfinishedToday.length + pendingNotes.length;
+  const inboxCount = unfinishedToday.length + pendingNotes.length;
 
   // EN CURSO marker index
   const nowMs = Date.now();
@@ -648,21 +629,6 @@ export function DashboardPage() {
                 </div>
               ) : (
                 <div>
-                  {pendingBookings.map(b => (
-                    <InboxItem
-                      key={b.id}
-                      icon={UserPlus}
-                      iconColor="#0ea5e9"
-                      iconBg="#e0f2fe"
-                      title="Solicitud de cita web"
-                      subtitle={`${b.first_name} ${b.last_name} · ${b.modality === 'VIRTUAL' ? 'Virtual' : 'Presencial'}`}
-                      time={fmtRelative(b.created_at)}
-                      action="Revisar"
-                      actionColor="#0ea5e9"
-                      urgent
-                      onAction={() => navigate('/booking-requests')}
-                    />
-                  ))}
                   {unfinishedToday.map(a => (
                     <AppointmentInboxItem
                       key={a.id}

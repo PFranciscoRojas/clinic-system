@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   CalendarDays, Users, Settings,
   Brain, Search, Plus, ChevronDown, Lock, LogOut, Menu,
-  UserCircle, Calendar, X, Globe, Clock, Building2, Receipt,
+  UserCircle, Calendar, X, Clock, Building2, Receipt,
   PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -18,7 +18,6 @@ import { profilesApi } from '@/api/profiles';
 const NAV = [
   { to: '/',                  label: 'Agenda',          Icon: CalendarDays,  perm: 'appointments:read', badge: null },
   { to: '/patients',          label: 'Pacientes',        Icon: Users,         perm: 'patients:read',     badge: null },
-  { to: '/booking-requests',  label: 'Solicitudes web',  Icon: Globe,         perm: null,                badge: null },
   { to: '/settings',          label: 'Configuración',    Icon: Settings,      perm: null,                badge: null },
 ];
 

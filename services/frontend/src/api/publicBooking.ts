@@ -5,18 +5,6 @@ export interface DayAvailability {
   slots: string[]; // ["09:00","09:30",…] local time
 }
 
-export interface BookingForm {
-  org_slug: string;
-  first_name: string;
-  last_name: string;
-  email: string;
-  phone: string;
-  modality: 'VIRTUAL' | 'IN_PERSON';
-  preferred_date: string; // YYYY-MM-DD (the chosen slot's day)
-  preferred_time: string; // HH:MM (the chosen slot)
-  notes?: string;
-}
-
 export interface OrgInfo {
   public_name: string;
   brand_color: string;
@@ -32,10 +20,6 @@ export const publicBookingApi = {
     api.get<{ days: DayAvailability[] }>(
       `/public/availability?org_slug=${encodeURIComponent(slug)}&modality=${modality}&from=${from}&to=${to}`,
     ),
-
-  // Reuses the existing public booking endpoint; creates a pending request
-  // (the clinic confirms). Kept as a no-payment fallback.
-  create: (body: BookingForm) => api.post<{ id: string }>('/public/booking/', body),
 
   // Holds the slot and returns a MercadoPago checkout URL + a summary to show
   // before redirecting to pay. prev_booking_id releases a hold created earlier
