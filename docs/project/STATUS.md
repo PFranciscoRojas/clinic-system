@@ -19,15 +19,15 @@
 | BC-6 Facturación | ✅ producción | Tarjeta/PSE/Efecty/Nequi, semana/mes/3meses/año, balance-por-paciente |
 | Ola Notificaciones | ✅ producción | Email diferido/conflicto a admins, WhatsApp templates (en revisión Meta) |
 | Ola Integraciones | ✅ producción | Google Calendar OAuth per-profesional, sync SGHCP→Google, grabación con IndexedDB |
+| Ola Legal (Colombia) | ✅ producción | ToS + Política privacidad (Ley 1581/Ley 1480), DPA Encargado-Responsable, checkbox aceptación signup, modal DPA, banner IA reforzado. Migración 000038 |
 
 ### Últimos commits a `main` — todos desplegados
 
-- `4642d7b` feat(users): eliminar miembro del equipo — CLINIC_ADMIN + SYSTEM_ADMIN con lista por org — 2026-06-24
+- `666ba06` feat(legal): cumplimiento go-live Colombia — ToS, privacidad, DPA, aceptación en signup — 2026-06-24
+- `a3de021` docs: actualizar contexto sesión 4 2026-06-24 — 2026-06-24
+- `4642d7b` feat(users): eliminar miembro del equipo — CLINIC_ADMIN + SYSTEM_ADMIN — 2026-06-24
 - `858c445` fix(admin): org_id → organization_id en JOIN de listOrgs — 2026-06-24
 - `acd74d3` feat(admin): CPU, backup status, tenant actions (suspend/cancel/extend-trial) — 2026-06-24
-- `bb5ac3e` docs: actualizar contexto sesión 3 2026-06-24 — 2026-06-24
-- `cc0b1ff` feat(admin): métricas PostgreSQL avanzadas — buffer hit, deadlocks, slow queries, locks — 2026-06-24
-- `74319a6` feat(admin): tablero de monitoreo del sistema para SYSTEM_ADMIN — 2026-06-24
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 > **CI/CD:** `core-api` y `ai-service` se construyen en GitHub Actions y se despliegan a ghcr.io. El VPS solo hace `docker pull` — sin builds locales.
@@ -47,7 +47,7 @@
 
 | Versión | Hito |
 |---|---|
-| `1.0.0` | Go-live real: token MP producción, precio real, `ALLOW_DATA_RESET=false`, `MP_WEBHOOK_ENFORCE=true` |
+| `1.0.0` | Go-live real: token MP producción, precio real, `ALLOW_DATA_RESET=false`, `MP_WEBHOOK_ENFORCE=true`, validación legal por abogado (ToS/privacidad ya publicados como borrador) |
 | post-1.0 | Google Calendar bidireccional (Google→SGHCP): webhooks de push, sync_token, reconciliación |
 | post-1.0 | Google Calendar: verificación de app con Google para >100 usuarios (actualmente testing mode) |
 | post-1.0 | Videollamada / Zoom nativa |
@@ -95,7 +95,7 @@
 | `core-api` | `services/core-api/` | ✅ Go 1.25, prod |
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
-| Migrations | `services/core-api/migrations/` | Última: `000037_professional_ai_prefs` |
+| Migrations | `services/core-api/migrations/` | Última: `000038_user_terms_acceptance` |
 | CI/CD | `.github/workflows/build-ai-service.yml` + `build-core-api.yml` | Build+push ghcr.io + deploy SSH al VPS (secrets: `VPS_HOST`, `VPS_SSH_KEY`, `GHCR_TOKEN`) |
 | Claude skills | `~/.claude/commands/` | Sincronizadas 2026-06-24 |
 

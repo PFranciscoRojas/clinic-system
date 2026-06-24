@@ -1,5 +1,12 @@
 # Ideas y Tareas Futuras (No procesar aún)
 
+## Legal / Cumplimiento (Colombia)
+- **Validación por abogado de ToS y Política de Privacidad (2026-06-24)** — Los documentos publicados en `/legal/terminos` y `/legal/privacidad` son borradores funcionales redactados como base. Antes del primer cliente pagando real, revisar con un abogado colombiano especializado en derecho digital/protección de datos. Costo estimado: COP $500k–$1.5M para revisión y firma.
+- **Registro SIC (RNBD) (2026-06-24)** — Verificar el estado actual del Registro Nacional de Bases de Datos ante la SIC (actualizado en 2022). Aplica cuando haya tracción real (5+ clientes pagando).
+- **Cláusula de arbitraje formal (Ley 1563/2012) (2026-06-24)** — Agregar cláusula de arbitraje a los ToS cuando el volumen de usuarios justifique la complejidad. Por ahora la ley aplicable y jurisdicción Bogotá ya están definidas.
+- **Política de cookies (2026-06-24)** — Diferida. Solo aplica si se añade analytics de terceros (Google Analytics, Hotjar, etc.). Hoy no hay tracking externo.
+- **Estructura legal (SAS vs persona natural) (2026-06-24)** — Decisión de negocio pendiente: para los primeros $20–40/cliente/mes, persona natural régimen SIMPLE es suficiente. Evaluar cuando supere el umbral de ingresos mínimos para SAS.
+
 ## Infraestructura / DevOps (pre go-live o post-1.0)
 - **Proteger rama `main` en GitHub** — antes o al llegar a 1.0.0: activar branch protection (require PR + 1 approval, no direct push, no force-push). Complementar con pipeline CI (GitHub Actions) que corra `go build ./...` + `tsc --noEmit` en cada PR antes de permitir merge. Hoy el flujo manual funciona pero no escala ni protege ante errores de madrugada.
 - **Disco VPS — Capa 2 (2026-06-24)** — Deferred (el usuario prefiere no aumentar el plan por ahora, no es producción real). Si el disco vuelve a apretar: añadir Hetzner Volume de 50 GB (~€2.5/mes) y mover el volumen `audio_data` ahí. Capa 1 (crons de limpieza + alerta email >80%) y Capa 3 (imagen ai-service a ghcr.io, whisper.tiny + spaCy sm, borrado de audio post-transcripción) ya implementadas.

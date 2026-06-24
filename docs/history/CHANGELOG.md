@@ -13,6 +13,10 @@
 
 ---
 
+## 2026-06-24 (sesión 5)
+
+- feat(legal): cumplimiento go-live Colombia (`666ba06`) — páginas públicas `/legal/terminos` y `/legal/privacidad` (borradores Ley 1481/Ley 1580, contenido en español versionado como `LEGAL_VERSION`); checkbox de aceptación obligatorio en `/signup` con links a ambas páginas; migración 000038 añade `terms_accepted_at`, `terms_version`, `dpa_accepted_at` a `users`; backend valida `accepted_terms=true` y persiste `terms_version` como audit trail; nuevo endpoint `POST /auth/accept-dpa`; `/auth/me` expone `dpa_accepted`; modal DPA bloqueante en AppShell para CLINIC_ADMIN/PROFESSIONAL sin aceptación previa (Contrato Encargado-Responsable Ley 1581); banner IA reforzado en `AIDraftPage` con texto de responsabilidad clínica (Ley 23/1981). Desplegado: migración aplicada en VPS, core-api pull, frontend rebuild.
+
 ## 2026-06-24 (sesión 4)
 
 - feat(admin): CPU + backup status en tablero sistema (`acd74d3`) — CPU vía `/proc/stat` (muestreado 150ms), card con barra de color; backup: script escribe `/var/lib/sghcp/last_backup_ok`, container lee vía volume mount `:ro`, card con último timestamp + tamaño + alerta si >26h; tenant list expandible (▼) con conteo usuarios/pacientes y acciones Suspender/Cancelar/Extender-trial. Fix: `org_id` → `organization_id` en JOIN (`858c445`).
