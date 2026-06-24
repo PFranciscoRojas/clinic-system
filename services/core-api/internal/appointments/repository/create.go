@@ -24,7 +24,7 @@ func (r *Repository) Create(ctx context.Context, p appointments.CreateParams) (s
 			LIMIT 1
 		)
 		INSERT INTO appointments (organization_id, patient_id, guest_name, staff_id, scheduled_at, duration_min, modality)
-		SELECT $1, $2, $3, $4, $5, $6, $7
+		SELECT $1, $2, $3, $4, $5, $6, $7::appointment_modality
 		WHERE NOT EXISTS (SELECT 1 FROM hold_conflict)
 		RETURNING id`
 
