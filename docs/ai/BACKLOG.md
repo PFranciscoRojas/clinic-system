@@ -6,12 +6,12 @@
 - **Migrar más servicios a build CI (2026-06-24)** — `ai-service` ya se construye en GitHub Actions y se despliega a ghcr.io. Considerar lo mismo para `core-api` (hoy `docker compose up --build` en el VPS) si el build local vuelve a llenar disco.
 
 ## Code-debt — features mockeadas sin backend (auditoría 2026-06-24)
-- **Evaluaciones psicométricas sin persistencia (ALTO)** — `pages/Evaluations/EvaluationsPage.tsx`: el flujo completa la prueba (PHQ-9, GAD-7, etc.), muestra resultado e interpretación clínica con `setTimeout(onComplete, 1400)` y se descarta. No hay tabla en BD, ni API, ni endpoint Go. El profesional no puede recuperar resultados históricos. Implementar: tabla `patient_evaluations` (cifrada), endpoints BC-5, persistir score+band+respuestas, listar histórico en perfil de paciente. (Ya estaba en roadmap post-1.0 "PHQ-9 y escalas", aquí se confirma que la UI existe pero sin backend.)
-- **Bloqueo de pantalla configurable pero ignorado (MEDIO)** — `Settings/SettingsPage.tsx` SecuritySection: el toggle "Bloqueo automático" y los botones 2/5/10/15/30 min marcan dirty y muestran "✓ Guardado" pero `handleSave` global solo actúa para `section==='ai'`. El tiempo real está hardcoded en `AppShell.tsx:46` (`IDLE_MS = 5min`). Persistir la preferencia (BD o localStorage) y que AppShell la lea.
-- **Formato "Con viñetas" sin implementar en IA (TRIVIAL)** — `Settings/SettingsPage.tsx:926` ofrece `bullet` en NOTE_STYLES, pero `ai-service/drafts/claude.py` solo tiene instrucciones para `structured` y `narrative`; si el profesional elige viñetas, el backend cae a structured silenciosamente. Añadir instrucción `bullet` en `_STYLE_INSTRUCTIONS` o quitar la opción del frontend.
-- **Retención de borradores no aprobados sin enforcement (MEDIO)** — la preferencia se persiste en `ai_prefs.data_retain` (6m/1a/2a) pero no existe cron/job que borre los `ai_drafts` vencidos. Implementar un sweep periódico que elimine drafts no aprobados más viejos que el umbral.
-- **SoonRow "Próximamente" en Notificaciones (BAJO)** — `Settings/SettingsPage.tsx`: SMS, "Nuevo paciente registrado", "Cancelación de cita", "Resumen semanal", "Borrador IA listo" son toggles decorativos con badge Próximamente, sin backend.
-- **`StubPage.tsx` muerto (BAJO)** — componente "en construcción" exportado pero sin imports. Eliminar.
+- **Evaluaciones psicométricas (ALTO)** — módulo eliminado completamente (decisión producto 2026-06-24: no se implementa por ahora). Cuando se retome: tabla `patient_evaluations` (cifrada), endpoints BC-5, persistir score+band+respuestas, listar histórico en perfil de paciente. Roadmap post-1.0 "PHQ-9 y escalas".
+- ✅ **Bloqueo de pantalla configurable (MEDIO)** — resuelto 2026-06-24: `lib/screenLock.ts` + AppShell reactivo.
+- ✅ **Formato "Con viñetas" sin implementar (TRIVIAL)** — resuelto 2026-06-24: opción eliminada de la UI.
+- ✅ **Retención de borradores no aprobados (MEDIO)** — resuelto 2026-06-24: sweeper `internal/aidrafts/retention` activo.
+- **SoonRow "Próximamente" en Notificaciones (BAJO)** — SMS, "Nuevo paciente registrado", "Cancelación de cita", "Resumen semanal", "Borrador IA listo" son toggles decorativos. Se dejan como señal de roadmap (honestos con badge Próximamente).
+- ✅ **`StubPage.tsx` muerto (BAJO)** — eliminado 2026-06-24.
 
 ## Fase 3 — IA y Automatizaciones
 - **Google Calendar (OAuth + sync)** — ✅ Implementado (2026-06-24): OAuth per-profesional con tokens cifrados, sync SGHCP→Google en create/cancel/backfill, limpieza al desconectar, `GoogleCalendarCard` en Settings.

@@ -22,13 +22,12 @@
 
 ### Últimos commits a `main` — todos desplegados
 
+- `ac2c501` feat(clinical,settings): code-debt cleanup — eliminaciones, bloqueo persistente, retención IA — 2026-06-24
+- `03d4c78` docs: actualizar contexto sesión 2026-06-24 — fixes agenda, prefs IA, incidente disco + CI ai-service — 2026-06-24
 - `c213763` ci: actualizar actions a Node.js 24 + git pull en deploy — 2026-06-24
 - `87489b0` chore(infra): reducir imagen ai-service + lifecycle de audio + CI build — 2026-06-24
 - `3e96211` feat(settings): limpiar sección IA — eliminar controles decorativos — 2026-06-24
 - `5dc3b0e` feat(ai): preferencias de IA persistentes por profesional (estilo + tono) — 2026-06-24
-- `1db26e4` fix(agenda): mostrar profesional de la cita en lugar del usuario logueado — 2026-06-24
-- `ce10cd6` fix(agenda): mostrar todas las citas del org + cast ENUM ai_draft status — 2026-06-24
-- `1d51d5e` feat(nav): nueva sección Clínico + agrupamiento de Configuración — 2026-06-24
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 > **Nuevo:** CI/CD GitHub Actions construye y despliega `ai-service` (ghcr.io) en cada push a `services/ai-service/`.
@@ -40,7 +39,7 @@
 | ID | Descripción | Estado |
 |---|---|---|
 | **MP webhook** | `MP_WEBHOOK_ENFORCE=false` en VPS — secreto mal configurado; hacer un pago real y capturar log de firma para corregir y volver a `true` | 🔴 pendiente |
-| **WhatsApp templates** | 3 plantillas `recordatorio_cita_24h`, `recordatorio_cita_2h`, `cita_confirmada` en revisión con Meta. Una vez aprobadas, configurar en Ajustes → Notificaciones con Phone Number ID `1138431989358649`. Necesita System User token permanente (el temporal caduca en 24h) | 🟡 en revisión Meta |
+| **WhatsApp templates** | 3 plantillas `recordatorio_cita_24h`, `recordatorio_cita_2h`, `cita_confirmada` en revisión con Meta. Una vez aprobadas, configurar en Ajustes → Notificaciones con Phone Number ID `1138431989358649`. Necesita System User token permanente (el temporal caduca en 24h). Cobro COP$90,675 en tarjeta es preautorización de verificación (estado Pending), se reversa en 5–7 días | 🟡 en revisión Meta |
 
 ---
 
@@ -73,7 +72,7 @@
 |---|---|
 | `postgres:5432` | ✅ corriendo (recuperado del incidente de disco 2026-06-24) |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción (rebuild 2026-06-24, migración 000037 aplicada) |
+| `core-api:8080` | ✅ producción (rebuild 2026-06-24, migración 000037, sweeper retención IA activo) |
 | `ai-service` | ✅ producción — ahora desde `ghcr.io/pfranciscorojas/clinic-system-ai-service:latest` (whisper.tiny + spaCy sm) |
 | `frontend` (Caddy :80/:443) | ✅ producción |
 | Backups | `pg_dump` cifrado GPG → Backblaze B2 |

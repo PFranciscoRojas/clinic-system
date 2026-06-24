@@ -13,6 +13,12 @@
 
 ---
 
+## 2026-06-24 (sesión 2)
+
+- chore(debt): limpieza de code-debt completa (`ac2c501`) — eliminado módulo Evaluaciones (852 líneas, sin backend y sin planes de implementación), eliminado StubPage muerto, quitado formato "Con viñetas" de la UI de IA (solo structured/narrative soportados). Bloqueo de pantalla ahora persiste config real por usuario en localStorage (`sghcp_lock_enabled/minutes_${userId}`) vía nuevo `lib/screenLock.ts`; AppShell reacciona sin reload via custom event `sghcp-lock-config`. Nuevo sweeper `internal/aidrafts/retention` en core-api: goroutine que cada 6 h borra `ai_drafts` no aprobados según `ai_prefs.data_retain` del profesional (default 180 días). Desplegado: core-api rebuild + frontend rebuild en VPS.
+
+---
+
 ## 2026-06-24
 
 - feat(gcal): integración Google Calendar completa — OAuth per-profesional (HMAC state, tokens cifrados con `km.SealSecret`), tablas `professional_google_calendar` + `appointment_gcal_events` (migración 000035), sync SGHCP→Google en create/cancel, backfill automático al conectar, limpieza de eventos al desconectar, `GoogleCalendarCard` en Settings. Bug crítico resuelto: service worker Workbox interceptaba la navegación al callback OAuth (`navigateFallbackDenylist: [/^\/api\//]`). Dockerfile Go 1.22→1.25 (`f416010`–`954a137`).
