@@ -37,6 +37,7 @@ func New(pool *pgxpool.Pool, cfg config.Config) *Handler {
 func (h *Handler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.With(middleware.RequirePermission("organization:configure")).Post("/checkout", h.checkout)
+	r.With(middleware.RequirePermission("organization:configure")).Post("/reconcile", h.reconcile)
 	return r
 }
 
@@ -125,6 +126,54 @@ func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
 		}
 		h.applyPreapproval(ctx, pre)
 	}
+}
+
+// POST /api/v1/billing/reconcile — called by the frontend after returning from
+// the MercadoPago checkout (back_url). Looks up the preapproval tied to the
+// org's plan, applies its status, and patches the notification_url so future
+// webhook events reach us. This is a safety net for when the webhook is delayed
+// or the notification_url was not propagated by the preapproval_plan API.
+func (h *Handler) reconcile(w http.ResponseWriter, r *http.Request) {
+	if !h.mp.Enabled() {
+		httputil.WriteError(w, http.StatusServiceUnavailable, "pagos no disponibles")
+		return
+	}
+	claims := middleware.ClaimsFromContext(r.Context())
+
+	var planID string
+	_ = h.pool.QueryRow(r.Context(),
+		`SELECT provider_customer_id FROM organizations WHERE id = $1`,
+		claims.OrganizationID).Scan(&planID)
+	if planID == "" {
+		httputil.WriteError(w, http.StatusNotFound, "no hay suscripción registrada")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	pre, err := h.mp.FindPreapprovalByPlan(ctx, planID)
+	if err != nil {
+		slog.Warn("billing.reconcile: preapproval not found", "plan_id", planID, "err", err)
+		httputil.WriteError(w, http.StatusNotFound, "suscripción no encontrada en MercadoPago")
+		return
+	}
+
+	h.applyPreapproval(ctx, pre)
+
+	// Patch notification_url so future renewals/cancellations reach the webhook.
+	if pre.Status == "authorized" {
+		notifURL := h.cfg.AppBaseURL + "/api/v1/public/billing/webhook"
+		if err := h.mp.PatchPreapprovalNotificationURL(ctx, pre.ID, notifURL); err != nil {
+			slog.Warn("billing.reconcile: could not patch notification_url", "err", err)
+		}
+	}
+
+	var status string
+	_ = h.pool.QueryRow(r.Context(),
+		`SELECT subscription_status FROM organizations WHERE id = $1`,
+		claims.OrganizationID).Scan(&status)
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"subscription_status": status})
 }
 
 // applyPreapproval maps a subscription's status onto the org's billing columns.

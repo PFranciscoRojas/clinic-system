@@ -128,6 +128,29 @@ func (c *Client) GetPreapproval(ctx context.Context, id string) (*Preapproval, e
 	return &p, nil
 }
 
+// FindPreapprovalByPlan returns the most-recent preapproval for the given plan id.
+func (c *Client) FindPreapprovalByPlan(ctx context.Context, planID string) (*Preapproval, error) {
+	var out struct {
+		Results []Preapproval `json:"results"`
+	}
+	if err := c.do(ctx, http.MethodGet,
+		"/preapproval/search?preapproval_plan_id="+planID+"&sort=date_created&criteria=desc&limit=1",
+		nil, &out); err != nil {
+		return nil, err
+	}
+	if len(out.Results) == 0 {
+		return nil, fmt.Errorf("mercadopago: no preapproval found for plan %s", planID)
+	}
+	return &out.Results[0], nil
+}
+
+// PatchPreapprovalNotificationURL sets the notification_url on an existing preapproval
+// so that future events (renewals, cancellations) reach the webhook endpoint.
+func (c *Client) PatchPreapprovalNotificationURL(ctx context.Context, preapprovalID, notificationURL string) error {
+	return c.do(ctx, http.MethodPut, "/preapproval/"+preapprovalID,
+		map[string]string{"notification_url": notificationURL}, nil)
+}
+
 // CreatePreference creates a one-time Checkout Pro preference (used for patient
 // appointment payments) and returns its id and hosted checkout URL.
 //
