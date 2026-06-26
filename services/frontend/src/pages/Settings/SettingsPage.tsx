@@ -782,7 +782,7 @@ function WhatsAppCard({ setDirty }: { setDirty: (v: boolean) => void }) {
   const blank: WhatsAppSettings = {
     enabled: false, phone_number_id: '', waba_id: '',
     tpl_reminder_24h: '', tpl_reminder_2h: '', tpl_booking: '',
-    lang: 'es', token_set: false,
+    lang: 'es_CO', token_set: false,
   };
   const [s, setS] = useState<WhatsAppSettings>(blank);
   const [token, setToken] = useState('');
@@ -807,7 +807,7 @@ function WhatsAppCard({ setDirty }: { setDirty: (v: boolean) => void }) {
       const out = await orgApi.saveWhatsApp({
         enabled: s.enabled, phone_number_id: s.phone_number_id.trim(), waba_id: s.waba_id.trim(),
         tpl_reminder_24h: s.tpl_reminder_24h.trim(), tpl_reminder_2h: s.tpl_reminder_2h.trim(),
-        tpl_booking: s.tpl_booking.trim(), lang: s.lang || 'es', access_token: token.trim(),
+        tpl_booking: s.tpl_booking.trim(), lang: s.lang || 'es_CO', access_token: token.trim(),
       });
       setS(out); setToken('');
       setSaved(true); setDirty(false);
@@ -845,7 +845,7 @@ function WhatsAppCard({ setDirty }: { setDirty: (v: boolean) => void }) {
         <FInput value={s.tpl_booking} onChange={v => upd('tpl_booking', v)} mono disabled={loading} placeholder="booking_confirmed" />
       </FieldRow>
       <FieldRow label="Idioma de las plantillas" sub="Código de idioma configurado en Meta">
-        <FInput value={s.lang} onChange={v => upd('lang', v)} mono disabled={loading} placeholder="es" />
+        <FInput value={s.lang} onChange={v => upd('lang', v)} mono disabled={loading} placeholder="es_CO" />
       </FieldRow>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 12 }}>
         <button onClick={save} disabled={saving || loading} style={{
