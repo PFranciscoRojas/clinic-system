@@ -468,7 +468,7 @@ export function AppShell({ children }: Props) {
             </div>
           </header>
 
-          <TrialBanner status={user?.subscription_status} daysLeft={user?.trial_days_left} />
+          <TrialBanner status={user?.subscription_status} daysLeft={user?.trial_days_left} periodEnd={user?.current_period_end} />
 
           <main style={{ flex: 1, overflow: 'auto', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
             {children}
@@ -483,8 +483,22 @@ export function AppShell({ children }: Props) {
 // Shows the remaining trial days while the org is on a trial. Dismissible for
 // the session (sessionStorage); reappears on reload so the deadline stays
 // visible. Turns urgent (amber) in the last three days.
-function TrialBanner({ status, daysLeft }: { status?: string; daysLeft?: number }) {
+function TrialBanner({ status, daysLeft, periodEnd }: { status?: string; daysLeft?: number; periodEnd?: string }) {
   const [hidden, setHidden] = useState(() => sessionStorage.getItem('sghcp_trial_banner_hidden') === '1');
+
+  if (status === 'active' && periodEnd) {
+    const end = new Date(periodEnd);
+    const daysLeft = Math.ceil((end.getTime() - Date.now()) / 86400000);
+    const fmt = end.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+    if (daysLeft > 7) return null; // solo mostrar cuando quedan ≤7 días
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 18px', background: '#fffbeb', borderBottom: '1px solid #fcd34d', color: '#92400e', fontSize: 13 }}>
+        <Clock size={15} style={{ flexShrink: 0 }} />
+        <span style={{ fontWeight: 600 }}>Tu plan se renueva el {fmt}.</span>
+      </div>
+    );
+  }
+
   if (status !== 'trialing' || daysLeft == null || hidden) return null;
 
   const urgent = daysLeft <= 3;

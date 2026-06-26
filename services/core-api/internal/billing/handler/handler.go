@@ -161,12 +161,12 @@ func (h *Handler) reconcile(w http.ResponseWriter, r *http.Request) {
 
 	h.applyPreapproval(ctx, pre)
 
-	// Patch notification_url so future renewals/cancellations reach the webhook.
-	if pre.Status == "authorized" {
-		notifURL := h.cfg.AppBaseURL + "/api/v1/public/billing/webhook"
-		if err := h.mp.PatchPreapprovalNotificationURL(ctx, pre.ID, notifURL); err != nil {
-			slog.Warn("billing.reconcile: could not patch notification_url", "err", err)
-		}
+	// Always patch notification_url so that future status changes (authorized,
+	// renewal, cancellation) reach the webhook — even if the current status is
+	// still pending (e.g. user returned before completing payment).
+	notifURL := h.cfg.AppBaseURL + "/api/v1/public/billing/webhook"
+	if err := h.mp.PatchPreapprovalNotificationURL(ctx, pre.ID, notifURL); err != nil {
+		slog.Warn("billing.reconcile: could not patch notification_url", "err", err)
 	}
 
 	var status string

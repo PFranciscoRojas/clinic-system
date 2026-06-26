@@ -71,6 +71,9 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 			}
 			resp["trial_days_left"] = days
 		}
+		if currentPeriodEnd != nil {
+			resp["current_period_end"] = currentPeriodEnd.UTC().Format(time.RFC3339)
+		}
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, resp)

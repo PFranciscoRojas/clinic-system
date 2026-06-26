@@ -19,6 +19,7 @@ import { orgApi, type WhatsAppSettings, type PaymentSettings } from '@/api/org';
 import { gcalApi } from '@/api/gcal';
 import { profilesApi, splitName, type Specialty } from '@/api/profiles';
 import { serviceRatesApi, type ServiceRate, type RateModality } from '@/api/serviceRates';
+import { startCheckout } from '@/api/billing';
 import { ACCENT_COLORS, saveAccentColor } from '@/lib/theme';
 import { loadSchedule, persistSchedule, fetchScheduleFromServer } from '@/lib/schedule';
 import { useIsCompact } from '@/lib/useMediaQuery';
@@ -1722,6 +1723,50 @@ function formatMoney(amount: string, currency: string): string {
 
 const EMPTY_RATE = { name: '', description: '', amount: '', currency: 'COP', modality: '' as '' | RateModality };
 
+const STATUS_DISPLAY: Record<string, { label: string; color: string; bg: string }> = {
+  trialing:  { label: 'Prueba gratuita', color: '#0f766e', bg: '#f0fdfa' },
+  active:    { label: 'Plan activo',     color: '#059669', bg: '#ecfdf5' },
+  past_due:  { label: 'Pago pendiente',  color: '#d97706', bg: '#fffbeb' },
+  canceled:  { label: 'Cancelado',       color: '#dc2626', bg: '#fef2f2' },
+  suspended: { label: 'Suspendido',      color: '#6b7280', bg: '#f9fafb' },
+};
+
+function PlanStatusCard() {
+  const { user } = useAuth();
+  if (!user) return null;
+
+  const status = user.subscription_status ?? 'trialing';
+  const display = STATUS_DISPLAY[status] ?? { label: status, color: '#6b7280', bg: '#f9fafb' };
+
+  let until: string | null = null;
+  if (status === 'active' && user.current_period_end) {
+    until = new Date(user.current_period_end).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+  } else if (status === 'trialing' && user.trial_ends_at) {
+    until = new Date(user.trial_ends_at).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+
+  return (
+    <div style={{ background: display.bg, border: `1.5px solid ${display.color}33`, borderRadius: 12, padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 14 }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 700, fontSize: 14, color: display.color }}>{display.label}</div>
+        {until && (
+          <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>
+            {status === 'active' ? 'Próxima renovación' : 'Período de prueba hasta'}: <strong>{until}</strong>
+          </div>
+        )}
+      </div>
+      {(status !== 'active') && (
+        <button
+          onClick={() => startCheckout().catch(() => {})}
+          style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#0f766e', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
+          Activar plan
+        </button>
+      )}
+    </div>
+  );
+}
+
 function OnlinePaymentCard() {
   const blank: PaymentSettings = { enabled: false, session_price: 180000, token_set: false };
   const [s, setS] = useState<PaymentSettings>(blank);
@@ -2084,7 +2129,7 @@ export function SettingsPage() {
             {section === 'ai'            && <AISection            setDirty={markDirty} saveRef={aiSaveRef} />}
             {section === 'security'      && <SecuritySection />}
             {section === 'templates'     && <ConsentTemplatesSection />}
-            {section === 'billing'       && <><OnlinePaymentCard /><RatesSection /></>}
+            {section === 'billing'       && <><PlanStatusCard /><OnlinePaymentCard /><RatesSection /></>}
             {section === 'users'         && <UsersSection />}
           </div>
           <SaveBar dirty={dirty} saving={saving} saved={saved} onSave={handleSave} />
