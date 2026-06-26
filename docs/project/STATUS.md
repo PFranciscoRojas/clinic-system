@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-06-24)
+## Estado actual (2026-06-26)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -20,13 +20,14 @@
 | Ola Notificaciones | ✅ producción | Email diferido/conflicto a admins, WhatsApp templates (en revisión Meta) |
 | Ola Integraciones | ✅ producción | Google Calendar OAuth per-profesional, sync SGHCP→Google, grabación con IndexedDB |
 | Ola Legal (Colombia) | ✅ producción | ToS + Política privacidad (Ley 1581/Ley 1480), DPA Encargado-Responsable, checkbox aceptación signup, modal DPA, banner IA reforzado. Migración 000038 |
-| Ola Gobernanza (sesión 6) | ✅ producción | Mensaje claro de cuenta desactivada (403). Eliminación de equipo con confirmación por correo + reactivación. CLINIC_ADMIN solo-lectura clínica (migración 000039). Break-the-glass con auditoría (X-Access-Reason, Ley 23/1981). CMS legal editable por super admin — tabla `legal_documents` (migración 000040), renderizador Markdown, editor con preview. |
+| Ola Gobernanza (sesión 6) | ✅ producción | Cuenta desactivada → 403 español. Eliminación con confirmación por correo + reactivación. CLINIC_ADMIN solo-lectura clínica (migración 000039). Break-the-glass con audit trail. CMS legal editable (migración 000040, Markdown, editor con preview). |
+| Ola Tabs clínicos (sesión 7) | ✅ producción | Rediseño tabs perfil paciente: Historial mixto → Agenda (citas) + Historia clínica (registros+Dx+Plan). Break-the-glass refinado: solo al abrir contenido confidencial (Dx, Plan, SOAP), no al ver metadata. RiskBanner y "Sesión pasada" ocultos para admin puro. Razón justificada persiste en sessionStorage por paciente. |
 
 ### Últimos commits a `main` — todos desplegados
 
+- `efdda71` feat(clinical): rediseño tabs perfil paciente + acceso clínico por rol — 2026-06-26
 - `ccae867` feat(governance): gobernanza de acceso y CMS legal — sesión 6 — 2026-06-24
-- `9ec6208` docs: actualizar contexto sesión 5 — 2026-06-24
-- `666ba06` feat(legal): cumplimiento go-live Colombia — ToS, privacidad, DPA, aceptación en signup — 2026-06-24
+- `666ba06` feat(legal): cumplimiento go-live Colombia — 2026-06-24
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 > **CI/CD:** `core-api` y `ai-service` se construyen en GitHub Actions y se despliegan a ghcr.io. El VPS solo hace `docker pull` — sin builds locales.
@@ -96,7 +97,7 @@
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
 | Migrations | `services/core-api/migrations/` | Última: `000040_legal_documents` |
 | CI/CD | `.github/workflows/build-ai-service.yml` + `build-core-api.yml` | Build+push ghcr.io + deploy SSH al VPS (secrets: `VPS_HOST`, `VPS_SSH_KEY`, `GHCR_TOKEN`) |
-| Claude skills | `~/.claude/commands/` | Sincronizadas 2026-06-24 |
+| Claude skills | `~/.claude/commands/` | Sincronizadas 2026-06-26 |
 
 ---
 
