@@ -26,9 +26,9 @@
 
 ### Últimos commits a `main`
 
-- `31ef04e` feat(clinical): acceso clínico need-to-know + UX gobernanza sesión 8 — 2026-06-26 **(en CI — desplegando)**
-- `efdda71` feat(clinical): rediseño tabs perfil paciente + acceso clínico por rol — 2026-06-26
-- `ccae867` feat(governance): gobernanza de acceso y CMS legal — sesión 6 — 2026-06-24
+- `1d5d85d` fix(clinical): break-the-glass sin cache sessionStorage — pide justificación cada visita — 2026-06-26
+- `8757a58` fix(clinical): ocultar controles de sesión en layout compacto para CLINIC_ADMIN puro — 2026-06-26
+- `31ef04e` feat(clinical): acceso clínico need-to-know + UX gobernanza sesión 8 — 2026-06-26
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 > **CI/CD:** `core-api` y `ai-service` se construyen en GitHub Actions y se despliegan a ghcr.io. El VPS solo hace `docker pull` — sin builds locales.

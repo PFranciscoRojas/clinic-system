@@ -13,6 +13,12 @@
 
 ---
 
+## 2026-06-26 (sesión 9)
+
+- fix(clinical): layout compacto de `AppointmentPage` mostraba "Finalizar sesión", "Pausar", "Reanudar" y "Grabar" a CLINIC_ADMIN puro — añadido `!pureAdmin` a todos los controles del modo escritura sticky (líneas 726-756). El layout principal ya tenía el guard desde sesión 8 (`8757a58`). Desplegado: frontend rebuild en VPS.
+- fix(clinical): break-the-glass almacenaba la justificación en `sessionStorage` — una vez justificado en una visita, el modal no volvía a aparecer en la misma pestaña del navegador. Eliminado el cache de `sessionStorage` de `clinicalAccess.ts` (`getClinicalAccessReason`/`setClinicalAccessReason`), `ClinicalGate`, `ClinicalRecordPage` y `PatientProfilePage`. La razón ahora vive solo en memoria del componente: desbloquea la página actual pero se olvida al navegar (`1d5d85d`). Desplegado: frontend rebuild en VPS.
+- producto: plan comercial del SaaS — nombre (candidatos: Sinapsis/PsiCore/Therapio/Clinova/Vínculo), pricing (Esencial $19/mes, Pro $35/mes, Clínica $28/mes/prof.), pros/contras, estructura landing page y copy propuesto. Landing page y sistema de diseño diferidos a repo separado (BACKLOG → Marca).
+
 ## 2026-06-26 (sesión 8)
 
 - feat(clinical): acceso clínico need-to-know + gobernanza (`31ef04e`) — migración 000041 backfilla `patient_staff_rel` desde `appointments` (PRIMARY_THERAPIST) y `clinical_records` (SUPERVISING para cosignatarios); appointment creation auto-upsert en `patient_staff_rel` vía CTE atómico. Nuevo paquete `shared/clinicalperm` (IsAssignedToPatient, HasClinicalRole, IsSysAdmin). Enforcement en `GET /patients/{id}/records`, `GET /clinical-records/{id}`, `GET /patients/{id}/diagnoses`, `GET /patients/{id}/treatment-plans`: PROFESSIONAL/INTERN sin fila activa en patient_staff_rel → 403 `NO_PATIENT_ACCESS` (sin workaround — Res. 1995/1999 Art. 14); SYSTEM_ADMIN bypass; CLINIC_ADMIN puro mantiene break-the-glass existente. Frontend: addenda ocultas para admin puro; "Iniciar sesión", "Finalizar sesión" y controles de grabación (Grabar/Pausar/Reanudar) ocultos para admin puro; PatientProfilePage tab Historia muestra "Sin acceso" para profesional no asignado; bug fix grabación: tras fallo de upload el banner de recuperación aparece inmediatamente recargando chunks de IndexedDB (sin necesitar F5). Migración 000041 aplicada manualmente en VPS (3 filas generadas). Deploy vía CI push a main.
