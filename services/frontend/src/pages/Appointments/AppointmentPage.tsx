@@ -723,23 +723,23 @@ export function AppointmentPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 {isInProgress && <SessionTimer startedAt={appt.started_at ?? appt.scheduled_at} durationMin={appt.duration_min} />}
                 {isInProgress && recording && <RecChip startMs={recStart} analyser={analyser} paused={recPaused} />}
-                {isInProgress && recordingConsent && recording && !recPaused && (
+                {isInProgress && !pureAdmin && recordingConsent && recording && !recPaused && (
                   <button onClick={pauseRecording} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: '#92400e', border: '1.5px solid #fcd34d', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
                     <Pause size={13} /> Pausar
                   </button>
                 )}
-                {isInProgress && recordingConsent && recording && recPaused && (
+                {isInProgress && !pureAdmin && recordingConsent && recording && recPaused && (
                   <button onClick={resumeRecording} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
                     <Mic size={13} /> Reanudar
                   </button>
                 )}
-                {isInProgress && recordingConsent && !recording && (
+                {isInProgress && !pureAdmin && recordingConsent && !recording && (
                   <button onClick={startRecording} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
                     {micError ? <RotateCcw size={13} /> : <Mic size={13} />}
                     {micError ? 'Reintentar' : 'Grabar'}
                   </button>
                 )}
-                {isInProgress && (
+                {isInProgress && !pureAdmin && (
                   <button
                     onClick={handleFinishSession}
                     disabled={statusLoading}
@@ -749,7 +749,7 @@ export function AppointmentPage() {
                     Finalizar sesión
                   </button>
                 )}
-                {!isInProgress && (
+                {!isInProgress && !pureAdmin && (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '6px 12px' }}>
                     <AlertTriangle size={13} /> Sesión finalizada — registra la nota
                   </span>
