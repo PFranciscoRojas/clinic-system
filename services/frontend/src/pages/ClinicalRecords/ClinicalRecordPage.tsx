@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, FileText, CheckCircle2, AlertTriangle,
@@ -14,11 +14,10 @@ import { Badge } from '@/components/ui/Badge';
 import { RecordSectionsForm, recordToDraft, draftToPayload, validateDraft, toUIRecordType, type ClinicalDraft } from '@/components/clinical/RecordSectionsForm';
 import { TEMPLATE_SECTIONS, RECORD_TYPE_LABELS, DISCHARGE_REASONS, riskMeta } from '@/components/clinical/constants';
 import { type MentalExam } from '@/components/clinical/MentalExamChecklist';
-import { getClinicalAccessReason, setClinicalAccessReason, isPureAdmin } from '@/lib/clinicalAccess';
+import { isPureAdmin } from '@/lib/clinicalAccess';
 
 export function ClinicalRecordPage() {
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -32,12 +31,7 @@ export function ClinicalRecordPage() {
   const [err, setErr] = useState('');
   const [showBreakGlass, setShowBreakGlass] = useState(false);
 
-  // Seed reason from sessionStorage (set when admin justified on Historia tab).
-  // patient_id comes via ?patient_id= query param from HistoriaTab navigation.
-  const patientId = searchParams.get('patient_id') ?? '';
-  const [breakGlassReason, setBreakGlassReason] = useState<string | null>(
-    () => (patientId ? getClinicalAccessReason(patientId) : null)
-  );
+  const [breakGlassReason, setBreakGlassReason] = useState<string | null>(null);
 
   const { data: record, isLoading, isError, error: recordError } = useQuery({
     queryKey: ['clinical-record', id, breakGlassReason],
@@ -123,7 +117,6 @@ export function ClinicalRecordPage() {
   if (showBreakGlass) return (
     <BreakGlassModal
       onConfirm={reason => {
-        if (patientId) setClinicalAccessReason(patientId, reason);
         setBreakGlassReason(reason);
         setShowBreakGlass(false);
       }}

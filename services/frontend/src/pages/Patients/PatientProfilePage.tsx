@@ -25,7 +25,7 @@ import { RiskBanner } from '@/components/clinical/RiskBanner';
 import { riskMeta } from '@/components/clinical/constants';
 import { BillingPanel } from '@/components/billing/BillingPanel';
 import { ClinicalGate } from '@/components/clinical/ClinicalGate';
-import { isPureAdmin, getClinicalAccessReason } from '@/lib/clinicalAccess';
+import { isPureAdmin } from '@/lib/clinicalAccess';
 import { ApiError } from '@/api/client';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -287,12 +287,12 @@ function HistoriaTab({
     </div>
 
     {/* ── Diagnósticos (gated for pure admin) ────────────────────────────── */}
-    <ClinicalGate patientId={patientId} isPure={pureAdmin} reason={clinicalReason} onReason={onReason}>
+    <ClinicalGate isPure={pureAdmin} reason={clinicalReason} onReason={onReason}>
       <DiagnosesPanel patientId={patientId} reason={clinicalReason ?? undefined} />
     </ClinicalGate>
 
     {/* ── Plan terapéutico (same gate — shared reason) ────────────────────── */}
-    <ClinicalGate patientId={patientId} isPure={pureAdmin} reason={clinicalReason} onReason={onReason}>
+    <ClinicalGate isPure={pureAdmin} reason={clinicalReason} onReason={onReason}>
       <TreatmentPlanPanel patientId={patientId} reason={clinicalReason ?? undefined} />
     </ClinicalGate>
 
@@ -520,11 +520,8 @@ export function PatientProfilePage() {
   const pureAdmin = isPureAdmin(user?.roles);
   const canSeeBilling = (user?.permissions ?? []).includes('billing:read');
 
-  // Clinical access reason — seeded from sessionStorage so it persists across
-  // navigation within the same browser session.
-  const [clinicalReason, setClinicalReason] = useState<string | null>(
-    () => (id ? getClinicalAccessReason(id) : null)
-  );
+  // Clinical access reason — in-memory only; admin must justify on each page visit.
+  const [clinicalReason, setClinicalReason] = useState<string | null>(null);
 
   const [tab, setTab] = useState<Tab>(pureAdmin ? 'agenda' : 'historia');
   const [editOpen, setEditOpen] = useState(false);

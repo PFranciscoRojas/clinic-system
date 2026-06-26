@@ -1,17 +1,14 @@
 import { useState, type ReactNode } from 'react';
 import { Lock } from 'lucide-react';
 import { BreakGlassModal } from './BreakGlassModal';
-import { setClinicalAccessReason } from '@/lib/clinicalAccess';
-
 interface Props {
-  patientId: string;
   isPure: boolean;
   reason: string | null;
   onReason: (r: string) => void;
   children: ReactNode;
 }
 
-export function ClinicalGate({ patientId, isPure, reason, onReason, children }: Props) {
+export function ClinicalGate({ isPure, reason, onReason, children }: Props) {
   const [showModal, setShowModal] = useState(false);
 
   if (!isPure || reason !== null) {
@@ -19,7 +16,6 @@ export function ClinicalGate({ patientId, isPure, reason, onReason, children }: 
   }
 
   const handleConfirm = (r: string) => {
-    setClinicalAccessReason(patientId, r);
     onReason(r);
     setShowModal(false);
   };
