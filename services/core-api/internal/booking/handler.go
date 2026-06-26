@@ -342,11 +342,15 @@ func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
 		// return page can show "reserva apartada, paga tu comprobante".
 		h.holdDeferred(ctx, pay.ExternalReference, id, pay)
 	case "rejected", "cancelled", "refunded", "charged_back":
-		// Free the held slot immediately so it can be booked again.
+		// Expire the hold so the slot is immediately free for other bookings,
+		// but keep the record. The user may retry with a different payment method
+		// within the same MP checkout session (same external_reference); if so,
+		// the subsequent "approved" webhook finds the booking and confirms it.
 		if org, e := h.bookingOrg(ctx, pay.ExternalReference); e == nil && org != "" {
 			_ = dbctx.WithOrgScope(ctx, h.pool, org, func(ctx context.Context) error {
 				_, err := dbctx.From(ctx, h.pool).Exec(ctx,
-					`DELETE FROM bookings WHERE id = $1 AND status = 'PENDING_PAYMENT'`, pay.ExternalReference)
+					`UPDATE bookings SET hold_expires_at = NOW() WHERE id = $1 AND status = 'PENDING_PAYMENT'`,
+					pay.ExternalReference)
 				return err
 			})
 		}
