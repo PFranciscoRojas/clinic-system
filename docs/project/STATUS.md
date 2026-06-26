@@ -21,13 +21,14 @@
 | Ola Integraciones | ✅ producción | Google Calendar OAuth per-profesional, sync SGHCP→Google, grabación con IndexedDB |
 | Ola Legal (Colombia) | ✅ producción | ToS + Política privacidad (Ley 1581/Ley 1480), DPA Encargado-Responsable, checkbox aceptación signup, modal DPA, banner IA reforzado. Migración 000038 |
 | Ola Gobernanza (sesión 6) | ✅ producción | Cuenta desactivada → 403 español. Eliminación con confirmación por correo + reactivación. CLINIC_ADMIN solo-lectura clínica (migración 000039). Break-the-glass con audit trail. CMS legal editable (migración 000040, Markdown, editor con preview). |
-| Ola Tabs clínicos (sesión 7) | ✅ producción | Rediseño tabs perfil paciente: Historial mixto → Agenda (citas) + Historia clínica (registros+Dx+Plan). Break-the-glass refinado: solo al abrir contenido confidencial (Dx, Plan, SOAP), no al ver metadata. RiskBanner y "Sesión pasada" ocultos para admin puro. Razón justificada persiste en sessionStorage por paciente. |
+| Ola Tabs clínicos (sesión 7) | ✅ producción | Rediseño tabs perfil paciente: Agenda (citas) + Historia clínica (registros+Dx+Plan). Break-the-glass refinado: solo al abrir contenido confidencial (Dx, Plan, SOAP), no al ver metadata. RiskBanner y "Sesión pasada" ocultos para admin puro. Razón justificada persiste en sessionStorage por paciente. |
+| Ola Need-to-know (sesión 8) | ✅ producción | `patient_staff_rel` enforced: profesionales solo ven HC de sus propios pacientes (403 NO_PATIENT_ACCESS). Migración 000041 backfilla desde appointments + clinical_records; appointment creation auto-registra en patient_staff_rel. Adendas ocultas para CLINIC_ADMIN puro. "Iniciar/Finalizar sesión" y controles de grabación ocultos para admin puro. Bug fix: tras fallo de upload de audio, recovery banner aparece sin F5. |
 
-### Últimos commits a `main` — todos desplegados
+### Últimos commits a `main`
 
+- `31ef04e` feat(clinical): acceso clínico need-to-know + UX gobernanza sesión 8 — 2026-06-26 **(en CI — desplegando)**
 - `efdda71` feat(clinical): rediseño tabs perfil paciente + acceso clínico por rol — 2026-06-26
 - `ccae867` feat(governance): gobernanza de acceso y CMS legal — sesión 6 — 2026-06-24
-- `666ba06` feat(legal): cumplimiento go-live Colombia — 2026-06-24
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 > **CI/CD:** `core-api` y `ai-service` se construyen en GitHub Actions y se despliegan a ghcr.io. El VPS solo hace `docker pull` — sin builds locales.
@@ -39,7 +40,7 @@
 | ID | Descripción | Estado |
 |---|---|---|
 | **MP webhook** | `MP_WEBHOOK_ENFORCE=false` en VPS — secreto mal configurado; hacer un pago real y capturar log de firma para corregir y volver a `true` | 🔴 pendiente |
-| **WhatsApp templates** | 3 plantillas `recordatorio_cita_24h`, `recordatorio_cita_2h`, `cita_confirmada` en revisión con Meta. Una vez aprobadas, configurar en Ajustes → Notificaciones con Phone Number ID `1138431989358649`. Necesita System User token permanente (el temporal caduca en 24h). Cobro COP$90,675 en tarjeta es preautorización de verificación (estado Pending), se reversa en 5–7 días | 🟡 en revisión Meta |
+| **WhatsApp templates** | 3 plantillas `recordatorio_cita_24h`, `recordatorio_cita_2h`, `cita_confirmada` en revisión con Meta. Una vez aprobadas, configurar en Ajustes → Notificaciones con Phone Number ID `1138431989358649`. Necesita System User token permanente (el temporal caduca en 24h). | 🟡 en revisión Meta |
 
 ---
 
@@ -70,13 +71,13 @@
 
 | Componente | Estado |
 |---|---|
-| `postgres:5432` | ✅ corriendo (recuperado del incidente de disco 2026-06-24) |
+| `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
 | `core-api:8080` | ✅ producción — imagen `ghcr.io/pfranciscorojas/clinic-system-core-api:latest` (build en CI) |
 | `ai-service` | ✅ producción — `ghcr.io/pfranciscorojas/clinic-system-ai-service:latest` (whisper.tiny + spaCy sm) |
 | `frontend` (Caddy :80/:443) | ✅ producción |
 | Backups | `pg_dump` cifrado GPG → Backblaze B2 |
-| **Disco** | ~40% (15/38 GB) — liberados 21 GB de build cache hoy. Cron semanal: `docker builder prune -af` + `system prune`. Alerta email si >80% |
+| **Disco** | ~40% (15/38 GB) — cron semanal: `docker builder prune -af` + `system prune`. Alerta email si >80% |
 
 **Env crítico en VPS:**
 - `MASTER_KEY` — clave maestra de cifrado PII
@@ -95,7 +96,7 @@
 | `core-api` | `services/core-api/` | ✅ Go 1.25, prod |
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
-| Migrations | `services/core-api/migrations/` | Última: `000040_legal_documents` |
+| Migrations | `services/core-api/migrations/` | Última: `000041_enforce_patient_staff_rel` |
 | CI/CD | `.github/workflows/build-ai-service.yml` + `build-core-api.yml` | Build+push ghcr.io + deploy SSH al VPS (secrets: `VPS_HOST`, `VPS_SSH_KEY`, `GHCR_TOKEN`) |
 | Claude skills | `~/.claude/commands/` | Sincronizadas 2026-06-26 |
 
