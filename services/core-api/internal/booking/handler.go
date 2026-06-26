@@ -22,6 +22,7 @@ import (
 	"sghcp/core-api/internal/billing/mercadopago"
 	notify "sghcp/core-api/internal/notify"
 	"sghcp/core-api/internal/shared/config"
+	"sghcp/core-api/internal/shared/crypto"
 	"sghcp/core-api/internal/shared/dbctx"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/whatsapp"
@@ -57,22 +58,54 @@ func loadBogota() *time.Location {
 
 type Handler struct {
 	pool     *pgxpool.Pool
-	mp       *mercadopago.Client
+	km       *crypto.KeyManager
 	resolver *availability.Repository
 	notifier notify.Notifier
 	wa       *whatsapp.Sender
 	cfg      config.Config
 }
 
-func New(pool *pgxpool.Pool, notifier notify.Notifier, wa *whatsapp.Sender, cfg config.Config) *Handler {
+func New(pool *pgxpool.Pool, km *crypto.KeyManager, notifier notify.Notifier, wa *whatsapp.Sender, cfg config.Config) *Handler {
 	return &Handler{
 		pool:     pool,
-		mp:       mercadopago.New(cfg.MPAccessToken),
+		km:       km,
 		resolver: availability.New(pool),
 		notifier: notifier,
 		wa:       wa,
 		cfg:      cfg,
 	}
+}
+
+// tenantPayment holds the decrypted per-tenant booking payment credentials.
+type tenantPayment struct {
+	mp    *mercadopago.Client
+	price int
+}
+
+// paymentFor loads and decrypts the org's booking payment config under RLS.
+// Returns ok=false when the org has no config, is disabled, or has no token.
+func (h *Handler) paymentFor(ctx context.Context, orgID string) (tenantPayment, bool) {
+	var enabled bool
+	var price int
+	var tokenEnc []byte
+	var keySource string
+	err := dbctx.WithOrgScope(ctx, h.pool, orgID, func(ctx context.Context) error {
+		return dbctx.From(ctx, h.pool).QueryRow(ctx, `
+			SELECT enabled, session_price, COALESCE(mp_access_token_enc,''), COALESCE(key_source,'')
+			FROM org_payment_config WHERE organization_id = $1`, orgID).
+			Scan(&enabled, &price, &tokenEnc, &keySource)
+	})
+	if err != nil || !enabled || len(tokenEnc) == 0 {
+		return tenantPayment{}, false
+	}
+	token, err := h.km.OpenSecret(keySource, tokenEnc)
+	if err != nil {
+		slog.Warn("booking: decrypt payment token failed", "org", orgID, "err", err)
+		return tenantPayment{}, false
+	}
+	mp := mercadopago.New(string(token))
+	crypto.Zeroize(token)
+	return tenantPayment{mp: mp, price: price}, true
 }
 
 // PublicRoutes is mounted at /api/v1/public/pay — no JWT.
@@ -161,10 +194,6 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 
 // POST /checkout — hold the slot and return a MercadoPago checkout URL.
 func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
-	if !h.mp.Enabled() {
-		httputil.WriteError(w, http.StatusServiceUnavailable, "el pago en línea no está disponible todavía")
-		return
-	}
 	var body struct {
 		OrgSlug        string `json:"org_slug"`
 		Modality       string `json:"modality"`
@@ -204,6 +233,14 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Load per-tenant MP credentials — each clinic receives booking payments
+	// in their own MercadoPago account, separate from the SaaS subscription.
+	pay, ok := h.paymentFor(r.Context(), prof.OrgID)
+	if !ok {
+		httputil.WriteError(w, http.StatusServiceUnavailable, "el pago en línea no está disponible todavía")
+		return
+	}
+
 	when, err := time.ParseInLocation("2006-01-02T15:04", body.Date+"T"+body.Time, bogota)
 	if err != nil || !when.After(time.Now()) {
 		httputil.WriteError(w, http.StatusBadRequest, "horario inválido")
@@ -211,7 +248,7 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 	}
 	scheduledAt := when.UTC()
 
-	amount := h.cfg.BookingSessionPrice
+	amount := pay.price
 	title := "Sesión psicológica · " + when.Format("02/01 03:04 pm") + " · " + modalityLabel(modality)
 
 	var bookingID, initPoint string
@@ -248,10 +285,12 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 
-		prefID, ip, err := h.mp.CreatePreference(
+		// Include org in the notification URL so the webhook knows which tenant
+		// token to use when calling GetPayment (each clinic's own MP account).
+		prefID, ip, err := pay.mp.CreatePreference(
 			ctx, title, amount, bookingID, body.Email,
 			h.cfg.AppBaseURL+"/book/return?slug="+url.QueryEscape(body.OrgSlug),
-			h.cfg.AppBaseURL+"/api/v1/public/pay/webhook",
+			h.cfg.AppBaseURL+"/api/v1/public/pay/webhook?org="+url.QueryEscape(prof.OrgID),
 		)
 		if err != nil {
 			// Release the hold so a failed gateway call doesn't block the slot.
@@ -309,11 +348,16 @@ func (h *Handler) slotTaken(ctx context.Context, orgID, staffID string, at time.
 
 // POST /webhook — MercadoPago payment notifications. Confirms the booking by
 // creating the appointment when the payment is approved. Always answers 200.
+// The checkout embeds ?org=<orgID> in the notification URL so we can load the
+// tenant's own MP token to call GetPayment (each clinic's separate account).
 func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
 	defer w.WriteHeader(http.StatusOK)
-	if !h.mp.Enabled() {
-		return
+
+	orgID := r.URL.Query().Get("org")
+	if orgID == "" {
+		return // legacy or ping without org param — ignore
 	}
+
 	if ok, detail := mercadopago.VerifyWebhook(h.cfg.MPWebhookSecret,
 		r.Header.Get("x-signature"), r.Header.Get("x-request-id"), r.URL.Query().Get("data.id")); !ok {
 		slog.Warn("booking.webhook: signature check failed", "detail", detail, "enforce", h.cfg.MPWebhookEnforce)
@@ -329,7 +373,13 @@ func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	pay, err := h.mp.GetPayment(ctx, id)
+	// Use the tenant's own MP token — GetPayment only returns payments owned
+	// by the token's account, so a spoofed ?org= can never read another org's data.
+	tenantPay, ok := h.paymentFor(ctx, orgID)
+	if !ok {
+		return
+	}
+	pay, err := tenantPay.mp.GetPayment(ctx, id)
 	if err != nil || pay.ExternalReference == "" {
 		return
 	}

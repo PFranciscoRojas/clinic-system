@@ -5,7 +5,7 @@ import {
   PenLine, Lock, Key, CheckCircle, Mail,
   Upload, Palette, Users, Trash2, Save,
   Shield, LogOut, Plus, Receipt, Pencil, X,
-  MessageCircle, Calendar,
+  MessageCircle, Calendar, CreditCard,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
@@ -15,7 +15,7 @@ import { ConfirmByTextModal } from '@/components/ui/ConfirmByTextModal';
 import { authApi } from '@/api/auth';
 import { adminApi } from '@/api/admin';
 import { consentTemplatesApi, type ConsentType } from '@/api/clinicalRecords';
-import { orgApi, type WhatsAppSettings } from '@/api/org';
+import { orgApi, type WhatsAppSettings, type PaymentSettings } from '@/api/org';
 import { gcalApi } from '@/api/gcal';
 import { profilesApi, splitName, type Specialty } from '@/api/profiles';
 import { serviceRatesApi, type ServiceRate, type RateModality } from '@/api/serviceRates';
@@ -1722,6 +1722,65 @@ function formatMoney(amount: string, currency: string): string {
 
 const EMPTY_RATE = { name: '', description: '', amount: '', currency: 'COP', modality: '' as '' | RateModality };
 
+function OnlinePaymentCard() {
+  const blank: PaymentSettings = { enabled: false, session_price: 180000, token_set: false };
+  const [s, setS] = useState<PaymentSettings>(blank);
+  const [token, setToken] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    orgApi.getPayment()
+      .then(setS)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const out = await orgApi.savePayment({
+        enabled: s.enabled,
+        session_price: s.session_price,
+        access_token: token,
+      });
+      setS(out);
+      setToken('');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch { /* keep form */ }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <SectionCard title="Pagos en línea (MercadoPago)" icon={CreditCard}>
+      <p style={{ fontSize: 13, color: 'var(--s500)', lineHeight: 1.6, marginBottom: 12 }}>
+        El dinero de las reservas en línea va directamente a la cuenta de MercadoPago de la clínica,
+        separado del pago de suscripción a la plataforma.
+      </p>
+      <Toggle value={s.enabled} onChange={v => setS(p => ({ ...p, enabled: v }))}
+        disabled={loading} label="Activar pagos en línea" sub="Habilita el botón de pago en el formulario de reserva público" />
+      <FieldRow label="Access Token (MP)" sub={s.token_set ? 'Token guardado — pega uno nuevo para reemplazarlo' : 'Token de producción de tu cuenta MercadoPago'}>
+        <FInput value={token} onChange={setToken} mono disabled={loading}
+          placeholder={s.token_set ? '••••••••••••••••' : 'APP_USR-...'} />
+      </FieldRow>
+      <FieldRow label="Precio de sesión (COP)" sub="Monto que paga el paciente al reservar en línea">
+        <FInput value={String(s.session_price)} onChange={v => setS(p => ({ ...p, session_price: Number(v) || 0 }))}
+          mono disabled={loading} placeholder="180000" />
+      </FieldRow>
+      <button onClick={save} disabled={saving || loading} style={{
+        marginTop: 8, padding: '9px 18px', borderRadius: 9, border: 'none',
+        background: saving || loading ? 'var(--s200)' : 'var(--teal)',
+        color: saving || loading ? 'var(--s400)' : '#fff',
+        fontWeight: 600, fontSize: 13.5, cursor: saving || loading ? 'default' : 'pointer',
+      }}>
+        {saving ? 'Guardando…' : saved ? '✓ Guardado' : 'Guardar pagos'}
+      </button>
+    </SectionCard>
+  );
+}
+
 function RatesSection() {
   const [rates,   setRates]   = useState<ServiceRate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2025,7 +2084,7 @@ export function SettingsPage() {
             {section === 'ai'            && <AISection            setDirty={markDirty} saveRef={aiSaveRef} />}
             {section === 'security'      && <SecuritySection />}
             {section === 'templates'     && <ConsentTemplatesSection />}
-            {section === 'billing'       && <RatesSection />}
+            {section === 'billing'       && <><OnlinePaymentCard /><RatesSection /></>}
             {section === 'users'         && <UsersSection />}
           </div>
           <SaveBar dirty={dirty} saving={saving} saved={saved} onSave={handleSave} />

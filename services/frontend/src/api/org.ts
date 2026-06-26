@@ -22,9 +22,21 @@ export interface WhatsAppSettings {
 
 export type WhatsAppSave = Omit<WhatsAppSettings, 'token_set'> & { access_token: string };
 
+// Per-tenant booking payment config. The MP access token is write-only:
+// the server returns token_set. Sending an empty access_token keeps the stored one.
+export interface PaymentSettings {
+  enabled: boolean;
+  session_price: number;
+  token_set: boolean;
+}
+
+export type PaymentSave = Omit<PaymentSettings, 'token_set'> & { access_token: string };
+
 export const orgApi = {
   getNotifications: () => api.get<NotificationSettings>('/org/notifications'),
   saveNotifications: (s: NotificationSettings) => api.put<NotificationSettings>('/org/notifications', s),
   getWhatsApp: () => api.get<WhatsAppSettings>('/org/whatsapp'),
   saveWhatsApp: (s: WhatsAppSave) => api.put<WhatsAppSettings>('/org/whatsapp', s),
+  getPayment: () => api.get<PaymentSettings>('/org/payment'),
+  savePayment: (s: PaymentSave) => api.put<PaymentSettings>('/org/payment', s),
 };

@@ -27,6 +27,8 @@ func (h *Handler) Routes() chi.Router {
 	r.With(middleware.RequirePermission("organization:configure")).Put("/notifications", h.putNotifications)
 	r.With(middleware.RequirePermission("organization:configure")).Get("/whatsapp", h.getWhatsApp)
 	r.With(middleware.RequirePermission("organization:configure")).Put("/whatsapp", h.putWhatsApp)
+	r.With(middleware.RequirePermission("organization:configure")).Get("/payment", h.getPayment)
+	r.With(middleware.RequirePermission("organization:configure")).Put("/payment", h.putPayment)
 	return r
 }
 
@@ -62,6 +64,55 @@ func (h *Handler) getWhatsApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, c)
+}
+
+func (h *Handler) getPayment(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	c, err := h.repo.GetPaymentConfig(r.Context(), claims.OrganizationID)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "no se pudo leer la configuración")
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, c)
+}
+
+type paymentRequest struct {
+	PaymentConfig
+	AccessToken string `json:"access_token"`
+}
+
+func (h *Handler) putPayment(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	var req paymentRequest
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.SessionPrice <= 0 {
+		req.SessionPrice = 180000
+	}
+
+	var tokenEnc []byte
+	var keySource string
+	if req.AccessToken != "" {
+		enc, ks, err := h.km.SealSecret([]byte(req.AccessToken))
+		if err != nil {
+			httputil.WriteError(w, http.StatusInternalServerError, "no se pudo cifrar el token")
+			return
+		}
+		tokenEnc, keySource = enc, ks
+	}
+
+	if err := h.repo.SetPaymentConfig(r.Context(), claims.OrganizationID, req.PaymentConfig, tokenEnc, keySource); err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "no se pudo guardar")
+		return
+	}
+	out, err := h.repo.GetPaymentConfig(r.Context(), claims.OrganizationID)
+	if err != nil {
+		httputil.WriteJSON(w, http.StatusOK, req.PaymentConfig)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, out)
 }
 
 // whatsAppRequest is the PUT body: like WhatsAppConfig but with a write-only
