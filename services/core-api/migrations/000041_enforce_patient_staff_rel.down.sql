@@ -1,0 +1,3 @@
+-- The backfill cannot be safely reversed: removing patient_staff_rel rows
+-- that existed before this migration is impossible to determine reliably.
+-- To roll back enforcement, revert the application code instead.

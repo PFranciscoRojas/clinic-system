@@ -5,7 +5,7 @@ import {
   ArrowLeft, Phone, Mail, Calendar, FileText,
   Clock, AlertCircle,
   CreditCard, MapPin, Video, FileCheck, Cake, AlertTriangle,
-  Pencil, Receipt, BookOpen,
+  Pencil, Receipt, BookOpen, Lock,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { EditPatientModal } from '@/components/patients/EditPatientModal';
@@ -26,6 +26,7 @@ import { riskMeta } from '@/components/clinical/constants';
 import { BillingPanel } from '@/components/billing/BillingPanel';
 import { ClinicalGate } from '@/components/clinical/ClinicalGate';
 import { isPureAdmin, getClinicalAccessReason } from '@/lib/clinicalAccess';
+import { ApiError } from '@/api/client';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -190,6 +191,7 @@ function HistoriaTab({
   pureAdmin,
   clinicalReason,
   onReason,
+  noAccess,
 }: {
   records: RecordMeta[];
   appointments: Appointment[];
@@ -198,7 +200,17 @@ function HistoriaTab({
   pureAdmin: boolean;
   clinicalReason: string | null;
   onReason: (r: string) => void;
+  noAccess?: boolean;
 }) {
+  if (noAccess) {
+    return (
+      <div className="anim-fade-in" style={{ background: '#fff', borderRadius: 14, padding: '48px 24px', textAlign: 'center', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
+        <Lock size={32} color="var(--s300)" style={{ marginBottom: 12 }} />
+        <p style={{ margin: '0 0 6px', fontWeight: 700, fontSize: 15, color: 'var(--s700)' }}>Sin acceso a este paciente</p>
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--s500)' }}>Solo puedes ver los registros clínicos de pacientes que atiendas directamente (Res. 1995/1999 Art. 14).</p>
+      </div>
+    );
+  }
   return (
     <div className="anim-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
@@ -532,14 +544,16 @@ export function PatientProfilePage() {
     enabled: !!id,
   });
 
-  // Clinical records list — metadata only (dates, type, status), no SOAP content.
-  // No break-the-glass gate on this endpoint; gate is on individual record GET.
-  const { data: recordsData } = useQuery({
+  // Clinical records list — metadata only (dates, type, status).
+  // Professionals not assigned to this patient get 403 NO_PATIENT_ACCESS.
+  const { data: recordsData, isError: recordsIsError, error: recordsError } = useQuery({
     queryKey: ['clinical-records', 'patient', id],
     queryFn: () => clinicalRecordsApi.list(id!),
     enabled: !!id,
+    retry: false,
   });
   const records: RecordMeta[] = recordsData?.items ?? [];
+  const noPatientAccess = recordsIsError && recordsError instanceof ApiError && recordsError.message === 'NO_PATIENT_ACCESS';
 
   // Consent evidence — Ley 1581/Ley 1090 require it before treatment
   const { data: consentsData } = useQuery({
@@ -752,6 +766,7 @@ export function PatientProfilePage() {
             pureAdmin={pureAdmin}
             clinicalReason={clinicalReason}
             onReason={setClinicalReason}
+            noAccess={noPatientAccess}
           />
         )}
         {tab === 'consentimientos' && <ConsentimientosTab patientId={id!} />}

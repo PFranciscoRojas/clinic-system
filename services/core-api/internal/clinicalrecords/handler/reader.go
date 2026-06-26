@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"sghcp/core-api/internal/clinicalrecords"
+	clinperm "sghcp/core-api/internal/shared/clinicalperm"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
 )
@@ -44,16 +45,34 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Professionals and interns must be part of this patient's treatment team
+	// (patient_staff_rel). System admins bypass; pure admins use break-the-glass above.
+	if !clinperm.IsSysAdmin(claims.Roles) && !isAdminOnly(claims.Roles) && clinperm.HasClinicalRole(claims.Roles) {
+		assigned, aErr := clinperm.IsAssignedToPatient(r.Context(), h.db, claims.OrganizationID, claims.UserID, rec.PatientID)
+		if aErr != nil || !assigned {
+			httputil.WriteError(w, http.StatusForbidden, "NO_PATIENT_ACCESS")
+			return
+		}
+	}
+
 	h.audit.RecordWithReason(r, "CLINICAL_RECORD_READ", "clinical_record", recordID, reason)
 	httputil.WriteJSON(w, http.StatusOK, toResponse(rec))
 }
 
 // GET /api/v1/patients/{patient_id}/records
-// Metadata only (dates, type, status) — not confidential, no break-the-glass gate.
-// Opening an individual record (GET /clinical-records/{id}) requires justification.
+// Metadata only (dates, type, status). No break-the-glass gate for admins (metadata
+// is not confidential), but professionals must be on the patient's treatment team.
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	patientID := chi.URLParam(r, "patient_id")
+
+	if !clinperm.IsSysAdmin(claims.Roles) && !isAdminOnly(claims.Roles) && clinperm.HasClinicalRole(claims.Roles) {
+		assigned, aErr := clinperm.IsAssignedToPatient(r.Context(), h.db, claims.OrganizationID, claims.UserID, patientID)
+		if aErr != nil || !assigned {
+			httputil.WriteError(w, http.StatusForbidden, "NO_PATIENT_ACCESS")
+			return
+		}
+	}
 
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))

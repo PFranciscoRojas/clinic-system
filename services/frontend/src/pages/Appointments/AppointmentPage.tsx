@@ -24,6 +24,7 @@ import { RecapCard } from '@/components/clinical/RecapCard';
 import { RiskBanner } from '@/components/clinical/RiskBanner';
 import { aiDraftsApi } from '@/api/aiDrafts';
 import { useAuth } from '@/context/AuthContext';
+import { isPureAdmin } from '@/lib/clinicalAccess';
 import { authApi } from '@/api/auth';
 import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
@@ -311,6 +312,7 @@ export function AppointmentPage() {
   const compactLayout = useIsCompact();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const pureAdmin = isPureAdmin(user?.roles);
   const queryClient = useQueryClient();
 
   const [statusLoading, setStatusLoading] = useState(false);
@@ -553,7 +555,12 @@ export function AppointmentPage() {
         setRecoveredChunks([]);
       } catch {
         setProcessingAudio(false);
-        setRecNote('La grabación terminó pero no se pudo subir — usa "Subir grabación" en Borrador IA.');
+        setRecNote('La grabación terminó pero no se pudo subir. Haz clic en "Subir grabación" para reintentar.');
+        // The IndexedDB chunks are intact (cleared only on success). Reload them so
+        // the recovery banner appears immediately without requiring a page refresh.
+        recordingStore.load(id!).then(chunks => {
+          if (chunks.length > 0) setRecoveredChunks(chunks);
+        }).catch(() => {});
       }
     } else {
       setProcessingAudio(false);
@@ -775,7 +782,7 @@ export function AppointmentPage() {
                 <AlertTriangle size={13} /> {recNote}
               </div>
             )}
-            {recoveredChunks.length > 0 && !recording && (
+            {recoveredChunks.length > 0 && !recording && !pureAdmin && (
               <div role="alert" style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', background: '#fefce8', border: '1px solid #fde047', borderRadius: 9, fontSize: 13, color: '#713f12' }}>
                 <Mic size={15} style={{ flexShrink: 0 }} />
                 <span style={{ flex: 1 }}>Hay una grabación sin finalizar de esta sesión (interrumpida por recarga).</span>
@@ -1079,7 +1086,7 @@ export function AppointmentPage() {
               </div>
             )}
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-            {isScheduled && (
+            {isScheduled && !pureAdmin && (
               <button
                 onClick={() => {
                   if (!canStartSession) return;
@@ -1096,7 +1103,7 @@ export function AppointmentPage() {
             )}
             {isInProgress && <SessionTimer startedAt={appt.started_at ?? appt.scheduled_at} durationMin={appt.duration_min} />}
             {isInProgress && recording && <RecChip startMs={recStart} analyser={analyser} paused={recPaused} />}
-            {isInProgress && recordingConsent && recording && !recPaused && (
+            {isInProgress && !pureAdmin && recordingConsent && recording && !recPaused && (
               <button
                 onClick={pauseRecording}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: '#92400e', border: '1.5px solid #fcd34d', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
@@ -1104,7 +1111,7 @@ export function AppointmentPage() {
                 <Pause size={13} /> Pausar
               </button>
             )}
-            {isInProgress && recordingConsent && recording && recPaused && (
+            {isInProgress && !pureAdmin && recordingConsent && recording && recPaused && (
               <button
                 onClick={resumeRecording}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
@@ -1112,7 +1119,7 @@ export function AppointmentPage() {
                 <Mic size={13} /> Reanudar
               </button>
             )}
-            {isInProgress && recordingConsent && !recording && (
+            {isInProgress && !pureAdmin && recordingConsent && !recording && (
               <button
                 onClick={startRecording}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: micError ? '#fff' : '#fff', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
@@ -1121,7 +1128,7 @@ export function AppointmentPage() {
                 {micError ? 'Reintentar' : 'Grabar'}
               </button>
             )}
-            {isInProgress && (
+            {isInProgress && !pureAdmin && (
               <button
                 onClick={handleFinishSession}
                 disabled={statusLoading}

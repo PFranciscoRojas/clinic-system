@@ -10,6 +10,7 @@ import (
 
 	"sghcp/core-api/internal/diagnoses"
 	diagrepo "sghcp/core-api/internal/diagnoses/repository"
+	clinperm "sghcp/core-api/internal/shared/clinicalperm"
 	"sghcp/core-api/internal/shared/audit"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
@@ -17,11 +18,12 @@ import (
 
 type Handler struct {
 	repo  *diagrepo.Repository
+	db    *pgxpool.Pool
 	audit *audit.Writer
 }
 
 func New(db *pgxpool.Pool) *Handler {
-	return &Handler{repo: diagrepo.New(db), audit: audit.New(db)}
+	return &Handler{repo: diagrepo.New(db), db: db, audit: audit.New(db)}
 }
 
 // CatalogRoutes — mounted at /api/v1/icd10 (reference data, read permission).
@@ -145,6 +147,14 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	if isAdminOnly(claims.Roles) && reason == "" {
 		httputil.WriteError(w, http.StatusForbidden, "BREAK_GLASS_REASON_REQUIRED")
 		return
+	}
+
+	if !clinperm.IsSysAdmin(claims.Roles) && !isAdminOnly(claims.Roles) && clinperm.HasClinicalRole(claims.Roles) {
+		assigned, aErr := clinperm.IsAssignedToPatient(r.Context(), h.db, claims.OrganizationID, claims.UserID, patientID)
+		if aErr != nil || !assigned {
+			httputil.WriteError(w, http.StatusForbidden, "NO_PATIENT_ACCESS")
+			return
+		}
 	}
 
 	items, err := h.repo.ListByPatient(r.Context(), claims.OrganizationID, patientID)

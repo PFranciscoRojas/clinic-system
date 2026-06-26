@@ -17,11 +17,12 @@ import (
 
 type Handler struct {
 	svc   *tpsvc.Service
+	db    *pgxpool.Pool
 	audit *audit.Writer
 }
 
 func New(db *pgxpool.Pool, km *crypto.KeyManager) *Handler {
-	return &Handler{svc: tpsvc.New(tprepo.New(db), km), audit: audit.New(db)}
+	return &Handler{svc: tpsvc.New(tprepo.New(db), km), db: db, audit: audit.New(db)}
 }
 
 var planErrors = httputil.ErrorMapper(func(err error) (int, string) {

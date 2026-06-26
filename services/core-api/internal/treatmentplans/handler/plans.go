@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	clinperm "sghcp/core-api/internal/shared/clinicalperm"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
 	"sghcp/core-api/internal/treatmentplans"
@@ -86,6 +87,14 @@ func (h *Handler) listPlans(w http.ResponseWriter, r *http.Request) {
 	if isAdminOnly(claims.Roles) && reason == "" {
 		httputil.WriteError(w, http.StatusForbidden, "BREAK_GLASS_REASON_REQUIRED")
 		return
+	}
+
+	if !clinperm.IsSysAdmin(claims.Roles) && !isAdminOnly(claims.Roles) && clinperm.HasClinicalRole(claims.Roles) {
+		assigned, aErr := clinperm.IsAssignedToPatient(r.Context(), h.db, claims.OrganizationID, claims.UserID, patientID)
+		if aErr != nil || !assigned {
+			httputil.WriteError(w, http.StatusForbidden, "NO_PATIENT_ACCESS")
+			return
+		}
 	}
 
 	plans, err := h.svc.ListByPatient(r.Context(), claims.OrganizationID, patientID)

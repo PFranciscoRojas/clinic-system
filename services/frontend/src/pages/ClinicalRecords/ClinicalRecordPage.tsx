@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/Badge';
 import { RecordSectionsForm, recordToDraft, draftToPayload, validateDraft, toUIRecordType, type ClinicalDraft } from '@/components/clinical/RecordSectionsForm';
 import { TEMPLATE_SECTIONS, RECORD_TYPE_LABELS, DISCHARGE_REASONS, riskMeta } from '@/components/clinical/constants';
 import { type MentalExam } from '@/components/clinical/MentalExamChecklist';
-import { getClinicalAccessReason, setClinicalAccessReason } from '@/lib/clinicalAccess';
+import { getClinicalAccessReason, setClinicalAccessReason, isPureAdmin } from '@/lib/clinicalAccess';
 
 export function ClinicalRecordPage() {
   const { id } = useParams<{ id: string }>();
@@ -259,7 +259,7 @@ export function ClinicalRecordPage() {
         </div>
       )}
 
-      {!isDraft && <AddendaSection recordId={id!} />}
+      {!isDraft && <AddendaSection recordId={id!} canAdd={!isPureAdmin(user?.roles)} />}
     </div>
   );
 }
@@ -350,7 +350,7 @@ function InfoLine({ label, value }: { label: string; value: string }) {
 
 // Addenda: signed, immutable supplementary notes on an approved record
 // (the original entry is never edited — Res. 1995/1999).
-function AddendaSection({ recordId }: { recordId: string }) {
+function AddendaSection({ recordId, canAdd = true }: { recordId: string; canAdd?: boolean }) {
   const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [content, setContent] = useState('');
@@ -381,13 +381,15 @@ function AddendaSection({ recordId }: { recordId: string }) {
           <PenLine size={15} color="var(--teal)" /> Adendas
           {addenda.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'var(--s100)', color: 'var(--s600)' }}>{addenda.length}</span>}
         </span>
-        <button
-          onClick={() => { setAdding(a => !a); setErr(''); }}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', background: adding ? 'var(--s100)' : 'var(--teal)', color: adding ? 'var(--s700)' : '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
-        >
-          {adding ? <X size={12} /> : <Plus size={12} />}
-          {adding ? 'Cancelar' : 'Agregar adenda'}
-        </button>
+        {canAdd && (
+          <button
+            onClick={() => { setAdding(a => !a); setErr(''); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', background: adding ? 'var(--s100)' : 'var(--teal)', color: adding ? 'var(--s700)' : '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+          >
+            {adding ? <X size={12} /> : <Plus size={12} />}
+            {adding ? 'Cancelar' : 'Agregar adenda'}
+          </button>
+        )}
       </div>
 
       {adding && (
