@@ -1,11 +1,11 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Phone, Mail, Calendar, FileText,
   Clock, AlertCircle,
-  CreditCard, MapPin, Video, FileCheck, Cake, Stethoscope, AlertTriangle,
-  Pencil, Target, Receipt,
+  CreditCard, MapPin, Video, FileCheck, Cake, AlertTriangle,
+  Pencil, Receipt, BookOpen,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { EditPatientModal } from '@/components/patients/EditPatientModal';
@@ -15,7 +15,6 @@ import { calcAge } from '@/lib/age';
 import { useIsMobile } from '@/lib/useMediaQuery';
 import { appointmentsApi, type Appointment } from '@/api/appointments';
 import { clinicalRecordsApi, consentsApi, type RecordMeta, type Consent, type ConsentType } from '@/api/clinicalRecords';
-import { diagnosesApi } from '@/api/diagnoses';
 import { Spinner } from '@/components/ui/Spinner';
 import { ConsentSignModal } from '@/components/consents/ConsentSignModal';
 import { UnifiedConsentSignModal } from '@/components/consents/UnifiedConsentSignModal';
@@ -25,12 +24,12 @@ import { TreatmentPlanPanel } from '@/components/clinical/TreatmentPlanPanel';
 import { RiskBanner } from '@/components/clinical/RiskBanner';
 import { riskMeta } from '@/components/clinical/constants';
 import { BillingPanel } from '@/components/billing/BillingPanel';
-import { BreakGlassModal } from '@/components/clinical/BreakGlassModal';
-import { ApiError } from '@/api/client';
+import { ClinicalGate } from '@/components/clinical/ClinicalGate';
+import { isPureAdmin, getClinicalAccessReason } from '@/lib/clinicalAccess';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Tab = 'historial' | 'plan' | 'consentimientos' | 'facturacion';
+type Tab = 'agenda' | 'historia' | 'consentimientos' | 'facturacion';
 
 type AppointmentStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
 
@@ -72,16 +71,14 @@ const CR_STATUS_CONFIG: Record<string, { label: string; color: string; bg: strin
   APPROVED: { label: 'Aprobado', color: '#065f46', bg: '#d1fae5' },
 };
 
-// ─── Tab: Historial ───────────────────────────────────────────────────────────
+// ─── Tab: Agenda (appointments only — accessible to all roles) ────────────────
 
-function HistorialTab({
+function AgendaTab({
   appointments,
-  records,
   navigate,
   patientId,
 }: {
   appointments: Appointment[];
-  records: RecordMeta[];
   navigate: (path: string) => void;
   patientId: string;
 }) {
@@ -103,81 +100,6 @@ function HistorialTab({
 
   return (
     <div className="anim-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-
-    {/* ── Registros clínicos ─────────────────────────────────────────────── */}
-    <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflowX: 'auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--s100)' }}>
-        <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)', display: 'flex', alignItems: 'center', gap: 10 }}>
-          Registros clínicos
-          {(() => {
-            const last = records.find(r => r.risk_level);
-            const rm = riskMeta(last?.risk_level);
-            return rm ? (
-              <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 12, background: rm.bg, color: rm.color, border: `1px solid ${rm.border}` }}>
-                Último riesgo: {rm.label}
-              </span>
-            ) : null;
-          })()}
-        </span>
-        {(() => {
-          // The clinical note lives inside a session: jump to the open/next
-          // appointment, or schedule one — no standalone records.
-          const target =
-            appointments.find(a => a.status === 'IN_PROGRESS') ??
-            appointments.filter(a => a.status === 'SCHEDULED').sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))[0];
-          return (
-            <button
-              onClick={() => navigate(target ? `/appointments/${target.id}` : `/appointments/new?patient_id=${patientId}`)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
-            >
-              {target ? <><FileText size={12} /> Ir a la cita</> : <><Calendar size={12} /> Agendar cita</>}
-            </button>
-          );
-        })()}
-      </div>
-      {records.length === 0 ? (
-        <div style={{ padding: '32px 20px', textAlign: 'center' }}>
-          <FileText size={32} color="var(--s200)" style={{ marginBottom: 8 }} />
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--s400)' }}>Sin registros clínicos aún</p>
-        </div>
-      ) : (
-        <>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 110px 90px 90px', minWidth: 580, gap: 8, padding: '8px 20px', background: 'var(--s50)', borderBottom: '1px solid var(--s200)' }}>
-            {['Fecha', 'Tipo', 'Riesgo', 'Estado', 'Co-firma', 'Acción'].map(h => (
-              <span key={h} style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</span>
-            ))}
-          </div>
-          {records.map((rec, idx) => {
-            const cfg = CR_STATUS_CONFIG[rec.status] ?? CR_STATUS_CONFIG.DRAFT;
-            return (
-              <div key={rec.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 110px 90px 90px', minWidth: 580, gap: 8, alignItems: 'center', padding: '12px 20px', borderBottom: idx < records.length - 1 ? '1px solid var(--s100)' : 'none' }}>
-                <span style={{ fontSize: 13, color: 'var(--s700)' }}>{fmtDate(rec.session_date)}</span>
-                <span style={{ fontSize: 13, color: 'var(--s600)' }}>{RECORD_TYPE_LABEL[rec.record_type] ?? rec.record_type}</span>
-                {(() => {
-                  const rm = riskMeta(rec.risk_level);
-                  return rm ? (
-                    <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 6, background: rm.bg, color: rm.color, display: 'inline-flex', width: 'fit-content' }}>{rm.label}</span>
-                  ) : <span style={{ fontSize: 12, color: 'var(--s300)' }}>—</span>;
-                })()}
-                <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 6, background: cfg.bg, color: cfg.color, display: 'inline-flex', width: 'fit-content' }}>
-                  {cfg.label}
-                </span>
-                <span style={{ fontSize: 12, color: rec.requires_cosign && !rec.supervisor_id ? 'var(--red)' : 'var(--s400)' }}>
-                  {rec.requires_cosign ? (rec.supervisor_id ? 'Firmado' : 'Pendiente') : '—'}
-                </span>
-                <button
-                  onClick={() => navigate(`/clinical-records/${rec.id}`)}
-                  style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s700)', cursor: 'pointer', width: 'fit-content' }}
-                >
-                  Ver
-                </button>
-              </div>
-            );
-          })}
-        </>
-      )}
-    </div>
-
     {/* ── Citas ──────────────────────────────────────────────────────────── */}
     <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflowX: 'auto' }}>
       <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--s100)' }}>
@@ -193,18 +115,15 @@ function HistorialTab({
         </div>
       ) : (
     <>
-      {/* Table header */}
       <div style={{ display: 'grid', gridTemplateColumns: '48px 1fr 1fr 1fr 80px 100px 120px', minWidth: 640, gap: 8, padding: '10px 20px', background: 'var(--s50)', borderBottom: '1px solid var(--s200)' }}>
         {['Ses#', 'Fecha', 'Tipo', 'Modalidad', 'Duración', 'Estado', 'Acciones'].map(h => (
           <span key={h} style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</span>
         ))}
       </div>
-
       {appointments.map((appt, idx) => {
         const status = appt.status as AppointmentStatus;
         const cfg = RECORD_STATUS_CONFIG[status] ?? RECORD_STATUS_CONFIG.pendiente;
         const isVirtual = appt.modality === 'VIRTUAL';
-
         return (
           <div
             key={appt.id}
@@ -257,9 +176,114 @@ function HistorialTab({
     </>
     )}
     </div>
+    </div>
+  );
+}
 
-    {/* Diagnóstico CIE-10 — parte obligatoria de la HC; compacto, sin tab propio */}
-    <DiagnosesPanel patientId={patientId} />
+// ─── Tab: Historia clínica (records + diagnoses + plan — clinical data) ────────
+
+function HistoriaTab({
+  records,
+  appointments,
+  navigate,
+  patientId,
+  pureAdmin,
+  clinicalReason,
+  onReason,
+}: {
+  records: RecordMeta[];
+  appointments: Appointment[];
+  navigate: (path: string) => void;
+  patientId: string;
+  pureAdmin: boolean;
+  clinicalReason: string | null;
+  onReason: (r: string) => void;
+}) {
+  return (
+    <div className="anim-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+    {/* ── Índice de registros clínicos (metadata only — no gate) ─────────── */}
+    <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflowX: 'auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--s100)' }}>
+        <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          Registros clínicos
+          {(() => {
+            const last = records.find(r => r.risk_level);
+            const rm = riskMeta(last?.risk_level);
+            return rm ? (
+              <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 12, background: rm.bg, color: rm.color, border: `1px solid ${rm.border}` }}>
+                Último riesgo: {rm.label}
+              </span>
+            ) : null;
+          })()}
+        </span>
+        {!pureAdmin && (() => {
+          const target =
+            appointments.find(a => a.status === 'IN_PROGRESS') ??
+            appointments.filter(a => a.status === 'SCHEDULED').sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))[0];
+          return (
+            <button
+              onClick={() => navigate(target ? `/appointments/${target.id}` : `/appointments/new?patient_id=${patientId}`)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+            >
+              {target ? <><FileText size={12} /> Ir a la cita</> : <><Calendar size={12} /> Agendar cita</>}
+            </button>
+          );
+        })()}
+      </div>
+      {records.length === 0 ? (
+        <div style={{ padding: '32px 20px', textAlign: 'center' }}>
+          <FileText size={32} color="var(--s200)" style={{ marginBottom: 8 }} />
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--s400)' }}>Sin registros clínicos aún</p>
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 110px 90px 90px', minWidth: 580, gap: 8, padding: '8px 20px', background: 'var(--s50)', borderBottom: '1px solid var(--s200)' }}>
+            {['Fecha', 'Tipo', 'Riesgo', 'Estado', 'Co-firma', 'Acción'].map(h => (
+              <span key={h} style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</span>
+            ))}
+          </div>
+          {records.map((rec, idx) => {
+            const cfg = CR_STATUS_CONFIG[rec.status] ?? CR_STATUS_CONFIG.DRAFT;
+            return (
+              <div key={rec.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 110px 90px 90px', minWidth: 580, gap: 8, alignItems: 'center', padding: '12px 20px', borderBottom: idx < records.length - 1 ? '1px solid var(--s100)' : 'none' }}>
+                <span style={{ fontSize: 13, color: 'var(--s700)' }}>{fmtDate(rec.session_date)}</span>
+                <span style={{ fontSize: 13, color: 'var(--s600)' }}>{RECORD_TYPE_LABEL[rec.record_type] ?? rec.record_type}</span>
+                {(() => {
+                  const rm = riskMeta(rec.risk_level);
+                  return rm ? (
+                    <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 6, background: rm.bg, color: rm.color, display: 'inline-flex', width: 'fit-content' }}>{rm.label}</span>
+                  ) : <span style={{ fontSize: 12, color: 'var(--s300)' }}>—</span>;
+                })()}
+                <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 6, background: cfg.bg, color: cfg.color, display: 'inline-flex', width: 'fit-content' }}>
+                  {cfg.label}
+                </span>
+                <span style={{ fontSize: 12, color: rec.requires_cosign && !rec.supervisor_id ? 'var(--red)' : 'var(--s400)' }}>
+                  {rec.requires_cosign ? (rec.supervisor_id ? 'Firmado' : 'Pendiente') : '—'}
+                </span>
+                <button
+                  onClick={() => navigate(`/clinical-records/${rec.id}?patient_id=${patientId}`)}
+                  style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s700)', cursor: 'pointer', width: 'fit-content' }}
+                >
+                  Ver
+                </button>
+              </div>
+            );
+          })}
+        </>
+      )}
+    </div>
+
+    {/* ── Diagnósticos (gated for pure admin) ────────────────────────────── */}
+    <ClinicalGate patientId={patientId} isPure={pureAdmin} reason={clinicalReason} onReason={onReason}>
+      <DiagnosesPanel patientId={patientId} reason={clinicalReason ?? undefined} />
+    </ClinicalGate>
+
+    {/* ── Plan terapéutico (same gate — shared reason) ────────────────────── */}
+    <ClinicalGate patientId={patientId} isPure={pureAdmin} reason={clinicalReason} onReason={onReason}>
+      <TreatmentPlanPanel patientId={patientId} reason={clinicalReason ?? undefined} />
+    </ClinicalGate>
+
     </div>
   );
 }
@@ -480,12 +504,19 @@ export function PatientProfilePage() {
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+
+  const pureAdmin = isPureAdmin(user?.roles);
   const canSeeBilling = (user?.permissions ?? []).includes('billing:read');
-  const [tab, setTab] = useState<Tab>('historial');
+
+  // Clinical access reason — seeded from sessionStorage so it persists across
+  // navigation within the same browser session.
+  const [clinicalReason, setClinicalReason] = useState<string | null>(
+    () => (id ? getClinicalAccessReason(id) : null)
+  );
+
+  const [tab, setTab] = useState<Tab>(pureAdmin ? 'agenda' : 'historia');
   const [editOpen, setEditOpen] = useState(false);
   const [lateOpen, setLateOpen] = useState(false);
-  const [breakGlassReason, setBreakGlassReason] = useState<string | null>(null);
-  const [showBreakGlass, setShowBreakGlass] = useState(false);
 
   // Patient query
   const { data: patient, isLoading: patLoading, isError } = useQuery({
@@ -494,36 +525,21 @@ export function PatientProfilePage() {
     enabled: !!id,
   });
 
-  // Appointments always-enabled (needed for quick stats)
+  // Appointments — accessible to all roles
   const { data: appointments = [] } = useQuery({
     queryKey: ['appointments', 'patient', id],
     queryFn: () => appointmentsApi.list({ patient_id: id!, limit: 50 }),
     enabled: !!id,
   });
 
-  // Clinical records list (metadata only — no decryption)
-  const { data: recordsData, error: recordsError } = useQuery({
-    queryKey: ['clinical-records', 'patient', id, breakGlassReason],
-    queryFn: () => clinicalRecordsApi.list(id!, breakGlassReason ?? undefined),
+  // Clinical records list — metadata only (dates, type, status), no SOAP content.
+  // No break-the-glass gate on this endpoint; gate is on individual record GET.
+  const { data: recordsData } = useQuery({
+    queryKey: ['clinical-records', 'patient', id],
+    queryFn: () => clinicalRecordsApi.list(id!),
     enabled: !!id,
-    retry: false,
   });
   const records: RecordMeta[] = recordsData?.items ?? [];
-
-  useEffect(() => {
-    if (recordsError instanceof ApiError && recordsError.status === 403 && recordsError.message === 'BREAK_GLASS_REASON_REQUIRED') {
-      setShowBreakGlass(true);
-    }
-  }, [recordsError]);
-
-  // Active principal diagnosis feeds the header chip (was a hardcoded demo label)
-  const { data: dxData } = useQuery({
-    queryKey: ['diagnoses', id],
-    queryFn: () => diagnosesApi.list(id!),
-    enabled: !!id,
-  });
-  const activeDx = (dxData?.items ?? []).find(d => d.status === 'ACTIVE' && d.diagnosis_type === 'PRINCIPAL')
-    ?? (dxData?.items ?? []).find(d => d.status === 'ACTIVE');
 
   // Consent evidence — Ley 1581/Ley 1090 require it before treatment
   const { data: consentsData } = useQuery({
@@ -568,11 +584,12 @@ export function PatientProfilePage() {
 
   const nextApptLabel = upcoming[0] ? fmtShortDate(upcoming[0].scheduled_at) : 'Sin citas';
 
-  // Tab definitions
+  // Tab definitions — all users see Agenda + Consentimientos; Historia visible to all
+  // but clinical content (Dx + Plan) is gated for pure admins within the tab.
   const TABS: { id: Tab; label: string; Icon: React.ElementType }[] = [
-    { id: 'historial',       label: 'Historial de consultas', Icon: Clock      },
-    { id: 'plan',            label: 'Plan terapéutico',        Icon: Target     },
-    { id: 'consentimientos', label: 'Consentimientos',         Icon: FileCheck  },
+    { id: 'agenda',          label: 'Agenda',           Icon: Calendar  },
+    { id: 'historia',        label: 'Historia clínica', Icon: BookOpen  },
+    { id: 'consentimientos', label: 'Consentimientos',  Icon: FileCheck },
     ...(canSeeBilling ? [{ id: 'facturacion' as Tab, label: 'Facturación', Icon: Receipt }] : []),
   ];
 
@@ -580,12 +597,6 @@ export function PatientProfilePage() {
 
   return (
     <div>
-      {showBreakGlass && (
-        <BreakGlassModal
-          onConfirm={reason => { setBreakGlassReason(reason); setShowBreakGlass(false); }}
-          onCancel={() => navigate('/patients')}
-        />
-      )}
       {/* ── Topbar breadcrumb ───────────────────────────────────────────────── */}
       <div style={{ background: '#fff', borderBottom: '1px solid var(--s200)', padding: '0 28px', height: 52, display: 'flex', alignItems: 'center', gap: 10 }}>
         <button
@@ -597,7 +608,7 @@ export function PatientProfilePage() {
         <span style={{ color: 'var(--s300)', fontSize: 14 }}>/</span>
         <span style={{ fontSize: 13, color: 'var(--s700)', fontWeight: 500 }}>{displayName}</span>
         <span style={{ color: 'var(--s300)', fontSize: 14 }}>·</span>
-        <span style={{ fontSize: 13, color: 'var(--s500)' }}>Historia clínica #{patient.id.slice(0, 8).toUpperCase()}</span>
+        <span style={{ fontSize: 13, color: 'var(--s500)' }}>HC #{patient.id.slice(0, 8).toUpperCase()}</span>
       </div>
 
       <div style={{ padding: isMobile ? '16px 12px' : '24px 28px' }}>
@@ -608,7 +619,6 @@ export function PatientProfilePage() {
 
             {/* Avatar + info */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, flex: 1, minWidth: 0 }}>
-              {/* Avatar */}
               <div style={{
                 width: 64, height: 64, borderRadius: '50%', flexShrink: 0,
                 background: 'linear-gradient(135deg, #14b8a6, #6366f1)',
@@ -619,7 +629,7 @@ export function PatientProfilePage() {
               </div>
 
               <div style={{ minWidth: 0, flex: 1 }}>
-                {/* Name + badge */}
+                {/* Name + active badge */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
                   <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: 'var(--s800)' }}>{displayName}</h1>
                   <span style={{
@@ -637,7 +647,7 @@ export function PatientProfilePage() {
                   </span>
                 </div>
 
-                {/* Info row 1 */}
+                {/* Info row 1 — administrative data */}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
                   {patient.birth_date && (
                     <InfoChip icon={<Cake size={12} />} text={`${calcAge(patient.birth_date) !== null ? `${calcAge(patient.birth_date)} años · ` : ''}${fmtBirthDate(patient.birth_date)}`} />
@@ -647,16 +657,9 @@ export function PatientProfilePage() {
                   {patient.phone && <InfoChip icon={<Phone size={12} />} text={patient.phone} />}
                 </div>
 
-                {/* Info row 2 */}
+                {/* Info row 2 — next appointment (always visible) */}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {activeDx && (
-                    <InfoChip
-                      icon={<Stethoscope size={12} />}
-                      text={`${activeDx.icd10_code} · ${activeDx.description}`}
-                      style={{ background: '#f5f3ff', color: '#6d28d9', border: '1px solid #ddd6fe' }}
-                    />
-                  )}
-                  <InfoChip icon={<Calendar size={12} />} text={`Próxima: ${nextApptLabel}`} />
+                  <InfoChip icon={<Calendar size={12} />} text={`Próxima cita: ${nextApptLabel}`} />
                 </div>
               </div>
             </div>
@@ -669,13 +672,15 @@ export function PatientProfilePage() {
               >
                 <Pencil size={13} /> Editar datos
               </button>
-              <button
-                onClick={() => setLateOpen(true)}
-                title="Registrar una sesión que ocurrió pero no se registró a tiempo"
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: '#92400e', border: '1px solid #fcd34d', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-              >
-                <Clock size={13} /> Sesión pasada
-              </button>
+              {!pureAdmin && (
+                <button
+                  onClick={() => setLateOpen(true)}
+                  title="Registrar una sesión que ocurrió pero no se registró a tiempo"
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: '#92400e', border: '1px solid #fcd34d', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  <Clock size={13} /> Sesión pasada
+                </button>
+              )}
               <button
                 onClick={() => navigate(`/appointments/new?patient_id=${patient.id}`)}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
@@ -686,10 +691,12 @@ export function PatientProfilePage() {
           </div>
         </div>
 
-        {/* ── Señales de riesgo (IA) — apoyo a la decisión, siempre visible ──── */}
-        <div style={{ marginBottom: 20 }}>
-          <RiskBanner patientId={patient.id} />
-        </div>
+        {/* ── AI risk signals — only for clinical roles ────────────────────── */}
+        {!pureAdmin && (
+          <div style={{ marginBottom: 20 }}>
+            <RiskBanner patientId={patient.id} />
+          </div>
+        )}
 
         {/* ── Consent warning (Ley 1581 / Ley 1090) ─────────────────────────── */}
         {consentsData && !hasTreatmentConsent && (
@@ -733,8 +740,20 @@ export function PatientProfilePage() {
         </div>
 
         {/* ── Tab Content ───────────────────────────────────────────────────── */}
-        {tab === 'historial'       && <HistorialTab appointments={appointments} records={records} navigate={navigate} patientId={id!} />}
-        {tab === 'plan'            && <TreatmentPlanPanel patientId={id!} />}
+        {tab === 'agenda' && (
+          <AgendaTab appointments={appointments} navigate={navigate} patientId={id!} />
+        )}
+        {tab === 'historia' && (
+          <HistoriaTab
+            records={records}
+            appointments={appointments}
+            navigate={navigate}
+            patientId={id!}
+            pureAdmin={pureAdmin}
+            clinicalReason={clinicalReason}
+            onReason={setClinicalReason}
+          />
+        )}
         {tab === 'consentimientos' && <ConsentimientosTab patientId={id!} />}
         {tab === 'facturacion'     && <BillingPanel patientId={id!} />}
       </div>

@@ -122,10 +122,30 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusCreated, map[string]string{"id": id})
 }
 
+// isAdminOnly returns true when the caller holds CLINIC_ADMIN but NOT PROFESSIONAL.
+func isAdminOnly(roles []string) bool {
+	hasAdmin, hasPro := false, false
+	for _, r := range roles {
+		if r == "CLINIC_ADMIN" {
+			hasAdmin = true
+		}
+		if r == "PROFESSIONAL" || r == "INTERN" {
+			hasPro = true
+		}
+	}
+	return hasAdmin && !hasPro
+}
+
 // GET /api/v1/patients/{patient_id}/diagnoses
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	patientID := chi.URLParam(r, "patient_id")
+
+	reason := r.Header.Get("X-Access-Reason")
+	if isAdminOnly(claims.Roles) && reason == "" {
+		httputil.WriteError(w, http.StatusForbidden, "BREAK_GLASS_REASON_REQUIRED")
+		return
+	}
 
 	items, err := h.repo.ListByPatient(r.Context(), claims.OrganizationID, patientID)
 	if err != nil {
@@ -135,7 +155,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	if items == nil {
 		items = []*diagnoses.Diagnosis{}
 	}
-	h.audit.Record(r, "DIAGNOSIS_LIST", "patient", patientID)
+	h.audit.RecordWithReason(r, "DIAGNOSIS_LIST", "patient", patientID, reason)
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 

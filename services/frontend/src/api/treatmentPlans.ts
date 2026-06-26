@@ -41,8 +41,9 @@ export interface UpdateGoalInput {
 }
 
 export const treatmentPlansApi = {
-  list: (patientId: string) =>
-    api.get<{ items: TreatmentPlan[] }>(`/patients/${patientId}/treatment-plans`),
+  list: (patientId: string, reason?: string) =>
+    api.get<{ items: TreatmentPlan[] }>(`/patients/${patientId}/treatment-plans`,
+      reason ? { headers: { 'X-Access-Reason': reason } } : undefined),
   create: (patientId: string, body: CreatePlanInput) =>
     api.post<{ id: string }>(`/patients/${patientId}/treatment-plans`, body),
   update: (planId: string, body: { title?: string; status?: PlanStatus }) =>

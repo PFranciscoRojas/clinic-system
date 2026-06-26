@@ -26,8 +26,9 @@ export interface Diagnosis {
 export const diagnosesApi = {
   searchIcd10: (q: string) =>
     api.get<{ items: ICD10Code[] }>(`/icd10?q=${encodeURIComponent(q)}`),
-  list: (patientId: string) =>
-    api.get<{ items: Diagnosis[] }>(`/patients/${patientId}/diagnoses`),
+  list: (patientId: string, reason?: string) =>
+    api.get<{ items: Diagnosis[] }>(`/patients/${patientId}/diagnoses`,
+      reason ? { headers: { 'X-Access-Reason': reason } } : undefined),
   create: (patientId: string, body: { icd10_code: string; diagnosis_type?: DiagnosisType; diagnosed_at?: string; clinical_record_id?: string }) =>
     api.post<{ id: string }>(`/patients/${patientId}/diagnoses`, body),
   updateStatus: (id: string, status: DiagnosisStatus) =>

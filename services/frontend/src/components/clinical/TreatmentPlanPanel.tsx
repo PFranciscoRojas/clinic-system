@@ -33,13 +33,13 @@ const PLAN_CFG: Record<PlanStatus, { label: string; color: string; bg: string }>
 
 const fmtDate = (d?: string | null) => (d ? new Date(d + 'T00:00:00').toLocaleDateString('es-CO') : '');
 
-export function TreatmentPlanPanel({ patientId }: { patientId: string }) {
+export function TreatmentPlanPanel({ patientId, reason }: { patientId: string; reason?: string }) {
   const queryClient = useQueryClient();
   const [err, setErr] = useState('');
 
   const { data, isLoading } = useQuery({
-    queryKey: ['treatment-plans', patientId],
-    queryFn: () => treatmentPlansApi.list(patientId),
+    queryKey: ['treatment-plans', patientId, reason],
+    queryFn: () => treatmentPlansApi.list(patientId, reason),
   });
   const plans: TreatmentPlan[] = data?.items ?? [];
   const active = plans.find(p => p.status === 'ACTIVE');

@@ -16,7 +16,7 @@ const NEXT_STATUS: Record<DiagnosisStatus, DiagnosisStatus[]> = {
   RULED_OUT: ['ACTIVE'],
 };
 
-export function DiagnosesPanel({ patientId }: { patientId: string }) {
+export function DiagnosesPanel({ patientId, reason }: { patientId: string; reason?: string }) {
   const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState('');
@@ -30,8 +30,8 @@ export function DiagnosesPanel({ patientId }: { patientId: string }) {
   }, [query]);
 
   const { data: dxData, isLoading } = useQuery({
-    queryKey: ['diagnoses', patientId],
-    queryFn: () => diagnosesApi.list(patientId),
+    queryKey: ['diagnoses', patientId, reason],
+    queryFn: () => diagnosesApi.list(patientId, reason),
   });
   const diagnoses: Diagnosis[] = dxData?.items ?? [];
 

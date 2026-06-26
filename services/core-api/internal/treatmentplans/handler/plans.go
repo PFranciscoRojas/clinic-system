@@ -63,10 +63,30 @@ func (h *Handler) createPlan(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusCreated, map[string]string{"id": planID})
 }
 
+// isAdminOnly returns true when the caller holds CLINIC_ADMIN but NOT PROFESSIONAL.
+func isAdminOnly(roles []string) bool {
+	hasAdmin, hasPro := false, false
+	for _, r := range roles {
+		if r == "CLINIC_ADMIN" {
+			hasAdmin = true
+		}
+		if r == "PROFESSIONAL" || r == "INTERN" {
+			hasPro = true
+		}
+	}
+	return hasAdmin && !hasPro
+}
+
 // GET /api/v1/patients/{patient_id}/treatment-plans
 func (h *Handler) listPlans(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	patientID := chi.URLParam(r, "patient_id")
+
+	reason := r.Header.Get("X-Access-Reason")
+	if isAdminOnly(claims.Roles) && reason == "" {
+		httputil.WriteError(w, http.StatusForbidden, "BREAK_GLASS_REASON_REQUIRED")
+		return
+	}
 
 	plans, err := h.svc.ListByPatient(r.Context(), claims.OrganizationID, patientID)
 	if err != nil {
@@ -74,6 +94,7 @@ func (h *Handler) listPlans(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.audit.RecordWithReason(r, "TREATMENT_PLAN_LIST", "patient", patientID, reason)
 	items := make([]map[string]any, 0, len(plans))
 	for _, p := range plans {
 		items = append(items, planResponse(p))

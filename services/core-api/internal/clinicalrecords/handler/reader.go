@@ -49,15 +49,11 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /api/v1/patients/{patient_id}/records
+// Metadata only (dates, type, status) — not confidential, no break-the-glass gate.
+// Opening an individual record (GET /clinical-records/{id}) requires justification.
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	patientID := chi.URLParam(r, "patient_id")
-
-	reason := r.Header.Get("X-Access-Reason")
-	if isAdminOnly(claims.Roles) && reason == "" {
-		httputil.WriteError(w, http.StatusForbidden, "BREAK_GLASS_REASON_REQUIRED")
-		return
-	}
 
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
@@ -76,7 +72,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.audit.RecordWithReason(r, "CLINICAL_RECORD_LIST", "patient", patientID, reason)
+	h.audit.Record(r, "CLINICAL_RECORD_LIST", "patient", patientID)
 	items := make([]map[string]any, 0, len(metas))
 	for _, m := range metas {
 		items = append(items, toMetaResponse(m))
