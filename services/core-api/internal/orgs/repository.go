@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"sghcp/core-api/internal/notify"
+	"sghcp/core-api/internal/shared/dbctx"
 )
 
 type Repository struct {
@@ -34,7 +35,7 @@ type NotificationSettings struct {
 // when the org hasn't configured anything yet.
 func (r *Repository) GetNotifications(ctx context.Context, orgID string) (NotificationSettings, error) {
 	s := NotificationSettings{Reminder24h: true, Reminder2h: false}
-	err := r.pool.QueryRow(ctx, `
+	err := dbctx.From(ctx, r.pool).QueryRow(ctx, `
 		SELECT COALESCE((settings->'notifications'->>'reminder_24h')::bool, true),
 		       COALESCE((settings->'notifications'->>'reminder_2h')::bool, false)
 		FROM organizations WHERE id = $1`, orgID).Scan(&s.Reminder24h, &s.Reminder2h)
@@ -44,7 +45,7 @@ func (r *Repository) GetNotifications(ctx context.Context, orgID string) (Notifi
 // SetNotifications merges the reminder prefs into settings.notifications without
 // disturbing other settings keys (branding, payments, …).
 func (r *Repository) SetNotifications(ctx context.Context, orgID string, s NotificationSettings) error {
-	_, err := r.pool.Exec(ctx, `
+	_, err := dbctx.From(ctx, r.pool).Exec(ctx, `
 		UPDATE organizations
 		SET settings = COALESCE(settings,'{}'::jsonb)
 		    || jsonb_build_object('notifications',
@@ -72,7 +73,7 @@ type WhatsAppConfig struct {
 // A missing row yields a zero-value (disabled) config.
 func (r *Repository) GetWhatsApp(ctx context.Context, orgID string) (WhatsAppConfig, error) {
 	c := WhatsAppConfig{Lang: "es"}
-	err := r.pool.QueryRow(ctx, `
+	err := dbctx.From(ctx, r.pool).QueryRow(ctx, `
 		SELECT enabled, COALESCE(phone_number_id,''), COALESCE(waba_id,''),
 		       COALESCE(tpl_reminder_24h,''), COALESCE(tpl_reminder_2h,''),
 		       COALESCE(tpl_booking,''), COALESCE(lang,'es'),
@@ -89,7 +90,7 @@ func (r *Repository) GetWhatsApp(ctx context.Context, orgID string) (WhatsAppCon
 // SetWhatsApp upserts the org's config. When tokenEnc is nil the existing token
 // is preserved (write-only field); otherwise it replaces it.
 func (r *Repository) SetWhatsApp(ctx context.Context, orgID string, c WhatsAppConfig, tokenEnc []byte, keySource string) error {
-	_, err := r.pool.Exec(ctx, `
+	_, err := dbctx.From(ctx, r.pool).Exec(ctx, `
 		INSERT INTO org_whatsapp_config
 		    (organization_id, enabled, phone_number_id, waba_id,
 		     access_token_enc, key_source,
