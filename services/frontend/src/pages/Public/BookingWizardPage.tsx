@@ -122,7 +122,7 @@ export function BookingWizardPage() {
   const shiftMonth = (delta: number) => setViewMonth(v => { const d = new Date(v.y, v.m + delta, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
 
   // ── styles ──
-  const page: React.CSSProperties = { minHeight: '100vh', background: PAPER, color: INK, fontFamily: "'DM Sans', -apple-system, sans-serif", display: 'flex', alignItems: 'stretch', overflowX: 'hidden' };
+  const page: React.CSSProperties = { minHeight: '100dvh', background: PAPER, color: INK, fontFamily: "'DM Sans', -apple-system, sans-serif", display: 'flex', alignItems: 'stretch', overflowX: 'hidden' };
   const inputWrap: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, border: `1.5px solid ${LINE}`, borderRadius: 10, padding: '11px 13px', marginBottom: 11, background: '#fff', width: '100%', boxSizing: 'border-box' };
   const input: React.CSSProperties = { border: 'none', outline: 'none', flex: 1, minWidth: 0, fontSize: 14.5, color: INK, background: 'transparent', width: '100%' };
   const chip = (active: boolean): React.CSSProperties => ({ border: `1.5px solid ${active ? accent : LINE}`, color: active ? '#fff' : INK, background: active ? accent : '#fff', borderRadius: 8, padding: '9px 14px', fontSize: 13.5, fontWeight: 500, cursor: 'pointer' });
@@ -133,10 +133,10 @@ export function BookingWizardPage() {
       <div style={{ flex: '0 0 38%', maxWidth: 460, background: INK, color: PAPER, padding: '48px 44px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }} className="booking-hero">
         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: '.22em', textTransform: 'uppercase', color: INK_FAINT }}>Reserva en línea</div>
         <div>
-          <div style={{ fontFamily: DISPLAY, fontSize: 38, lineHeight: 1.08, fontWeight: 500, marginBottom: 18 }}>
+          <div className="booking-hero-title" style={{ fontFamily: DISPLAY, fontSize: 38, lineHeight: 1.08, fontWeight: 500, marginBottom: 18 }}>
             El primer paso es <span style={{ fontStyle: 'italic', color: accent === '#8a5a5a' ? '#d9a7a7' : accent }}>agendar</span> una conversación.
           </div>
-          <p style={{ fontSize: 14.5, lineHeight: 1.7, color: '#d8cdc0', maxWidth: 320 }}>
+          <p className="booking-hero-sub" style={{ fontSize: 14.5, lineHeight: 1.7, color: '#d8cdc0', maxWidth: 320 }}>
             Una sesión de reconocimiento para vernos, contarme qué te trae y saber si podemos
             caminar juntos en este proceso.
           </p>
@@ -288,7 +288,7 @@ export function BookingWizardPage() {
         </div>
       </div>
 
-      <style>{`@media (max-width: 760px){ .booking-page{ flex-direction:column !important; } .booking-hero{ flex-basis:auto !important; max-width:none !important; padding:26px 22px !important; } .booking-wizard{ padding:26px 18px !important; } .booking-cal{ grid-template-columns:1fr !important; } }`}</style>
+      <style>{`@media (max-width: 760px){ .booking-page{ flex-direction:column !important; } .booking-hero{ flex-basis:auto !important; max-width:none !important; padding:20px 18px !important; } .booking-hero-title{ font-size:22px !important; } .booking-hero-sub{ display:none !important; } .booking-wizard{ padding:20px 16px !important; } .booking-cal{ grid-template-columns:1fr !important; } }`}</style>
     </div>
   );
 }

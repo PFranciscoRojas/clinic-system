@@ -36,7 +36,7 @@ export function VerifyEmailPage() {
   const card: React.CSSProperties = { background: '#fff', borderRadius: 18, padding: '32px 30px', boxShadow: '0 20px 60px rgba(0,0,0,0.12)', width: '100%', maxWidth: 420, boxSizing: 'border-box', textAlign: 'center' };
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0f766e, #134e4a)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+    <div style={{ minHeight: '100dvh', background: 'linear-gradient(135deg, #0f766e, #134e4a)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <div style={{ width: '100%', maxWidth: 420 }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', border: '1.5px solid rgba(255,255,255,0.20)' }}>

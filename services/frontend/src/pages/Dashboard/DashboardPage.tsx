@@ -457,7 +457,7 @@ export function DashboardPage() {
   }, [filtered, nowMs, isToday]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', ...(compact ? { minHeight: 'calc(100vh - var(--topbar-h))' } : { height: 'calc(100vh - var(--topbar-h))', overflow: 'hidden' }) }}>
+    <div style={{ display: 'flex', flexDirection: 'column', ...(compact ? { minHeight: 'calc(100dvh - var(--topbar-h))' } : { height: 'calc(100dvh - var(--topbar-h))', overflow: 'hidden' }) }}>
 
       {/* ── Sub-tab bar ─────────────────────────────────────────────────────── */}
       <div style={{

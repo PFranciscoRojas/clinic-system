@@ -255,7 +255,7 @@ function NewInvoiceForm({ patientId, onDone, onCancel }: { patientId: string; on
   return (
     <div style={{ border: '1.5px solid var(--s200)', borderRadius: 12, background: 'var(--s50)', padding: 16, marginBottom: 16 }}>
       <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--s800)', marginBottom: 14 }}>Nueva factura</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div className="grid-2" style={{ gap: 12 }}>
         <div style={{ gridColumn: '1 / -1' }}>
           <div style={labelStyle}>Tarifa (opcional — autocompleta el monto)</div>
           <select value={rateId} onChange={e => pickRate(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
@@ -321,7 +321,7 @@ function PaymentForm({ invoice, balance, onDone, onCancel }: {
   return (
     <div style={{ border: '1.5px solid #6ee7b7', borderRadius: 11, background: '#ecfdf5', padding: 14 }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: '#065f46', marginBottom: 12 }}>Registrar pago · saldo {formatMoney(balance, invoice.currency)}</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div className="grid-2" style={{ gap: 12 }}>
         <div>
           <div style={labelStyle}>Monto</div>
           <input value={amount} onChange={e => setAmount(e.target.value)} style={{ ...inputStyle, fontFamily: "'DM Mono', monospace" }} />

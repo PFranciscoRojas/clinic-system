@@ -9,6 +9,7 @@ import { adminApi, type AdminOrg, type AdminOrgUser, type SystemHealth, type Act
 import { legalApi, type LegalDoc } from '@/api/legal';
 import { ConfirmByTextModal } from '@/components/ui/ConfirmByTextModal';
 import { Markdown } from '@/components/common/Markdown';
+import { useIsMobile } from '@/lib/useMediaQuery';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -838,6 +839,7 @@ type Tab = 'tenants' | 'sistema' | 'legal';
 
 export function SuperAdminPage() {
   const [tab, setTab] = useState<Tab>('sistema');
+  const isMobile = useIsMobile();
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'sistema', label: 'Sistema', icon: <Activity size={14} /> },
@@ -846,7 +848,7 @@ export function SuperAdminPage() {
   ];
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 1100, margin: '0 auto' }}>
+    <div style={{ padding: isMobile ? '14px 12px' : '28px 32px', maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
         <Building2 size={22} color="var(--teal)" />
         <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--s800)', margin: 0 }}>Operador SaaS</h1>

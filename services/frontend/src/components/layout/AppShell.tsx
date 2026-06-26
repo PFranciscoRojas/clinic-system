@@ -175,7 +175,7 @@ export function AppShell({ children }: Props) {
         />
       )}
       {locked && <LockScreen userId={user?.user_id} onUnlock={() => setLocked(false)} />}
-      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', height: '100dvh', overflow: 'hidden' }}>
 
         {/* ── Sidebar ─────────────────────────────────────────── */}
         {isMobile && mobileNavOpen && (
@@ -185,7 +185,7 @@ export function AppShell({ children }: Props) {
           />
         )}
         <aside style={{
-          width: showCollapsed ? 64 : 'var(--sidebar-w)', minHeight: '100vh', flexShrink: 0,
+          width: showCollapsed ? 64 : 'var(--sidebar-w)', minHeight: '100dvh', flexShrink: 0,
           background: 'var(--teal-d)',
           display: 'flex', flexDirection: 'column',
           boxShadow: '2px 0 16px rgba(0,0,0,.10)',
@@ -331,6 +331,8 @@ export function AppShell({ children }: Props) {
             display: 'flex', alignItems: 'center',
             padding: isMobile ? '0 12px' : '0 24px', gap: isMobile ? 8 : 12,
             position: 'sticky', top: 0, zIndex: 20,
+            paddingLeft: isMobile ? 'max(12px, env(safe-area-inset-left))' : '24px',
+            paddingRight: isMobile ? 'max(12px, env(safe-area-inset-right))' : '24px',
           }}>
             {isMobile && (
               <button
@@ -468,7 +470,7 @@ export function AppShell({ children }: Props) {
 
           <TrialBanner status={user?.subscription_status} daysLeft={user?.trial_days_left} />
 
-          <main style={{ flex: 1, overflow: 'auto' }}>
+          <main style={{ flex: 1, overflow: 'auto', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
             {children}
           </main>
         </div>
@@ -526,7 +528,7 @@ function SubscriptionExpired({ onLogout }: { onLogout: () => void }) {
     catch { setErr('El pago en línea no está disponible. Escríbenos para activar tu cuenta.'); setBusy(false); }
   };
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0f766e, #134e4a)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+    <div style={{ minHeight: '100dvh', background: 'linear-gradient(135deg, #0f766e, #134e4a)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <div style={{ background: '#fff', borderRadius: 18, padding: '36px 34px', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', width: '100%', maxWidth: 460, textAlign: 'center' }}>
         <div style={{ width: 60, height: 60, borderRadius: 16, background: '#fffbeb', border: '1.5px solid #fcd34d', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
           <Clock size={28} color="#92400e" />

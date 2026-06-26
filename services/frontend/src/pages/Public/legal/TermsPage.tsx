@@ -14,7 +14,7 @@ export function TermsPage() {
   });
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--s50, #f8fafc)', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+    <div style={{ minHeight: '100dvh', background: 'var(--s50, #f8fafc)', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <header style={{ background: '#fff', borderBottom: '1px solid var(--s200, #e2e8f0)', padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 14, position: 'sticky', top: 0, zIndex: 10 }}>
         <button onClick={() => navigate(-1)} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--s500)', fontWeight: 500, padding: '6px 10px', borderRadius: 8 }}>
           <ArrowLeft size={15} /> Volver

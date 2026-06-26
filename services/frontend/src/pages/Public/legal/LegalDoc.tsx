@@ -14,7 +14,7 @@ export function LegalDoc({ title, subtitle, sections, version }: Props) {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      minHeight: '100dvh',
       background: 'var(--s50, #f8fafc)',
       fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     }}>

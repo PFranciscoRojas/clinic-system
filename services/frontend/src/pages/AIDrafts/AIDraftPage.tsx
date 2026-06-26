@@ -6,6 +6,7 @@ import {
   Edit3, Save, ChevronDown, ChevronUp, Sparkles, FileText, Stethoscope, Search, X,
 } from 'lucide-react';
 import { aiDraftsApi, type DraftStatus } from '@/api/aiDrafts';
+import { useIsMobile } from '@/lib/useMediaQuery';
 import { diagnosesApi, type ICD10Code } from '@/api/diagnoses';
 import { TEMPLATE_SECTIONS, RECORD_TYPE_LABELS, type SectionDef } from '@/components/clinical/constants';
 import { Badge } from '@/components/ui/Badge';
@@ -25,6 +26,7 @@ export function AIDraftPage() {
   const { id } = useParams<{ id: string }>();
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   // Session context passed by the appointment page so the approved record
   // lands linked to the right appointment, date and record type.
   const qsAppointmentId = params.get('appointment_id') ?? '';
@@ -137,7 +139,7 @@ export function AIDraftPage() {
   const getDraftField = (key: string) => draftEdit[key] ?? baseContent[key] ?? '';
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto' }}>
+    <div style={{ maxWidth: 760, margin: '0 auto', padding: isMobile ? '0 12px 32px' : 0 }}>
       {/* Back */}
       <button
         onClick={() => navigate(-1)}

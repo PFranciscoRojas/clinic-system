@@ -124,7 +124,7 @@ export function BookingPaymentReturnPage() {
     : <Clock size={50} color={ACCENT} style={{ margin: '0 auto 16px' }} />;
 
   return (
-    <div style={{ minHeight: '100vh', background: PAPER, color: INK, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: "'DM Sans', -apple-system, sans-serif" }}>
+    <div style={{ minHeight: '100dvh', background: PAPER, color: INK, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: "'DM Sans', -apple-system, sans-serif" }}>
       <div style={{ background: '#fff', borderRadius: 18, padding: '40px 32px', boxShadow: '0 20px 60px rgba(42,36,32,0.12)', width: '100%', maxWidth: 460, textAlign: 'center', border: `1px solid ${LINE}`, boxSizing: 'border-box' }}>
         {icon}
         <h1 style={{ fontFamily: DISPLAY, fontWeight: 500, fontSize: 25, marginBottom: 12 }}>{heading}</h1>

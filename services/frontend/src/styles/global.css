@@ -42,6 +42,8 @@ body {
   color: var(--s800);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
 }
 button  { font-family: 'DM Sans', sans-serif; cursor: pointer; }
 input, textarea, select { font-family: 'DM Sans', sans-serif; }
@@ -96,8 +98,33 @@ a { color: inherit; text-decoration: none; }
   -webkit-backdrop-filter: blur(20px);
 }
 
-/* Onboarding profile grid collapses to a single column on small screens so
-   the two-up fields (Nombres / Apellidos) don't get squeezed. */
+/* ── Mobile foundations ─────────────────────────────────────── */
+
+/* Prevent iOS zoom-on-focus (triggered when input font-size < 16px) */
+@media (max-width: 767px) {
+  input, textarea, select { font-size: 16px !important; }
+}
+
+/* Reusable responsive grid: 2 columns on desktop, 1 on phone */
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 767px) {
+  .grid-2 { grid-template-columns: 1fr; }
+}
+
+/* Horizontal-scrollable table wrapper for data tables on phone */
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Safe-area bottom padding for standalone PWA (iOS home bar / Android gesture nav) */
+.safe-pad-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+/* Onboarding profile grid collapses to a single column on small screens */
 @media (max-width: 480px) {
   .onb-grid { grid-template-columns: 1fr !important; }
 }

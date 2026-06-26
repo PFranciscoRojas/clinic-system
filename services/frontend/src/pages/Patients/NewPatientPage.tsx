@@ -8,6 +8,7 @@ import {
 import { patientsApi, type CreatePatientBody } from '@/api/patients';
 import { appointmentsApi } from '@/api/appointments';
 import { validateBirthDate } from '@/lib/age';
+import { useIsMobile } from '@/lib/useMediaQuery';
 import { BirthDateField } from '@/components/patients/BirthDateField';
 import { Spinner } from '@/components/ui/Spinner';
 
@@ -151,6 +152,7 @@ function SectionHeader({ icon: Icon, title }: { icon: React.ElementType; title: 
 export function NewPatientPage() {
   const navigate = useNavigate();
   const birthWrapRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
   // Set when registering the patient for a guest reservation — after creating,
   // the patient is linked to that appointment and we return to it.
   const [searchParams] = useSearchParams();
@@ -269,7 +271,7 @@ export function NewPatientPage() {
   }
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', paddingBottom: 40 }}>
+    <div style={{ maxWidth: 720, margin: '0 auto', padding: isMobile ? '0 12px 32px' : '0 0 40px' }}>
       {/* Back */}
       <button
         onClick={() => navigate(-1)}
@@ -326,7 +328,7 @@ export function NewPatientPage() {
         {/* ── Nombre completo ─────────────────────────────────────────────── */}
         <div style={cardStyle}>
           <SectionHeader icon={User} title="Nombre completo" />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 0 : 16 }}>
             <Field id="fld-firstName" label="Primer nombre" value={firstName} onChange={v => { setFirstName(v); setErrors(e => ({ ...e, firstName: '' })); }} placeholder="Juan" required error={errors.firstName} />
             <Field label="Segundo nombre" value={middleName} onChange={setMiddleName} placeholder="Carlos (opcional)" />
             <Field id="fld-pLastName" label="Primer apellido" value={pLastName} onChange={v => { setPLastName(v); setErrors(e => ({ ...e, pLastName: '' })); }} placeholder="Pérez" required error={errors.pLastName} />
@@ -337,7 +339,7 @@ export function NewPatientPage() {
         {/* ── Datos personales ────────────────────────────────────────────── */}
         <div style={cardStyle}>
           <SectionHeader icon={Phone} title="Contacto y datos personales" />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 0 : 16 }}>
             <Field
               id="fld-email"
               label="Correo electrónico"
@@ -447,7 +449,7 @@ export function NewPatientPage() {
         {/* ── Contacto de emergencia ──────────────────────────────────────── */}
         <div style={cardStyle}>
           <SectionHeader icon={HeartPulse} title="Contacto de emergencia" />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 0 : 16 }}>
             <Field label="Nombre" value={ecName} onChange={setEcName} placeholder="María García" />
             <div>
               <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--s700)', marginBottom: 6 }}>Parentesco</label>

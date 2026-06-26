@@ -1112,7 +1112,7 @@ function SecuritySection() {
         {/* PIN change */}
         <div style={{ padding: '14px 0', borderBottom: '1px solid var(--s100)' }}>
           <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--s800)', marginBottom: 12 }}>Cambiar PIN de bloqueo</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 10 }}>
+          <div className="grid-2" style={{ marginBottom: 10 }}>
             {[
               { label: 'Nuevo PIN (4 dígitos)', val: pin, set: setPin },
               { label: 'Confirmar PIN',         val: pin2, set: setPin2 },
@@ -1153,7 +1153,7 @@ function SecuritySection() {
 
       <SectionCard title="Cambiar contraseña" icon={Key} color="#ef4444">
         <form onSubmit={handlePasswordChange} style={{ padding: '14px 0' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+          <div className="grid-2" style={{ marginBottom: 12 }}>
             <div style={{ gridColumn: '1 / -1' }}>
               <div style={{ fontSize: 12, color: 'var(--s500)', marginBottom: 6, fontWeight: 500 }}>Contraseña actual</div>
               <input value={curPwd} onChange={e => setCurPwd(e.target.value)} type="password" required
@@ -1660,7 +1660,7 @@ function UsersSection() {
             Como administrador puedes restablecer la contraseña de cualquier usuario de tu organización.
             Cada usuario también puede hacerlo por su cuenta desde <b>"¿Olvidaste tu contraseña?"</b> en el inicio de sesión.
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+          <div className="grid-2" style={{ marginBottom: 12 }}>
             <div>
               <div style={{ fontSize: 12, color: 'var(--s500)', marginBottom: 6, fontWeight: 500 }}>Correo del usuario</div>
               <input value={resetEmail} onChange={e => setResetEmail(e.target.value)} type="email" required
@@ -1992,7 +1992,7 @@ export function SettingsPage() {
   const compact = useIsCompact();
 
   return (
-    <div style={{ display: 'flex', flexDirection: compact ? 'column' : 'row', ...(compact ? { minHeight: 'calc(100vh - var(--topbar-h))' } : { height: 'calc(100vh - var(--topbar-h))', overflow: 'hidden' }) }}>
+    <div style={{ display: 'flex', flexDirection: compact ? 'column' : 'row', ...(compact ? { minHeight: 'calc(100dvh - var(--topbar-h))' } : { height: 'calc(100dvh - var(--topbar-h))', overflow: 'hidden' }) }}>
 
       {/* ── Settings nav: side column on desktop, scrollable tab bar on small screens */}
       {compact ? (

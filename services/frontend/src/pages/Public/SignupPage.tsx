@@ -55,13 +55,14 @@ export function SignupPage() {
     }
   };
 
-  const card: React.CSSProperties = { background: '#fff', borderRadius: 18, padding: '32px 30px', boxShadow: '0 20px 60px rgba(0,0,0,0.12)', width: '100%', maxWidth: 430, boxSizing: 'border-box' };
+  const narrow = typeof window !== 'undefined' && window.innerWidth < 400;
+  const card: React.CSSProperties = { background: '#fff', borderRadius: 18, padding: narrow ? '24px 16px' : '32px 30px', boxShadow: '0 20px 60px rgba(0,0,0,0.12)', width: '100%', maxWidth: 430, boxSizing: 'border-box' };
   const inputWrap: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, border: '1.5px solid var(--s200)', borderRadius: 11, padding: '11px 14px', marginBottom: 12, background: '#fff' };
   const input: React.CSSProperties = { border: 'none', outline: 'none', flex: 1, fontSize: 14, color: 'var(--s800)', background: 'transparent' };
   const sectionLabel: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--s500)', letterSpacing: '.06em', textTransform: 'uppercase', margin: '4px 2px 10px' };
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0f766e, #134e4a)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+    <div style={{ minHeight: '100dvh', background: 'linear-gradient(135deg, #0f766e, #134e4a)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px 12px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <div style={{ width: '100%', maxWidth: 430 }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', border: '1.5px solid rgba(255,255,255,0.20)' }}>

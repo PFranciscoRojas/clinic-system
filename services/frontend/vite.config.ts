@@ -8,18 +8,24 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icons/*.png'],
+      includeAssets: ['icons/*.png', 'icons/*.svg'],
       manifest: {
+        id: '/',
+        scope: '/',
+        start_url: '/',
         name: 'SGHCP — Historias Clínicas Psicológicas',
         short_name: 'SGHCP',
         description: 'Sistema de Gestión de Historias Clínicas Psicológicas',
         theme_color: '#0f766e',
         background_color: '#f8fafc',
         display: 'standalone',
+        display_override: ['standalone'],
         orientation: 'portrait-primary',
+        lang: 'es',
         icons: [
-          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {

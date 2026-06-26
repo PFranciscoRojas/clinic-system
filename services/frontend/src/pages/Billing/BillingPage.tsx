@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useIsMobile } from '@/lib/useMediaQuery';
 import { useQuery } from '@tanstack/react-query';
 import { Receipt, Wallet, Clock, SearchX, ArrowUp, ArrowDown, Globe, HandCoins, FileText, BarChart3, AlertTriangle, Download, Send, CheckCircle, AlertCircle, Users } from 'lucide-react';
 import { Spinner } from '@/components/ui/Spinner';
@@ -277,6 +278,7 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
             <div style={{ fontSize: 13.5, marginTop: 10 }}>No hay facturas ni reservas en este período.</div>
           </div>
         ) : (
+          <div className="table-wrap">
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: 'var(--s50)', textAlign: 'left', color: 'var(--s500)', fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '.03em' }}>
@@ -367,6 +369,7 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -531,6 +534,7 @@ function PacientesTab({ period }: { period: BillingPeriod }) {
           <div style={{ fontSize: 13.5, marginTop: 10 }}>No hay actividad de pacientes en este período.</div>
         </div>
       ) : (
+        <div className="table-wrap">
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ background: 'var(--s50)', textAlign: 'left', color: 'var(--s500)', fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '.03em' }}>
@@ -565,6 +569,7 @@ function PacientesTab({ period }: { period: BillingPeriod }) {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );
@@ -576,6 +581,7 @@ type Tab = 'facturas' | 'resumen' | 'pacientes';
 export function BillingPage() {
   const [tab, setTab] = useState<Tab>('facturas');
   const [period, setPeriod] = useState<BillingPeriod>('month');
+  const isMobile = useIsMobile();
 
   const { data: ov } = useQuery<BillingOverview>({ queryKey: ['billing-overview', period], queryFn: () => invoicesApi.overview(period) });
 
@@ -586,12 +592,12 @@ export function BillingPage() {
   ];
 
   return (
-    <div style={{ padding: '24px 28px', maxWidth: 1100, margin: '0 auto' }}>
+    <div style={{ padding: isMobile ? '14px 12px' : '24px 28px', maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <Receipt size={20} color="#10b981" />
         <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--s800)', margin: 0 }}>Facturación</h1>
         {/* Module-level period selector — drives the cards and every tab */}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, background: 'var(--s100)', borderRadius: 9, padding: 3 }}>
+        <div style={{ marginLeft: isMobile ? 0 : 'auto', display: 'flex', gap: 4, background: 'var(--s100)', borderRadius: 9, padding: 3, overflowX: 'auto', flexShrink: 0 }}>
           {PERIODS.map(p => {
             const on = period === p.id;
             return (

@@ -444,7 +444,7 @@ export function PatientsPage() {
   const effectiveView: ViewMode = isMobile ? 'grid' : viewMode;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', ...(compact ? { minHeight: 'calc(100vh - var(--topbar-h))' } : { height: 'calc(100vh - var(--topbar-h))', overflow: 'hidden' }) }}>
+    <div style={{ display: 'flex', flexDirection: 'column', ...(compact ? { minHeight: 'calc(100dvh - var(--topbar-h))' } : { height: 'calc(100dvh - var(--topbar-h))', overflow: 'hidden' }) }}>
 
       {/* ── Filters toolbar ─────────────────────────────────────────────────── */}
       <div style={{ background: '#fff', borderBottom: '1px solid var(--s200)', padding: '10px 24px', display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>

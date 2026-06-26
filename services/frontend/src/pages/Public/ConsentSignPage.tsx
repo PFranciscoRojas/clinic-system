@@ -42,7 +42,7 @@ export function ConsentSignPage() {
   const canSign = accepted && !!signature;
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f5f4f0', padding: '32px 16px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+    <div style={{ minHeight: '100dvh', background: '#f5f4f0', padding: '20px 12px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <div style={{ maxWidth: 560, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#5e8265' }}>Marcela Chapués · Psicóloga Clínica</p>

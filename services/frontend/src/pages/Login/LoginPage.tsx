@@ -6,6 +6,7 @@ import { authApi } from '@/api/auth';
 import { ApiError } from '@/api/client';
 import { profilesApi, splitName, type Specialty } from '@/api/profiles';
 import { COUNTRIES, validatePhone } from '@/lib/phone';
+import { useIsMobile } from '@/lib/useMediaQuery';
 
 /* ── Animated blobs ──────────────────────────────────────────── */
 function Blobs() {
@@ -187,6 +188,7 @@ const HOURS = ['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','
 export function LoginPage() {
   const { login, refreshUser, updateProfile, user } = useAuth();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   const [screen,   setScreen]   = useState<Screen>('login');
   const [onbStep,  setOnbStep]  = useState(0);
@@ -388,9 +390,9 @@ export function LoginPage() {
   /* ── Layout wrapper ──────────────────────────────────────────── */
   return (
     <div className="bg-gradient" style={{
-      width: '100%', height: '100%', minHeight: '100vh',
+      width: '100%', height: '100%', minHeight: '100dvh',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      position: 'relative', overflow: 'auto', padding: '32px 16px',
+      position: 'relative', overflow: 'auto', padding: isMobile ? '20px 12px' : '32px 16px',
     }}>
       <Blobs />
       <div style={{ position: 'relative', zIndex: 1, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -413,7 +415,7 @@ export function LoginPage() {
             </div>
 
             {/* Card */}
-            <div className="glass" style={{ borderRadius: 20, padding: '30px 32px', boxShadow: '0 24px 64px rgba(0,0,0,0.28)' }}>
+            <div className="glass" style={{ borderRadius: 20, padding: isMobile ? '24px 18px' : '30px 32px', boxShadow: '0 24px 64px rgba(0,0,0,0.28)' }}>
               <div style={{ fontWeight: 800, fontSize: 19, color: 'var(--s800)', marginBottom: 4 }}>Iniciar sesión</div>
               <div style={{ fontSize: 13, color: 'var(--s400)', marginBottom: 24 }}>Accede a tu cuenta profesional</div>
 
@@ -619,7 +621,7 @@ export function LoginPage() {
               <span style={{ fontWeight: 800, fontSize: 18, color: '#fff', letterSpacing: '-0.3px' }}>SGHCP</span>
             </div>
 
-            <div className="glass" style={{ borderRadius: 20, padding: '28px 32px', boxShadow: '0 24px 64px rgba(0,0,0,0.28)' }}>
+            <div className="glass" style={{ borderRadius: 20, padding: isMobile ? '20px 16px' : '28px 32px', boxShadow: '0 24px 64px rgba(0,0,0,0.28)' }}>
               {done ? (
                 <div style={{ textAlign: 'center', padding: '20px 0' }}>
                   <div style={{ fontSize: 48, marginBottom: 16 }}>🎉</div>
@@ -721,7 +723,7 @@ export function LoginPage() {
                           })}
                         </div>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px', marginBottom: 16 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 0 : '0 16px', marginBottom: 16 }}>
                         <div>
                           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--s700)', marginBottom: 6 }}>Hora de inicio</div>
                           <select value={startHour} onChange={e => setStartHour(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1.5px solid var(--s200)', borderRadius: 10, fontSize: 13.5, color: 'var(--s700)', background: '#fff' }}>
