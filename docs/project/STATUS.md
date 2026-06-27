@@ -26,11 +26,11 @@
 
 ### Últimos commits a `main`
 
+- `829d4ec` feat(settings): pestaña Integraciones con gate de contraseña (CLINIC_ADMIN) — 2026-06-27
+- `8580e05` fix(booking): use WithOrgScope in orgWebhookSecret to satisfy RLS — 2026-06-27
 - `d5c7b58` feat(orgs): modo test/producción visible en Ajustes → Pagos — 2026-06-27
 - `c45a264` feat(booking): añadir items.description y payer first/last_name a preferencia MP — 2026-06-27
 - `506e25f` feat(billing): webhook secret por tenant para pagos de citas — 2026-06-27
-- `7a6d6c7` fix(billing): quitar banner de renovación — solo mostrar en Ajustes — 2026-06-26
-- `f517307` feat(billing): mostrar estado del plan + fix resiliencia webhook — 2026-06-26
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 > **CI/CD:** `core-api` y `ai-service` se construyen en GitHub Actions y se despliegan a ghcr.io. El VPS solo hace `docker pull` — sin builds locales.
@@ -41,8 +41,7 @@
 
 | ID | Descripción | Estado |
 |---|---|---|
-| **MP webhook firma** | El webhook usa el secret global en vez del per-org (`orgWebhookSecret` retorna vacío). El booking procesó igual (`enforce=false`). Causa probable: primera notificación llegó antes de que el config estuviera en el org correcto. En producción funciona pero la firma no se verifica con el secret de Marcela — pendiente investigar y activar `MP_WEBHOOK_ENFORCE=true`. | 🟡 bajo riesgo |
-| **WhatsApp billing** | Cargo pendiente COP $90.675 en Meta Billing — API bloqueada hasta pagar. Una vez pagado, templates funcionan (cita_confirmada verificado). Pendiente configurar tpl_reminder_24h y tpl_reminder_2h en Ajustes. | 🟡 pendiente pago Meta |
+| **WhatsApp Meta API** | Cargo COP $90.675 pagado. Pendiente: confirmar que la API se desbloqueó, configurar `tpl_reminder_24h` y `tpl_reminder_2h` en Ajustes → Integraciones con los nombres exactos de las plantillas aprobadas. | 🟡 verificar desbloqueo |
 
 ---
 
@@ -50,7 +49,7 @@
 
 | Versión | Hito |
 |---|---|
-| `1.0.0` | Go-live real: precio real ($180.000), `ALLOW_DATA_RESET=false`, `MP_WEBHOOK_ENFORCE=true`, validación legal por abogado (ToS/privacidad ya publicados como borrador) |
+| `1.0.0` | Go-live real: precio real ($180.000), `ALLOW_DATA_RESET=false`, ✅ `MP_WEBHOOK_ENFORCE=true` (activo desde sesión 12), validación legal por abogado (ToS/privacidad ya publicados como borrador) |
 | post-1.0 | Google Calendar bidireccional (Google→SGHCP): webhooks de push, sync_token, reconciliación |
 | post-1.0 | Google Calendar: verificación de app con Google para >100 usuarios (actualmente testing mode) |
 | post-1.0 | Videollamada / Zoom nativa |
@@ -85,6 +84,7 @@
 - `MASTER_KEY` — clave maestra de cifrado PII
 - `MP_ACCESS_TOKEN` — MercadoPago producción SaaS (suscripciones)
 - `MP_WEBHOOK_SECRET` — ✅ configurado (global, para suscripciones SaaS)
+- `MP_WEBHOOK_ENFORCE=true` — ✅ activado (sesión 12); org payment configs usa secret per-tenant vía `WithOrgScope`
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google Calendar OAuth (añadidos 2026-06-24)
 - `ALLOW_DATA_RESET=true` → cambiar a `false` en go-live (1.0.0)
 - Demo: `admin@demo.clinica.co` / `Admin1234!` · tenant ID `005e349d2fbc5d30000000003`

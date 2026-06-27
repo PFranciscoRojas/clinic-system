@@ -13,6 +13,12 @@
 
 ---
 
+## 2026-06-27 (sesión 12)
+
+- fix(booking): `orgWebhookSecret()` usaba `h.pool.QueryRow` sin `app.current_org`, RLS bloqueaba la fila y retornaba vacío — envuelto en `dbctx.WithOrgScope`; `MP_WEBHOOK_ENFORCE=true` activado en VPS `.env` (`8580e05`). Root cause confirmado: la función comentaba "bypasses RLS intentionally" pero el comportamiento real era que RLS la bloqueaba silenciosamente.
+- feat(settings): nueva pestaña "Integraciones" visible solo para CLINIC_ADMIN, agrupa MercadoPago y WhatsApp/Meta Cloud API; gate de contraseña antes de mostrar credenciales — backend `POST /api/v1/auth/verify-password` (sin efectos secundarios); frontend locked→unlock con password antes de mostrar los cards (`829d4ec`). WhatsApp movida de Notificaciones, MP movida de Tarifas.
+- operativo: cargo Meta Billing COP $90.675 pagado; pendiente confirmar desbloqueo de API y configurar nombres de plantillas en Ajustes → Integraciones.
+
 ## 2026-06-27 (sesión 11)
 
 - feat(booking): webhook secret por tenant — migración 000043 añade `mp_webhook_secret_enc`+`mp_webhook_secret_key_src` a `org_payment_config`; `orgWebhookSecret()` en booking handler descifra y usa el secret del tenant, con fallback al global; `PUT /org/payment` acepta `webhook_secret` y lo cifra (`506e25f`). Descubrimiento: el slug `marcelachapues` apuntaba a org distinto del que tenía el payment config — copiado al org correcto (`fbf1fb3d`). Prueba real end-to-end: pago COP $1.000 procesado, webhook llegó, cita creada `SCHEDULED` ✅.
