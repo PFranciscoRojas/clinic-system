@@ -7,6 +7,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"sghcp/core-api/internal/shared/config"
+	"sghcp/core-api/internal/shared/crypto"
 	"sghcp/core-api/internal/shared/middleware"
 )
 
@@ -16,12 +18,14 @@ import (
 type Handler struct {
 	pool           *pgxpool.Pool
 	rdb            *redis.Client
+	km             *crypto.KeyManager
+	cfg            config.Config
 	startedAt      time.Time
 	allowDataReset bool
 }
 
-func New(pool *pgxpool.Pool, rdb *redis.Client, allowDataReset bool) *Handler {
-	return &Handler{pool: pool, rdb: rdb, startedAt: time.Now(), allowDataReset: allowDataReset}
+func New(pool *pgxpool.Pool, rdb *redis.Client, km *crypto.KeyManager, cfg config.Config, allowDataReset bool) *Handler {
+	return &Handler{pool: pool, rdb: rdb, km: km, cfg: cfg, startedAt: time.Now(), allowDataReset: allowDataReset}
 }
 
 func (h *Handler) Routes() chi.Router {
@@ -41,6 +45,9 @@ func (h *Handler) Routes() chi.Router {
 		r.Post("/orgs/{id}/users/{user_id}/reactivate", h.reactivateOrgUser)
 		r.Get("/system/health", h.systemHealth)
 		r.Post("/system/actions", h.systemAction)
+		r.Get("/platform/mp", h.getPlatformMP)
+		r.Put("/platform/mp", h.updatePlatformMP)
+		r.Put("/platform/mp/tokens", h.updatePlatformTokens)
 	})
 
 	// Destructive per-org wipe — exists only during the testing phase.

@@ -10,7 +10,9 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -18,18 +20,31 @@ import (
 
 	"sghcp/core-api/internal/billing/mercadopago"
 	"sghcp/core-api/internal/shared/config"
+	"sghcp/core-api/internal/shared/crypto"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
 )
 
-type Handler struct {
-	pool *pgxpool.Pool
-	mp   *mercadopago.Client
-	cfg  config.Config
+type livePlatformCfg struct {
+	accessToken string
+	secret      string
+	enforce     bool
+	amount      int
+	reason      string
 }
 
-func New(pool *pgxpool.Pool, cfg config.Config) *Handler {
-	return &Handler{pool: pool, mp: mercadopago.New(cfg.MPAccessToken), cfg: cfg}
+type Handler struct {
+	pool *pgxpool.Pool
+	km   *crypto.KeyManager
+	cfg  config.Config
+
+	cfgMu   sync.Mutex
+	cfgAt   time.Time
+	cfgLive livePlatformCfg
+}
+
+func New(pool *pgxpool.Pool, km *crypto.KeyManager, cfg config.Config) *Handler {
+	return &Handler{pool: pool, km: km, cfg: cfg}
 }
 
 // Routes are protected (the checkout needs the caller's org). The webhook is
@@ -47,11 +62,85 @@ func (h *Handler) PublicRoutes() chi.Router {
 	return r
 }
 
+// platformConfig returns the live platform MP config, reading from the
+// platform_settings table with a 5-minute in-memory cache. Falls back to the
+// values from config (env vars) when a key is not in the DB.
+func (h *Handler) platformConfig(ctx context.Context) livePlatformCfg {
+	h.cfgMu.Lock()
+	defer h.cfgMu.Unlock()
+	if time.Since(h.cfgAt) < 5*time.Minute {
+		return h.cfgLive
+	}
+
+	rows, err := h.pool.Query(ctx,
+		`SELECT key, value, value_enc, key_source FROM platform_settings
+		 WHERE key = ANY($1)`,
+		[]string{"mp_access_token", "mp_webhook_secret", "mp_plan_amount", "mp_plan_reason", "mp_webhook_enforce"},
+	)
+
+	live := livePlatformCfg{
+		accessToken: h.cfg.MPAccessToken,
+		secret:      h.cfg.MPWebhookSecret,
+		enforce:     h.cfg.MPWebhookEnforce,
+		amount:      h.cfg.MPPlanAmount,
+		reason:      h.cfg.MPPlanReason,
+	}
+
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var key string
+			var val *string
+			var enc []byte
+			var ks *string
+			if err := rows.Scan(&key, &val, &enc, &ks); err != nil {
+				continue
+			}
+			switch key {
+			case "mp_access_token":
+				if len(enc) > 0 && ks != nil {
+					if plain, err := h.km.OpenSecret(*ks, enc); err == nil {
+						live.accessToken = string(plain)
+						crypto.Zeroize(plain)
+					}
+				}
+			case "mp_webhook_secret":
+				if len(enc) > 0 && ks != nil {
+					if plain, err := h.km.OpenSecret(*ks, enc); err == nil {
+						live.secret = string(plain)
+						crypto.Zeroize(plain)
+					}
+				}
+			case "mp_plan_amount":
+				if val != nil {
+					if n, err := strconv.Atoi(*val); err == nil {
+						live.amount = n
+					}
+				}
+			case "mp_plan_reason":
+				if val != nil {
+					live.reason = *val
+				}
+			case "mp_webhook_enforce":
+				if val != nil {
+					live.enforce = *val == "true"
+				}
+			}
+		}
+	}
+
+	h.cfgLive = live
+	h.cfgAt = time.Now()
+	return live
+}
+
 // POST /api/v1/billing/checkout — create a per-org subscription plan and return
 // its hosted checkout URL. Allowed even when the trial has lapsed (the gate
 // whitelists /api/v1/billing) so a blocked tenant can still subscribe.
 func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
-	if !h.mp.Enabled() {
+	pcfg := h.platformConfig(r.Context())
+	mp := mercadopago.New(pcfg.accessToken)
+	if !mp.Enabled() {
 		httputil.WriteError(w, http.StatusServiceUnavailable, "el pago en línea no está disponible todavía")
 		return
 	}
@@ -59,13 +148,13 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 
 	var orgName string
 	_ = h.pool.QueryRow(r.Context(), `SELECT name FROM organizations WHERE id = $1`, claims.OrganizationID).Scan(&orgName)
-	reason := h.cfg.MPPlanReason
+	reason := pcfg.reason
 	if orgName != "" {
-		reason = h.cfg.MPPlanReason + " · " + orgName
+		reason = pcfg.reason + " · " + orgName
 	}
 
-	planID, initPoint, err := h.mp.CreatePlan(
-		r.Context(), claims.OrganizationID, reason, h.cfg.MPPlanAmount,
+	planID, initPoint, err := mp.CreatePlan(
+		r.Context(), claims.OrganizationID, reason, pcfg.amount,
 		h.cfg.AppBaseURL+"/billing/return",
 		h.cfg.AppBaseURL+"/api/v1/public/billing/webhook",
 	)
@@ -89,13 +178,15 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 // retrying once we've received it.
 func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
 	defer w.WriteHeader(http.StatusOK)
-	if !h.mp.Enabled() {
+	pcfg := h.platformConfig(r.Context())
+	mp := mercadopago.New(pcfg.accessToken)
+	if !mp.Enabled() {
 		return
 	}
-	if ok, detail := mercadopago.VerifyWebhook(h.cfg.MPWebhookSecret,
+	if ok, detail := mercadopago.VerifyWebhook(pcfg.secret,
 		r.Header.Get("x-signature"), r.Header.Get("x-request-id"), r.URL.Query().Get("data.id")); !ok {
-		slog.Warn("billing.webhook: signature check failed", "detail", detail, "enforce", h.cfg.MPWebhookEnforce)
-		if h.cfg.MPWebhookEnforce {
+		slog.Warn("billing.webhook: signature check failed", "detail", detail, "enforce", pcfg.enforce)
+		if pcfg.enforce {
 			return
 		}
 	}
@@ -111,7 +202,7 @@ func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case strings.Contains(kind, "payment"):
 		// A recurring charge: approved → extend the tenant another month.
-		pay, err := h.mp.GetPayment(ctx, id)
+		pay, err := mp.GetPayment(ctx, id)
 		if err != nil || pay.ExternalReference == "" {
 			return
 		}
@@ -120,7 +211,7 @@ func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
 		}
 	default:
 		// The subscription itself (created/authorized/paused/cancelled).
-		pre, err := h.mp.GetPreapproval(ctx, id)
+		pre, err := mp.GetPreapproval(ctx, id)
 		if err != nil || pre.ExternalReference == "" {
 			return
 		}
@@ -134,7 +225,9 @@ func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
 // webhook events reach us. This is a safety net for when the webhook is delayed
 // or the notification_url was not propagated by the preapproval_plan API.
 func (h *Handler) reconcile(w http.ResponseWriter, r *http.Request) {
-	if !h.mp.Enabled() {
+	pcfg := h.platformConfig(r.Context())
+	mp := mercadopago.New(pcfg.accessToken)
+	if !mp.Enabled() {
 		httputil.WriteError(w, http.StatusServiceUnavailable, "pagos no disponibles")
 		return
 	}
@@ -152,7 +245,7 @@ func (h *Handler) reconcile(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	pre, err := h.mp.FindPreapprovalByPlan(ctx, planID)
+	pre, err := mp.FindPreapprovalByPlan(ctx, planID)
 	if err != nil {
 		slog.Warn("billing.reconcile: preapproval not found", "plan_id", planID, "err", err)
 		httputil.WriteError(w, http.StatusNotFound, "suscripción no encontrada en MercadoPago")
@@ -165,7 +258,7 @@ func (h *Handler) reconcile(w http.ResponseWriter, r *http.Request) {
 	// renewal, cancellation) reach the webhook — even if the current status is
 	// still pending (e.g. user returned before completing payment).
 	notifURL := h.cfg.AppBaseURL + "/api/v1/public/billing/webhook"
-	if err := h.mp.PatchPreapprovalNotificationURL(ctx, pre.ID, notifURL); err != nil {
+	if err := mp.PatchPreapprovalNotificationURL(ctx, pre.ID, notifURL); err != nil {
 		slog.Warn("billing.reconcile: could not patch notification_url", "err", err)
 	}
 

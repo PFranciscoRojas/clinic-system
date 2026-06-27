@@ -238,68 +238,93 @@ export function AppShell({ children }: Props) {
 
           {/* Nav */}
           <nav style={{ padding: showCollapsed ? '16px 8px' : '16px 12px', flex: 1 }}>
-            {!showCollapsed && (
-              <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,.40)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 8, paddingLeft: 4 }}>
-                Principal
-              </div>
+            {user?.roles?.includes('SYSTEM_ADMIN') ? (
+              // SYSTEM_ADMIN sees only operator-relevant items — no clinical nav.
+              <>
+                {(() => {
+                  const active = location.pathname.startsWith('/admin');
+                  return (
+                    <Link to="/admin" title={showCollapsed ? 'Operador' : undefined} onClick={() => setMobileNavOpen(false)} style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      justifyContent: showCollapsed ? 'center' : 'flex-start',
+                      padding: showCollapsed ? '12px 0' : '10px 12px', borderRadius: 8, marginBottom: 2,
+                      background: active ? 'rgba(255,255,255,.18)' : 'transparent',
+                      color: active ? '#fff' : 'rgba(255,255,255,.65)',
+                      fontSize: 13.5, fontWeight: active ? 600 : 400,
+                    }}>
+                      <Building2 size={showCollapsed ? 18 : 16} color={active ? '#fff' : 'rgba(255,255,255,.65)'} />
+                      {!showCollapsed && <span style={{ flex: 1 }}>Operador SaaS</span>}
+                    </Link>
+                  );
+                })()}
+                {(() => {
+                  const active = location.pathname.startsWith('/settings');
+                  return (
+                    <Link to="/settings" title={showCollapsed ? 'Configuración' : undefined} onClick={() => setMobileNavOpen(false)} style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      justifyContent: showCollapsed ? 'center' : 'flex-start',
+                      padding: showCollapsed ? '12px 0' : '10px 12px', borderRadius: 8, marginBottom: 2,
+                      background: active ? 'rgba(255,255,255,.18)' : 'transparent',
+                      color: active ? '#fff' : 'rgba(255,255,255,.65)',
+                      fontSize: 13.5, fontWeight: active ? 600 : 400,
+                    }}>
+                      <Settings size={showCollapsed ? 18 : 16} color={active ? '#fff' : 'rgba(255,255,255,.65)'} />
+                      {!showCollapsed && <span style={{ flex: 1 }}>Configuración</span>}
+                    </Link>
+                  );
+                })()}
+              </>
+            ) : (
+              // Tenant users see the full clinical navigation.
+              <>
+                {!showCollapsed && (
+                  <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,.40)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 8, paddingLeft: 4 }}>
+                    Principal
+                  </div>
+                )}
+                {NAV.map(({ to, label, Icon, badge }) => {
+                  const active = to === '/' ? location.pathname === '/' : location.pathname.startsWith(to);
+                  return (
+                    <Link key={to} to={to} title={showCollapsed ? label : undefined} onClick={() => setMobileNavOpen(false)} style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      justifyContent: showCollapsed ? 'center' : 'flex-start',
+                      padding: showCollapsed ? '12px 0' : '10px 12px', borderRadius: 8, marginBottom: 2,
+                      background: active ? 'rgba(255,255,255,.18)' : 'transparent',
+                      color: active ? '#fff' : 'rgba(255,255,255,.65)',
+                      fontSize: 13.5, fontWeight: active ? 600 : 400,
+                      transition: 'all .15s',
+                    }}
+                    onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,.09)'; }}
+                    onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                    >
+                      <Icon size={showCollapsed ? 18 : 16} color={active ? '#fff' : 'rgba(255,255,255,.65)'} />
+                      {!showCollapsed && <span style={{ flex: 1 }}>{label}</span>}
+                      {!showCollapsed && badge !== null && (
+                        <span style={{ background: '#f59e0b', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 9999, padding: '1px 6px', minWidth: 18, textAlign: 'center' }}>
+                          {badge}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+                {user?.permissions?.includes('billing:reports') && (() => {
+                  const active = location.pathname.startsWith('/billing');
+                  return (
+                    <Link to="/billing" title={showCollapsed ? 'Facturación' : undefined} onClick={() => setMobileNavOpen(false)} style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      justifyContent: showCollapsed ? 'center' : 'flex-start',
+                      padding: showCollapsed ? '12px 0' : '10px 12px', borderRadius: 8, marginBottom: 2,
+                      background: active ? 'rgba(255,255,255,.18)' : 'transparent',
+                      color: active ? '#fff' : 'rgba(255,255,255,.65)',
+                      fontSize: 13.5, fontWeight: active ? 600 : 400,
+                    }}>
+                      <Receipt size={showCollapsed ? 18 : 16} color={active ? '#fff' : 'rgba(255,255,255,.65)'} />
+                      {!showCollapsed && <span style={{ flex: 1 }}>Facturación</span>}
+                    </Link>
+                  );
+                })()}
+              </>
             )}
-            {NAV.map(({ to, label, Icon, badge }) => {
-              const active = to === '/' ? location.pathname === '/' : location.pathname.startsWith(to);
-              return (
-                <Link key={to} to={to} title={showCollapsed ? label : undefined} onClick={() => setMobileNavOpen(false)} style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  justifyContent: showCollapsed ? 'center' : 'flex-start',
-                  padding: showCollapsed ? '12px 0' : '10px 12px', borderRadius: 8, marginBottom: 2,
-                  background: active ? 'rgba(255,255,255,.18)' : 'transparent',
-                  color: active ? '#fff' : 'rgba(255,255,255,.65)',
-                  fontSize: 13.5, fontWeight: active ? 600 : 400,
-                  transition: 'all .15s',
-                }}
-                onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,.09)'; }}
-                onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-                >
-                  <Icon size={showCollapsed ? 18 : 16} color={active ? '#fff' : 'rgba(255,255,255,.65)'} />
-                  {!showCollapsed && <span style={{ flex: 1 }}>{label}</span>}
-                  {!showCollapsed && badge !== null && (
-                    <span style={{ background: '#f59e0b', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 9999, padding: '1px 6px', minWidth: 18, textAlign: 'center' }}>
-                      {badge}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-            {user?.permissions?.includes('billing:reports') && (() => {
-              const active = location.pathname.startsWith('/billing');
-              return (
-                <Link to="/billing" title={showCollapsed ? 'Facturación' : undefined} onClick={() => setMobileNavOpen(false)} style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  justifyContent: showCollapsed ? 'center' : 'flex-start',
-                  padding: showCollapsed ? '12px 0' : '10px 12px', borderRadius: 8, marginBottom: 2,
-                  background: active ? 'rgba(255,255,255,.18)' : 'transparent',
-                  color: active ? '#fff' : 'rgba(255,255,255,.65)',
-                  fontSize: 13.5, fontWeight: active ? 600 : 400,
-                }}>
-                  <Receipt size={showCollapsed ? 18 : 16} color={active ? '#fff' : 'rgba(255,255,255,.65)'} />
-                  {!showCollapsed && <span style={{ flex: 1 }}>Facturación</span>}
-                </Link>
-              );
-            })()}
-            {user?.roles?.includes('SYSTEM_ADMIN') && (() => {
-              const active = location.pathname.startsWith('/admin');
-              return (
-                <Link to="/admin" title={showCollapsed ? 'Operador' : undefined} onClick={() => setMobileNavOpen(false)} style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  justifyContent: showCollapsed ? 'center' : 'flex-start',
-                  padding: showCollapsed ? '12px 0' : '10px 12px', borderRadius: 8, marginBottom: 2, marginTop: 8,
-                  background: active ? 'rgba(255,255,255,.18)' : 'transparent',
-                  color: active ? '#fff' : 'rgba(255,255,255,.65)',
-                  fontSize: 13.5, fontWeight: active ? 600 : 400,
-                }}>
-                  <Building2 size={showCollapsed ? 18 : 16} color={active ? '#fff' : 'rgba(255,255,255,.65)'} />
-                  {!showCollapsed && <span style={{ flex: 1 }}>Operador SaaS</span>}
-                </Link>
-              );
-            })()}
           </nav>
 
           {/* User mini card */}

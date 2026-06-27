@@ -108,4 +108,20 @@ export const adminApi = {
 
   reactivateOrgUser: (orgId: string, userId: string, role_name: string) =>
     api.post<void>(`/admin/orgs/${orgId}/users/${userId}/reactivate`, { role_name }),
+
+  getPlatformMP: () => api.get<PlatformMPConfig>('/admin/platform/mp'),
+  updatePlatformMP: (data: { plan_amount?: number; plan_reason?: string; webhook_enforce?: boolean }) =>
+    api.put<void>('/admin/platform/mp', data),
+  updatePlatformTokens: (data: { access_token?: string; webhook_secret?: string }) =>
+    api.put<void>('/admin/platform/mp/tokens', data),
 };
+
+export interface PlatformMPConfig {
+  plan_amount: number;
+  plan_reason: string;
+  webhook_enforce: boolean;
+  access_token_set: boolean;
+  access_token_source: 'db' | 'env' | 'none';
+  webhook_secret_set: boolean;
+  webhook_secret_source: 'db' | 'env' | 'none';
+}

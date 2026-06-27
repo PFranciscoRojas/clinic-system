@@ -4,8 +4,10 @@ import {
   Building2, Activity, HardDrive, Database,
   Cpu, Users, Bot, RefreshCw, AlertTriangle, Info,
   AlertCircle, Wrench, MemoryStick, FileText,
+  CreditCard, Lock, Unlock, CheckCircle, XCircle, Eye, EyeOff, KeyRound,
 } from 'lucide-react';
-import { adminApi, type AdminOrg, type AdminOrgUser, type SystemHealth, type ActionResult } from '@/api/admin';
+import { adminApi, type AdminOrg, type AdminOrgUser, type SystemHealth, type ActionResult, type PlatformMPConfig } from '@/api/admin';
+import { authApi } from '@/api/auth';
 import { legalApi, type LegalDoc } from '@/api/legal';
 import { ConfirmByTextModal } from '@/components/ui/ConfirmByTextModal';
 import { Markdown } from '@/components/common/Markdown';
@@ -833,18 +835,315 @@ function LegalTab() {
   );
 }
 
+// ── Plataforma tab ────────────────────────────────────────────────────────────
+
+function SourceBadge({ source }: { source: 'db' | 'env' | 'none' }) {
+  const colors: Record<string, { bg: string; color: string; label: string }> = {
+    db:   { bg: '#ecfdf5', color: '#059669', label: 'BD' },
+    env:  { bg: '#eff6ff', color: '#2563eb', label: 'ENV' },
+    none: { bg: '#fef2f2', color: '#dc2626', label: 'No configurado' },
+  };
+  const s = colors[source] ?? colors.none;
+  return (
+    <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: s.bg, color: s.color }}>
+      {s.label}
+    </span>
+  );
+}
+
+function TokenRotateForm({ label, field, onSaved }: {
+  label: string;
+  field: 'access_token' | 'webhook_secret';
+  onSaved: () => void;
+}) {
+  const [val, setVal]   = useState('');
+  const [show, setShow] = useState(false);
+  const [err, setErr]   = useState('');
+  const mut = useMutation({
+    mutationFn: () => adminApi.updatePlatformTokens({ [field]: val }),
+    onSuccess: () => { setVal(''); setErr(''); onSaved(); },
+    onError:   () => setErr('Error al guardar. Verifica el valor.'),
+  });
+  return (
+    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ position: 'relative', flex: 1 }}>
+          <input
+            type={show ? 'text' : 'password'}
+            placeholder={`Nuevo ${label}`}
+            value={val}
+            onChange={e => setVal(e.target.value)}
+            style={{ width: '100%', padding: '7px 36px 7px 10px', border: '1.5px solid var(--s200)', borderRadius: 7, fontSize: 13, boxSizing: 'border-box' }}
+          />
+          <button onClick={() => setShow(v => !v)} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--s400)', padding: 2 }}>
+            {show ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+        </div>
+        <button
+          onClick={() => { if (!val.trim()) { setErr('El campo no puede estar vacío'); return; } mut.mutate(); }}
+          disabled={mut.isPending}
+          style={{ padding: '7px 14px', borderRadius: 7, border: 'none', background: 'var(--teal)', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+        >
+          {mut.isPending ? '...' : 'Guardar'}
+        </button>
+      </div>
+      {err && <p style={{ fontSize: 12, color: '#dc2626', margin: 0 }}>{err}</p>}
+    </div>
+  );
+}
+
+function PlataformaTab() {
+  const qc = useQueryClient();
+  const [unlocked, setUnlocked] = useState(false);
+  const [pwd, setPwd]           = useState('');
+  const [pwdErr, setPwdErr]     = useState('');
+  const [unlocking, setUnlocking] = useState(false);
+
+  const [rotatingToken,  setRotatingToken]  = useState(false);
+  const [rotatingSecret, setRotatingSecret] = useState(false);
+
+  const { data: cfg, isLoading } = useQuery<PlatformMPConfig>({
+    queryKey: ['admin', 'platform-mp'],
+    queryFn: adminApi.getPlatformMP,
+    enabled: unlocked,
+    refetchOnWindowFocus: false,
+  });
+
+  // Plain-text editable fields
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState('');
+  const [enforce, setEnforce] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState('');
+  const [saveOk, setSaveOk] = useState(false);
+
+  useEffect(() => {
+    if (cfg) {
+      setAmount(String(cfg.plan_amount));
+      setReason(cfg.plan_reason);
+      setEnforce(cfg.webhook_enforce);
+    }
+  }, [cfg]);
+
+  const handleUnlock = async () => {
+    if (!pwd) { setPwdErr('Ingresa tu contraseña'); return; }
+    setUnlocking(true); setPwdErr('');
+    try {
+      await authApi.verifyPassword(pwd);
+      setUnlocked(true); setPwd('');
+    } catch {
+      setPwdErr('Contraseña incorrecta');
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
+  const handleSavePlan = async () => {
+    setSaving(true); setSaveErr(''); setSaveOk(false);
+    try {
+      const n = parseInt(amount, 10);
+      if (isNaN(n) || n <= 0) throw new Error('Monto inválido');
+      await adminApi.updatePlatformMP({ plan_amount: n, plan_reason: reason, webhook_enforce: enforce });
+      qc.invalidateQueries({ queryKey: ['admin', 'platform-mp'] });
+      setSaveOk(true);
+      setTimeout(() => setSaveOk(false), 3000);
+    } catch (e: unknown) {
+      setSaveErr(e instanceof Error ? e.message : 'Error al guardar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!unlocked) {
+    return (
+      <div style={{ maxWidth: 420, margin: '40px auto', textAlign: 'center' }}>
+        <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+          <Lock size={26} color="#d97706" />
+        </div>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--s800)', marginBottom: 8 }}>Configuración protegida</h3>
+        <p style={{ fontSize: 13, color: 'var(--s500)', marginBottom: 20 }}>
+          Confirma tu contraseña de operador para acceder a la configuración de MercadoPago de la plataforma.
+        </p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            type="password"
+            placeholder="Contraseña"
+            value={pwd}
+            onChange={e => setPwd(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleUnlock()}
+            autoFocus
+            style={{ flex: 1, padding: '9px 12px', border: '1.5px solid var(--s200)', borderRadius: 8, fontSize: 14 }}
+          />
+          <button
+            onClick={handleUnlock}
+            disabled={unlocking}
+            style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: '#d97706', color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
+          >
+            {unlocking ? '...' : 'Desbloquear'}
+          </button>
+        </div>
+        {pwdErr && <p style={{ fontSize: 12.5, color: '#dc2626', marginTop: 8 }}>{pwdErr}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Unlock banner */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 16px', marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#92400e', fontWeight: 600 }}>
+          <Unlock size={15} color="#92400e" />
+          Configuración de plataforma desbloqueada
+        </div>
+        <button onClick={() => setUnlocked(false)} style={{ fontSize: 12, color: '#92400e', background: 'none', border: '1px solid #fde68a', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontWeight: 600 }}>
+          Bloquear
+        </button>
+      </div>
+
+      {isLoading ? (
+        <p style={{ color: 'var(--s400)', fontSize: 13 }}>Cargando...</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* Plan config */}
+          <div style={{ background: '#fff', border: '1px solid var(--s100)', borderRadius: 12, padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <CreditCard size={17} color="var(--teal)" />
+              <span style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--s800)' }}>Plan de suscripción</span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--s500)', display: 'block', marginBottom: 4 }}>Precio mensual (COP)</label>
+                <input
+                  type="number"
+                  value={amount}
+                  onChange={e => setAmount(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', border: '1.5px solid var(--s200)', borderRadius: 7, fontSize: 13.5, boxSizing: 'border-box' }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--s500)', display: 'block', marginBottom: 4 }}>Descripción en MercadoPago</label>
+                <input
+                  type="text"
+                  value={reason}
+                  onChange={e => setReason(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', border: '1.5px solid var(--s200)', borderRadius: 7, fontSize: 13.5, boxSizing: 'border-box' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--s700)' }}>
+                <input type="checkbox" checked={enforce} onChange={e => setEnforce(e.target.checked)}
+                  style={{ width: 16, height: 16, accentColor: 'var(--teal)', cursor: 'pointer' }} />
+                Rechazar webhooks con firma inválida (MP_WEBHOOK_ENFORCE)
+              </label>
+            </div>
+
+            <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                onClick={handleSavePlan}
+                disabled={saving}
+                style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: 'var(--teal)', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}
+              >
+                {saving ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+              {saveOk && <span style={{ fontSize: 12.5, color: '#059669', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}><CheckCircle size={13} /> Guardado</span>}
+              {saveErr && <span style={{ fontSize: 12.5, color: '#dc2626' }}>{saveErr}</span>}
+            </div>
+          </div>
+
+          {/* Credentials */}
+          <div style={{ background: '#fff', border: '1px solid var(--s100)', borderRadius: 12, padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <KeyRound size={17} color="#7c3aed" />
+              <span style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--s800)' }}>Credenciales MercadoPago</span>
+            </div>
+
+            {/* Access token */}
+            <div style={{ borderBottom: '1px solid var(--s100)', paddingBottom: 16, marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--s700)', marginBottom: 4 }}>Access Token (suscripciones)</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {cfg?.access_token_set
+                      ? <CheckCircle size={14} color="#059669" />
+                      : <XCircle size={14} color="#dc2626" />}
+                    <span style={{ fontSize: 12.5, color: 'var(--s500)' }}>
+                      {cfg?.access_token_set ? 'Configurado' : 'No configurado'}
+                    </span>
+                    {cfg && <SourceBadge source={cfg.access_token_source} />}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setRotatingToken(v => !v)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 7, border: '1.5px solid var(--s200)', background: '#fff', fontSize: 12.5, fontWeight: 600, color: 'var(--s600)', cursor: 'pointer' }}
+                >
+                  <RefreshCw size={12} /> Rotar token
+                </button>
+              </div>
+              {rotatingToken && (
+                <TokenRotateForm label="Access Token" field="access_token" onSaved={() => {
+                  setRotatingToken(false);
+                  qc.invalidateQueries({ queryKey: ['admin', 'platform-mp'] });
+                }} />
+              )}
+            </div>
+
+            {/* Webhook secret */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--s700)', marginBottom: 4 }}>Webhook Secret (firma de notificaciones)</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {cfg?.webhook_secret_set
+                      ? <CheckCircle size={14} color="#059669" />
+                      : <XCircle size={14} color="#dc2626" />}
+                    <span style={{ fontSize: 12.5, color: 'var(--s500)' }}>
+                      {cfg?.webhook_secret_set ? 'Configurado' : 'No configurado'}
+                    </span>
+                    {cfg && <SourceBadge source={cfg.webhook_secret_source} />}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setRotatingSecret(v => !v)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 7, border: '1.5px solid var(--s200)', background: '#fff', fontSize: 12.5, fontWeight: 600, color: 'var(--s600)', cursor: 'pointer' }}
+                >
+                  <RefreshCw size={12} /> Rotar secret
+                </button>
+              </div>
+              {rotatingSecret && (
+                <TokenRotateForm label="Webhook Secret" field="webhook_secret" onSaved={() => {
+                  setRotatingSecret(false);
+                  qc.invalidateQueries({ queryKey: ['admin', 'platform-mp'] });
+                }} />
+              )}
+            </div>
+          </div>
+
+          <p style={{ fontSize: 11.5, color: 'var(--s400)', margin: 0 }}>
+            Los valores guardados aquí (BD) tienen prioridad sobre las variables de entorno del servidor. El cache se renueva cada 5 minutos; los cambios aplican sin reiniciar el servicio.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-type Tab = 'tenants' | 'sistema' | 'legal';
+type Tab = 'tenants' | 'sistema' | 'legal' | 'plataforma';
 
 export function SuperAdminPage() {
   const [tab, setTab] = useState<Tab>('sistema');
   const isMobile = useIsMobile();
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'sistema', label: 'Sistema', icon: <Activity size={14} /> },
-    { id: 'tenants', label: 'Tenants', icon: <Building2 size={14} /> },
-    { id: 'legal',   label: 'Legal',   icon: <FileText size={14} /> },
+    { id: 'sistema',    label: 'Sistema',    icon: <Activity size={14} /> },
+    { id: 'tenants',    label: 'Tenants',    icon: <Building2 size={14} /> },
+    { id: 'legal',      label: 'Legal',      icon: <FileText size={14} /> },
+    { id: 'plataforma', label: 'Plataforma', icon: <CreditCard size={14} /> },
   ];
 
   return (
@@ -876,9 +1175,10 @@ export function SuperAdminPage() {
         ))}
       </div>
 
-      {tab === 'sistema' && <SistemaTab />}
-      {tab === 'tenants' && <TenantsTab />}
-      {tab === 'legal'   && <LegalTab />}
+      {tab === 'sistema'    && <SistemaTab />}
+      {tab === 'tenants'    && <TenantsTab />}
+      {tab === 'legal'      && <LegalTab />}
+      {tab === 'plataforma' && <PlataformaTab />}
     </div>
   );
 }

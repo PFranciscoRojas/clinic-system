@@ -97,7 +97,7 @@ func (a *app) buildRouter() http.Handler {
 	legalH.RegisterPublicRoutes(r)
 
 	// MercadoPago webhook — public (the gateway calls it), no JWT.
-	billingH := billinghandler.New(a.pool, a.cfg)
+	billingH := billinghandler.New(a.pool, a.km, a.cfg)
 	r.Mount("/api/v1/public/billing", billingH.PublicRoutes())
 
 	// Google Calendar OAuth callback — public (Google redirects here after consent).
@@ -166,7 +166,7 @@ func (a *app) buildRouter() http.Handler {
 
 		// Operator console: SYSTEM_ADMIN billing endpoints are always mounted;
 		// the destructive data-reset route only exists while ALLOW_DATA_RESET is on.
-		r.Mount("/api/v1/admin", adminhandler.New(a.pool, a.rdb, a.cfg.AllowDataReset).Routes())
+		r.Mount("/api/v1/admin", adminhandler.New(a.pool, a.rdb, a.km, a.cfg, a.cfg.AllowDataReset).Routes())
 
 		// Legal document CMS — SYSTEM_ADMIN write (public reads are above).
 		legalH.RegisterAdminRoutes(r.With(middleware.RequireRole("SYSTEM_ADMIN")))
