@@ -5,7 +5,7 @@ import {
   CalendarDays, Users, Settings, Stethoscope,
   Brain, Search, Plus, ChevronDown, Lock, LogOut, Menu,
   UserCircle, Calendar, X, Clock, Building2, Receipt,
-  PanelLeftClose, PanelLeftOpen,
+  PanelLeftClose, PanelLeftOpen, Activity, FileText, CreditCard,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useIsMobile } from '@/lib/useMediaQuery';
@@ -239,35 +239,49 @@ export function AppShell({ children }: Props) {
           {/* Nav */}
           <nav style={{ padding: showCollapsed ? '16px 8px' : '16px 12px', flex: 1 }}>
             {user?.roles?.includes('SYSTEM_ADMIN') ? (
-              // SYSTEM_ADMIN sees only operator-relevant items — no clinical nav.
+              // SYSTEM_ADMIN: each SuperAdmin tab + Settings as direct sidebar items.
               <>
-                {(() => {
-                  const active = location.pathname.startsWith('/admin');
+                {([
+                  { to: '/admin?tab=sistema',    Icon: Activity,    label: 'Sistema',      tab: 'sistema'    },
+                  { to: '/admin?tab=tenants',    Icon: Building2,   label: 'Tenants',      tab: 'tenants'    },
+                  { to: '/admin?tab=plataforma', Icon: CreditCard,  label: 'Plataforma',   tab: 'plataforma' },
+                  { to: '/admin?tab=legal',      Icon: FileText,    label: 'Legal',        tab: 'legal'      },
+                ] as const).map(({ to, Icon, label, tab }) => {
+                  const params = new URLSearchParams(location.search);
+                  const active = location.pathname === '/admin' && params.get('tab') === tab;
                   return (
-                    <Link to="/admin" title={showCollapsed ? 'Operador' : undefined} onClick={() => setMobileNavOpen(false)} style={{
+                    <Link key={tab} to={to} title={showCollapsed ? label : undefined} onClick={() => setMobileNavOpen(false)} style={{
                       display: 'flex', alignItems: 'center', gap: 10,
                       justifyContent: showCollapsed ? 'center' : 'flex-start',
                       padding: showCollapsed ? '12px 0' : '10px 12px', borderRadius: 8, marginBottom: 2,
                       background: active ? 'rgba(255,255,255,.18)' : 'transparent',
                       color: active ? '#fff' : 'rgba(255,255,255,.65)',
                       fontSize: 13.5, fontWeight: active ? 600 : 400,
-                    }}>
-                      <Building2 size={showCollapsed ? 18 : 16} color={active ? '#fff' : 'rgba(255,255,255,.65)'} />
-                      {!showCollapsed && <span style={{ flex: 1 }}>Operador SaaS</span>}
+                    }}
+                    onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,.09)'; }}
+                    onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                    >
+                      <Icon size={showCollapsed ? 18 : 16} color={active ? '#fff' : 'rgba(255,255,255,.65)'} />
+                      {!showCollapsed && <span style={{ flex: 1 }}>{label}</span>}
                     </Link>
                   );
-                })()}
+                })}
                 {(() => {
                   const active = location.pathname.startsWith('/settings');
                   return (
                     <Link to="/settings" title={showCollapsed ? 'Configuración' : undefined} onClick={() => setMobileNavOpen(false)} style={{
                       display: 'flex', alignItems: 'center', gap: 10,
                       justifyContent: showCollapsed ? 'center' : 'flex-start',
-                      padding: showCollapsed ? '12px 0' : '10px 12px', borderRadius: 8, marginBottom: 2,
+                      padding: showCollapsed ? '12px 0' : '10px 12px', borderRadius: 8, marginBottom: 2, marginTop: 6,
                       background: active ? 'rgba(255,255,255,.18)' : 'transparent',
                       color: active ? '#fff' : 'rgba(255,255,255,.65)',
                       fontSize: 13.5, fontWeight: active ? 600 : 400,
-                    }}>
+                      borderTop: '1px solid rgba(255,255,255,.10)',
+                      paddingTop: showCollapsed ? '12px' : '10px',
+                    }}
+                    onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,.09)'; }}
+                    onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                    >
                       <Settings size={showCollapsed ? 18 : 16} color={active ? '#fff' : 'rgba(255,255,255,.65)'} />
                       {!showCollapsed && <span style={{ flex: 1 }}>Configuración</span>}
                     </Link>

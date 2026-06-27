@@ -2126,13 +2126,15 @@ export function SettingsPage() {
   // Interns and receptionists can't manage staff or edit clinical templates, so
   // those sections aren't shown to them at all (the backend also gates them).
   const roles = user?.roles ?? [];
+  const isSysAdmin = roles.includes('SYSTEM_ADMIN');
   const canManageOrg = roles.includes('CLINIC_ADMIN') || roles.includes('PROFESSIONAL');
   const isAdmin = roles.includes('CLINIC_ADMIN');
   // Rate management needs billing:manage_rates (CLINIC_ADMIN); staff/templates
-  // need org management. The backend enforces all three regardless.
+  // need org management. SYSTEM_ADMIN only sees Perfil + Seguridad (no clinical tools).
   const visibleSections = SECTIONS.filter(s => {
     if (s.id === 'billing' || s.id === 'integrations') return isAdmin;
     if (s.id === 'users' || s.id === 'templates') return canManageOrg;
+    if (s.id === 'schedule' || s.id === 'ai' || s.id === 'notifications') return !isSysAdmin;
     return true;
   });
 

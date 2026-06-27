@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Building2, Activity, HardDrive, Database,
+  HardDrive, Database,
   Cpu, Users, Bot, RefreshCw, AlertTriangle, Info,
-  AlertCircle, Wrench, MemoryStick, FileText,
+  AlertCircle, Wrench, MemoryStick,
   CreditCard, Lock, Unlock, CheckCircle, XCircle, Eye, EyeOff, KeyRound,
 } from 'lucide-react';
 import { adminApi, type AdminOrg, type AdminOrgUser, type SystemHealth, type ActionResult, type PlatformMPConfig } from '@/api/admin';
@@ -1133,47 +1134,28 @@ function PlataformaTab() {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-type Tab = 'tenants' | 'sistema' | 'legal' | 'plataforma';
+type Tab = 'sistema' | 'tenants' | 'plataforma' | 'legal';
+const TAB_TITLES: Record<Tab, string> = {
+  sistema:    'Sistema',
+  tenants:    'Tenants',
+  plataforma: 'Plataforma',
+  legal:      'Legal',
+};
 
 export function SuperAdminPage() {
-  const [tab, setTab] = useState<Tab>('sistema');
-  const isMobile = useIsMobile();
+  const [searchParams] = useSearchParams();
+  const rawTab = searchParams.get('tab') ?? 'sistema';
+  const tab: Tab = (['sistema', 'tenants', 'plataforma', 'legal'] as Tab[]).includes(rawTab as Tab)
+    ? (rawTab as Tab)
+    : 'sistema';
 
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'sistema',    label: 'Sistema',    icon: <Activity size={14} /> },
-    { id: 'tenants',    label: 'Tenants',    icon: <Building2 size={14} /> },
-    { id: 'legal',      label: 'Legal',      icon: <FileText size={14} /> },
-    { id: 'plataforma', label: 'Plataforma', icon: <CreditCard size={14} /> },
-  ];
+  const isMobile = useIsMobile();
 
   return (
     <div style={{ padding: isMobile ? '14px 12px' : '28px 32px', maxWidth: 1100, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-        <Building2 size={22} color="var(--teal)" />
-        <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--s800)', margin: 0 }}>Operador SaaS</h1>
-      </div>
-      <p style={{ fontSize: 13.5, color: 'var(--s500)', marginBottom: 22 }}>
-        Consola de administración global — monitoreo del sistema y gestión de tenants.
-      </p>
-
-      <div style={{ display: 'flex', gap: 4, marginBottom: 22, borderBottom: '2px solid var(--s100)', paddingBottom: 0 }}>
-        {tabs.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '8px 18px', border: 'none', background: 'none',
-              fontSize: 13.5, fontWeight: tab === t.id ? 700 : 500,
-              color: tab === t.id ? 'var(--teal)' : 'var(--s500)',
-              borderBottom: tab === t.id ? '2px solid var(--teal)' : '2px solid transparent',
-              marginBottom: -2, cursor: 'pointer', borderRadius: '6px 6px 0 0',
-            }}
-          >
-            {t.icon}{t.label}
-          </button>
-        ))}
-      </div>
+      <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--s800)', margin: '0 0 24px' }}>
+        {TAB_TITLES[tab]}
+      </h1>
 
       {tab === 'sistema'    && <SistemaTab />}
       {tab === 'tenants'    && <TenantsTab />}
