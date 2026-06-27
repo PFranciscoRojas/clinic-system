@@ -442,8 +442,8 @@ export function AppShell({ children }: Props) {
 
             <div style={{ flex: 1 }} />
 
-            {/* Nueva Cita */}
-            <Link to="/appointments/new" style={{
+            {/* Nueva Cita — not shown to SYSTEM_ADMIN who has no appointments */}
+            {!user?.roles?.includes('SYSTEM_ADMIN') && <Link to="/appointments/new" style={{
               display: 'flex', alignItems: 'center', gap: 7,
               background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 10,
               padding: '9px 16px', fontSize: 13.5, fontWeight: 600,
@@ -455,7 +455,7 @@ export function AppShell({ children }: Props) {
             >
               <Plus size={16} color="white" />
               {!isMobile && 'Nueva Cita'}
-            </Link>
+            </Link>}
 
             {/* Profile */}
             <div ref={profileRef} style={{ position: 'relative' }}>
@@ -480,9 +480,11 @@ export function AppShell({ children }: Props) {
                     <div style={{ fontSize: 11.5, color: 'var(--s500)', marginTop: 2 }}>{user?.email ?? '—'}</div>
                   </div>
                   {[
-                    { Icon: UserCircle, label: 'Mi perfil',      action: () => { navigate('/settings'); setProfileOpen(false); } },
-                    { Icon: Calendar,   label: 'Mi agenda',      action: () => { navigate('/'); setProfileOpen(false); } },
-                    { Icon: Settings,   label: 'Configuración',  action: () => { navigate('/settings'); setProfileOpen(false); } },
+                    { Icon: UserCircle, label: 'Mi perfil',     action: () => { navigate('/settings'); setProfileOpen(false); } },
+                    ...(!user?.roles?.includes('SYSTEM_ADMIN') ? [
+                      { Icon: Calendar, label: 'Mi agenda',     action: () => { navigate('/'); setProfileOpen(false); } },
+                    ] : []),
+                    { Icon: Settings,  label: 'Configuración',  action: () => { navigate('/settings'); setProfileOpen(false); } },
                   ].map(({ Icon, label, action }) => (
                     <button key={label} onClick={action} style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '9px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13, color: 'var(--s700)', textAlign: 'left', transition: 'background .12s' }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'var(--s50)')}
