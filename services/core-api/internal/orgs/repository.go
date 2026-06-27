@@ -118,46 +118,54 @@ func (r *Repository) SetWhatsApp(ctx context.Context, orgID string, c WhatsAppCo
 // SessionPrice is in whole COP (no decimals, no floats — stored as INTEGER).
 // TokenSet tells the UI whether an MP access token is already stored.
 type PaymentConfig struct {
-	Enabled          bool `json:"enabled"`
-	SessionPrice     int  `json:"session_price"`
-	TokenSet         bool `json:"token_set"`
-	WebhookSecretSet bool `json:"webhook_secret_set"`
+	Enabled          bool   `json:"enabled"`
+	SessionPrice     int    `json:"session_price"`
+	TokenSet         bool   `json:"token_set"`
+	TokenMode        string `json:"token_mode"` // "live" | "test" | ""
+	WebhookSecretSet bool   `json:"webhook_secret_set"`
 }
 
 // GetPaymentConfig reads the org's booking payment config without exposing the token.
 // Returns a zero-value (disabled, default price) when no row exists.
 func (r *Repository) GetPaymentConfig(ctx context.Context, orgID string) (PaymentConfig, error) {
 	c := PaymentConfig{SessionPrice: 180000}
+	var mode *string
 	err := dbctx.From(ctx, r.pool).QueryRow(ctx, `
 		SELECT enabled, session_price,
 		       mp_access_token_enc IS NOT NULL,
+		       mp_token_mode,
 		       mp_webhook_secret_enc IS NOT NULL
 		FROM org_payment_config WHERE organization_id = $1`, orgID).
-		Scan(&c.Enabled, &c.SessionPrice, &c.TokenSet, &c.WebhookSecretSet)
+		Scan(&c.Enabled, &c.SessionPrice, &c.TokenSet, &mode, &c.WebhookSecretSet)
 	if err == pgx.ErrNoRows {
 		return c, nil
+	}
+	if mode != nil {
+		c.TokenMode = *mode
 	}
 	return c, err
 }
 
 // SetPaymentConfig upserts the org's booking payment config.
 // Nil slices (tokenEnc, webhookSecretEnc) preserve the existing stored value.
-func (r *Repository) SetPaymentConfig(ctx context.Context, orgID string, c PaymentConfig, tokenEnc []byte, keySource string, webhookSecretEnc []byte, webhookKeySource string) error {
+// tokenMode is only updated when a new token is provided ("" = keep existing).
+func (r *Repository) SetPaymentConfig(ctx context.Context, orgID string, c PaymentConfig, tokenEnc []byte, keySource, tokenMode string, webhookSecretEnc []byte, webhookKeySource string) error {
 	_, err := dbctx.From(ctx, r.pool).Exec(ctx, `
 		INSERT INTO org_payment_config
 		    (organization_id, enabled, session_price, mp_access_token_enc, key_source,
-		     mp_webhook_secret_enc, mp_webhook_secret_key_src)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		     mp_token_mode, mp_webhook_secret_enc, mp_webhook_secret_key_src)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (organization_id) DO UPDATE SET
 		    enabled                    = EXCLUDED.enabled,
 		    session_price              = EXCLUDED.session_price,
 		    mp_access_token_enc        = COALESCE(EXCLUDED.mp_access_token_enc, org_payment_config.mp_access_token_enc),
 		    key_source                 = COALESCE(EXCLUDED.key_source, org_payment_config.key_source),
+		    mp_token_mode              = COALESCE(EXCLUDED.mp_token_mode, org_payment_config.mp_token_mode),
 		    mp_webhook_secret_enc      = COALESCE(EXCLUDED.mp_webhook_secret_enc, org_payment_config.mp_webhook_secret_enc),
 		    mp_webhook_secret_key_src  = COALESCE(EXCLUDED.mp_webhook_secret_key_src, org_payment_config.mp_webhook_secret_key_src),
 		    updated_at                 = NOW()`,
 		orgID, c.Enabled, c.SessionPrice, tokenEnc, nullIfEmpty(keySource),
-		webhookSecretEnc, nullIfEmpty(webhookKeySource))
+		nullIfEmpty(tokenMode), webhookSecretEnc, nullIfEmpty(webhookKeySource))
 	return err
 }
 

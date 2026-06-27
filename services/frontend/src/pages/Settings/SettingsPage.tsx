@@ -70,7 +70,7 @@ function Toggle({ value, onChange, label, sub, disabled }: {
   );
 }
 
-function FieldRow({ label, sub, children }: { label: string; sub?: string; children: React.ReactNode }) {
+function FieldRow({ label, sub, children }: { label: React.ReactNode; sub?: string; children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, padding: '14px 0', borderBottom: '1px solid var(--s100)' }}>
       <div style={{ flex: 1, paddingTop: 2 }}>
@@ -1768,7 +1768,7 @@ function PlanStatusCard() {
 }
 
 function OnlinePaymentCard() {
-  const blank: PaymentSettings = { enabled: false, session_price: 180000, token_set: false, webhook_secret_set: false };
+  const blank: PaymentSettings = { enabled: false, session_price: 180000, token_set: false, token_mode: '', webhook_secret_set: false };
   const [s, setS] = useState<PaymentSettings>(blank);
   const [token, setToken] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
@@ -1801,6 +1801,14 @@ function OnlinePaymentCard() {
     finally { setSaving(false); }
   };
 
+  const modeBadge = s.token_set
+    ? s.token_mode === 'test'
+      ? <span style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 6, background: '#fef3c7', color: '#92400e', fontSize: 11, fontWeight: 700 }}>PRUEBA</span>
+      : s.token_mode === 'live'
+        ? <span style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 6, background: '#d1fae5', color: '#065f46', fontSize: 11, fontWeight: 700 }}>PRODUCCIÓN</span>
+        : null
+    : null;
+
   return (
     <SectionCard title="Pagos en línea (MercadoPago)" icon={CreditCard}>
       <p style={{ fontSize: 13, color: 'var(--s500)', lineHeight: 1.6, marginBottom: 12 }}>
@@ -1809,9 +1817,12 @@ function OnlinePaymentCard() {
       </p>
       <Toggle value={s.enabled} onChange={v => setS(p => ({ ...p, enabled: v }))}
         disabled={loading} label="Activar pagos en línea" sub="Habilita el botón de pago en el formulario de reserva público" />
-      <FieldRow label="Access Token (MP)" sub={s.token_set ? 'Token guardado — pega uno nuevo para reemplazarlo' : 'Token de producción de tu cuenta MercadoPago'}>
+      <FieldRow
+        label={<span style={{ display: 'flex', alignItems: 'center' }}>Access Token (MP){modeBadge}</span>}
+        sub={s.token_set ? 'Pega un token TEST-... para pruebas o APP_USR-... para producción' : 'Token de tu cuenta MercadoPago — APP_USR-... (producción) o TEST-... (pruebas)'}
+      >
         <FInput value={token} onChange={setToken} mono disabled={loading}
-          placeholder={s.token_set ? '••••••••••••••••' : 'APP_USR-...'} />
+          placeholder={s.token_set ? '••••••••••••••••' : 'APP_USR-... o TEST-...'} />
       </FieldRow>
       <FieldRow label="Clave secreta de webhook (MP)" sub={s.webhook_secret_set ? 'Clave guardada — pega una nueva para reemplazarla' : 'Clave secreta de notificaciones en el portal de MP'}>
         <FInput value={webhookSecret} onChange={setWebhookSecret} mono disabled={loading}

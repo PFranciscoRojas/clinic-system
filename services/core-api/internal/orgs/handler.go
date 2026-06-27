@@ -2,6 +2,7 @@ package orgs
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -94,7 +95,7 @@ func (h *Handler) putPayment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var tokenEnc []byte
-	var keySource string
+	var keySource, tokenMode string
 	if req.AccessToken != "" {
 		enc, ks, err := h.km.SealSecret([]byte(req.AccessToken))
 		if err != nil {
@@ -102,6 +103,11 @@ func (h *Handler) putPayment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		tokenEnc, keySource = enc, ks
+		if strings.HasPrefix(req.AccessToken, "TEST-") {
+			tokenMode = "test"
+		} else {
+			tokenMode = "live"
+		}
 	}
 
 	var webhookSecretEnc []byte
@@ -115,7 +121,7 @@ func (h *Handler) putPayment(w http.ResponseWriter, r *http.Request) {
 		webhookSecretEnc, webhookKeySource = enc, ks
 	}
 
-	if err := h.repo.SetPaymentConfig(r.Context(), claims.OrganizationID, req.PaymentConfig, tokenEnc, keySource, webhookSecretEnc, webhookKeySource); err != nil {
+	if err := h.repo.SetPaymentConfig(r.Context(), claims.OrganizationID, req.PaymentConfig, tokenEnc, keySource, tokenMode, webhookSecretEnc, webhookKeySource); err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "no se pudo guardar")
 		return
 	}

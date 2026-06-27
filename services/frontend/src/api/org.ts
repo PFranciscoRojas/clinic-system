@@ -28,10 +28,11 @@ export interface PaymentSettings {
   enabled: boolean;
   session_price: number;
   token_set: boolean;
+  token_mode: 'live' | 'test' | '';
   webhook_secret_set: boolean;
 }
 
-export type PaymentSave = Omit<PaymentSettings, 'token_set' | 'webhook_secret_set'> & {
+export type PaymentSave = Omit<PaymentSettings, 'token_set' | 'webhook_secret_set' | 'token_mode'> & {
   access_token: string;
   webhook_secret: string;
 };
