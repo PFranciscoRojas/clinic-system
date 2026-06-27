@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-06-26)
+## Estado actual (2026-06-27)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -14,10 +14,10 @@
 |---|---|---|
 | Fases 1–5 (core) | ✅ producción | Historia clínica, consentimientos, plan terapéutico, PDF export con Nº HC |
 | Ola 2 — SaaS multi-tenant | ✅ producción | RLS por tenant, signup self-serve, trial, gating 402, cobro MP suscripción |
-| Ola Booking | ✅ producción | `/book/:slug` público, tarjeta/PSE/Efecty, diferidos, emails, agenda integrada |
+| Ola Booking | ✅ producción | `/book/:slug` público, tarjeta/PSE/Efecty, diferidos, emails, agenda integrada. Pagos por tenant (migración 000042). Webhook secret per-org cifrado (migración 000043). Badge test/producción en Ajustes (migración 000044). |
 | Ola 3 — IA | ✅ producción | Recap pre-sesión, borrador clínico (estructurado/narrativo), plan TCC, detección de riesgo. Prefs de estilo+tono por profesional (migración 000037). Activo en VPS |
 | BC-6 Facturación | ✅ producción | Tarjeta/PSE/Efecty/Nequi, semana/mes/3meses/año, balance-por-paciente |
-| Ola Notificaciones | ✅ producción | Email diferido/conflicto a admins, WhatsApp templates (en revisión Meta) |
+| Ola Notificaciones | ✅ producción | Email diferido/conflicto a admins, WhatsApp `cita_confirmada` verificado (es_CO). Bloqueado por cargo pendiente Meta. |
 | Ola Integraciones | ✅ producción | Google Calendar OAuth per-profesional, sync SGHCP→Google, grabación con IndexedDB |
 | Ola Legal (Colombia) | ✅ producción | ToS + Política privacidad (Ley 1581/Ley 1480), DPA Encargado-Responsable, checkbox aceptación signup, modal DPA, banner IA reforzado. Migración 000038 |
 | Ola Gobernanza (sesión 6) | ✅ producción | Cuenta desactivada → 403 español. Eliminación con confirmación por correo + reactivación. CLINIC_ADMIN solo-lectura clínica (migración 000039). Break-the-glass con audit trail. CMS legal editable (migración 000040, Markdown, editor con preview). |
@@ -26,9 +26,11 @@
 
 ### Últimos commits a `main`
 
-- `1d5d85d` fix(clinical): break-the-glass sin cache sessionStorage — pide justificación cada visita — 2026-06-26
-- `8757a58` fix(clinical): ocultar controles de sesión en layout compacto para CLINIC_ADMIN puro — 2026-06-26
-- `31ef04e` feat(clinical): acceso clínico need-to-know + UX gobernanza sesión 8 — 2026-06-26
+- `d5c7b58` feat(orgs): modo test/producción visible en Ajustes → Pagos — 2026-06-27
+- `c45a264` feat(booking): añadir items.description y payer first/last_name a preferencia MP — 2026-06-27
+- `506e25f` feat(billing): webhook secret por tenant para pagos de citas — 2026-06-27
+- `7a6d6c7` fix(billing): quitar banner de renovación — solo mostrar en Ajustes — 2026-06-26
+- `f517307` feat(billing): mostrar estado del plan + fix resiliencia webhook — 2026-06-26
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 > **CI/CD:** `core-api` y `ai-service` se construyen en GitHub Actions y se despliegan a ghcr.io. El VPS solo hace `docker pull` — sin builds locales.
@@ -39,8 +41,8 @@
 
 | ID | Descripción | Estado |
 |---|---|---|
-| **MP webhook** | `MP_WEBHOOK_ENFORCE=false` en VPS — secreto mal configurado; hacer un pago real y capturar log de firma para corregir y volver a `true` | 🔴 pendiente |
-| **WhatsApp templates** | 3 plantillas `recordatorio_cita_24h`, `recordatorio_cita_2h`, `cita_confirmada` en revisión con Meta. Una vez aprobadas, configurar en Ajustes → Notificaciones con Phone Number ID `1138431989358649`. Necesita System User token permanente (el temporal caduca en 24h). | 🟡 en revisión Meta |
+| **MP webhook firma** | El webhook usa el secret global en vez del per-org (`orgWebhookSecret` retorna vacío). El booking procesó igual (`enforce=false`). Causa probable: primera notificación llegó antes de que el config estuviera en el org correcto. En producción funciona pero la firma no se verifica con el secret de Marcela — pendiente investigar y activar `MP_WEBHOOK_ENFORCE=true`. | 🟡 bajo riesgo |
+| **WhatsApp billing** | Cargo pendiente COP $90.675 en Meta Billing — API bloqueada hasta pagar. Una vez pagado, templates funcionan (cita_confirmada verificado). Pendiente configurar tpl_reminder_24h y tpl_reminder_2h en Ajustes. | 🟡 pendiente pago Meta |
 
 ---
 
@@ -48,7 +50,7 @@
 
 | Versión | Hito |
 |---|---|
-| `1.0.0` | Go-live real: token MP producción, precio real, `ALLOW_DATA_RESET=false`, `MP_WEBHOOK_ENFORCE=true`, validación legal por abogado (ToS/privacidad ya publicados como borrador) |
+| `1.0.0` | Go-live real: precio real ($180.000), `ALLOW_DATA_RESET=false`, `MP_WEBHOOK_ENFORCE=true`, validación legal por abogado (ToS/privacidad ya publicados como borrador) |
 | post-1.0 | Google Calendar bidireccional (Google→SGHCP): webhooks de push, sync_token, reconciliación |
 | post-1.0 | Google Calendar: verificación de app con Google para >100 usuarios (actualmente testing mode) |
 | post-1.0 | Videollamada / Zoom nativa |
@@ -81,11 +83,12 @@
 
 **Env crítico en VPS:**
 - `MASTER_KEY` — clave maestra de cifrado PII
-- `MP_ACCESS_TOKEN` — MercadoPago producción (actualmente token de prueba)
-- `MP_WEBHOOK_SECRET` — ✅ configurado y obligatorio (B-11 cerrado 2026-06-22)
+- `MP_ACCESS_TOKEN` — MercadoPago producción SaaS (suscripciones)
+- `MP_WEBHOOK_SECRET` — ✅ configurado (global, para suscripciones SaaS)
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google Calendar OAuth (añadidos 2026-06-24)
 - `ALLOW_DATA_RESET=true` → cambiar a `false` en go-live (1.0.0)
 - Demo: `admin@demo.clinica.co` / `Admin1234!` · tenant ID `005e349d2fbc5d30000000003`
+- Marcela org: `fbf1fb3d-607d-4f4d-9870-05e95f63a1a3` (slug `marcelachapues`) — token MP **live** ✅
 
 ---
 
@@ -96,9 +99,9 @@
 | `core-api` | `services/core-api/` | ✅ Go 1.25, prod |
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
-| Migrations | `services/core-api/migrations/` | Última: `000041_enforce_patient_staff_rel` |
+| Migrations | `services/core-api/migrations/` | Última: `000044_org_payment_token_mode` |
 | CI/CD | `.github/workflows/build-ai-service.yml` + `build-core-api.yml` | Build+push ghcr.io + deploy SSH al VPS (secrets: `VPS_HOST`, `VPS_SSH_KEY`, `GHCR_TOKEN`) |
-| Claude skills | `~/.claude/commands/` | Sincronizadas 2026-06-26 |
+| Claude skills | `~/.claude/commands/` | Sincronizadas 2026-06-27 |
 
 ---
 

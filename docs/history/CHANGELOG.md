@@ -13,6 +13,22 @@
 
 ---
 
+## 2026-06-27 (sesión 11)
+
+- feat(booking): webhook secret por tenant — migración 000043 añade `mp_webhook_secret_enc`+`mp_webhook_secret_key_src` a `org_payment_config`; `orgWebhookSecret()` en booking handler descifra y usa el secret del tenant, con fallback al global; `PUT /org/payment` acepta `webhook_secret` y lo cifra (`506e25f`). Descubrimiento: el slug `marcelachapues` apuntaba a org distinto del que tenía el payment config — copiado al org correcto (`fbf1fb3d`). Prueba real end-to-end: pago COP $1.000 procesado, webhook llegó, cita creada `SCHEDULED` ✅.
+- feat(booking): `items.description` + `payer.first_name`/`last_name` en preferencia MP siguiendo recomendaciones de portal de calidad — mejora tasa de aprobación (`c45a264`).
+- feat(orgs): badge PRUEBA/PRODUCCIÓN en Ajustes → Tarifas → Pagos en línea — migración 000044 columna `mp_token_mode` (test|live); backend detecta prefix `TEST-`/`APP_USR-` al guardar; frontend muestra badge de color; el admin cambia de modo pegando el token que quiera (`d5c7b58`).
+- operativo sandbox MP: para probar con credenciales TEST el buyer debe crearse en el mismo portal de MP del vendedor (cuentas de prueba aisladas por app). Recomendación: hacer pruebas reales con montos bajos ($100–$1.000) y reembolsar desde el portal.
+
+## 2026-06-26 (sesión 10)
+
+- fix(booking): webhook MP de rechazo (OTHE/PSE fallido) borraba el booking inmediatamente — si el usuario reintentaba con APRO en el mismo checkout de MP, el webhook de aprobación no encontraba el booking y la cita nunca quedaba confirmada. Fix: `DELETE` → `UPDATE hold_expires_at = NOW()`: slot libre para otros pero registro existe para el retry (`8be3337`).
+- fix(booking): retry con APRO verificado end-to-end — cita creada, WhatsApp `cita_confirmada` disparado.
+- fix(whatsapp): plantillas Meta en Colombia usan código `es_CO`, no `es`. Default del UI y fallback actualizados (`fdbefd8`). BD parcheada directamente (`UPDATE org_whatsapp_config SET lang = 'es_CO'`).
+- fix(orgs): `PUT /org/whatsapp` retornaba 500 — `repository.go` usaba `r.pool` directo (sin tenant scope RLS). Corregido con `dbctx.From` en los 4 métodos de request context (`524de84`). Desplegado vía CI.
+- operativo WhatsApp: cargo COP $90.675 pendiente en Meta Billing — API Cloud bloqueada hasta pagar. No es sandbox; todo mensaje vía Cloud API se cobra desde el primero (desactivar en Ajustes durante pruebas futuras).
+- feat(booking): pagos por tenant — migración 000042 `org_payment_config` (mp_access_token_enc cifrado AES-256-GCM, session_price INTEGER, RLS); `GET/PUT /org/payment`; booking handler carga token del tenant vía `paymentFor()` y lo usa en CreatePreference + GetPayment (webhook lee `?org=<orgID>`); token global `MP_ACCESS_TOKEN` queda exclusivo para suscripciones SaaS. UI: tarjeta "Pagos en línea (MercadoPago)" en Ajustes → Tarifas (`e1e6b02`). Migración aplicada en VPS.
+
 ## 2026-06-26 (sesión 9)
 
 - fix(clinical): layout compacto de `AppointmentPage` mostraba "Finalizar sesión", "Pausar", "Reanudar" y "Grabar" a CLINIC_ADMIN puro — añadido `!pureAdmin` a todos los controles del modo escritura sticky (líneas 726-756). El layout principal ya tenía el guard desde sesión 8 (`8757a58`). Desplegado: frontend rebuild en VPS.
