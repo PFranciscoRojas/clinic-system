@@ -1768,9 +1768,10 @@ function PlanStatusCard() {
 }
 
 function OnlinePaymentCard() {
-  const blank: PaymentSettings = { enabled: false, session_price: 180000, token_set: false };
+  const blank: PaymentSettings = { enabled: false, session_price: 180000, token_set: false, webhook_secret_set: false };
   const [s, setS] = useState<PaymentSettings>(blank);
   const [token, setToken] = useState('');
+  const [webhookSecret, setWebhookSecret] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -1789,9 +1790,11 @@ function OnlinePaymentCard() {
         enabled: s.enabled,
         session_price: s.session_price,
         access_token: token,
+        webhook_secret: webhookSecret,
       });
       setS(out);
       setToken('');
+      setWebhookSecret('');
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch { /* keep form */ }
@@ -1809,6 +1812,10 @@ function OnlinePaymentCard() {
       <FieldRow label="Access Token (MP)" sub={s.token_set ? 'Token guardado — pega uno nuevo para reemplazarlo' : 'Token de producción de tu cuenta MercadoPago'}>
         <FInput value={token} onChange={setToken} mono disabled={loading}
           placeholder={s.token_set ? '••••••••••••••••' : 'APP_USR-...'} />
+      </FieldRow>
+      <FieldRow label="Clave secreta de webhook (MP)" sub={s.webhook_secret_set ? 'Clave guardada — pega una nueva para reemplazarla' : 'Clave secreta de notificaciones en el portal de MP'}>
+        <FInput value={webhookSecret} onChange={setWebhookSecret} mono disabled={loading}
+          placeholder={s.webhook_secret_set ? '••••••••••••••••' : 'b2faf936...'} />
       </FieldRow>
       <FieldRow label="Precio de sesión (COP)" sub="Monto que paga el paciente al reservar en línea">
         <FInput value={String(s.session_price)} onChange={v => setS(p => ({ ...p, session_price: Number(v) || 0 }))}

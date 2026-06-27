@@ -28,9 +28,13 @@ export interface PaymentSettings {
   enabled: boolean;
   session_price: number;
   token_set: boolean;
+  webhook_secret_set: boolean;
 }
 
-export type PaymentSave = Omit<PaymentSettings, 'token_set'> & { access_token: string };
+export type PaymentSave = Omit<PaymentSettings, 'token_set' | 'webhook_secret_set'> & {
+  access_token: string;
+  webhook_secret: string;
+};
 
 export const orgApi = {
   getNotifications: () => api.get<NotificationSettings>('/org/notifications'),

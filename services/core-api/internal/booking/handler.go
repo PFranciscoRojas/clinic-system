@@ -82,6 +82,28 @@ type tenantPayment struct {
 	price int
 }
 
+// orgWebhookSecret returns the decrypted per-org MP webhook secret (bypasses RLS
+// intentionally — the secret is only used for signature verification, not patient data).
+func (h *Handler) orgWebhookSecret(orgID string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var enc []byte
+	var ks string
+	err := h.pool.QueryRow(ctx, `
+		SELECT COALESCE(mp_webhook_secret_enc,''), COALESCE(mp_webhook_secret_key_src,'')
+		FROM org_payment_config WHERE organization_id = $1`, orgID).
+		Scan(&enc, &ks)
+	if err != nil || len(enc) == 0 {
+		return "", err
+	}
+	plain, err := h.km.OpenSecret(ks, enc)
+	if err != nil {
+		return "", err
+	}
+	defer crypto.Zeroize(plain)
+	return string(plain), nil
+}
+
 // paymentFor loads and decrypts the org's booking payment config under RLS.
 // Returns ok=false when the org has no config, is disabled, or has no token.
 func (h *Handler) paymentFor(ctx context.Context, orgID string) (tenantPayment, bool) {
@@ -358,7 +380,12 @@ func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
 		return // legacy or ping without org param — ignore
 	}
 
-	if ok, detail := mercadopago.VerifyWebhook(h.cfg.MPWebhookSecret,
+	// Use the per-org webhook secret when available; fall back to the global one.
+	webhookSecret := h.cfg.MPWebhookSecret
+	if orgSecret, err := h.orgWebhookSecret(orgID); err == nil && orgSecret != "" {
+		webhookSecret = orgSecret
+	}
+	if ok, detail := mercadopago.VerifyWebhook(webhookSecret,
 		r.Header.Get("x-signature"), r.Header.Get("x-request-id"), r.URL.Query().Get("data.id")); !ok {
 		slog.Warn("booking.webhook: signature check failed", "detail", detail, "enforce", h.cfg.MPWebhookEnforce)
 		if h.cfg.MPWebhookEnforce {

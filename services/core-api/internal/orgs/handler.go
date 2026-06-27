@@ -78,7 +78,8 @@ func (h *Handler) getPayment(w http.ResponseWriter, r *http.Request) {
 
 type paymentRequest struct {
 	PaymentConfig
-	AccessToken string `json:"access_token"`
+	AccessToken   string `json:"access_token"`
+	WebhookSecret string `json:"webhook_secret"`
 }
 
 func (h *Handler) putPayment(w http.ResponseWriter, r *http.Request) {
@@ -103,7 +104,18 @@ func (h *Handler) putPayment(w http.ResponseWriter, r *http.Request) {
 		tokenEnc, keySource = enc, ks
 	}
 
-	if err := h.repo.SetPaymentConfig(r.Context(), claims.OrganizationID, req.PaymentConfig, tokenEnc, keySource); err != nil {
+	var webhookSecretEnc []byte
+	var webhookKeySource string
+	if req.WebhookSecret != "" {
+		enc, ks, err := h.km.SealSecret([]byte(req.WebhookSecret))
+		if err != nil {
+			httputil.WriteError(w, http.StatusInternalServerError, "no se pudo cifrar el webhook secret")
+			return
+		}
+		webhookSecretEnc, webhookKeySource = enc, ks
+	}
+
+	if err := h.repo.SetPaymentConfig(r.Context(), claims.OrganizationID, req.PaymentConfig, tokenEnc, keySource, webhookSecretEnc, webhookKeySource); err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "no se pudo guardar")
 		return
 	}
