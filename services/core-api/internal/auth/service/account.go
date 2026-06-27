@@ -9,6 +9,19 @@ import (
 	"sghcp/core-api/internal/auth"
 )
 
+// VerifyPassword checks that password matches the stored hash without any
+// side effects — used to gate sensitive configuration changes.
+func (s *Service) VerifyPassword(ctx context.Context, userID, password string) error {
+	user, err := s.repo.FindUserByID(ctx, userID)
+	if err != nil {
+		return auth.ErrUserNotFound
+	}
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
+		return auth.ErrInvalidCredentials
+	}
+	return nil
+}
+
 // ChangePassword lets an authenticated user rotate their own password after
 // proving they know the current one.
 func (s *Service) ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error {

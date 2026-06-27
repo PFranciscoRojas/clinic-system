@@ -27,6 +27,7 @@ func (h *Handler) Routes(jwtSecret []byte) chi.Router {
 		r.Get("/me", h.me)
 		r.Patch("/profile", h.updateProfile)
 		r.Patch("/me/email", h.requestEmailChange)
+		r.Post("/verify-password", h.verifyPassword)
 		r.Post("/change-password", h.changePassword)
 		r.Post("/onboarding-complete", h.onboardingComplete)
 		r.Post("/accept-dpa", h.acceptDpa)

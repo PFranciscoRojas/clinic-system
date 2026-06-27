@@ -5,7 +5,7 @@ import {
   PenLine, Lock, Key, CheckCircle, Mail,
   Upload, Palette, Users, Trash2, Save,
   Shield, LogOut, Plus, Receipt, Pencil, X,
-  MessageCircle, Calendar, CreditCard,
+  MessageCircle, Calendar, CreditCard, Plug,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
@@ -27,7 +27,7 @@ import { getLockConfig, setLockConfig } from '@/lib/screenLock';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type SectionId = 'profile' | 'schedule' | 'notifications' | 'ai' | 'security' | 'templates' | 'billing' | 'users';
+type SectionId = 'profile' | 'schedule' | 'notifications' | 'ai' | 'security' | 'templates' | 'billing' | 'users' | 'integrations';
 
 const SECTIONS: { id: SectionId; icon: React.ElementType; label: string; color?: string; group: string }[] = [
   { id: 'profile',       icon: UserRound,  label: 'Perfil profesional',  group: 'Personal'     },
@@ -38,6 +38,7 @@ const SECTIONS: { id: SectionId; icon: React.ElementType; label: string; color?:
   { id: 'templates',     icon: FileText,    label: 'Plantillas clínicas',  group: 'Herramientas',color: '#8b5cf6' },
   { id: 'billing',       icon: Receipt,     label: 'Tarifas',              group: 'Equipo',      color: '#10b981' },
   { id: 'users',         icon: Users,       label: 'Usuarios',             group: 'Equipo',      color: '#0ea5e9' },
+  { id: 'integrations',  icon: Plug,        label: 'Integraciones',        group: 'Equipo',      color: '#7c3aed' },
 ];
 
 const ROLE_COLORS: Record<string, { color: string; bg: string }> = {
@@ -891,9 +892,11 @@ function NotificationsSection({ setDirty }: { setDirty: (v: boolean) => void }) 
       <SectionCard title="Canales de notificación" icon={Send}>
         <Toggle value disabled onChange={() => {}} label="Correo electrónico" sub="Confirmaciones de cita y recordatorios — activo" />
         <SoonRow label="SMS" sub="Respaldo cuando WhatsApp no está disponible" />
+        <div style={{ padding: '12px 0 4px', fontSize: 12.5, color: 'var(--s400)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Plug size={12} color="#7c3aed" />
+          <span>La configuración de WhatsApp (Meta) se gestiona en <b>Integraciones</b>.</span>
+        </div>
       </SectionCard>
-
-      <WhatsAppCard setDirty={setDirty} />
 
       <SectionCard title="Recordatorios a pacientes" icon={Bell}>
         <div style={{ fontSize: 13, color: 'var(--s500)', padding: '4px 0 8px', lineHeight: 1.6 }}>
@@ -2013,6 +2016,101 @@ function RateForm({ form, setForm, onSave, onCancel, saving, err }: {
   );
 }
 
+// ── Integrations section (CLINIC_ADMIN only, password-gated) ─────────────────
+
+function IntegrationsSection() {
+  const [unlocked, setUnlocked] = useState(false);
+  const [pwd,      setPwd]      = useState('');
+  const [pwdErr,   setPwdErr]   = useState('');
+  const [verifying,setVerifying]= useState(false);
+
+  const handleUnlock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pwd.trim()) return;
+    setVerifying(true); setPwdErr('');
+    try {
+      await authApi.verifyPassword(pwd.trim());
+      setUnlocked(true);
+      setPwd('');
+    } catch {
+      setPwdErr('Contraseña incorrecta. Verifica e intenta de nuevo.');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  if (!unlocked) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '48px 24px', maxWidth: 420 }}>
+        <div style={{ width: 56, height: 56, borderRadius: 16, background: '#f5f3ff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+          <Lock size={26} color="#7c3aed" />
+        </div>
+        <h2 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 800, color: 'var(--s800)', textAlign: 'center' }}>
+          Área protegida
+        </h2>
+        <p style={{ margin: '0 0 24px', fontSize: 13.5, color: 'var(--s500)', textAlign: 'center', lineHeight: 1.6 }}>
+          Aquí se configuran las credenciales de servicios externos (MercadoPago, WhatsApp).
+          Un cambio accidental puede interrumpir los pagos en línea o los recordatorios.
+          Confirma tu contraseña para continuar.
+        </p>
+        <form onSubmit={handleUnlock} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <input
+            value={pwd}
+            onChange={e => { setPwd(e.target.value); setPwdErr(''); }}
+            type="password"
+            autoFocus
+            autoComplete="current-password"
+            placeholder="Tu contraseña"
+            style={{
+              padding: '10px 14px', borderRadius: 10,
+              border: `1.5px solid ${pwdErr ? '#ef4444' : 'var(--s200)'}`,
+              fontSize: 14, color: 'var(--s800)', outline: 'none', width: '100%', boxSizing: 'border-box',
+            }}
+          />
+          {pwdErr && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: '#ef4444' }}>
+              <AlertCircle size={13} />{pwdErr}
+            </div>
+          )}
+          <button
+            type="submit"
+            disabled={verifying || !pwd.trim()}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              padding: '10px 20px', borderRadius: 10, border: 'none',
+              background: verifying || !pwd.trim() ? 'var(--s200)' : '#7c3aed',
+              color: verifying || !pwd.trim() ? 'var(--s400)' : '#fff',
+              fontSize: 14, fontWeight: 700, cursor: verifying || !pwd.trim() ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {verifying
+              ? <><span style={{ width: 14, height: 14, border: '2.5px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: 99, animation: 'spin .7s linear infinite', display: 'inline-block' }} />Verificando…</>
+              : <><Key size={15} />Desbloquear</>}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '10px 14px', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 10, fontSize: 12.5, color: '#5b21b6' }}>
+        <CheckCircle size={13} color="#7c3aed" />
+        <span>Sesión desbloqueada — puedes editar las credenciales de integración.</span>
+        <button
+          onClick={() => setUnlocked(false)}
+          style={{ marginLeft: 'auto', border: 'none', background: 'none', color: '#7c3aed', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+        >
+          Bloquear
+        </button>
+      </div>
+
+      <OnlinePaymentCard />
+      <WhatsAppCard setDirty={() => {}} />
+    </>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function SettingsPage() {
@@ -2033,7 +2131,7 @@ export function SettingsPage() {
   // Rate management needs billing:manage_rates (CLINIC_ADMIN); staff/templates
   // need org management. The backend enforces all three regardless.
   const visibleSections = SECTIONS.filter(s => {
-    if (s.id === 'billing') return isAdmin;
+    if (s.id === 'billing' || s.id === 'integrations') return isAdmin;
     if (s.id === 'users' || s.id === 'templates') return canManageOrg;
     return true;
   });
@@ -2147,8 +2245,9 @@ export function SettingsPage() {
             {section === 'ai'            && <AISection            setDirty={markDirty} saveRef={aiSaveRef} />}
             {section === 'security'      && <SecuritySection />}
             {section === 'templates'     && <ConsentTemplatesSection />}
-            {section === 'billing'       && <><PlanStatusCard /><OnlinePaymentCard /><RatesSection /></>}
+            {section === 'billing'       && <><PlanStatusCard /><RatesSection /></>}
             {section === 'users'         && <UsersSection />}
+            {section === 'integrations'  && <IntegrationsSection />}
           </div>
           <SaveBar dirty={dirty} saving={saving} saved={saved} onSave={handleSave} />
         </div>

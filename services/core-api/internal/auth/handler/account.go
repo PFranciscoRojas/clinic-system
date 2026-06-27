@@ -8,6 +8,24 @@ import (
 	"sghcp/core-api/internal/shared/middleware"
 )
 
+// POST /api/v1/auth/verify-password — confirms the caller's password is correct
+// without any side-effects. Used by the frontend to gate sensitive config changes.
+func (h *Handler) verifyPassword(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	var body struct {
+		Password string `json:"password"`
+	}
+	if err := httputil.DecodeJSON(r, &body); err != nil || body.Password == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "password is required")
+		return
+	}
+	if err := h.svc.VerifyPassword(r.Context(), claims.UserID, body.Password); err != nil {
+		writeErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // POST /api/v1/auth/change-password — the caller rotates their own password.
 func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())

@@ -67,6 +67,8 @@ export const authApi = {
   confirmReset: (token: string, new_password: string) =>
     api.post<void>('/auth/reset-password-confirm', { token, new_password }),
 
+  verifyPassword: (password: string) =>
+    api.post<void>('/auth/verify-password', { password }),
   changePassword: (current_password: string, new_password: string) =>
     api.post<void>('/auth/change-password', { current_password, new_password }),
   onboardingComplete: () =>
