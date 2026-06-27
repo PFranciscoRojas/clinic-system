@@ -82,17 +82,19 @@ type tenantPayment struct {
 	price int
 }
 
-// orgWebhookSecret returns the decrypted per-org MP webhook secret (bypasses RLS
-// intentionally — the secret is only used for signature verification, not patient data).
+// orgWebhookSecret returns the decrypted per-org MP webhook secret. Uses
+// WithOrgScope to satisfy the RLS policy on org_payment_config.
 func (h *Handler) orgWebhookSecret(orgID string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var enc []byte
 	var ks string
-	err := h.pool.QueryRow(ctx, `
-		SELECT COALESCE(mp_webhook_secret_enc,''), COALESCE(mp_webhook_secret_key_src,'')
-		FROM org_payment_config WHERE organization_id = $1`, orgID).
-		Scan(&enc, &ks)
+	err := dbctx.WithOrgScope(ctx, h.pool, orgID, func(ctx context.Context) error {
+		return dbctx.From(ctx, h.pool).QueryRow(ctx, `
+			SELECT COALESCE(mp_webhook_secret_enc,''), COALESCE(mp_webhook_secret_key_src,'')
+			FROM org_payment_config WHERE organization_id = $1`, orgID).
+			Scan(&enc, &ks)
+	})
 	if err != nil || len(enc) == 0 {
 		return "", err
 	}
