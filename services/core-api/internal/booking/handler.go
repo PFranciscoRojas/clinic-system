@@ -307,10 +307,13 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 
+		// Split full name into first/last for MP approval-rate fields.
+		firstName, lastName := splitName(body.Name)
+
 		// Include org in the notification URL so the webhook knows which tenant
 		// token to use when calling GetPayment (each clinic's own MP account).
 		prefID, ip, err := pay.mp.CreatePreference(
-			ctx, title, amount, bookingID, body.Email,
+			ctx, title, amount, bookingID, body.Email, firstName, lastName,
 			h.cfg.AppBaseURL+"/book/return?slug="+url.QueryEscape(body.OrgSlug),
 			h.cfg.AppBaseURL+"/api/v1/public/pay/webhook?org="+url.QueryEscape(prof.OrgID),
 		)
@@ -681,4 +684,15 @@ func notification(r *http.Request) (kind, id string) {
 		}
 	}
 	return strings.ToLower(kind), id
+}
+
+// splitName splits a full name into first and last name for MP payer fields.
+// "Ana María López" → ("Ana María", "López"). Single word → (name, "").
+func splitName(full string) (first, last string) {
+	full = strings.TrimSpace(full)
+	i := strings.LastIndex(full, " ")
+	if i < 0 {
+		return full, ""
+	}
+	return strings.TrimSpace(full[:i]), strings.TrimSpace(full[i+1:])
 }

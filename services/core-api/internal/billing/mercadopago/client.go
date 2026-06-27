@@ -153,23 +153,28 @@ func (c *Client) PatchPreapprovalNotificationURL(ctx context.Context, preapprova
 
 // CreatePreference creates a one-time Checkout Pro preference (used for patient
 // appointment payments) and returns its id and hosted checkout URL.
-//
-// CreatePreference creates a one-time Checkout Pro preference (used for patient
-// appointment payments) and returns its id and hosted checkout URL.
 // Deadline enforcement for deferred (Efecty/cash) payments is done server-side:
 // holdDeferred caps hold_expires_at to before the appointment, so a voucher
 // paid after the deadline won't confirm a slot that's already been freed.
-func (c *Client) CreatePreference(ctx context.Context, title string, amountCOP int, externalRef, payerEmail, backURL, notificationURL string) (prefID, initPoint string, err error) {
+func (c *Client) CreatePreference(ctx context.Context, title string, amountCOP int, externalRef, payerEmail, payerFirstName, payerLastName, backURL, notificationURL string) (prefID, initPoint string, err error) {
 	payload := map[string]any{
 		"items": []map[string]any{{
-			"title": title, "quantity": 1, "unit_price": amountCOP, "currency_id": "COP",
+			"title":       title,
+			"description": title,
+			"quantity":    1,
+			"unit_price":  amountCOP,
+			"currency_id": "COP",
 		}},
 		"external_reference": externalRef,
 		"back_urls":          map[string]string{"success": backURL, "failure": backURL, "pending": backURL},
 		// No auto_return: MercadoPago shows a manual "Volver al sitio" button on
 		// its success screen instead of an automatic countdown redirect.
 		"notification_url": notificationURL,
-		"payer":              map[string]string{"email": payerEmail},
+		"payer": map[string]string{
+			"email":      payerEmail,
+			"first_name": payerFirstName,
+			"last_name":  payerLastName,
+		},
 	}
 	var out struct {
 		ID        string `json:"id"`
