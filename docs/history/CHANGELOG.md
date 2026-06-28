@@ -13,9 +13,10 @@
 
 ---
 
-## 2026-06-28 (sesión 15)
+## 2026-06-28 (sesión 15–16)
 
 - feat(clinical): plantillas de registro clínico definibles por el profesional en Markdown — tabla `clinical_record_templates` (migración 000046, RLS, permisos `record_templates:*`), `clinical_records.template_id`; parser Go `## heading {type}` → `[]SectionDef`; 7 endpoints CRUD + `/parse` preview; `field-widgets.json` catálogo compartido Go/Python/TS; Settings → "Formatos de registro" con editor markdown + preview en vivo + paleta de widgets; `TemplatedSectionsForm` renderiza `text/select/scale/checklist/widget` usando componentes existentes (`MentalExamChecklist`, `RiskSelector`, etc.); `RecordForm` con selector de plantilla, default preseleccionada; `AIDraftPage` usa `TemplatedSectionsForm` con secciones tipadas cuando draft tiene `template_id`; `AppointmentPage` propaga `template_id` a los 3 puntos de `uploadAudio`; worker Python carga schema JSONB y construye prompt dinámico por tipo. Deployado a VPS (migración 000046 aplicada, frontend rebuild). (`aa4ce66`, `32620a7`)
+- feat(clinical/pdf): `pdf.RenderInput.TemplateSections []TemplateSectionDef` — cuando el registro tiene `template_id`, el handler carga el schema JSONB (incluso si está archivado, Res. 1995/1999) y el renderer usa etiquetas y orden de la plantilla; render por tipo: `text/select`→MultiCell, `scale`→"N/max", `checklist`→viñetas, `widget`→dispatch (mental_exam, distress_scale, risk, task_checklist, formulation_5f, functional_analysis, task_adherence, session_evaluation, functionality, spa_history); `treatment_plan` y `diagnoses` omitidos (tienen sección propia en el PDF); fallback a formato integrado si template no encontrado. (`2991af2`)
 
 ## 2026-06-27 (sesión 14)
 
