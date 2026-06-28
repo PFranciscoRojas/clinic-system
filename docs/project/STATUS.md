@@ -26,11 +26,11 @@
 
 ### Últimos commits a `main`
 
+- `c6191d3` feat(admin): pestaña Plataforma en SuperAdmin con config MP por BD + nav limpio para SYSTEM_ADMIN — 2026-06-27
 - `829d4ec` feat(settings): pestaña Integraciones con gate de contraseña (CLINIC_ADMIN) — 2026-06-27
 - `8580e05` fix(booking): use WithOrgScope in orgWebhookSecret to satisfy RLS — 2026-06-27
 - `d5c7b58` feat(orgs): modo test/producción visible en Ajustes → Pagos — 2026-06-27
 - `c45a264` feat(booking): añadir items.description y payer first/last_name a preferencia MP — 2026-06-27
-- `506e25f` feat(billing): webhook secret por tenant para pagos de citas — 2026-06-27
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 > **CI/CD:** `core-api` y `ai-service` se construyen en GitHub Actions y se despliegan a ghcr.io. El VPS solo hace `docker pull` — sin builds locales.
@@ -42,6 +42,7 @@
 | ID | Descripción | Estado |
 |---|---|---|
 | **WhatsApp Meta API** | Cargo COP $90.675 pagado. Pendiente: confirmar que la API se desbloqueó, configurar `tpl_reminder_24h` y `tpl_reminder_2h` en Ajustes → Integraciones con los nombres exactos de las plantillas aprobadas. | 🟡 verificar desbloqueo |
+| **Validación de demanda** | Conseguir 2-3 psicólogas externas en beta de diseño (acceso gratis 2 semanas, acompañamiento 1ª sesión en vivo). Sin esto, el go-live 1.0.0 carece de señal de mercado. 2 contactos disponibles (colegas de la esposa). | 🔴 sin iniciar |
 
 ---
 
@@ -82,8 +83,8 @@
 
 **Env crítico en VPS:**
 - `MASTER_KEY` — clave maestra de cifrado PII
-- `MP_ACCESS_TOKEN` — MercadoPago producción SaaS (suscripciones)
-- `MP_WEBHOOK_SECRET` — ✅ configurado (global, para suscripciones SaaS)
+- `MP_ACCESS_TOKEN` — MercadoPago producción SaaS (suscripciones); sobrerideable desde UI en Operador → Plataforma (tabla `platform_settings`)
+- `MP_WEBHOOK_SECRET` — ✅ configurado (global); sobrerideable desde UI en Operador → Plataforma
 - `MP_WEBHOOK_ENFORCE=true` — ✅ activado (sesión 12); org payment configs usa secret per-tenant vía `WithOrgScope`
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google Calendar OAuth (añadidos 2026-06-24)
 - `ALLOW_DATA_RESET=true` → cambiar a `false` en go-live (1.0.0)
@@ -99,7 +100,7 @@
 | `core-api` | `services/core-api/` | ✅ Go 1.25, prod |
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
-| Migrations | `services/core-api/migrations/` | Última: `000044_org_payment_token_mode` |
+| Migrations | `services/core-api/migrations/` | Última: `000045_platform_settings` |
 | CI/CD | `.github/workflows/build-ai-service.yml` + `build-core-api.yml` | Build+push ghcr.io + deploy SSH al VPS (secrets: `VPS_HOST`, `VPS_SSH_KEY`, `GHCR_TOKEN`) |
 | Claude skills | `~/.claude/commands/` | Sincronizadas 2026-06-27 |
 

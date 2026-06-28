@@ -13,6 +13,14 @@
 
 ---
 
+## 2026-06-27 (sesión 14)
+
+- estratégico: análisis SGHCP vs. Startup Playbook (Altman). Sin cambios de código ni deploy. Decisión de founder: congelar nuevas olas de features y validar demanda real con 2-3 psicólogas externas (beta de diseño gratuita, 2 semanas) antes de fijar precio y vender. Cuello de botella identificado: distribución (0 demos a extraños), no producto. Siguiente acción no-técnica: contactar hoy a las 2 colegas disponibles.
+
+## 2026-06-27 (sesión 13)
+
+- feat(admin): pestaña "Plataforma" en SuperAdminPage — gate de contraseña → config de plan MP (amount/reason/webhook_enforce) editable desde UI; rotación de `MP_ACCESS_TOKEN` y `MP_WEBHOOK_SECRET` desde UI con cifrado AES-256-GCM en tabla `platform_settings` (migración 000045); billing handler lee config de BD con cache 5min (fallback a env vars). Nav sidebar simplificado para SYSTEM_ADMIN: solo "Operador SaaS" + "Configuración", sin nav clínico (`c6191d3`).
+
 ## 2026-06-27 (sesión 12)
 
 - fix(booking): `orgWebhookSecret()` usaba `h.pool.QueryRow` sin `app.current_org`, RLS bloqueaba la fila y retornaba vacío — envuelto en `dbctx.WithOrgScope`; `MP_WEBHOOK_ENFORCE=true` activado en VPS `.env` (`8580e05`). Root cause confirmado: la función comentaba "bypasses RLS intentionally" pero el comportamiento real era que RLS la bloqueaba silenciosamente.

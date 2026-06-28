@@ -1,5 +1,11 @@
 # Ideas y Tareas Futuras (No procesar aún)
 
+## Validación / Go-to-market
+
+- **Beta de diseño con 2-3 psicólogas externas (2026-06-27)** — dar acceso gratis 2 semanas a colegas de la esposa (2 contactos ya identificados); acompañar la 1ª carga de paciente + grabación en vivo (do things that don't scale); anotar bugs/fricción reales que el founder solo nunca detecta; al cierre preguntar "¿lo seguirías usando? ¿cuánto pagarías?". Objetivo: separar hobby de negocio antes de invertir más en features.
+- **Congelar features hasta tener señal de willingness-to-pay externa (2026-06-27)** — pausar nuevas olas (WhatsApp templates, RIPS, videollamada, verificación Google, SuperAdmin extras) hasta que al menos una psicóloga externa confirme que pagaría. Cada feature nueva antes de eso es ruido.
+- **Mensaje de reclutamiento para beta (2026-06-27)** — plantilla aprobada: "Hola [nombre]. Construí un sistema de historia clínica para psicólogos — cifrado, cumple la norma colombiana, y graba la sesión y te arma el borrador de la nota en segundos. Lo uso con [esposa] y funciona muy bien. Quiero que 2 colegas en quien confío lo prueben gratis 2 semanas y me digan sin filtro qué sirve y qué se rompe. ¿Te animas? Te lo dejo listo y te acompaño yo mismo."
+
 ## Marca / Landing Page SaaS (2026-06-26)
 - **Repo separado para landing page de marketing** — el sistema actual no tiene página de venta del SaaS. Crear repositorio independiente (Next.js estático o Astro). Dominio propio (ej. sinapsis.co).
 - **Sistema de diseño de marca completo** — antes de tocar código de la landing: definir nombre final, paleta de color (HEX), tipografías (display + body), concepto de logo, lenguaje visual (formas, patrones, fotografía/ilustración). Tres direcciones propuestas: A "El Aliado" (verde bosque + crema, serif+humanista), B "El Experto" (índigo + teal, sans geométrica), C "El Espacio" (pizarra + salvia, minimalismo radical).
