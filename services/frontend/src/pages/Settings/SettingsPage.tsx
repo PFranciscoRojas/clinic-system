@@ -24,10 +24,11 @@ import { ACCENT_COLORS, saveAccentColor } from '@/lib/theme';
 import { loadSchedule, persistSchedule, fetchScheduleFromServer } from '@/lib/schedule';
 import { useIsCompact } from '@/lib/useMediaQuery';
 import { getLockConfig, setLockConfig } from '@/lib/screenLock';
+import RecordTemplatesSection from '@/components/clinical/RecordTemplatesSection';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type SectionId = 'profile' | 'schedule' | 'notifications' | 'ai' | 'security' | 'templates' | 'billing' | 'users' | 'integrations';
+type SectionId = 'profile' | 'schedule' | 'notifications' | 'ai' | 'security' | 'templates' | 'record_templates' | 'billing' | 'users' | 'integrations';
 
 const SECTIONS: { id: SectionId; icon: React.ElementType; label: string; color?: string; group: string }[] = [
   { id: 'profile',       icon: UserRound,  label: 'Perfil profesional',  group: 'Personal'     },
@@ -35,7 +36,8 @@ const SECTIONS: { id: SectionId; icon: React.ElementType; label: string; color?:
   { id: 'security',      icon: ShieldCheck, label: 'Seguridad',            group: 'Personal',    color: '#ef4444' },
   { id: 'ai',            icon: Sparkles,    label: 'Asistente IA',         group: 'Herramientas',color: '#f59e0b' },
   { id: 'notifications', icon: Bell,        label: 'Notificaciones',       group: 'Herramientas' },
-  { id: 'templates',     icon: FileText,    label: 'Plantillas clínicas',  group: 'Herramientas',color: '#8b5cf6' },
+  { id: 'templates',        icon: FileText,  label: 'Plantillas clínicas',  group: 'Herramientas',color: '#8b5cf6' },
+  { id: 'record_templates', icon: FileText,  label: 'Formatos de registro',  group: 'Herramientas',color: '#7c3aed' },
   { id: 'billing',       icon: Receipt,     label: 'Tarifas',              group: 'Equipo',      color: '#10b981' },
   { id: 'users',         icon: Users,       label: 'Usuarios',             group: 'Equipo',      color: '#0ea5e9' },
   { id: 'integrations',  icon: Plug,        label: 'Integraciones',        group: 'Equipo',      color: '#7c3aed' },
@@ -2246,8 +2248,9 @@ export function SettingsPage() {
             {section === 'notifications' && <NotificationsSection setDirty={markDirty} />}
             {section === 'ai'            && <AISection            setDirty={markDirty} saveRef={aiSaveRef} />}
             {section === 'security'      && <SecuritySection />}
-            {section === 'templates'     && <ConsentTemplatesSection />}
-            {section === 'billing'       && <><PlanStatusCard /><RatesSection /></>}
+            {section === 'templates'        && <ConsentTemplatesSection />}
+            {section === 'record_templates' && <RecordTemplatesSection />}
+            {section === 'billing'          && <><PlanStatusCard /><RatesSection /></>}
             {section === 'users'         && <UsersSection />}
             {section === 'integrations'  && <IntegrationsSection />}
           </div>

@@ -23,10 +23,13 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		AppointmentID      string         `json:"appointment_id"`
 		RecordType         string         `json:"record_type"`
 		SessionDate        string         `json:"session_date"` // "2006-01-02"
-		Sections           map[string]any `json:"sections"`
-		RiskLevel          string         `json:"risk_level"`
-		DischargeReason    string         `json:"discharge_reason"`
-		SupervisorID       string         `json:"supervisor_id"`
+		// TemplateID is optional. When provided, sections are validated against
+		// the custom template schema instead of the hardcoded integrated format.
+		TemplateID      string         `json:"template_id"`
+		Sections        map[string]any `json:"sections"`
+		RiskLevel       string         `json:"risk_level"`
+		DischargeReason string         `json:"discharge_reason"`
+		SupervisorID    string         `json:"supervisor_id"`
 	}
 	if err := httputil.DecodeJSON(r, &body); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid JSON")
@@ -60,6 +63,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		AppointmentID:      body.AppointmentID,
 		RecordType:         clinicalrecords.RecordType(body.RecordType),
 		SessionDate:        sessionDate,
+		TemplateID:         body.TemplateID,
 		Sections:           body.Sections,
 		RiskLevel:          clinicalrecords.RiskLevel(body.RiskLevel),
 		DischargeReason:    clinicalrecords.DischargeReason(body.DischargeReason),

@@ -50,11 +50,13 @@ func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Shapes the AI draft to the clinical record being written in this session
+	// Shapes the AI draft to the clinical record being written in this session.
 	recordType := r.FormValue("record_type")
 	if recordType != "INITIAL" && recordType != "DISCHARGE" {
 		recordType = "EVOLUTION"
 	}
+	// Optional custom template — drives the AI prompt and record section schema.
+	templateID := r.FormValue("template_id")
 
 	// Load professional's AI preferences; fall back to defaults if no profile yet
 	noteStyle, tone := "structured", "formal"
@@ -82,6 +84,7 @@ func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 		PatientID:      patientID,
 		RequestedBy:    claims.UserID,
 		RecordType:     recordType,
+		TemplateID:     templateID,
 		NoteStyle:      noteStyle,
 		Tone:           tone,
 		Filename:       filename,

@@ -52,6 +52,9 @@ func (h *Handler) approveDraft(w http.ResponseWriter, r *http.Request) {
 		RecordType    string            `json:"record_type"`
 		AppointmentID string            `json:"appointment_id"`
 		RiskLevel     string            `json:"risk_level"`
+		// TemplateID propagates the custom template used during recording so
+		// the resulting clinical_record is validated and stored with it.
+		TemplateID string `json:"template_id"`
 	}
 	// Body is optional — silently ignore decode errors.
 	_ = httputil.DecodeJSON(r, &body)
@@ -90,6 +93,7 @@ func (h *Handler) approveDraft(w http.ResponseWriter, r *http.Request) {
 		AppointmentID:      appointmentID,
 		RecordType:         recordType,
 		SessionDate:        sessionDate,
+		TemplateID:         body.TemplateID,
 	}
 	if body.RiskLevel != "" {
 		in.RiskLevel = clinicalrecords.RiskLevel(body.RiskLevel)

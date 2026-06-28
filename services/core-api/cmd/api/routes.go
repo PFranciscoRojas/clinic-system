@@ -27,6 +27,8 @@ import (
 	"sghcp/core-api/internal/orgs"
 	patientshandler "sghcp/core-api/internal/patients/handler"
 	profileshandler "sghcp/core-api/internal/profiles/handler"
+	rthandler "sghcp/core-api/internal/recordtemplates/handler"
+	rtrepo "sghcp/core-api/internal/recordtemplates/repository"
 	"sghcp/core-api/internal/shared/middleware"
 	tphandler "sghcp/core-api/internal/treatmentplans/handler"
 )
@@ -121,9 +123,12 @@ func (a *app) buildRouter() http.Handler {
 		// risk read through the same enqueue path the on-demand routes use.
 		aiSugSvc := aisuggestionshandler.NewService(aisuggestionshandler.NewRepository(a.pool), a.km, a.rdb)
 
-		crr := crrhandler.New(a.pool, a.km, aiSugSvc)
+		crr := crrhandler.New(a.pool, a.km, aiSugSvc, rtrepo.New(a.pool))
 		r.Mount("/api/v1/patients/{patient_id}/records", crr.PatientRoutes())
 		r.Mount("/api/v1/clinical-records", crr.Routes())
+
+		// Clinical-record templates: professionals create/edit markdown-based formats.
+		r.Mount("/api/v1/record-templates", rthandler.New(a.pool).Routes())
 
 		r.Mount("/api/v1/patients/{patient_id}/consents", consentsH.Routes())
 		r.Mount("/api/v1/consents", consentsH.OrgRoutes())

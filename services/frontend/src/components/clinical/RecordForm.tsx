@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import { AlertTriangle, Save, Copy } from 'lucide-react';
-import { clinicalRecordsApi, type RecordType } from '@/api/clinicalRecords';
+import { useQuery } from '@tanstack/react-query';
+import { clinicalRecordsApi, type RecordType, type RiskLevel } from '@/api/clinicalRecords';
+import { recordTemplatesApi } from '@/api/recordTemplates';
 import { Spinner } from '@/components/ui/Spinner';
 import { RecordSectionsForm, emptyDraft, draftToPayload, recordToDraft, validateDraft, type ClinicalDraft, type UIRecordType } from './RecordSectionsForm';
 import { RECORD_TYPE_LABELS } from './constants';
+import TemplatedSectionsForm, { type SectionsState } from './TemplatedSectionsForm';
 
 // ─── Clinical record form (template v2) ──────────────────────────────────────
 
@@ -24,6 +27,8 @@ interface RecordFormProps {
   /** Emitted when the selected record type changes, so the audio/AI draft can
    *  target the same format the professional is filling. */
   onTypeChange?: (t: RecordType) => void;
+  /** Emitted when the selected template changes so the audio upload can pass template_id. */
+  onTemplateChange?: (templateId: string | undefined) => void;
   onSaved: () => void;
 }
 
@@ -41,7 +46,7 @@ function draftHasContent(d: ClinicalDraft): boolean {
   return false;
 }
 
-export function RecordForm({ patientId, appointmentId, defaultType, sessionDate: sessionDateProp, lateEntryReason, treatmentConsentSigned, hasOpenProcess, onTypeChange, onSaved }: RecordFormProps) {
+export function RecordForm({ patientId, appointmentId, defaultType, sessionDate: sessionDateProp, lateEntryReason, treatmentConsentSigned, hasOpenProcess, onTypeChange, onTemplateChange, onSaved }: RecordFormProps) {
   const storageKey = appointmentId ? `clinical-draft-${appointmentId}` : `clinical-draft-patient-${patientId}`;
   // Only the types the open-process rule permits are offered, so the user can't
   // pick a format the server will reject on save.
@@ -60,6 +65,31 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   const [err, setErr] = useState('');
 
   const apiType: RecordType = uiType === 'PLAN' ? 'EVOLUTION' : uiType;
+
+  // Custom template selection
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+  const [customSections, setCustomSections] = useState<SectionsState>({});
+
+  const { data: templates = [] } = useQuery({
+    queryKey: ['record-templates', apiType],
+    queryFn: () => recordTemplatesApi.list(apiType),
+  });
+
+  const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
+
+  // Apply default template when apiType changes and a default is available
+  useEffect(() => {
+    const def = templates.find(t => t.is_default);
+    if (def && !selectedTemplateId) {
+      setSelectedTemplateId(def.id);
+      setCustomSections({});
+    }
+  }, [templates, selectedTemplateId]);
+
+  // Notify parent of template changes (for audio upload targeting)
+  useEffect(() => {
+    onTemplateChange?.(selectedTemplateId || undefined);
+  }, [selectedTemplateId, onTemplateChange]);
 
   // Discard the draft and switch format — wiped because each format has its own fields.
   const switchType = (val: UIRecordType) => {
@@ -121,26 +151,52 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   };
 
   const handleSave = async () => {
-    const miss = validateDraft(uiType, draft);
-    if (miss) {
-      setErr(miss.message);
-      if (miss.key) {
-        const el = document.getElementById(`clinical-field-${miss.key}`);
-        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(() => (el?.querySelector('textarea, input, select') as HTMLElement | null)?.focus(), 350);
-      }
-      return;
-    }
     setSaving(true); setErr('');
     try {
-      const payload = draftToPayload(uiType, draft);
-      if (lateEntryReason?.trim()) payload.sections.late_entry_reason = lateEntryReason.trim();
-      await clinicalRecordsApi.create(patientId, {
-        ...(appointmentId ? { appointment_id: appointmentId } : {}),
-        record_type: apiType,
-        session_date: sessionDate,
-        ...payload,
-      });
+      let createBody: Parameters<typeof clinicalRecordsApi.create>[1];
+
+      if (selectedTemplate) {
+        // Custom template path: validate required fields client-side
+        const missingRequired = selectedTemplate.schema.find(
+          s => s.required && !customSections[s.key]
+        );
+        if (missingRequired) {
+          setErr(`El campo "${missingRequired.label}" es obligatorio.`);
+          setSaving(false);
+          return;
+        }
+        createBody = {
+          ...(appointmentId ? { appointment_id: appointmentId } : {}),
+          record_type: apiType,
+          session_date: sessionDate,
+          template_id: selectedTemplate.id,
+          sections: customSections,
+          risk_level: ((customSections.risk as string) || 'NONE') as RiskLevel,
+        };
+      } else {
+        // Integrated format path
+        const miss = validateDraft(uiType, draft);
+        if (miss) {
+          setErr(miss.message);
+          if (miss.key) {
+            const el = document.getElementById(`clinical-field-${miss.key}`);
+            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(() => (el?.querySelector('textarea, input, select') as HTMLElement | null)?.focus(), 350);
+          }
+          setSaving(false);
+          return;
+        }
+        const payload = draftToPayload(uiType, draft);
+        if (lateEntryReason?.trim()) payload.sections.late_entry_reason = lateEntryReason.trim();
+        createBody = {
+          ...(appointmentId ? { appointment_id: appointmentId } : {}),
+          record_type: apiType,
+          session_date: sessionDate,
+          ...payload,
+        };
+      }
+
+      await clinicalRecordsApi.create(patientId, createBody);
       localStorage.removeItem(storageKey);
       onSaved();
     } catch (e: unknown) {
@@ -227,8 +283,40 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
           Recuerda registrar el <strong>consentimiento informado</strong> del paciente (pestaña Consentimientos del perfil) — es obligatorio antes de iniciar tratamiento.
         </p>
       )}
+      {/* Template selector — shown when custom templates exist for this record type */}
+      {templates.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 700, color: 'var(--s500)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
+            Formato de registro
+          </p>
+          <select
+            value={selectedTemplateId}
+            onChange={(e) => {
+              setSelectedTemplateId(e.target.value);
+              setCustomSections({});
+            }}
+            style={{ borderRadius: 8, border: '1.5px solid var(--s200)', padding: '6px 10px', fontSize: 13, color: 'var(--s700)', width: '100%', maxWidth: 320 }}
+          >
+            <option value="">Formato integrado (Colombia)</option>
+            {templates.map(t => (
+              <option key={t.id} value={t.id}>
+                {t.name}{t.is_default ? ' ★' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div style={{ marginBottom: 16 }}>
-        <RecordSectionsForm recordType={uiType} value={draft} onChange={setDraft} />
+        {selectedTemplate ? (
+          <TemplatedSectionsForm
+            schema={selectedTemplate.schema}
+            value={customSections}
+            onChange={setCustomSections}
+          />
+        ) : (
+          <RecordSectionsForm recordType={uiType} value={draft} onChange={setDraft} />
+        )}
       </div>
 
       {err && (

@@ -32,6 +32,9 @@ type ClinicalRecord struct {
 	RecordType           RecordType
 	SessionDate          time.Time
 	TemplateVersion      int16
+	// TemplateID is the custom record template used when creating this record.
+	// Empty string means the integrated (hardcoded) format was used.
+	TemplateID           string
 	Sections             map[string]any
 	RiskLevel            *string
 	DischargeReason      *string
@@ -56,6 +59,7 @@ type RawRecord struct {
 	RecordType           RecordType
 	SessionDate          time.Time
 	TemplateVersion      int16
+	TemplateID           string // empty = integrated format
 	SectionsEnc          []byte
 	RiskLevel            *string
 	DischargeReason      *string
@@ -79,6 +83,7 @@ type RecordMeta struct {
 	RecordType         RecordType
 	SessionDate        time.Time
 	TemplateVersion    int16
+	TemplateID         string // empty = integrated format
 	RiskLevel          *string
 	Status             RecordStatus
 	RequiresCosign     bool
@@ -97,6 +102,7 @@ type CreateParams struct {
 	RecordType         RecordType
 	SessionDate        time.Time
 	TemplateVersion    int16
+	TemplateID         string // empty = integrated format
 	SectionsEnc        []byte
 	RiskLevel          *string
 	DischargeReason    *string

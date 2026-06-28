@@ -102,16 +102,17 @@ class AIWorker:
         record_type = fields.get("record_type") or "EVOLUTION"
         note_style = fields.get("note_style") or "structured"
         tone = fields.get("tone") or "formal"
+        template_id = fields.get("template_id")  # optional — custom record template
 
         if not draft_id or not audio_path:
             logger.warning("ai_job missing fields", extra={"message_id": message_id, "fields": list(fields.keys())})
             await self._ack(message_id)
             return
 
-        logger.info("processing ai draft", extra={"draft_id": draft_id})
+        logger.info("processing ai draft", extra={"draft_id": draft_id, "template_id": template_id})
         try:
             await self._set_status(draft_id, "PROCESSING")
-            await self._process_draft(draft_id, audio_path, record_type, note_style, tone)
+            await self._process_draft(draft_id, audio_path, record_type, note_style, tone, template_id)
             await self._ack(message_id)
         except Exception as exc:
             logger.error("draft processing failed", extra={"draft_id": draft_id, "err": str(exc)})
@@ -138,17 +139,48 @@ class AIWorker:
             await self._set_suggestion_error(suggestion_id, str(exc))
             # Do NOT ack — message stays in PEL for retry or manual inspection
 
-    async def _process_draft(self, draft_id: str, audio_path: str, record_type: str, note_style: str = "structured", tone: str = "formal") -> None:
+    async def _load_template_sections(self, template_id: str) -> list[dict[str, Any]] | None:
+        """Load the JSONB schema for a custom record template. Returns None if not found."""
+        if not template_id:
+            return None
+        assert self._db is not None
+        row = await self._db.fetchrow(
+            "SELECT schema FROM clinical_record_templates WHERE id = $1 AND status = 'ACTIVE'",
+            template_id,
+        )
+        if row is None:
+            logger.warning("custom template not found or archived", extra={"template_id": template_id})
+            return None
+        try:
+            return json.loads(row["schema"])
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("invalid template schema JSON", extra={"template_id": template_id})
+            return None
+
+    async def _process_draft(
+        self,
+        draft_id: str,
+        audio_path: str,
+        record_type: str,
+        note_style: str = "structured",
+        tone: str = "formal",
+        template_id: str | None = None,
+    ) -> None:
         # 1. Transcribe locally — audio never leaves the server
         transcription = await asyncio.to_thread(transcribe_audio, audio_path)
 
         # 2. Anonymize — strip names, document numbers, phones before Claude sees anything
         anonymized = anonymize(transcription)
 
-        # 3. Generate the clinical-record sections via Claude API with anonymized text only
-        clinical_draft = await generate_clinical_draft(anonymized, record_type, note_style, tone)
+        # 3. Load custom template schema (if provided) to drive the AI prompt
+        template_sections = await self._load_template_sections(template_id) if template_id else None
 
-        # 4. Encrypt both outputs with the draft's DEK before storing
+        # 4. Generate the clinical-record sections via Claude API with anonymized text only
+        clinical_draft = await generate_clinical_draft(
+            anonymized, record_type, note_style, tone, template_sections
+        )
+
+        # 5. Encrypt both outputs with the draft's DEK before storing
         assert self._db is not None
         row = await self._db.fetchrow(
             """

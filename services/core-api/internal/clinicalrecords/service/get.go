@@ -21,6 +21,7 @@ func (s *Service) Get(ctx context.Context, orgID, recordID string) (*clinicalrec
 	rec := &clinicalrecords.ClinicalRecord{
 		ID:                   raw.ID,
 		TemplateVersion:      raw.TemplateVersion,
+		TemplateID:           raw.TemplateID,
 		RiskLevel:            raw.RiskLevel,
 		DischargeReason:      raw.DischargeReason,
 		OrganizationID:       raw.OrganizationID,

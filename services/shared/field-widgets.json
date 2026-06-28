@@ -1,0 +1,67 @@
+{
+  "_comment": "Canonical registry of field types and widget names understood by all three stacks (Go, Python, TypeScript). A record template section references one of these 'type' values. Widget names match component identifiers in the frontend.",
+  "types": ["text", "select", "scale", "checklist", "widget"],
+  "widgets": {
+    "mental_exam": {
+      "description": "10-domain mental-status checklist; each domain has {status: NORMAL|ALTERED, note: string}",
+      "value_shape": "object",
+      "ai_schema": "{appearance:{status,note}, consciousness_orientation:{status,note}, attention:{status,note}, memory:{status,note}, language:{status,note}, thought:{status,note}, affect:{status,note}, perception:{status,note}, judgment:{status,note}, insight:{status,note}}"
+    },
+    "formulation_5f": {
+      "description": "5-factor clinical formulation (presenting, predisposing, precipitating, perpetuating, protective)",
+      "value_shape": "object",
+      "ai_schema": "{presenting:string, predisposing:string, precipitating:string, perpetuating:string, protective:string}"
+    },
+    "functional_analysis": {
+      "description": "Functional (ABC) analysis of a target behavior",
+      "value_shape": "object",
+      "ai_schema": "{antecedents:string, behavior:string, consequences:string}"
+    },
+    "distress_scale": {
+      "description": "Subjective Units of Distress 0–10 with anchor labels",
+      "value_shape": "number",
+      "ai_schema": "number 0-10"
+    },
+    "task_checklist": {
+      "description": "Checklist of therapeutic tasks for the session",
+      "value_shape": "array",
+      "ai_schema": "array of strings"
+    },
+    "task_adherence": {
+      "description": "Between-session homework review with adherence rating",
+      "value_shape": "object",
+      "ai_schema": "{adherence: number 0-4, notes: string}"
+    },
+    "session_evaluation": {
+      "description": "Professional evaluation of the session (axis, quality, notes)",
+      "value_shape": "object",
+      "ai_schema": "{axis:string, quality:string, notes:string}"
+    },
+    "functionality": {
+      "description": "Global assessment of patient functional level (work, social, personal)",
+      "value_shape": "object",
+      "ai_schema": "{work:string, social:string, personal:string, global_level:string}"
+    },
+    "spa_history": {
+      "description": "Substance use history (alcohol, psychoactives)",
+      "value_shape": "object",
+      "ai_schema": "{substances:string, frequency:string, last_use:string, impact:string}"
+    },
+    "risk": {
+      "description": "Risk assessment widget — writes the system risk_level field (NONE|IDEATION|PLAN|ATTEMPT)",
+      "value_shape": "string",
+      "ai_schema": "one of: NONE, IDEATION, PLAN, ATTEMPT",
+      "writes_system_field": "risk_level"
+    },
+    "treatment_plan": {
+      "description": "Structured therapeutic goals and interventions",
+      "value_shape": "object",
+      "ai_schema": "{goals:[{description:string, target_weeks:number}], techniques:[string]}"
+    },
+    "diagnoses": {
+      "description": "ICD-10 diagnoses panel (suggested only; professional confirms before saving)",
+      "value_shape": "array",
+      "ai_schema": "array of {code:string, description:string}"
+    }
+  }
+}

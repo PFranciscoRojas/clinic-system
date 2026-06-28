@@ -79,7 +79,8 @@ var templateSections = map[RecordType]struct {
 	},
 }
 
-func validRiskLevel(r RiskLevel) bool {
+// IsValidRiskLevel reports whether r is a recognised risk level.
+func IsValidRiskLevel(r RiskLevel) bool {
 	switch r {
 	case RiskNone, RiskIdeation, RiskPlan, RiskAttempt:
 		return true
@@ -87,13 +88,22 @@ func validRiskLevel(r RiskLevel) bool {
 	return false
 }
 
-func validDischargeReason(d DischargeReason) bool {
+// IsValidDischargeReason reports whether d is a recognised discharge reason.
+func IsValidDischargeReason(d DischargeReason) bool {
 	switch d {
 	case DischargeTherapeutic, DischargeDropout, DischargeReferral, DischargeMutualAgreement:
 		return true
 	}
 	return false
 }
+
+// IsEmptySection is exported so the custom-template validation path in
+// service/create.go can reuse the same emptiness check.
+func IsEmptySection(v any) bool { return isEmptySection(v) }
+
+// keep the unexported variant for internal use in ValidateTemplateV2.
+func validRiskLevel(r RiskLevel) bool   { return IsValidRiskLevel(r) }
+func validDischargeReason(d DischargeReason) bool { return IsValidDischargeReason(d) }
 
 // ValidateTemplateV2 checks a v2 payload: known record type, only allowed
 // section keys, all required sections present and non-empty, a valid risk

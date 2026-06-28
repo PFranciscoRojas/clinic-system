@@ -20,6 +20,8 @@ export interface ClinicalRecord {
   record_type: RecordType;
   session_date: string;
   template_version: number;
+  /** ID of the custom clinical_record_template used. Empty string = integrated format. */
+  template_id?: string;
   sections?: RecordSections;
   risk_level?: RiskLevel;
   discharge_reason?: DischargeReason;
@@ -42,6 +44,7 @@ export interface RecordMeta {
   record_type: RecordType;
   session_date: string;
   template_version: number;
+  template_id?: string;
   risk_level?: RiskLevel;
   status: RecordStatus;
   requires_cosign: boolean;
@@ -66,6 +69,8 @@ export interface CreateRecordInput {
   appointment_id?: string;
   record_type: RecordType;
   session_date: string;
+  /** Optional custom template ID. When set, sections are validated against it. */
+  template_id?: string;
   sections?: RecordSections;
   risk_level?: RiskLevel;
   discharge_reason?: DischargeReason;

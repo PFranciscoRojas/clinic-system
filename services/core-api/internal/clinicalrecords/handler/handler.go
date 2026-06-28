@@ -10,6 +10,7 @@ import (
 	diagrepo "sghcp/core-api/internal/diagnoses/repository"
 	patsrepo "sghcp/core-api/internal/patients/repository"
 	patssvc "sghcp/core-api/internal/patients/service"
+	"sghcp/core-api/internal/recordtemplates"
 	"sghcp/core-api/internal/shared/audit"
 	"sghcp/core-api/internal/shared/crypto"
 	"sghcp/core-api/internal/shared/dbctx"
@@ -37,11 +38,16 @@ func (h *Handler) q(ctx context.Context) dbctx.Querier { return dbctx.From(ctx, 
 
 // New builds the handler. risk may be nil (e.g. in tests) — when set, approving
 // a clinical record triggers an AI risk-detection refresh for the patient.
-func New(db *pgxpool.Pool, km *crypto.KeyManager, risk riskEnqueuer) *Handler {
+// tmplRepo may be nil; when provided, custom template_id is validated on create.
+func New(db *pgxpool.Pool, km *crypto.KeyManager, risk riskEnqueuer, tmplRepo recordtemplates.Repository) *Handler {
 	crrRepo := crrrepo.New(db)
 	patsRepo := patsrepo.New(db)
+	svc := crrsvc.New(crrRepo, km)
+	if tmplRepo != nil {
+		svc.WithTemplateRepo(tmplRepo)
+	}
 	return &Handler{
-		svc:      crrsvc.New(crrRepo, km),
+		svc:      svc,
 		patients: patssvc.New(patsRepo, km),
 		diag:     diagrepo.New(db),
 		db:       db,

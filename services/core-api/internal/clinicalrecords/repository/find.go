@@ -27,7 +27,8 @@ func (r *Repository) FindByID(ctx context.Context, orgID, recordID string) (*cli
 		SELECT id, organization_id, patient_id, responsible_staff_id, created_by,
 		       COALESCE(appointment_id::text, ''), dek_id,
 		       record_type, session_date,
-		       template_version, sections_enc, risk_level::text, discharge_reason::text,
+		       template_version, COALESCE(template_id::text, ''),
+		       sections_enc, risk_level::text, discharge_reason::text,
 		       status, approved_at, requires_cosign,
 		       COALESCE(supervisor_id::text, ''), supervisor_cosigned_at,
 		       created_at, updated_at
@@ -41,7 +42,8 @@ func (r *Repository) FindByID(ctx context.Context, orgID, recordID string) (*cli
 		&rec.ResponsibleStaffID, &rec.CreatedBy,
 		&rec.AppointmentID, &rec.DEKID,
 		&rec.RecordType, &rec.SessionDate,
-		&rec.TemplateVersion, &rec.SectionsEnc, &rec.RiskLevel, &rec.DischargeReason,
+		&rec.TemplateVersion, &rec.TemplateID,
+		&rec.SectionsEnc, &rec.RiskLevel, &rec.DischargeReason,
 		&rec.Status, &rec.ApprovedAt, &rec.RequiresCosign,
 		&rec.SupervisorID, &rec.SupervisorCosignedAt,
 		&rec.CreatedAt, &rec.UpdatedAt,
@@ -61,7 +63,7 @@ func scanRecordMeta(rows interface {
 	return rows.Scan(
 		&m.ID, &m.PatientID, &m.PatientCode, &m.ResponsibleStaffID, &m.CreatedBy,
 		&m.AppointmentID, &m.RecordType,
-		&m.SessionDate, &m.TemplateVersion, &m.RiskLevel,
+		&m.SessionDate, &m.TemplateVersion, &m.TemplateID, &m.RiskLevel,
 		&m.Status, &m.RequiresCosign,
 		&m.SupervisorID, &m.CreatedAt,
 	)
@@ -70,7 +72,7 @@ func scanRecordMeta(rows interface {
 const metaCols = `
 	cr.id, cr.patient_id, p.patient_code, cr.responsible_staff_id, cr.created_by,
 	COALESCE(cr.appointment_id::text, ''), cr.record_type,
-	cr.session_date, cr.template_version, cr.risk_level::text,
+	cr.session_date, cr.template_version, COALESCE(cr.template_id::text, ''), cr.risk_level::text,
 	cr.status, cr.requires_cosign,
 	COALESCE(cr.supervisor_id::text, ''), cr.created_at`
 

@@ -15,6 +15,9 @@ type CreateInput struct {
 	AppointmentID      string
 	RecordType         clinicalrecords.RecordType
 	SessionDate        time.Time
+	// TemplateID is optional. When set the sections are validated against the
+	// custom template schema instead of the hardcoded integrated template.
+	TemplateID         string
 	Sections           map[string]any
 	RiskLevel          clinicalrecords.RiskLevel
 	DischargeReason    clinicalrecords.DischargeReason
