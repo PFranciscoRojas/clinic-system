@@ -51,17 +51,30 @@ type OrgInfo struct {
 	Email   string
 }
 
+// TemplateSectionDef is one section from a custom clinical_record_template.
+// When RenderInput.TemplateSections is non-nil, the PDF uses these instead
+// of the hardcoded templateSections map.
+type TemplateSectionDef struct {
+	Key      string
+	Label    string
+	Type     string // text | select | scale | checklist | widget
+	Widget   string // widget name when type == "widget"
+	ScaleMax int    // upper bound for scale; 0 → defaults to 10
+}
+
 type RenderInput struct {
-	Record         *clinicalrecords.ClinicalRecord
-	Org            OrgInfo
-	Patient        PatientInfo
-	Professional   ProfessionalInfo
-	SignaturePNG   []byte // optional handwritten signature stamp
-	SupervisorName string // set when the record was cosigned
-	RecordType     string // Spanish label (e.g., "Evolución")
-	Diagnoses      []DiagnosisLine
-	Addenda        []*clinicalrecords.Addendum
-	ContentHash    string // SHA-256 integrity fingerprint stored at approval
+	Record           *clinicalrecords.ClinicalRecord
+	Org              OrgInfo
+	Patient          PatientInfo
+	Professional     ProfessionalInfo
+	SignaturePNG     []byte // optional handwritten signature stamp
+	SupervisorName   string // set when the record was cosigned
+	RecordType       string // Spanish label (e.g., "Evolución")
+	Diagnoses        []DiagnosisLine
+	Addenda          []*clinicalrecords.Addendum
+	ContentHash      string // SHA-256 integrity fingerprint stored at approval
+	// When non-nil, overrides the hardcoded templateSections for rendering.
+	TemplateSections []TemplateSectionDef
 }
 
 type sectionDef struct {
@@ -278,7 +291,11 @@ func Render(w io.Writer, in RenderInput) error {
 
 	// ── 4. Clinical content ───────────────────────────────────────────────
 	nextSection("Contenido clínico")
-	renderSectionsV2(doc, tr, in.Record)
+	if len(in.TemplateSections) > 0 {
+		renderCustomTemplate(doc, tr, in.Record, in.TemplateSections)
+	} else {
+		renderSectionsV2(doc, tr, in.Record)
+	}
 
 	// ── 5. Active diagnoses ───────────────────────────────────────────────
 	if len(in.Diagnoses) > 0 {
@@ -472,6 +489,225 @@ func renderSectionsV2(doc *fpdf.Fpdf, tr func(string) string, rec *clinicalrecor
 		doc.MultiCell(0, 5, tr(strings.TrimSpace(content)), "1", "L", false)
 		doc.Ln(2)
 	}
+}
+
+// renderCustomTemplate renders sections driven by a custom template schema.
+// Each section's value is rendered differently depending on its field type.
+// Widgets that are self-contained in the UI (treatment_plan, diagnoses) are
+// skipped — they are handled by other sections in the PDF (e.g., §5 diagnoses).
+func renderCustomTemplate(doc *fpdf.Fpdf, tr func(string) string, rec *clinicalrecords.ClinicalRecord, schema []TemplateSectionDef) {
+	for _, sec := range schema {
+		// Skip widgets whose data is rendered in dedicated PDF sections.
+		if sec.Type == "widget" && (sec.Widget == "treatment_plan" || sec.Widget == "diagnoses") {
+			continue
+		}
+
+		val, exists := rec.Sections[sec.Key]
+		if !exists || val == nil {
+			continue
+		}
+
+		content := renderFieldValue(sec, val)
+		if strings.TrimSpace(content) == "" {
+			continue
+		}
+
+		writeSectionHeader(doc, tr, sec.Label)
+		doc.SetFont("Helvetica", "", 9.5)
+		doc.MultiCell(0, 5, tr(strings.TrimSpace(content)), "1", "L", false)
+		doc.Ln(2)
+	}
+}
+
+// renderFieldValue converts a section value to a printable string based on
+// the field type declared in the template schema.
+func renderFieldValue(sec TemplateSectionDef, val any) string {
+	switch sec.Type {
+	case "text", "select":
+		if s, ok := val.(string); ok {
+			return s
+		}
+		return fmt.Sprintf("%v", val)
+
+	case "scale":
+		max := sec.ScaleMax
+		if max == 0 {
+			max = 10
+		}
+		switch v := val.(type) {
+		case float64:
+			return fmt.Sprintf("%.0f / %d", v, max)
+		case int:
+			return fmt.Sprintf("%d / %d", v, max)
+		}
+		return fmt.Sprintf("%v / %d", val, max)
+
+	case "checklist":
+		items, ok := toStringSlice(val)
+		if !ok || len(items) == 0 {
+			return ""
+		}
+		var b strings.Builder
+		for _, item := range items {
+			b.WriteString("• " + item + "\n")
+		}
+		return b.String()
+
+	case "widget":
+		return renderWidgetValue(sec.Widget, val)
+	}
+
+	// Fallback for unknown types.
+	return fmt.Sprintf("%v", val)
+}
+
+// renderWidgetValue converts a widget value to a printable string.
+func renderWidgetValue(name string, val any) string {
+	switch name {
+	case "mental_exam":
+		exam, ok := val.(map[string]any)
+		if !ok {
+			return ""
+		}
+		return formatMentalExam(exam)
+
+	case "distress_scale":
+		switch v := val.(type) {
+		case float64:
+			return fmt.Sprintf("%.0f / 10", v)
+		case int:
+			return fmt.Sprintf("%d / 10", v)
+		}
+		return fmt.Sprintf("%v / 10", val)
+
+	case "task_checklist":
+		items, ok := toStringSlice(val)
+		if !ok || len(items) == 0 {
+			return ""
+		}
+		var b strings.Builder
+		for _, item := range items {
+			b.WriteString("• " + item + "\n")
+		}
+		return b.String()
+
+	case "risk":
+		if s, ok := val.(string); ok {
+			if label := riskLabels[s]; label != "" {
+				return label
+			}
+			return s
+		}
+
+	case "formulation_5f":
+		return formatOrderedMap(val, []string{
+			"predisposition:Predisposición",
+			"acquisition:Adquisición",
+			"triggers:Desencadenantes",
+			"maintenance:Mantenimiento",
+			"protection:Factores de protección",
+		})
+
+	case "functional_analysis":
+		return formatOrderedMap(val, []string{
+			"antecedents:Antecedentes",
+			"cognitive_response:Respuesta cognitiva",
+			"physiological_response:Respuesta fisiológica",
+			"behavioral_response:Respuesta conductual",
+			"emotional_response:Respuesta emocional",
+			"consequences:Consecuencias",
+		})
+
+	case "task_adherence":
+		return formatOrderedMap(val, []string{
+			"level:Nivel de adherencia",
+			"observations:Observaciones",
+		})
+
+	case "session_evaluation":
+		return formatOrderedMap(val, []string{
+			"axis:Eje de trabajo",
+			"patient_feedback:Percepción del paciente",
+			"insight:Nivel de insight",
+			"barriers:Barreras identificadas",
+			"next_objective:Objetivo próxima sesión",
+		})
+
+	case "functionality":
+		return formatOrderedMap(val, []string{
+			"level:Nivel de funcionalidad",
+			"referral_destination:Remisión",
+		})
+
+	case "spa_history":
+		m, ok := val.(map[string]any)
+		if !ok {
+			return ""
+		}
+		var parts []string
+		if spa, ok := m["spa"].(map[string]any); ok {
+			parts = append(parts, "[SPA]")
+			for k, v := range spa {
+				if b, ok := v.(bool); ok && b {
+					parts = append(parts, "  • "+k)
+				}
+			}
+		}
+		if fmh, ok := m["familyMH"].(map[string]any); ok {
+			parts = append(parts, "[Antecedentes familiares SM]")
+			for k, v := range fmh {
+				if b, ok := v.(bool); ok && b {
+					parts = append(parts, "  • "+k)
+				}
+			}
+		}
+		return strings.Join(parts, "\n")
+	}
+
+	// Generic fallback for widgets not handled above.
+	return fmt.Sprintf("%v", val)
+}
+
+// formatOrderedMap renders a map[string]any in a fixed field order, skipping
+// empty values. Labels are declared as "key:Label" pairs.
+func formatOrderedMap(val any, fields []string) string {
+	m, ok := val.(map[string]any)
+	if !ok {
+		return ""
+	}
+	var b strings.Builder
+	for _, spec := range fields {
+		parts := strings.SplitN(spec, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key, label := parts[0], parts[1]
+		v, exists := m[key]
+		if !exists || v == nil {
+			continue
+		}
+		s := fmt.Sprintf("%v", v)
+		if strings.TrimSpace(s) == "" {
+			continue
+		}
+		b.WriteString(label + ": " + s + "\n")
+	}
+	return b.String()
+}
+
+// toStringSlice coerces an []any or []string to []string.
+func toStringSlice(val any) ([]string, bool) {
+	switch v := val.(type) {
+	case []string:
+		return v, true
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			out = append(out, fmt.Sprintf("%v", item))
+		}
+		return out, true
+	}
+	return nil, false
 }
 
 // formatMentalExam walks the domains in fixed order so output is deterministic.

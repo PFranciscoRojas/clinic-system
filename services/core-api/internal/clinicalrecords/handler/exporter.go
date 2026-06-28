@@ -18,6 +18,17 @@ import (
 	"sghcp/core-api/internal/shared/middleware"
 )
 
+// templateSectionSchema holds the JSON shape of each element in
+// clinical_record_templates.schema (mirrors recordtemplates.SectionDef in Go).
+type templateSectionSchema struct {
+	Key      string   `json:"key"`
+	Label    string   `json:"label"`
+	Type     string   `json:"type"`
+	Widget   string   `json:"widget,omitempty"`
+	ScaleMax *int     `json:"scale_max,omitempty"`
+	Options  []string `json:"options,omitempty"`
+}
+
 // Labels mirror RECORD_TYPE_LABELS in the frontend constants.
 var recordTypeLabels = map[string]string{
 	"INITIAL":           "Apertura",
@@ -101,6 +112,10 @@ func (h *Handler) exportPDF(w http.ResponseWriter, r *http.Request) {
 		recordID, claims.OrganizationID,
 	).Scan(&contentHash)
 
+	// When the record was created from a custom template, load the schema
+	// so the PDF renderer uses the template's field labels and ordering.
+	templateSections := h.loadTemplateSections(ctx, rec.TemplateID)
+
 	var diagLines []pdf.DiagnosisLine
 	if all, err := h.diag.ListByPatient(ctx, claims.OrganizationID, rec.PatientID); err == nil {
 		for _, d := range all {
@@ -129,16 +144,17 @@ func (h *Handler) exportPDF(w http.ResponseWriter, r *http.Request) {
 			patient.DocumentNumber, rec.SessionDate.Format("2006-01-02")))
 
 	err = pdf.Render(w, pdf.RenderInput{
-		Record:         rec,
-		Org:            org,
-		Patient:        patientInfo,
-		Professional:   prof,
-		SignaturePNG:   signature,
-		SupervisorName: supervisorName,
-		RecordType:     recordTypeLabel,
-		Diagnoses:      diagLines,
-		Addenda:        addenda,
-		ContentHash:    contentHash,
+		Record:           rec,
+		Org:              org,
+		Patient:          patientInfo,
+		Professional:     prof,
+		SignaturePNG:     signature,
+		SupervisorName:   supervisorName,
+		RecordType:       recordTypeLabel,
+		Diagnoses:        diagLines,
+		Addenda:          addenda,
+		ContentHash:      contentHash,
+		TemplateSections: templateSections,
 	})
 	if err != nil {
 		// Headers already sent — nothing useful to return to the client.
@@ -244,6 +260,44 @@ func joinNames(parts ...string) string {
 		}
 	}
 	return strings.Join(nonEmpty, " ")
+}
+
+// loadTemplateSections queries the custom template schema and converts it to
+// []pdf.TemplateSectionDef. Returns nil when templateID is empty or the
+// template is not found — the caller falls back to the integrated format.
+func (h *Handler) loadTemplateSections(ctx context.Context, templateID string) []pdf.TemplateSectionDef {
+	if templateID == "" {
+		return nil
+	}
+	var schemaRaw []byte
+	// Include ARCHIVED — a signed record must always re-render with its original
+	// field labels (Res. 1995/1999: the document cannot change after approval).
+	if err := h.q(ctx).QueryRow(ctx,
+		`SELECT schema FROM clinical_record_templates WHERE id = $1`,
+		templateID,
+	).Scan(&schemaRaw); err != nil || len(schemaRaw) == 0 {
+		return nil
+	}
+
+	var raw []templateSectionSchema
+	if err := json.Unmarshal(schemaRaw, &raw); err != nil {
+		return nil
+	}
+
+	out := make([]pdf.TemplateSectionDef, 0, len(raw))
+	for _, s := range raw {
+		def := pdf.TemplateSectionDef{
+			Key:    s.Key,
+			Label:  s.Label,
+			Type:   s.Type,
+			Widget: s.Widget,
+		}
+		if s.ScaleMax != nil {
+			def.ScaleMax = *s.ScaleMax
+		}
+		out = append(out, def)
+	}
+	return out
 }
 
 func yearsBetween(birth, at time.Time) int {
