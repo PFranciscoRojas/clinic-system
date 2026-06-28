@@ -13,6 +13,12 @@
 
 ---
 
+## 2026-06-27 (sesión 17)
+
+- fix(db): 4 plantillas de registro clínico insertadas en org incorrecto (`MarcelaChapues` / fbf1fb3d) en lugar del org real con usuarios (`Marcela Chapués` / aa2cbd1f, 5 usuarios). Movidas al org correcto; STATUS.md corregido con el ID canónico. Root cause: dos orgs con nombres casi idénticos (con/sin acento y espacios).
+- feat(settings): rediseño mobile-first de `RecordTemplatesSection` aplicando reglas de `ui-ux-pro-max` — modal del editor como bottom sheet en móvil (`rounded-t-2xl`, `items-end`), header se apila verticalmente en mobile, botones de acción en `TemplateCard` pasan a íconos puros 40px (Star/Pencil/Archive) sin texto, `grid-cols-1` en mobile → `grid-cols-2` en sm+, select de filtro y CTA a ancho completo en móvil, skeleton de carga animado, empty state con ícono visual. Deployed: git pull + `docker run node:20-alpine npm run build` en VPS. (`8983ae1`)
+- chore(tools): skill `ui-ux-pro-max` instalada localmente (`~/.claude/commands/ui-ux-pro-max.md` + `~/.claude/skills/ui-ux-pro-max/`) — clonada desde `github.com/nextlevelbuilder/ui-ux-pro-max-skill`.
+
 ## 2026-06-28 (sesión 15–16)
 
 - feat(clinical): plantillas de registro clínico definibles por el profesional en Markdown — tabla `clinical_record_templates` (migración 000046, RLS, permisos `record_templates:*`), `clinical_records.template_id`; parser Go `## heading {type}` → `[]SectionDef`; 7 endpoints CRUD + `/parse` preview; `field-widgets.json` catálogo compartido Go/Python/TS; Settings → "Formatos de registro" con editor markdown + preview en vivo + paleta de widgets; `TemplatedSectionsForm` renderiza `text/select/scale/checklist/widget` usando componentes existentes (`MentalExamChecklist`, `RiskSelector`, etc.); `RecordForm` con selector de plantilla, default preseleccionada; `AIDraftPage` usa `TemplatedSectionsForm` con secciones tipadas cuando draft tiene `template_id`; `AppointmentPage` propaga `template_id` a los 3 puntos de `uploadAudio`; worker Python carga schema JSONB y construye prompt dinámico por tipo. Deployado a VPS (migración 000046 aplicada, frontend rebuild). (`aa4ce66`, `32620a7`)
