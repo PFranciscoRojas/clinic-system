@@ -8,6 +8,7 @@ import {
 } from '../../api/recordTemplates';
 import { RecordType } from '../../api/clinicalRecords';
 
+// ── Labels ──────────────────────────────────────────────────────────────────
 const RECORD_TYPE_LABELS: Record<RecordType, string> = {
   INITIAL: 'Apertura / Inicial',
   EVOLUTION: 'Evolución',
@@ -55,15 +56,126 @@ ${Object.entries(WIDGET_LABELS).map(([k, v]) => `- \`{widget:${k}}\` — ${v}`).
 **Nombre de plantilla:** línea que comienza con \`# \` (un solo hash).
 `.trim();
 
-// ── SectionPreview ─────────────────────────────────────────────────────────
+// ── Shared style tokens (inline, following app convention) ──────────────────
+const S = {
+  input: {
+    width: '100%',
+    height: 40,
+    border: '1px solid var(--s200)',
+    borderRadius: 8,
+    padding: '0 12px',
+    fontSize: 14,
+    fontFamily: "'DM Sans', sans-serif",
+    background: '#fff',
+    color: 'var(--s800)',
+    outline: 'none',
+    transition: 'box-shadow .15s',
+  } as React.CSSProperties,
+  inputFocus: {
+    boxShadow: '0 0 0 2px var(--teal-10)',
+    border: '1px solid var(--teal)',
+  } as React.CSSProperties,
+  textarea: {
+    width: '100%',
+    border: '1px solid var(--s200)',
+    borderRadius: 8,
+    padding: '10px 12px',
+    fontSize: 13,
+    fontFamily: "'DM Mono', monospace",
+    background: '#fff',
+    color: 'var(--s800)',
+    outline: 'none',
+    resize: 'vertical',
+    lineHeight: 1.6,
+    transition: 'box-shadow .15s',
+  } as React.CSSProperties,
+  select: {
+    border: '1px solid var(--s200)',
+    borderRadius: 8,
+    padding: '0 12px',
+    fontSize: 14,
+    fontFamily: "'DM Sans', sans-serif",
+    background: '#fff',
+    color: 'var(--s800)',
+    height: 40,
+    outline: 'none',
+    cursor: 'pointer',
+    transition: 'box-shadow .15s',
+  } as React.CSSProperties,
+  btnPrimary: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    height: 40,
+    padding: '0 18px',
+    background: 'var(--teal)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 10,
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontFamily: "'DM Sans', sans-serif",
+    transition: 'background .15s',
+    whiteSpace: 'nowrap' as const,
+  } as React.CSSProperties,
+  btnSecondary: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    height: 40,
+    padding: '0 18px',
+    background: '#fff',
+    color: 'var(--s600)',
+    border: '1px solid var(--s200)',
+    borderRadius: 10,
+    fontSize: 14,
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontFamily: "'DM Sans', sans-serif",
+    transition: 'background .15s',
+  } as React.CSSProperties,
+  iconBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 36,
+    height: 36,
+    border: 'none',
+    borderRadius: 8,
+    background: 'transparent',
+    cursor: 'pointer',
+    transition: 'background .15s, color .15s',
+    padding: 0,
+  } as React.CSSProperties,
+  label: {
+    display: 'block',
+    fontSize: 13,
+    fontWeight: 600,
+    color: 'var(--s600)',
+    marginBottom: 6,
+  } as React.CSSProperties,
+};
+
+// ── Focusable input hook ─────────────────────────────────────────────────────
+function useFocus() {
+  const [focused, setFocused] = useState(false);
+  return {
+    focused,
+    onFocus: () => setFocused(true),
+    onBlur: () => setFocused(false),
+  };
+}
+
+// ── SectionPreview ──────────────────────────────────────────────────────────
 function SectionPreview({ sections }: { sections: SectionDef[] }) {
   if (sections.length === 0) return null;
   return (
-    <ul className="mt-2 space-y-1.5">
+    <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
       {sections.map((s) => (
-        <li key={s.key} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
-          <span className="font-medium text-gray-700">{s.label}</span>
-          <span className="text-gray-400">
+        <li key={s.key} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '4px 8px' }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s700)' }}>{s.label}</span>
+          <span style={{ fontSize: 12, color: 'var(--s400)' }}>
             {s.type === 'widget' ? `widget:${s.widget}` : s.type}
             {s.type === 'select' ? ` [${(s.options ?? []).join(' | ')}]` : ''}
             {s.type === 'scale' ? ` [${s.scale_min ?? 0}–${s.scale_max ?? 10}]` : ''}
@@ -75,7 +187,7 @@ function SectionPreview({ sections }: { sections: SectionDef[] }) {
   );
 }
 
-// ── TemplateEditor ─────────────────────────────────────────────────────────
+// ── TemplateEditor (inline panel, no modal) ─────────────────────────────────
 interface EditorProps {
   initial?: RecordTemplate;
   onClose: () => void;
@@ -93,6 +205,10 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
   const [showPalette, setShowPalette] = useState(false);
   const [previewError, setPreviewError] = useState('');
 
+  const nameFocus = useFocus();
+  const mdFocus = useFocus();
+  const selectFocus = useFocus();
+
   const parsePreview = useCallback(async (md: string) => {
     if (!md.trim()) { setPreview([]); setPreviewError(''); return; }
     try {
@@ -103,6 +219,7 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
     } catch {
       setPreviewError('Markdown inválido — revisa los encabezados ##');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name]);
 
   useEffect(() => {
@@ -121,150 +238,219 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
     },
   });
 
+  const canSave = !saveMutation.isPending && name.trim() && markdown.trim() && preview.length > 0;
+
   return (
-    // Sheet slides up from bottom on mobile; centered dialog on sm+
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center sm:p-4">
-      <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full sm:max-w-3xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="px-4 py-3 sm:px-5 sm:py-4 border-b flex items-center justify-between shrink-0">
-          <h2 className="text-base sm:text-lg font-semibold text-gray-900">
-            {initial ? 'Editar plantilla' : 'Nueva plantilla'}
-          </h2>
-          <button
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="h-9 w-9 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-          >
-            ✕
-          </button>
-        </div>
+    <div
+      style={{
+        background: '#fff',
+        border: '1px solid var(--teal)',
+        borderRadius: 'var(--radius)',
+        boxShadow: 'var(--shadow-md)',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Header bar */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '14px 18px',
+        borderBottom: '1px solid var(--s100)',
+        background: 'var(--teal-l)',
+      }}>
+        <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--teal-dark)' }}>
+          {initial ? 'Editar plantilla' : 'Nueva plantilla'}
+        </span>
+        <button
+          onClick={onClose}
+          aria-label="Cerrar editor"
+          style={{ ...S.iconBtn, color: 'var(--s400)' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--s100)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--s700)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--s400)'; }}
+        >
+          ✕
+        </button>
+      </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5 space-y-4">
-          {/* Name + Type — stacked on mobile, side-by-side on sm+ */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Nombre</label>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Nombre de la plantilla"
-                className="w-full h-11 rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
-            </div>
-            {!initial && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Tipo de registro</label>
-                <select
-                  value={recordType}
-                  onChange={(e) => setRecordType(e.target.value as RecordType)}
-                  className="w-full h-11 rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                >
-                  {(['INITIAL', 'EVOLUTION', 'DISCHARGE'] as RecordType[]).map((rt) => (
-                    <option key={rt} value={rt}>{RECORD_TYPE_LABELS[rt]}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
+      {/* Body */}
+      <div style={{ padding: '18px 18px 0' }}>
 
-          {/* Markdown editor */}
+        {/* Name + Type row */}
+        <div className="grid-2" style={{ marginBottom: 16 }}>
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-sm font-medium text-gray-700">Formato en markdown</label>
-              <button
-                type="button"
-                onClick={() => setShowPalette(p => !p)}
-                className="text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1 py-1"
-              >
-                {showPalette ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                {showPalette ? 'Ocultar referencia' : 'Ver referencia'}
-              </button>
-            </div>
-            {showPalette && (
-              <pre className="text-xs bg-gray-50 border border-gray-200 rounded-lg p-3 whitespace-pre-wrap mb-2 max-h-48 overflow-y-auto leading-relaxed">
-                {PALETTE}
-              </pre>
-            )}
-            <textarea
-              value={markdown}
-              onChange={(e) => setMarkdown(e.target.value)}
-              rows={12}
-              placeholder={`# Nombre de la plantilla (opcional)
-
-## Motivo de consulta {text} {required}
-Qué trajo el paciente a la sesión.
-
-## Nivel de malestar {scale:0-10}
-
-## Examen mental {widget:mental_exam}
-
-## Tareas para casa {checklist}`}
-              className="w-full rounded-lg border border-gray-300 text-sm font-mono p-3 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+            <label style={S.label}>Nombre</label>
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Nombre de la plantilla"
+              style={{ ...S.input, ...(nameFocus.focused ? S.inputFocus : {}) }}
+              onFocus={nameFocus.onFocus}
+              onBlur={nameFocus.onBlur}
             />
           </div>
-
-          {/* Live preview */}
-          {(preview.length > 0 || previewError) && (
-            <div className="bg-gray-50 rounded-lg px-4 py-3 border border-gray-100">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                Vista previa
-              </p>
-              {previewError ? (
-                <p className="text-xs text-red-500">{previewError}</p>
-              ) : (
-                <SectionPreview sections={preview} />
-              )}
+          {!initial && (
+            <div>
+              <label style={S.label}>Tipo de registro</label>
+              <select
+                value={recordType}
+                onChange={e => setRecordType(e.target.value as RecordType)}
+                style={{
+                  ...S.select,
+                  width: '100%',
+                  ...(selectFocus.focused ? { boxShadow: '0 0 0 2px var(--teal-10)', border: '1px solid var(--teal)' } : {}),
+                }}
+                onFocus={selectFocus.onFocus}
+                onBlur={selectFocus.onBlur}
+              >
+                {(['INITIAL', 'EVOLUTION', 'DISCHARGE'] as RecordType[]).map(rt => (
+                  <option key={rt} value={rt}>{RECORD_TYPE_LABELS[rt]}</option>
+                ))}
+              </select>
             </div>
           )}
+        </div>
 
-          {/* Default toggle (new only) */}
-          {!initial && (
-            <label className="flex items-start gap-3 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isDefault}
-                onChange={(e) => setIsDefault(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-              />
-              <span className="text-gray-700">
-                Usar como plantilla predeterminada para este tipo de registro
-              </span>
-            </label>
+        {/* Markdown editor */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <label style={{ ...S.label, margin: 0 }}>Formato en markdown</label>
+            <button
+              type="button"
+              onClick={() => setShowPalette(p => !p)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                fontSize: 12,
+                color: 'var(--teal-dark)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '2px 0',
+                fontFamily: "'DM Sans', sans-serif",
+              }}
+            >
+              {showPalette ? <EyeOff size={13} /> : <Eye size={13} />}
+              {showPalette ? 'Ocultar referencia' : 'Ver referencia'}
+            </button>
+          </div>
+          {showPalette && (
+            <pre style={{
+              fontSize: 12,
+              background: 'var(--s50)',
+              border: '1px solid var(--s200)',
+              borderRadius: 8,
+              padding: '10px 12px',
+              whiteSpace: 'pre-wrap',
+              marginBottom: 8,
+              maxHeight: 200,
+              overflowY: 'auto',
+              lineHeight: 1.6,
+              fontFamily: "'DM Mono', monospace",
+              color: 'var(--s700)',
+            }}>
+              {PALETTE}
+            </pre>
           )}
+          <textarea
+            value={markdown}
+            onChange={e => setMarkdown(e.target.value)}
+            rows={14}
+            placeholder={`# Nombre de la plantilla (opcional)\n\n## Motivo de consulta {text} {required}\nQué trajo el paciente a la sesión.\n\n## Nivel de malestar {scale:0-10}\n\n## Examen mental {widget:mental_exam}\n\n## Tareas para casa {checklist}`}
+            style={{
+              ...S.textarea,
+              ...(mdFocus.focused ? { boxShadow: '0 0 0 2px var(--teal-10)', border: '1px solid var(--teal)' } : {}),
+            }}
+            onFocus={mdFocus.onFocus}
+            onBlur={mdFocus.onBlur}
+          />
         </div>
 
-        {/* Footer */}
-        <div className="px-4 py-3 sm:px-5 sm:py-4 border-t flex gap-3 shrink-0">
-          <button
-            onClick={onClose}
-            className="flex-1 sm:flex-none h-11 px-5 text-sm font-medium text-gray-600 hover:text-gray-800 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending || !name.trim() || !markdown.trim() || preview.length === 0}
-            className="flex-1 sm:flex-none h-11 px-5 bg-purple-600 text-white text-sm font-medium rounded-xl hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            {saveMutation.isPending ? 'Guardando…' : (initial ? 'Guardar cambios' : 'Crear plantilla')}
-          </button>
-        </div>
+        {/* Live preview */}
+        {(preview.length > 0 || previewError) && (
+          <div style={{
+            background: 'var(--s50)',
+            border: '1px solid var(--s100)',
+            borderRadius: 8,
+            padding: '10px 14px',
+            marginBottom: 16,
+          }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+              Vista previa
+            </p>
+            {previewError ? (
+              <p style={{ fontSize: 12, color: 'var(--red)' }}>{previewError}</p>
+            ) : (
+              <SectionPreview sections={preview} />
+            )}
+          </div>
+        )}
+
+        {/* Default checkbox (new only) */}
+        {!initial && (
+          <label style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 10,
+            fontSize: 13,
+            color: 'var(--s700)',
+            cursor: 'pointer',
+            marginBottom: 16,
+          }}>
+            <input
+              type="checkbox"
+              checked={isDefault}
+              onChange={e => setIsDefault(e.target.checked)}
+              style={{ marginTop: 2, accentColor: 'var(--teal)', width: 15, height: 15 }}
+            />
+            Usar como plantilla predeterminada para este tipo de registro
+          </label>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'flex-end',
+        gap: 10,
+        padding: '12px 18px',
+        borderTop: '1px solid var(--s100)',
+        background: 'var(--s50)',
+      }}>
+        <button
+          onClick={onClose}
+          style={S.btnSecondary}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--s100)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fff'; }}
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={() => saveMutation.mutate()}
+          disabled={!canSave}
+          style={{
+            ...S.btnPrimary,
+            background: canSave ? 'var(--teal)' : 'var(--s200)',
+            cursor: canSave ? 'pointer' : 'not-allowed',
+            color: canSave ? '#fff' : 'var(--s400)',
+          }}
+          onMouseEnter={e => { if (canSave) (e.currentTarget as HTMLButtonElement).style.background = 'var(--teal-dark)'; }}
+          onMouseLeave={e => { if (canSave) (e.currentTarget as HTMLButtonElement).style.background = 'var(--teal)'; }}
+        >
+          {saveMutation.isPending ? 'Guardando…' : (initial ? 'Guardar cambios' : 'Crear plantilla')}
+        </button>
       </div>
     </div>
   );
 }
 
-// ── TemplateCard ────────────────────────────────────────────────────────────
-function TemplateCard({
-  tpl,
-  onEdit,
-}: {
-  tpl: RecordTemplate;
-  onEdit: (t: RecordTemplate) => void;
-}) {
+// ── TemplateCard ─────────────────────────────────────────────────────────────
+type CardMode = 'collapsed' | 'view' | 'edit';
+
+function TemplateCard({ tpl }: { tpl: RecordTemplate }) {
   const qc = useQueryClient();
-  const [expanded, setExpanded] = useState(false);
+  const [mode, setMode] = useState<CardMode>('collapsed');
 
   const archiveMutation = useMutation({
     mutationFn: () => recordTemplatesApi.archive(tpl.id),
@@ -275,77 +461,181 @@ function TemplateCard({
     onSuccess: () => qc.invalidateQueries({ queryKey: ['record-templates'] }),
   });
 
+  const toggle = (next: CardMode) => setMode(m => m === next ? 'collapsed' : next);
+
+  const IconButton = ({
+    onClick,
+    disabled,
+    label,
+    children,
+    hoverBg,
+    hoverColor,
+    color,
+  }: {
+    onClick: () => void;
+    disabled?: boolean;
+    label: string;
+    children: React.ReactNode;
+    hoverBg: string;
+    hoverColor: string;
+    color: string;
+  }) => (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      style={{ ...S.iconBtn, color, opacity: disabled ? 0.4 : 1 }}
+      onMouseEnter={e => {
+        if (!disabled) {
+          (e.currentTarget as HTMLButtonElement).style.background = hoverBg;
+          (e.currentTarget as HTMLButtonElement).style.color = hoverColor;
+        }
+      }}
+      onMouseLeave={e => {
+        (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+        (e.currentTarget as HTMLButtonElement).style.color = color;
+      }}
+    >
+      {children}
+    </button>
+  );
+
   return (
-    <div className="border border-gray-200 rounded-xl bg-white hover:border-gray-300 hover:shadow-sm transition-all">
+    <div
+      className="card"
+      style={{
+        overflow: 'hidden',
+        border: mode !== 'collapsed' ? '1px solid var(--teal)' : '1px solid var(--s200)',
+        transition: 'border-color .2s',
+      }}
+    >
       {/* Main row */}
-      <div className="flex items-start gap-3 p-4">
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px' }}>
         {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-1.5 mb-1">
-            <span className="font-semibold text-gray-800 text-sm leading-snug">{tpl.name}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 6px', marginBottom: 4 }}>
+            <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)', lineHeight: 1.3 }}>
+              {tpl.name}
+            </span>
             {tpl.is_default && (
-              <span className="inline-flex items-center gap-1 text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-medium">
-                <Star className="w-3 h-3" /> Predeterminada
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 3,
+                fontSize: 11,
+                background: 'var(--amber-l)',
+                color: 'var(--amber)',
+                border: '1px solid #fde68a',
+                borderRadius: 99,
+                padding: '1px 8px',
+                fontWeight: 600,
+              }}>
+                <Star size={10} /> Predeterminada
               </span>
             )}
-            <span className="inline-flex items-center text-xs bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full font-medium">
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              fontSize: 11,
+              background: 'var(--teal-l)',
+              color: 'var(--teal-dark)',
+              border: '1px solid var(--teal-100)',
+              borderRadius: 99,
+              padding: '1px 8px',
+              fontWeight: 600,
+            }}>
               {RECORD_TYPE_SHORT[tpl.record_type as RecordType] ?? tpl.record_type}
             </span>
           </div>
-          <p className="text-xs text-gray-400">
+          <p style={{ fontSize: 12, color: 'var(--s400)' }}>
             {tpl.schema.length} {tpl.schema.length === 1 ? 'sección' : 'secciones'} · v{tpl.version}
           </p>
         </div>
 
-        {/* Actions — icon-only (44px touch targets) */}
-        <div className="flex items-center gap-0.5 shrink-0 -mr-1">
-          <button
-            onClick={() => setExpanded(e => !e)}
-            aria-label={expanded ? 'Ocultar secciones' : 'Ver secciones'}
-            className="h-10 w-10 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+        {/* Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+          <IconButton
+            onClick={() => toggle('view')}
+            label={mode === 'view' ? 'Ocultar markdown' : 'Ver markdown'}
+            color="var(--s400)"
+            hoverBg="var(--s100)"
+            hoverColor="var(--s700)"
           >
-            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
+            {mode === 'view' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </IconButton>
           {!tpl.is_default && (
-            <button
+            <IconButton
               onClick={() => defaultMutation.mutate()}
               disabled={defaultMutation.isPending}
-              aria-label="Marcar como predeterminada"
-              title="Predeterminar"
-              className="h-10 w-10 flex items-center justify-center rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 disabled:opacity-40 transition-colors"
+              label="Marcar como predeterminada"
+              color="#fbbf24"
+              hoverBg="#fffbeb"
+              hoverColor="var(--amber)"
             >
-              <Star className="w-4 h-4" />
-            </button>
+              <Star size={15} />
+            </IconButton>
           )}
-          <button
-            onClick={() => onEdit(tpl)}
-            aria-label="Editar plantilla"
-            title="Editar"
-            className="h-10 w-10 flex items-center justify-center rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+          <IconButton
+            onClick={() => toggle('edit')}
+            label={mode === 'edit' ? 'Cerrar editor' : 'Editar plantilla'}
+            color={mode === 'edit' ? 'var(--teal)' : 'var(--s400)'}
+            hoverBg="var(--teal-l)"
+            hoverColor="var(--teal-dark)"
           >
-            <Pencil className="w-4 h-4" />
-          </button>
-          <button
+            <Pencil size={15} />
+          </IconButton>
+          <IconButton
             onClick={() => {
               if (confirm(`¿Archivar "${tpl.name}"? Los registros existentes no se verán afectados.`))
                 archiveMutation.mutate();
             }}
             disabled={archiveMutation.isPending}
-            aria-label="Archivar plantilla"
-            title="Archivar"
-            className="h-10 w-10 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 disabled:opacity-40 transition-colors"
+            label="Archivar plantilla"
+            color="var(--s300)"
+            hoverBg="#fff5f5"
+            hoverColor="var(--red)"
           >
-            <Archive className="w-4 h-4" />
-          </button>
+            <Archive size={15} />
+          </IconButton>
         </div>
       </div>
 
-      {/* Expanded sections */}
-      {expanded && (
-        <div className="px-4 pb-4 border-t border-gray-100">
-          <div className="pt-3">
-            <SectionPreview sections={tpl.schema} />
-          </div>
+      {/* Expanded region */}
+      {mode === 'view' && (
+        <div style={{ borderTop: '1px solid var(--s100)', padding: '14px 16px' }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+            Markdown fuente
+          </p>
+          <pre style={{
+            fontFamily: "'DM Mono', monospace",
+            fontSize: 12.5,
+            lineHeight: 1.7,
+            color: 'var(--s700)',
+            background: 'var(--s50)',
+            border: '1px solid var(--s200)',
+            borderRadius: 8,
+            padding: '12px 14px',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            margin: 0,
+          }}>
+            {tpl.source_markdown}
+          </pre>
+          {tpl.schema.length > 0 && (
+            <div style={{ marginTop: 14 }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                Secciones parseadas
+              </p>
+              <SectionPreview sections={tpl.schema} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {mode === 'edit' && (
+        <div style={{ borderTop: '1px solid var(--s100)', padding: 16 }}>
+          <TemplateEditor initial={tpl} onClose={() => setMode('collapsed')} />
         </div>
       )}
     </div>
@@ -354,9 +644,9 @@ function TemplateCard({
 
 // ── Main component ──────────────────────────────────────────────────────────
 export default function RecordTemplatesSection() {
-  const [showEditor, setShowEditor] = useState(false);
-  const [editing, setEditing] = useState<RecordTemplate | undefined>();
+  const [creating, setCreating] = useState(false);
   const [filterType, setFilterType] = useState<RecordType | ''>('');
+  const filterFocus = useFocus();
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ['record-templates', filterType],
@@ -364,29 +654,44 @@ export default function RecordTemplatesSection() {
   });
 
   return (
-    <div className="space-y-5">
-      {/* Header — stacks on mobile */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div>
-          <h3 className="text-base font-semibold text-gray-900">Plantillas de registro clínico</h3>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--s800)', margin: 0 }}>
+            Plantillas de registro clínico
+          </h3>
+          <p style={{ fontSize: 13, color: 'var(--s500)', marginTop: 4, maxWidth: 480 }}>
             Define los campos de cada tipo de registro. La IA rellena las secciones de la plantilla elegida al grabar una sesión.
           </p>
         </div>
         <button
-          onClick={() => { setEditing(undefined); setShowEditor(true); }}
-          className="flex items-center justify-center gap-2 h-11 px-4 bg-purple-600 text-white text-sm font-medium rounded-xl hover:bg-purple-700 active:bg-purple-800 transition-colors shrink-0 w-full sm:w-auto"
+          onClick={() => setCreating(c => !c)}
+          style={{
+            ...S.btnPrimary,
+            background: creating ? 'var(--teal-dark)' : 'var(--teal)',
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--teal-dark)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = creating ? 'var(--teal-dark)' : 'var(--teal)'; }}
         >
-          <Plus className="w-4 h-4" />
-          Nueva plantilla
+          <Plus size={16} />
+          {creating ? 'Cancelar' : 'Nueva plantilla'}
         </button>
       </div>
 
-      {/* Filter — full width on mobile */}
+      {/* Filter */}
       <select
         value={filterType}
-        onChange={(e) => setFilterType(e.target.value as RecordType | '')}
-        className="w-full sm:w-auto h-10 rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+        onChange={e => setFilterType(e.target.value as RecordType | '')}
+        style={{
+          ...S.select,
+          width: '100%',
+          maxWidth: 260,
+          ...(filterFocus.focused ? { boxShadow: '0 0 0 2px var(--teal-10)', border: '1px solid var(--teal)' } : {}),
+        }}
+        onFocus={filterFocus.onFocus}
+        onBlur={filterFocus.onBlur}
       >
         <option value="">Todos los tipos</option>
         {(['INITIAL', 'EVOLUTION', 'DISCHARGE'] as RecordType[]).map(rt => (
@@ -394,48 +699,61 @@ export default function RecordTemplatesSection() {
         ))}
       </select>
 
+      {/* Inline create panel */}
+      {creating && (
+        <div className="anim-fade-up">
+          <TemplateEditor onClose={() => setCreating(false)} />
+        </div>
+      )}
+
       {/* List */}
       {isLoading ? (
-        <div className="space-y-3">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {[1, 2, 3].map(i => (
-            <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />
+            <div key={i} style={{
+              height: 72,
+              background: 'var(--s100)',
+              borderRadius: 'var(--radius)',
+              animation: 'pulse 1.5s ease infinite',
+            }} />
           ))}
         </div>
-      ) : templates.length === 0 ? (
-        <div className="text-center py-14 text-gray-400">
-          <div className="w-12 h-12 rounded-2xl bg-purple-50 flex items-center justify-center mx-auto mb-3">
-            <Plus className="w-6 h-6 text-purple-400" />
+      ) : templates.length === 0 && !creating ? (
+        <div style={{ textAlign: 'center', padding: '56px 0', color: 'var(--s400)' }}>
+          <div style={{
+            width: 48,
+            height: 48,
+            borderRadius: 14,
+            background: 'var(--teal-l)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 14px',
+          }}>
+            <Plus size={22} color="var(--teal)" />
           </div>
-          <p className="text-sm font-medium text-gray-500">Sin plantillas personalizadas</p>
-          <p className="text-xs mt-1">Crea una para personalizar los campos de tus registros clínicos.</p>
+          <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--s600)', margin: '0 0 4px' }}>
+            Sin plantillas personalizadas
+          </p>
+          <p style={{ fontSize: 13, color: 'var(--s400)', margin: 0 }}>
+            Crea una para personalizar los campos de tus registros clínicos.
+          </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {templates.map(tpl => (
-            <TemplateCard
-              key={tpl.id}
-              tpl={tpl}
-              onEdit={(t) => { setEditing(t); setShowEditor(true); }}
-            />
+            <TemplateCard key={tpl.id} tpl={tpl} />
           ))}
         </div>
       )}
 
-      {/* Note */}
-      <div className="border-t pt-4">
-        <p className="text-xs text-gray-400">
-          Las <strong>plantillas de consentimiento</strong> (Tratamiento, Grabación, etc.)
+      {/* Footer note */}
+      <div style={{ borderTop: '1px solid var(--s200)', paddingTop: 16 }}>
+        <p style={{ fontSize: 12, color: 'var(--s400)', margin: 0 }}>
+          Las <strong style={{ color: 'var(--s500)' }}>plantillas de consentimiento</strong> (Tratamiento, Grabación, etc.)
           se editan en la sección "Plantillas clínicas".
         </p>
       </div>
-
-      {/* Editor modal */}
-      {showEditor && (
-        <TemplateEditor
-          initial={editing}
-          onClose={() => { setShowEditor(false); setEditing(undefined); }}
-        />
-      )}
     </div>
   );
 }
