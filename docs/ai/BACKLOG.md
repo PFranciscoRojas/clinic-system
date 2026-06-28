@@ -41,6 +41,14 @@
 - **SoonRow "Próximamente" en Notificaciones (BAJO)** — SMS, "Nuevo paciente registrado", "Cancelación de cita", "Resumen semanal", "Borrador IA listo" son toggles decorativos. Se dejan como señal de roadmap (honestos con badge Próximamente).
 - ✅ **`StubPage.tsx` muerto (BAJO)** — eliminado 2026-06-24.
 
+## Plantillas de registro — Fase 2 (post sesión 15)
+
+- **Autodetección de plantilla por IA (2026-06-28)** — cuando el profesional no elige plantilla, que el LLM detecte el tipo de registro y sugiera la plantilla más adecuada basándose en el contenido transcrito. Complejidad alta; requiere umbral de confianza y confirmación explícita del profesional.
+- **Importación de plantillas entre clínicas (2026-06-28)** — exportar plantillas como `.md` y permitir subir el mismo archivo en otra organización. Útil para cadenas de clínicas o consultores que configuran múltiples tenants.
+- **Versionado estricto de plantillas para registros firmados (2026-06-28)** — actualmente `template_id` apunta a la plantilla viva (incluso si fue actualizada). Para mayor integridad legal: guardar snapshot del schema en el momento de la aprobación directamente en `clinical_records.sections_enc` o en una columna `template_schema_snapshot JSONB`. Requiere decisión de producto (complejidad vs. espacio).
+- **PDF con etiquetas de plantilla personalizada (2026-06-28)** — el renderer de PDF actual (`clinicalrecords/pdf/renderer.go`) usa etiquetas hardcoded. Cuando `template_id` está presente, resolver etiquetas y orden de secciones desde el schema de la plantilla. Pendiente de implementar.
+- **AIDraftPage — edición de secciones tipadas (2026-06-28)** — el modo edición del draft con plantilla custom actualmente es read-only (muestra el form deshabilitado y el botón "Editar" activa el formulario). Verificar que `TemplatedSectionsForm` con `disabled=false` funcione fluidamente para todos los tipos de campo (especialmente widgets de solo lectura como `TreatmentPlanPanel` y `DiagnosesPanel` que son self-contained).
+
 ## Fase 3 — IA y Automatizaciones
 - **Google Calendar (OAuth + sync)** — ✅ Implementado (2026-06-24): OAuth per-profesional con tokens cifrados, sync SGHCP→Google en create/cancel/backfill, limpieza al desconectar, `GoogleCalendarCard` en Settings.
 - **Recordatorios + confirmación por WhatsApp (Meta Cloud API)** — ✅ Implementado (2026-06-23): credenciales por-tenant cifradas (`org_whatsapp_config`, migración 000034), sender `internal/whatsapp`, recordatorios 24h/2h y confirmación de cita por plantilla aprobada, UI de configuración en Ajustes → Notificaciones. Pendiente operativo (no-código): cada clínica verifica su Meta Business + aprueba sus plantillas. Sin webhooks de estado de entrega aún.

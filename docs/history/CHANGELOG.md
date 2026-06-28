@@ -13,6 +13,10 @@
 
 ---
 
+## 2026-06-28 (sesión 15)
+
+- feat(clinical): plantillas de registro clínico definibles por el profesional en Markdown — tabla `clinical_record_templates` (migración 000046, RLS, permisos `record_templates:*`), `clinical_records.template_id`; parser Go `## heading {type}` → `[]SectionDef`; 7 endpoints CRUD + `/parse` preview; `field-widgets.json` catálogo compartido Go/Python/TS; Settings → "Formatos de registro" con editor markdown + preview en vivo + paleta de widgets; `TemplatedSectionsForm` renderiza `text/select/scale/checklist/widget` usando componentes existentes (`MentalExamChecklist`, `RiskSelector`, etc.); `RecordForm` con selector de plantilla, default preseleccionada; `AIDraftPage` usa `TemplatedSectionsForm` con secciones tipadas cuando draft tiene `template_id`; `AppointmentPage` propaga `template_id` a los 3 puntos de `uploadAudio`; worker Python carga schema JSONB y construye prompt dinámico por tipo. Deployado a VPS (migración 000046 aplicada, frontend rebuild). (`aa4ce66`, `32620a7`)
+
 ## 2026-06-27 (sesión 14)
 
 - estratégico: análisis SGHCP vs. Startup Playbook (Altman). Sin cambios de código ni deploy. Decisión de founder: congelar nuevas olas de features y validar demanda real con 2-3 psicólogas externas (beta de diseño gratuita, 2 semanas) antes de fijar precio y vender. Cuello de botella identificado: distribución (0 demos a extraños), no producto. Siguiente acción no-técnica: contactar hoy a las 2 colegas disponibles.

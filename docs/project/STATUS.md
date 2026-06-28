@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-06-27)
+## Estado actual (2026-06-28)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -19,6 +19,7 @@
 | BC-6 Facturación | ✅ producción | Tarjeta/PSE/Efecty/Nequi, semana/mes/3meses/año, balance-por-paciente |
 | Ola Notificaciones | ✅ producción | Email diferido/conflicto a admins, WhatsApp `cita_confirmada` verificado (es_CO). Bloqueado por cargo pendiente Meta. |
 | Ola Integraciones | ✅ producción | Google Calendar OAuth per-profesional, sync SGHCP→Google, grabación con IndexedDB |
+| Ola Plantillas de registro (sesión 15) | ✅ producción | Formatos clínicos definibles por el profesional en Markdown; parser → `SectionDef[]`; tabla `clinical_record_templates` (migración 000046); CRUD + preview en vivo en Settings; `TemplatedSectionsForm` renderiza tipos + widgets existentes; AI worker usa schema dinámico; `template_id` viaja en todo el flujo audio→draft→aprobación. |
 | Ola Legal (Colombia) | ✅ producción | ToS + Política privacidad (Ley 1581/Ley 1480), DPA Encargado-Responsable, checkbox aceptación signup, modal DPA, banner IA reforzado. Migración 000038 |
 | Ola Gobernanza (sesión 6) | ✅ producción | Cuenta desactivada → 403 español. Eliminación con confirmación por correo + reactivación. CLINIC_ADMIN solo-lectura clínica (migración 000039). Break-the-glass con audit trail. CMS legal editable (migración 000040, Markdown, editor con preview). |
 | Ola Tabs clínicos (sesión 7) | ✅ producción | Rediseño tabs perfil paciente: Agenda (citas) + Historia clínica (registros+Dx+Plan). Break-the-glass refinado: solo al abrir contenido confidencial (Dx, Plan, SOAP), no al ver metadata. RiskBanner y "Sesión pasada" ocultos para admin puro. Razón justificada persiste en sessionStorage por paciente. |
@@ -26,11 +27,11 @@
 
 ### Últimos commits a `main`
 
-- `c6191d3` feat(admin): pestaña Plataforma en SuperAdmin con config MP por BD + nav limpio para SYSTEM_ADMIN — 2026-06-27
-- `829d4ec` feat(settings): pestaña Integraciones con gate de contraseña (CLINIC_ADMIN) — 2026-06-27
-- `8580e05` fix(booking): use WithOrgScope in orgWebhookSecret to satisfy RLS — 2026-06-27
-- `d5c7b58` feat(orgs): modo test/producción visible en Ajustes → Pagos — 2026-06-27
-- `c45a264` feat(booking): añadir items.description y payer first/last_name a preferencia MP — 2026-06-27
+- `32620a7` feat(clinical): conectar template_id al flujo audio → draft → aprobación — 2026-06-28
+- `aa4ce66` feat(clinical): plantillas de registro clínico definidas por el profesional — 2026-06-28
+- `e1bae26` docs: sesión 14 — análisis Startup Playbook — 2026-06-27
+- `932bbe2` fix(admin): ocultar 'Mi agenda' y 'Nueva Cita' del header para SYSTEM_ADMIN — 2026-06-27
+- `c6191d3` feat(admin): pestaña Plataforma en SuperAdmin con config MP por BD — 2026-06-27
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 > **CI/CD:** `core-api` y `ai-service` se construyen en GitHub Actions y se despliegan a ghcr.io. El VPS solo hace `docker pull` — sin builds locales.
@@ -100,9 +101,9 @@
 | `core-api` | `services/core-api/` | ✅ Go 1.25, prod |
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
-| Migrations | `services/core-api/migrations/` | Última: `000045_platform_settings` |
+| Migrations | `services/core-api/migrations/` | Última: `000046_record_templates` |
 | CI/CD | `.github/workflows/build-ai-service.yml` + `build-core-api.yml` | Build+push ghcr.io + deploy SSH al VPS (secrets: `VPS_HOST`, `VPS_SSH_KEY`, `GHCR_TOKEN`) |
-| Claude skills | `~/.claude/commands/` | Sincronizadas 2026-06-27 |
+| Claude skills | `~/.claude/commands/` | Sincronizadas 2026-06-28 |
 
 ---
 
