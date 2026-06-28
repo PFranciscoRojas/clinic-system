@@ -1,13 +1,13 @@
 ## Sin tarea pendiente
 
-Sesión 17 cerrada. Plantillas de Marcela visibles en el frontend correcto. Rediseño mobile de RecordTemplatesSection deployado — revisión visual pendiente desde PC mañana.
+Sesión 17 cerrada limpiamente. Backlog actualizado con 3 temas nuevos.
 
 ## Sugerencia de siguiente paso
 
-Basándome en STATUS.md (bloqueantes + roadmap) y BACKLOG.md, lo más valioso a atacar ahora es:
+1. **Revisar RecordTemplatesSection en desktop** — el usuario lo revisará mañana desde el PC para confirmar que el rediseño mobile-first se ve bien también en pantalla grande.
 
-1. **Revisión visual del rediseño mobile en desktop** — el usuario revisará mañana desde el PC para confirmar que los cambios de `RecordTemplatesSection` (bottom sheet, íconos, grid responsive) se ven bien también en pantalla grande.
+2. **Acción no-técnica prioritaria: enviar mensaje de reclutamiento a las 2 psicólogas** — plantilla lista en BACKLOG.md → Validación. El cuello de botella sigue siendo distribución, no producto.
 
-2. **Acción no-técnica prioritaria: enviar el mensaje de reclutamiento a las 2 psicólogas** — sigue siendo el cuello de botella. El mensaje está redactado en `BACKLOG.md` → Validación / Go-to-market. Antes de abrir el editor de código, abrir el chat.
+3. **Investigar pruebas psicométricas** — una vez estén las betas activas, preguntar qué instrumentos usan y si tendría valor integrarlos. Ver guía de investigación en BACKLOG.md → Pruebas Psicológicas.
 
-3. **Verificar desbloqueo Meta API** — cargo COP $90.675 pagado. Confirmar en Meta Business Suite que Cloud API dejó de dar error → pegar nombres exactos de plantillas en Ajustes → Integraciones.
+4. **Marca + landing** — solo después de confirmar willingness-to-pay externa. Skills disponibles: `/ui-ux-pro-max` + `/ui-styling`.

@@ -6,7 +6,9 @@
 - **Congelar features hasta tener señal de willingness-to-pay externa (2026-06-27)** — pausar nuevas olas (WhatsApp templates, RIPS, videollamada, verificación Google, SuperAdmin extras) hasta que al menos una psicóloga externa confirme que pagaría. Cada feature nueva antes de eso es ruido.
 - **Mensaje de reclutamiento para beta (2026-06-27)** — plantilla aprobada: "Hola [nombre]. Construí un sistema de historia clínica para psicólogos — cifrado, cumple la norma colombiana, y graba la sesión y te arma el borrador de la nota en segundos. Lo uso con [esposa] y funciona muy bien. Quiero que 2 colegas en quien confío lo prueben gratis 2 semanas y me digan sin filtro qué sirve y qué se rompe. ¿Te animas? Te lo dejo listo y te acompaño yo mismo."
 
-## Marca / Landing Page SaaS (2026-06-26)
+## Marca / Landing Page SaaS (2026-06-27 — prioridad post-beta)
+
+- **Cuando atacar esto** — solo después de tener al menos 1 psicóloga externa confirmando willingness-to-pay. La marca y la landing son el paso de distribución; sin señal de demanda, es ruido. Herramienta disponible: skill `/ui-styling` (shadcn/ui + Tailwind) y `/ui-ux-pro-max` para las decisiones de diseño.
 - **Repo separado para landing page de marketing** — el sistema actual no tiene página de venta del SaaS. Crear repositorio independiente (Next.js estático o Astro). Dominio propio (ej. sinapsis.co).
 - **Sistema de diseño de marca completo** — antes de tocar código de la landing: definir nombre final, paleta de color (HEX), tipografías (display + body), concepto de logo, lenguaje visual (formas, patrones, fotografía/ilustración). Tres direcciones propuestas: A "El Aliado" (verde bosque + crema, serif+humanista), B "El Experto" (índigo + teal, sans geométrica), C "El Espacio" (pizarra + salvia, minimalismo radical).
 - **Nombre del SaaS — candidatos evaluados**: Sinapsis (favorito — neurología, memorable, .co disponible), PsiCore, Therapio, Clinova, Vínculo, Flujo. Pendiente: reservar dominio una vez decidido.
@@ -33,8 +35,13 @@
 - **Migrar más servicios a build CI (2026-06-24)** — ✅ `core-api` y `ai-service` ya se construyen en GitHub Actions. El VPS solo hace `docker pull`.
 - **Prometheus + Grafana (cuando haya clientes reales pagando)** — añadir 2 contenedores al VPS: `prometheus` + `grafana` + `postgres_exporter`. Da gráficas de series de tiempo (conexiones, latencia, IOPS, etc.) con historial de días/semanas. ~300 MB RAM adicional. Diferir hasta tener carga real que justifique el overhead operativo.
 
+## Pruebas Psicológicas / Psicométricas (investigar antes de implementar)
+
+- **Investigar valor diferencial de pruebas psicométricas integradas (2026-06-27)** — antes de construir nada, responder: ¿qué pruebas usan realmente los psicólogos colombianos en consulta? (PHQ-9, GAD-7, BDI-II, SCL-90, MMSE, escalas de ansiedad Beck, Conners pediátricas, pruebas proyectivas). ¿Están disponibles en dominio público o tienen licencia de pago (TEA, Pearson)? ¿Se pueden aplicar digitalmente sin infringir derechos? ¿Qué valor le aporta al profesional vs. papel? Preguntas para las betas de diseño. Solo implementar si hay demanda clara y los instrumentos son de libre uso.
+- **Diseño técnico si se implementa (2026-06-27)** — tabla `patient_evaluations` (score cifrado, respuestas JSONB cifradas, instrumento, fecha, profesional); endpoints BC-5; display de score+banda normativa en perfil paciente; historial de mediciones para tracking de evolución; posibilidad de incluir resultado en el borrador IA. Complejidad: media-alta dependiendo del número de instrumentos a soportar.
+
 ## Code-debt — features mockeadas sin backend (auditoría 2026-06-24)
-- **Evaluaciones psicométricas (ALTO)** — módulo eliminado completamente (decisión producto 2026-06-24: no se implementa por ahora). Cuando se retome: tabla `patient_evaluations` (cifrada), endpoints BC-5, persistir score+band+respuestas, listar histórico en perfil de paciente. Roadmap post-1.0 "PHQ-9 y escalas".
+- **Evaluaciones psicométricas (ALTO)** — módulo eliminado completamente (decisión producto 2026-06-24: no se implementa por ahora). Ver sección "Pruebas Psicológicas" arriba para el análisis pendiente.
 - ✅ **Bloqueo de pantalla configurable (MEDIO)** — resuelto 2026-06-24: `lib/screenLock.ts` + AppShell reactivo.
 - ✅ **Formato "Con viñetas" sin implementar (TRIVIAL)** — resuelto 2026-06-24: opción eliminada de la UI.
 - ✅ **Retención de borradores no aprobados (MEDIO)** — resuelto 2026-06-24: sweeper `internal/aidrafts/retention` activo.
