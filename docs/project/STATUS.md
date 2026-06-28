@@ -27,11 +27,11 @@
 
 ### Últimos commits a `main`
 
+- `ab50821` refactor(clinical): rewrite RecordTemplatesSection with app design system — 2026-06-28
+- `8ebfc45` docs: backlog pruebas psicométricas + marca + ui-styling skill instalada — 2026-06-27
+- `9e0c5ba` docs: sesión 17 — fix org Marcela + mobile redesign RecordTemplates — 2026-06-27
 - `8983ae1` feat(settings): mobile-first redesign of RecordTemplatesSection — 2026-06-27
-- `7183a75` docs: corregir org ID real de Marcela Chapués en STATUS.md — 2026-06-27
 - `1042486` docs: sesión 16 — PDF renderer con plantillas custom completo — 2026-06-28
-- `2991af2` feat(clinical/pdf): render de plantillas custom en exportación PDF — 2026-06-27
-- `32620a7` feat(clinical): conectar template_id al flujo audio → draft → aprobación — 2026-06-28
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 > **CI/CD:** `core-api` y `ai-service` se construyen en GitHub Actions y se despliegan a ghcr.io. El VPS solo hace `docker pull` — sin builds locales.
@@ -105,7 +105,7 @@
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
 | Migrations | `services/core-api/migrations/` | Última: `000046_record_templates` |
 | CI/CD | `.github/workflows/build-ai-service.yml` + `build-core-api.yml` | Build+push ghcr.io + deploy SSH al VPS (secrets: `VPS_HOST`, `VPS_SSH_KEY`, `GHCR_TOKEN`) |
-| Claude skills | `~/.claude/commands/` + `~/.claude/skills/` | `ui-ux-pro-max` instalada 2026-06-27; sincronizadas 2026-06-27 |
+| Claude skills | `~/.claude/commands/` + `~/.claude/skills/` | `ui-ux-pro-max` instalada; `ui-styling` (Tailwind/shadcn) desinstalada 2026-06-28 — proyecto usa inline styles |
 
 ---
 

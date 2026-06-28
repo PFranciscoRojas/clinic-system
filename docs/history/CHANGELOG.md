@@ -13,6 +13,12 @@
 
 ---
 
+## 2026-06-28 (sesión 18)
+
+- refactor(clinical): reescritura completa de `RecordTemplatesSection.tsx` (`ab50821`) — causa raíz del "feo/desorganizado": era el único archivo del proyecto con clases Tailwind, que no está instalado (todas resolvían a nada; el "modal" `fixed inset-0` caía al fondo de la página en flujo normal). Migrado a inline styles + CSS vars del sistema (`var(--teal)`, `var(--s*)`, `var(--radius)`). Cambios: color morado → teal de marca; "Ver" despliega markdown fuente inline bajo cada tarjeta; "Editar" despliega editor inline bajo la tarjeta; "Nueva plantilla" abre panel inline arriba de la lista; `TemplateCard` con estado `mode: collapsed|view|edit`. Desplegado a VPS (frontend rebuild). TypeScript limpio.
+- chore(tools): desinstalada skill `ui-styling` (shadcn/ui + Tailwind CSS) — no aplica al proyecto; el frontend usa solo inline styles + variables CSS propias.
+- docs(backlog): instrucciones para crear widgets clínicos personalizados registradas en BACKLOG (3 pasos: componente en `components/clinical/`, case en `WidgetField` de `TemplatedSectionsForm.tsx`, label en `WIDGET_LABELS`).
+
 ## 2026-06-27 (sesión 17)
 
 - fix(db): 4 plantillas de registro clínico insertadas en org incorrecto (`MarcelaChapues` / fbf1fb3d) en lugar del org real con usuarios (`Marcela Chapués` / aa2cbd1f, 5 usuarios). Movidas al org correcto; STATUS.md corregido con el ID canónico. Root cause: dos orgs con nombres casi idénticos (con/sin acento y espacios).
