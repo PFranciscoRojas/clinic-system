@@ -9,6 +9,8 @@ export interface AIDraft {
   status: DraftStatus;
   ai_model_version: string;
   whisper_model: string;
+  /** Optional custom template used when the recording was initiated. */
+  template_id?: string;
   /** Draft shape: { record_type, sections: {...} }. */
   draft_content_plain?: Record<string, unknown> | null;
   /** Whisper transcription — always available once processed, even if sections are empty. */
@@ -20,11 +22,12 @@ export interface AIDraft {
 }
 
 export interface ApproveDraftInput {
-  sections?: Record<string, string>;
+  sections?: Record<string, unknown>;
   session_date?: string;
   record_type?: string;
   appointment_id?: string;
   risk_level?: string;
+  template_id?: string;
 }
 
 export interface DraftMeta {

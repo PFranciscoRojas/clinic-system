@@ -67,11 +67,12 @@ export const appointmentsApi = {
   cancel: (id: string, reason: string) =>
     api.delete<void>(`/appointments/${id}`, { reason }),
 
-  uploadAudio: (appointmentId: string, patientId: string, file: File, recordType?: string) => {
+  uploadAudio: (appointmentId: string, patientId: string, file: File, recordType?: string, templateId?: string) => {
     const form = new FormData();
     form.append('audio', file);
     form.append('patient_id', patientId);
     if (recordType) form.append('record_type', recordType);
+    if (templateId) form.append('template_id', templateId);
     return api.upload<{ draft_id: string }>(`/appointments/${appointmentId}/audio`, form);
   },
 

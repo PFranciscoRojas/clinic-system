@@ -71,12 +71,13 @@ interface AudioSectionProps {
   patientId: string;
   draftId: string;
   recordType: string;
+  templateId?: string;
   sessionDate: string;
   processing?: boolean;
   onDraftCreated: (draftId: string) => void;
 }
 
-function AudioSection({ appointmentId, patientId, draftId, recordType, sessionDate, processing, onDraftCreated }: AudioSectionProps) {
+function AudioSection({ appointmentId, patientId, draftId, recordType, templateId, sessionDate, processing, onDraftCreated }: AudioSectionProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState('');
@@ -108,7 +109,7 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, sessionDa
   const handleFile = async (file: File) => {
     setUploading(true); setUploadErr('');
     try {
-      const res = await appointmentsApi.uploadAudio(appointmentId, patientId, file, recordType);
+      const res = await appointmentsApi.uploadAudio(appointmentId, patientId, file, recordType, templateId);
       onDraftCreated(res.draft_id);
     } catch {
       setUploadErr('Error al subir el audio. Verifica el formato (mp3, wav, m4a).');
@@ -342,6 +343,8 @@ export function AppointmentPage() {
   // The record type the professional is actively filling — drives which format
   // the session recording / AI draft targets. Set by RecordForm via onTypeChange.
   const [selectedRecordType, setSelectedRecordType] = useState<RecordType | null>(null);
+  // Template ID selected in RecordForm (undefined = integrated format)
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>();
 
   const { data: appt, isLoading, isError } = useQuery({
     queryKey: ['appointment', id],
@@ -549,7 +552,7 @@ export function AppointmentPage() {
     await handleStatusChange('COMPLETED');
     if (audio && appt?.patient_id) {
       try {
-        const res = await appointmentsApi.uploadAudio(id!, appt.patient_id, audio, aiRecordType);
+        const res = await appointmentsApi.uploadAudio(id!, appt.patient_id, audio, aiRecordType, selectedTemplateId);
         handleDraftCreated(res.draft_id);
         recordingStore.clear(id!).catch(() => {});
         setRecoveredChunks([]);
@@ -573,7 +576,7 @@ export function AppointmentPage() {
     try {
       const blob = new Blob(recoveredChunks, { type: 'audio/webm' });
       const file = new File([blob], `session-${id}.webm`, { type: 'audio/webm' });
-      const res = await appointmentsApi.uploadAudio(id!, appt.patient_id, file, aiRecordType);
+      const res = await appointmentsApi.uploadAudio(id!, appt.patient_id, file, aiRecordType, selectedTemplateId);
       handleDraftCreated(res.draft_id);
       recordingStore.clear(id!).catch(() => {});
       setRecoveredChunks([]);
@@ -874,7 +877,7 @@ export function AppointmentPage() {
                   <span><b>Registro extemporáneo</b> — motivo: {lateReason}. Quedará declarado en la historia y en el PDF.</span>
                 </div>
               )}
-              <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} hasOpenProcess={hasOpenProcess} onTypeChange={setSelectedRecordType} onSaved={handleRecordSaved} />
+              <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} hasOpenProcess={hasOpenProcess} onTypeChange={setSelectedRecordType} onTemplateChange={setSelectedTemplateId} onSaved={handleRecordSaved} />
             </div>
 
             {/* ASIDE — recap + borrador IA como apoyo (sticky en desktop) */}
@@ -897,6 +900,7 @@ export function AppointmentPage() {
                     patientId={appt.patient_id}
                     draftId={draftId}
                     recordType={aiRecordType}
+                    templateId={selectedTemplateId}
                     sessionDate={apptDate}
                     processing={processingAudio}
                     onDraftCreated={handleDraftCreated}
@@ -1240,6 +1244,7 @@ export function AppointmentPage() {
                 patientId={appt.patient_id}
                 draftId={draftId}
                 recordType={aiRecordType}
+                templateId={selectedTemplateId}
                 sessionDate={apptDate}
                 processing={processingAudio}
                 onDraftCreated={handleDraftCreated}
@@ -1303,7 +1308,7 @@ export function AppointmentPage() {
                 <span><b>Registro extemporáneo</b> — motivo: {lateReason}. Quedará declarado en la historia y en el PDF.</span>
               </div>
             )}
-            <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} hasOpenProcess={hasOpenProcess} onTypeChange={setSelectedRecordType} onSaved={handleRecordSaved} />
+            <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} hasOpenProcess={hasOpenProcess} onTypeChange={setSelectedRecordType} onTemplateChange={setSelectedTemplateId} onSaved={handleRecordSaved} />
           </div>
         ) : canWriteNote ? (
           <div style={{ textAlign: 'center', padding: '24px 0' }}>

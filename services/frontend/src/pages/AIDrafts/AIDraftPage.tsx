@@ -8,9 +8,12 @@ import {
 import { aiDraftsApi, type DraftStatus } from '@/api/aiDrafts';
 import { useIsMobile } from '@/lib/useMediaQuery';
 import { diagnosesApi, type ICD10Code } from '@/api/diagnoses';
+import { recordTemplatesApi } from '@/api/recordTemplates';
+import type { RecordSections } from '@/api/clinicalRecords';
 import { TEMPLATE_SECTIONS, RECORD_TYPE_LABELS, type SectionDef } from '@/components/clinical/constants';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
+import TemplatedSectionsForm, { type SectionsState } from '@/components/clinical/TemplatedSectionsForm';
 
 const STATUS_CONFIG: Record<DraftStatus, { label: string; color: string; bg: string; Icon: React.ElementType }> = {
   PENDING:      { label: 'En cola',        color: '#6b7280', bg: '#f3f4f6', Icon: Clock        },
@@ -37,6 +40,8 @@ export function AIDraftPage() {
   // All sections start open — collapsing is the exception
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [draftEdit, setDraftEdit] = useState<Record<string, string>>({});
+  // State for custom-template mode (typed sections, not just strings)
+  const [customEdit, setCustomEdit] = useState<SectionsState>({});
   const [approving, setApproving] = useState(false);
   const [approveErr, setApproveErr] = useState('');
   const [createdRecordId, setCreatedRecordId] = useState('');
@@ -57,6 +62,21 @@ export function AIDraftPage() {
     },
   });
 
+  // Load the custom template schema when the draft was created with one
+  const { data: customTemplate } = useQuery({
+    queryKey: ['record-template', draft?.template_id],
+    queryFn: () => recordTemplatesApi.get(draft!.template_id!),
+    enabled: !!draft?.template_id,
+  });
+
+  // Seed customEdit from draft content when using a custom template
+  useEffect(() => {
+    if (!customTemplate || !draft) return;
+    const raw = draft.draft_content_plain as Record<string, unknown> | null;
+    const sections = (raw?.sections ?? {}) as RecordSections;
+    setCustomEdit(sections);
+  }, [customTemplate, draft]);
+
   // Seed the ICD-10 selector from the AI suggestion once, when the draft loads
   useEffect(() => {
     if (icd10 !== undefined) return;
@@ -73,17 +93,31 @@ export function AIDraftPage() {
     setApproving(true);
     setApproveErr('');
     try {
-      const finalSections: Record<string, string> = {};
-      for (const def of sectionDefs) {
-        const v = (draftEdit[def.key] ?? baseContent[def.key] ?? '').trim();
-        if (v) finalSections[def.key] = v;
+      let approveBody: Parameters<typeof aiDraftsApi.approve>[1];
+      if (customTemplate) {
+        // Custom template path: send typed sections as-is
+        approveBody = {
+          sections: customEdit,
+          record_type: recordType,
+          session_date: qsSessionDate || undefined,
+          appointment_id: qsAppointmentId || undefined,
+          template_id: customTemplate.id,
+        };
+      } else {
+        // Integrated format path: text-only sections
+        const finalSections: Record<string, string> = {};
+        for (const def of sectionDefs) {
+          const v = (draftEdit[def.key] ?? baseContent[def.key] ?? '').trim();
+          if (v) finalSections[def.key] = v;
+        }
+        approveBody = {
+          sections: finalSections,
+          record_type: recordType,
+          session_date: qsSessionDate || undefined,
+          appointment_id: qsAppointmentId || undefined,
+        };
       }
-      const res = await aiDraftsApi.approve(id, {
-        sections: finalSections,
-        record_type: recordType,
-        session_date: qsSessionDate || undefined,
-        appointment_id: qsAppointmentId || undefined,
-      });
+      const res = await aiDraftsApi.approve(id, approveBody);
       setCreatedRecordId(res.clinical_record_id);
       // Assign the confirmed diagnosis (if any) to the new record
       if (icd10?.code && draft?.patient_id) {
@@ -135,6 +169,8 @@ export function AIDraftPage() {
   const sectionDefs: { key: string; label: string; description: string }[] =
     (TEMPLATE_SECTIONS[recordType] ?? TEMPLATE_SECTIONS.EVOLUTION).map((d: SectionDef) => ({ key: d.key, label: d.label, description: d.placeholder }));
   const content = contentRaw; // truthiness gate for the render below
+  // Whether to render with the data-driven template form or the plain-text form
+  const useCustomTemplate = !!customTemplate;
 
   const getDraftField = (key: string) => draftEdit[key] ?? baseContent[key] ?? '';
 
@@ -271,49 +307,70 @@ export function AIDraftPage() {
             </div>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-            {sectionDefs.map(({ key, label, description }) => {
-              const isOpen = !collapsed.has(key);
-              return (
-                <div key={key} className="card" style={{ overflow: 'hidden', padding: 0 }}>
-                  <button
-                    onClick={() => toggleSection(key)}
-                    style={{
-                      width: '100%', padding: '16px 20px', background: 'none', border: 'none', cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', textAlign: 'left',
-                    }}
-                  >
-                    <div>
-                      <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>{label}</p>
-                      {!isOpen && <p style={{ margin: 0, fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>{description}</p>}
-                    </div>
-                    {isOpen ? <ChevronUp size={16} color="var(--s400)" /> : <ChevronDown size={16} color="var(--s400)" />}
-                  </button>
-                  {isOpen && (
-                    <div style={{ padding: '0 20px 20px', borderTop: '1px solid var(--s100)' }}>
-                      <p style={{ fontSize: 12, color: 'var(--s400)', margin: '12px 0 10px', fontStyle: 'italic' }}>{description}</p>
-                      {editing ? (
-                        <textarea
-                          value={getDraftField(key)}
-                          onChange={e => setDraftEdit(prev => ({ ...prev, [key]: e.target.value }))}
-                          rows={6}
-                          style={{
-                            width: '100%', padding: '12px 14px', borderRadius: 10,
-                            border: '1.5px solid var(--teal)', fontSize: 14, color: 'var(--s700)',
-                            resize: 'vertical', background: '#fff', boxSizing: 'border-box',
-                            lineHeight: 1.7,
-                          }}
-                        />
-                      ) : (
-                        <p style={{ margin: 0, fontSize: 14, color: 'var(--s700)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
-                          {getDraftField(key) || <em style={{ color: 'var(--s300)' }}>Sin contenido</em>}
-                        </p>
+          <div style={{ marginBottom: 24 }}>
+            {useCustomTemplate ? (
+              /* Custom template — data-driven form with typed fields and existing widgets */
+              <div className="card" style={{ padding: '20px 24px' }}>
+                {customTemplate?.name && (
+                  <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--s400)', fontStyle: 'italic' }}>
+                    Formato: <strong>{customTemplate.name}</strong>
+                  </p>
+                )}
+                <TemplatedSectionsForm
+                  schema={customTemplate!.schema}
+                  value={customEdit}
+                  onChange={setCustomEdit}
+                  disabled={!editing}
+                  patientId={draft.patient_id}
+                />
+              </div>
+            ) : (
+              /* Integrated format — collapsible text sections */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {sectionDefs.map(({ key, label, description }) => {
+                  const isOpen = !collapsed.has(key);
+                  return (
+                    <div key={key} className="card" style={{ overflow: 'hidden', padding: 0 }}>
+                      <button
+                        onClick={() => toggleSection(key)}
+                        style={{
+                          width: '100%', padding: '16px 20px', background: 'none', border: 'none', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', textAlign: 'left',
+                        }}
+                      >
+                        <div>
+                          <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>{label}</p>
+                          {!isOpen && <p style={{ margin: 0, fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>{description}</p>}
+                        </div>
+                        {isOpen ? <ChevronUp size={16} color="var(--s400)" /> : <ChevronDown size={16} color="var(--s400)" />}
+                      </button>
+                      {isOpen && (
+                        <div style={{ padding: '0 20px 20px', borderTop: '1px solid var(--s100)' }}>
+                          <p style={{ fontSize: 12, color: 'var(--s400)', margin: '12px 0 10px', fontStyle: 'italic' }}>{description}</p>
+                          {editing ? (
+                            <textarea
+                              value={getDraftField(key)}
+                              onChange={e => setDraftEdit(prev => ({ ...prev, [key]: e.target.value }))}
+                              rows={6}
+                              style={{
+                                width: '100%', padding: '12px 14px', borderRadius: 10,
+                                border: '1.5px solid var(--teal)', fontSize: 14, color: 'var(--s700)',
+                                resize: 'vertical', background: '#fff', boxSizing: 'border-box',
+                                lineHeight: 1.7,
+                              }}
+                            />
+                          ) : (
+                            <p style={{ margin: 0, fontSize: 14, color: 'var(--s700)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
+                              {getDraftField(key) || <em style={{ color: 'var(--s300)' }}>Sin contenido</em>}
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* ICD-10 suggestion — the AI proposes, the professional confirms */}
