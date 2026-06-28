@@ -90,7 +90,8 @@
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google Calendar OAuth (añadidos 2026-06-24)
 - `ALLOW_DATA_RESET=true` → cambiar a `false` en go-live (1.0.0)
 - Demo: `admin@demo.clinica.co` / `Admin1234!` · tenant ID `005e349d2fbc5d30000000003`
-- Marcela org: `fbf1fb3d-607d-4f4d-9870-05e95f63a1a3` (slug `marcelachapues`) — token MP **live** ✅
+- Marcela org (real, 5 usuarios): `aa2cbd1f-76b2-4cf9-bdde-dcf403ad1f04` (slug `marcela-chapues`) — token MP **live** ✅
+- Marcela org (legacy vacío, 0 pacientes): `fbf1fb3d-607d-4f4d-9870-05e95f63a1a3` (slug `marcelachapues`)
 
 ---
 
