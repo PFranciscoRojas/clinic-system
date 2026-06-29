@@ -95,6 +95,8 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   const switchType = (val: UIRecordType) => {
     setUIType(val);
     setDraft(emptyDraft());
+    setSelectedTemplateId('');
+    setCustomSections({});
     setErr('');
     setRestored(false);
     setPendingType(null);
@@ -299,9 +301,7 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
           >
             <option value="">Formato integrado (Colombia)</option>
             {templates.map(t => (
-              <option key={t.id} value={t.id}>
-                {t.name}{t.is_default ? ' ★' : ''}
-              </option>
+              <option key={t.id} value={t.id}>{t.name}</option>
             ))}
           </select>
         </div>

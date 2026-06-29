@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useBlocker } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Calendar, Clock, MapPin, Video, User,
@@ -447,10 +447,13 @@ export function AppointmentPage() {
       setRecording(false);
       const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' });
       chunksRef.current = [];
-      resolve(blob.size > 0 ? new File([blob], `session-${id}.webm`, { type: blob.type || 'audio/webm' }) : null);
+      resolve(blob.size > 0 ? new File([blob], `session-${id}-${Date.now()}.webm`, { type: blob.type || 'audio/webm' }) : null);
     };
     rec.stop();
   });
+
+  // Warn the user before navigating away via React Router while recording
+  const blocker = useBlocker(() => recording);
 
   // Releases the mic if the user navigates away mid-recording
   useEffect(() => () => {
@@ -543,6 +546,7 @@ export function AppointmentPage() {
     // appears while the professional can still react — not mid-session.
     if (recordingConsent) await startRecording();
     await handleStatusChange('IN_PROGRESS');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleFinishSession = async () => {
@@ -575,7 +579,7 @@ export function AppointmentPage() {
     setUploadingRecovery(true);
     try {
       const blob = new Blob(recoveredChunks, { type: 'audio/webm' });
-      const file = new File([blob], `session-${id}.webm`, { type: 'audio/webm' });
+      const file = new File([blob], `session-${id}-${Date.now()}.webm`, { type: 'audio/webm' });
       const res = await appointmentsApi.uploadAudio(id!, appt.patient_id, file, aiRecordType, selectedTemplateId);
       handleDraftCreated(res.draft_id);
       recordingStore.clear(id!).catch(() => {});
@@ -1361,6 +1365,39 @@ export function AppointmentPage() {
             handleStartSession();
           }}
         />
+      )}
+
+      {/* Navigation blocker while recording */}
+      {blocker.state === 'blocked' && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15,23,42,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div className="card" style={{ maxWidth: 420, width: '100%', padding: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Mic size={18} color="#dc2626" />
+              </div>
+              <div>
+                <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--s800)' }}>¿Salir de la sesión?</p>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--s500)', lineHeight: 1.6 }}>
+                  Hay una grabación en curso. Si sales ahora, el audio se guardará en el dispositivo y podrás subirlo al volver.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => blocker.reset()}
+                style={{ flex: 1, padding: '10px 0', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
+              >
+                Continuar grabando
+              </button>
+              <button
+                onClick={() => blocker.proceed()}
+                style={{ flex: 1, padding: '10px 0', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
+              >
+                Salir de todos modos
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

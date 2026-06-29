@@ -46,7 +46,6 @@ export function AIDraftPage() {
   const [approveErr, setApproveErr] = useState('');
   const [createdRecordId, setCreatedRecordId] = useState('');
   // Lets the professional correct the record type before approving
-  const [typeOverride, setTypeOverride] = useState('');
   const [showTranscript, setShowTranscript] = useState(false);
   // ICD-10 to assign on approve — seeded from the AI suggestion, confirmable.
   // undefined = not yet initialised from the draft; null = explicitly removed.
@@ -163,7 +162,7 @@ export function AIDraftPage() {
 
   const contentRaw = draft.draft_content_plain as Record<string, unknown> | null;
   // Drafts carry the clinical-record sections for the record type.
-  const recordType = (typeOverride || qsRecordType || (contentRaw?.record_type as string) || 'EVOLUTION') as keyof typeof TEMPLATE_SECTIONS;
+  const recordType = (qsRecordType || (contentRaw?.record_type as string) || 'EVOLUTION') as keyof typeof TEMPLATE_SECTIONS;
   const transcription = (draft.transcription ?? '').trim();
   const baseContent: Record<string, string> = (contentRaw?.sections as Record<string, string>) ?? {};
   const sectionDefs: { key: string; label: string; description: string }[] =
@@ -196,22 +195,7 @@ export function AIDraftPage() {
               <Badge label={statusCfg.label} color={statusCfg.color} bg={statusCfg.bg} />
             </div>
             <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
-              {isReady ? (
-                <div>
-                  <div style={{ fontSize: 11, color: 'var(--s400)', marginBottom: 3 }}>Tipo de registro</div>
-                  <select
-                    value={recordType}
-                    onChange={e => setTypeOverride(e.target.value)}
-                    style={{ padding: '5px 10px', borderRadius: 8, border: '1.5px solid var(--s200)', fontSize: 13, fontWeight: 600, color: 'var(--s800)', background: '#fff', cursor: 'pointer' }}
-                  >
-                    {(['INITIAL', 'EVOLUTION', 'DISCHARGE'] as const).map(t => (
-                      <option key={t} value={t}>{RECORD_TYPE_LABELS[t] ?? t}</option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <InfoLine label="Tipo" value={RECORD_TYPE_LABELS[recordType] ?? recordType} />
-              )}
+              <InfoLine label="Tipo" value={RECORD_TYPE_LABELS[recordType] ?? recordType} />
               <InfoLine label="Modelo" value={draft.ai_model_version ?? '—'} />
               <InfoLine label="Draft ID" value={id?.slice(-8) ?? '—'} />
             </div>
@@ -397,7 +381,7 @@ export function AIDraftPage() {
                     onClick={() => setEditing(false)}
                     style={{ flex: 1, padding: 13, borderRadius: 11, background: '#6366f1', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
                   >
-                    <Save size={16} /> Guardar cambios
+                    <Save size={16} /> Listo
                   </button>
                 </>
               ) : (

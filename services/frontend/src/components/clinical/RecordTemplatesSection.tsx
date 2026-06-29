@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Archive, Star, Eye, EyeOff, ChevronDown, ChevronUp, Pencil } from 'lucide-react';
+import { Plus, Archive, Eye, EyeOff, ChevronDown, ChevronUp, Pencil } from 'lucide-react';
 import {
   recordTemplatesApi,
   RecordTemplate,
@@ -456,11 +456,6 @@ function TemplateCard({ tpl }: { tpl: RecordTemplate }) {
     mutationFn: () => recordTemplatesApi.archive(tpl.id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['record-templates'] }),
   });
-  const defaultMutation = useMutation({
-    mutationFn: () => recordTemplatesApi.setDefault(tpl.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['record-templates'] }),
-  });
-
   const toggle = (next: CardMode) => setMode(m => m === next ? 'collapsed' : next);
 
   const IconButton = ({
@@ -518,22 +513,19 @@ function TemplateCard({ tpl }: { tpl: RecordTemplate }) {
             <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)', lineHeight: 1.3 }}>
               {tpl.name}
             </span>
-            {tpl.is_default && (
-              <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 3,
-                fontSize: 11,
-                background: 'var(--amber-l)',
-                color: 'var(--amber)',
-                border: '1px solid #fde68a',
-                borderRadius: 99,
-                padding: '1px 8px',
-                fontWeight: 600,
-              }}>
-                <Star size={10} /> Predeterminada
-              </span>
-            )}
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              fontSize: 11,
+              background: '#d1fae5',
+              color: '#065f46',
+              border: '1px solid #6ee7b7',
+              borderRadius: 99,
+              padding: '1px 8px',
+              fontWeight: 600,
+            }}>
+              Activo
+            </span>
             <span style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -564,18 +556,6 @@ function TemplateCard({ tpl }: { tpl: RecordTemplate }) {
           >
             {mode === 'view' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </IconButton>
-          {!tpl.is_default && (
-            <IconButton
-              onClick={() => defaultMutation.mutate()}
-              disabled={defaultMutation.isPending}
-              label="Marcar como predeterminada"
-              color="#fbbf24"
-              hoverBg="#fffbeb"
-              hoverColor="var(--amber)"
-            >
-              <Star size={15} />
-            </IconButton>
-          )}
           <IconButton
             onClick={() => toggle('edit')}
             label={mode === 'edit' ? 'Cerrar editor' : 'Editar plantilla'}
