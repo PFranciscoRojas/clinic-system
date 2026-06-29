@@ -16,6 +16,10 @@
 - **Copy de la landing** — hero propuesto: "Tu historia clínica, protegida y al día / Software para psicólogos colombianos con IA que transcribe tus sesiones, cumplimiento legal automático y cifrado de datos — desde $19/mes". Secciones: Hero → Dolor → Solución (3 features) → Demo/video → Precios → Testimonios → CTA final.
 - **Pauta digital** — Facebook/Instagram segmentada a psicólogos Colombia una vez live la landing. Argumento central: "Menos de lo que cobras en una sesión."
 
+## Evaluaciones psicológicas / Measurement-Based Care
+
+- **Módulo MBC — plan completo listo, pendiente validación beta (2026-06-28)** — Ver `docs/ai/PLAN_ASSESSMENTS.md`. Veredicto: sí vale la pena, vacío de mercado en Colombia. Costo de licencias $0 (PHQ-9, GAD-7, PCL-5, AUDIT, DASS-21, HAM-A, ACE son dominio público y validadas en Colombia). Ningún software colombiano tiene gráficas de progreso tipo MBC. Implementación en 4 fases; Fase 1 toma 2–3 semanas. **Validar primero con las psicólogas beta** preguntando: *"¿Enviarías un cuestionario de 2 min a tus pacientes antes de cada sesión?"*
+
 ## Plantillas de registro — Widgets personalizados
 
 - **Crear widgets clínicos personalizados (2026-06-28)** — El sistema ya soporta `{widget:nombre}` en plantillas. Para agregar uno nuevo: 1) Crear componente en `components/clinical/MiWidget.tsx` (inline styles + CSS vars), 2) Importarlo y añadir `case 'mi_widget':` en `TemplatedSectionsForm.tsx` (`WidgetField` switch ~línea 254), 3) Registrar la etiqueta en `WIDGET_LABELS` en `RecordTemplatesSection.tsx`. Sin cambios de backend. Ejemplo discutido: escala visual de estado de ánimo con 5 niveles y colores semafóricos.
