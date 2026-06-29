@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useParams, useNavigate, useBlocker } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Calendar, Clock, MapPin, Video, User,
@@ -311,7 +311,7 @@ function RecChip({ startMs, analyser, paused }: { startMs: number; analyser: Ana
 export function AppointmentPage() {
   const { id } = useParams<{ id: string }>();
   const compactLayout = useIsCompact();
-  const navigate = useNavigate();
+  const rawNavigate = useNavigate();
   const { user } = useAuth();
   const pureAdmin = isPureAdmin(user?.roles);
   const queryClient = useQueryClient();
@@ -359,6 +359,7 @@ export function AppointmentPage() {
   const chunksRef = useRef<Blob[]>([]);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const [recording, setRecording] = useState(false);
+  const [blockTarget, setBlockTarget] = useState<string | number | null>(null);
   const [recPaused, setRecPaused] = useState(false);
   const [recStart, setRecStart] = useState(0);
   const [recNote, setRecNote] = useState('');
@@ -452,8 +453,23 @@ export function AppointmentPage() {
     rec.stop();
   });
 
-  // Warn the user before navigating away via React Router while recording
-  const blocker = useBlocker(() => recording);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const navigate = (to: string | number, opts?: any) => {
+    if (recording) { setBlockTarget(to); return; }
+    rawNavigate(to as any, opts);
+  };
+
+  // Intercept browser back/forward while recording
+  useEffect(() => {
+    if (!recording) return;
+    window.history.pushState(null, '', window.location.href);
+    const onPop = () => {
+      window.history.pushState(null, '', window.location.href);
+      setBlockTarget(-1);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [recording]);
 
   // Releases the mic if the user navigates away mid-recording
   useEffect(() => () => {
@@ -1368,7 +1384,7 @@ export function AppointmentPage() {
       )}
 
       {/* Navigation blocker while recording */}
-      {blocker.state === 'blocked' && (
+      {blockTarget !== null && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15,23,42,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <div className="card" style={{ maxWidth: 420, width: '100%', padding: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
@@ -1384,13 +1400,13 @@ export function AppointmentPage() {
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button
-                onClick={() => blocker.reset()}
+                onClick={() => setBlockTarget(null)}
                 style={{ flex: 1, padding: '10px 0', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
               >
                 Continuar grabando
               </button>
               <button
-                onClick={() => blocker.proceed()}
+                onClick={() => { setBlockTarget(null); rawNavigate(blockTarget as any); }}
                 style={{ flex: 1, padding: '10px 0', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
               >
                 Salir de todos modos
