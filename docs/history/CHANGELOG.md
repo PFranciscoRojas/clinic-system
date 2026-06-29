@@ -13,6 +13,10 @@
 
 ---
 
+## 2026-06-29 (sesión 20)
+
+- fix(clinical/grabación): 6 bugs UX en `AppointmentPage`, `RecordForm`, `RecordTemplatesSection` y `AIDraftPage` (`a6a737f`). (1) página en blanco al cambiar tipo de registro: `switchType` ahora resetea `selectedTemplateId`+`customSections`; (2) página en blanco al iniciar sesión: `scrollTo(0,0)` tras cambio de layout; (3) badge `★ Predeterminada` → badge `Activo` en plantillas, botón estrella eliminado, `★` quitado del dropdown de formatos; (4) segunda grabación falla tras recovery por F5: timestamp en filename evita colisión `O_EXCL` del backend; (5) botón "Guardar cambios" en AIDraftPage renombrado a "Listo" (no persistía en servidor — solo cerraba modo edición); (6) selector de tipo editable en AIDraftPage eliminado (el tipo lo fija el profesional al grabar, no en el borrador); (7) `useBlocker` intercepta navegación de React Router mientras hay grabación activa y muestra diálogo de confirmación. **Frontend pendiente de rebuild en VPS.**
+
 ## 2026-06-28 (sesión 18)
 
 - refactor(clinical): reescritura completa de `RecordTemplatesSection.tsx` (`ab50821`) — causa raíz del "feo/desorganizado": era el único archivo del proyecto con clases Tailwind, que no está instalado (todas resolvían a nada; el "modal" `fixed inset-0` caía al fondo de la página en flujo normal). Migrado a inline styles + CSS vars del sistema (`var(--teal)`, `var(--s*)`, `var(--radius)`). Cambios: color morado → teal de marca; "Ver" despliega markdown fuente inline bajo cada tarjeta; "Editar" despliega editor inline bajo la tarjeta; "Nueva plantilla" abre panel inline arriba de la lista; `TemplateCard` con estado `mode: collapsed|view|edit`. Desplegado a VPS (frontend rebuild). TypeScript limpio.

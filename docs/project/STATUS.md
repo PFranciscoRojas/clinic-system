@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-06-28)
+## Estado actual (2026-06-29)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -27,12 +27,15 @@
 
 ### Últimos commits a `main`
 
+- `a6a737f` fix(clinical): 6 UX bugs en grabación, borrador IA y plantillas — 2026-06-29
+- `b72b6bf` docs: sesión 19 — análisis MBC evaluaciones psicológicas — 2026-06-28
 - `7d60df2` docs(backlog): plan MBC evaluaciones psicológicas — pendiente validación beta — 2026-06-28
-- `70f5468` docs: sesión 18 — rewrite RecordTemplatesSection + rm ui-styling skill — 2026-06-28
+- `70f5468` docs: sesión 18 — rewrite RecordTemplatesSection — 2026-06-28
 - `ab50821` refactor(clinical): rewrite RecordTemplatesSection with app design system — 2026-06-28
-- `8ebfc45` docs: backlog pruebas psicométricas + marca + ui-styling skill instalada — 2026-06-27
-- `9e0c5ba` docs: sesión 17 — fix org Marcela + mobile redesign RecordTemplates — 2026-06-27
 
+> **⚠️ Frontend pendiente de rebuild en VPS** — commit `a6a737f` no está desplegado. Ejecutar en VPS:
+> `docker run --rm -v /srv/clinic-system/services/frontend:/app -w /app node:20-alpine sh -c "npm ci && npm run build"`
+>
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 > **CI/CD:** `core-api` y `ai-service` se construyen en GitHub Actions y se despliegan a ghcr.io. El VPS solo hace `docker pull` — sin builds locales.
 > **Frontend:** se construye **manualmente** en el VPS (`docker run node:20-alpine npm run build`). El CI no tiene workflow para frontend.

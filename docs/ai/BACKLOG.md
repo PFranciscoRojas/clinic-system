@@ -56,6 +56,10 @@
 - **SoonRow "Próximamente" en Notificaciones (BAJO)** — SMS, "Nuevo paciente registrado", "Cancelación de cita", "Resumen semanal", "Borrador IA listo" son toggles decorativos. Se dejan como señal de roadmap (honestos con badge Próximamente).
 - ✅ **`StubPage.tsx` muerto (BAJO)** — eliminado 2026-06-24.
 
+## Historia clínica — UX pendiente (sesión 20)
+
+- **Picker de formato antes de iniciar sesión (2026-06-29)** — al dar "Iniciar sesión", mostrar un selector inline (no modal completo) con: tipo de registro (Apertura / Evolución / Alta) + plantilla custom si hay disponibles. La IA necesita saber desde el inicio qué formato generar. Actualmente `aiRecordType` se deriva del `defaultRecordType` inferido del historial, que no es la elección explícita del profesional. Implementación: estado `[showFormatPicker, pickerType, pickerTemplateId]` en `AppointmentPage`; `useQuery` de templates para el picker; al confirmar → iniciar sesión con los valores seleccionados. RecordForm recibe los valores preseleccionados para arrancar directo con el formato elegido. Dificultad: media (solo frontend, sin backend).
+
 ## Plantillas de registro — Fase 2 (post sesión 15)
 
 - **Autodetección de plantilla por IA (2026-06-28)** — cuando el profesional no elige plantilla, que el LLM detecte el tipo de registro y sugiera la plantilla más adecuada basándose en el contenido transcrito. Complejidad alta; requiere umbral de confianza y confirmación explícita del profesional.
