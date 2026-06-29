@@ -99,12 +99,12 @@ export function SessionEvaluationPanel({ value, onChange, disabled }: Props) {
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
           {RESISTANCE_BARRIER_OPTIONS.map(opt => {
-            const active = value.barriers.includes(opt.key);
+            const active = (value.barriers ?? []).includes(opt.key);
             return (
               <label key={opt.key} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: disabled ? 'default' : 'pointer' }}>
                 <input
                   type="checkbox" checked={active} disabled={disabled}
-                  onChange={() => set({ barriers: toggle(value.barriers, opt.key) })}
+                  onChange={() => set({ barriers: toggle(value.barriers ?? [], opt.key) })}
                   style={{ accentColor: '#dc2626', cursor: disabled ? 'default' : 'pointer' }}
                 />
                 <span style={{ fontSize: 12, color: 'var(--s700)' }}>{opt.label}</span>
