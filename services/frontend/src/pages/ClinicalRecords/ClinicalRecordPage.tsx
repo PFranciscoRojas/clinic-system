@@ -15,6 +15,8 @@ import { RecordSectionsForm, recordToDraft, draftToPayload, validateDraft, toUIR
 import { TEMPLATE_SECTIONS, RECORD_TYPE_LABELS, DISCHARGE_REASONS, riskMeta } from '@/components/clinical/constants';
 import { type MentalExam } from '@/components/clinical/MentalExamChecklist';
 import { isPureAdmin } from '@/lib/clinicalAccess';
+import TemplatedSectionsForm, { type SectionsState } from '@/components/clinical/TemplatedSectionsForm';
+import { recordTemplatesApi, type RecordTemplate } from '@/api/recordTemplates';
 
 export function ClinicalRecordPage() {
   const { id } = useParams<{ id: string }>();
@@ -24,6 +26,7 @@ export function ClinicalRecordPage() {
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<ClinicalDraft | null>(null);
+  const [customSections, setCustomSections] = useState<SectionsState>({});
   const [saving, setSaving] = useState(false);
   const [approving, setApproving] = useState(false);
   const [cosigning, setCosigning] = useState(false);
@@ -40,6 +43,12 @@ export function ClinicalRecordPage() {
     retry: false,
   });
 
+  const { data: template } = useQuery<RecordTemplate>({
+    queryKey: ['record-template', record?.template_id],
+    queryFn: () => recordTemplatesApi.get(record!.template_id!),
+    enabled: !!record?.template_id,
+  });
+
   useEffect(() => {
     if (recordError instanceof ApiError && recordError.status === 403 && recordError.message === 'BREAK_GLASS_REASON_REQUIRED') {
       setShowBreakGlass(true);
@@ -48,16 +57,27 @@ export function ClinicalRecordPage() {
 
   const startEditing = () => {
     if (record) {
-      setDraft(recordToDraft(record.sections, record.risk_level, record.discharge_reason));
+      if (record.template_id && record.sections) {
+        setCustomSections(record.sections as SectionsState);
+      } else {
+        setDraft(recordToDraft(record.sections, record.risk_level, record.discharge_reason));
+      }
     }
     setEditing(true);
   };
 
   const handleSave = async () => {
-    if (!id || !record || !draft) return;
+    if (!id || !record) return;
     setErr('');
+    if (record.template_id) {
+      if (!template) return;
+      const missingRequired = template.schema.find(s => s.required && !customSections[s.key]);
+      if (missingRequired) { setErr(`El campo "${missingRequired.label}" es obligatorio.`); return; }
+    } else {
+      if (!draft) return;
+    }
     const uiType = toUIRecordType(record.record_type, record.sections);
-    const miss = validateDraft(uiType, draft);
+    const miss = !record.template_id ? validateDraft(uiType, draft!) : null;
     if (miss) {
       setErr(miss.message);
       if (miss.key) {
@@ -69,7 +89,10 @@ export function ClinicalRecordPage() {
     }
     setSaving(true);
     try {
-      await clinicalRecordsApi.update(id, draftToPayload(uiType, draft));
+      const payload = record.template_id
+        ? { sections: customSections as import('@/api/clinicalRecords').RecordSections, risk_level: ((customSections.risk as string) || record.risk_level || 'NONE') as import('@/api/clinicalRecords').RiskLevel }
+        : draftToPayload(uiType, draft!);
+      await clinicalRecordsApi.update(id, payload);
       queryClient.invalidateQueries({ queryKey: ['clinical-record', id] });
       setEditing(false); setDraft(null);
     } catch { setErr('Error al guardar. Intenta de nuevo.'); }
@@ -197,12 +220,16 @@ export function ClinicalRecordPage() {
       </div>
 
       {/* Content — clinical-record sections */}
-      {editing && draft ? (
+      {editing ? (
         <div style={{ marginBottom: 24 }}>
-          <RecordSectionsForm recordType={toUIRecordType(record.record_type, record.sections)} value={draft} onChange={setDraft} />
+          {record.template_id && template ? (
+            <TemplatedSectionsForm schema={template.schema} value={customSections} onChange={setCustomSections} />
+          ) : draft ? (
+            <RecordSectionsForm recordType={toUIRecordType(record.record_type, record.sections)} value={draft} onChange={setDraft} />
+          ) : null}
         </div>
       ) : (
-        <V2RecordView record={record} />
+        <V2RecordView record={record} template={template} />
       )}
 
       {err && (
@@ -267,9 +294,28 @@ function MentalExamRow({ label, items }: { label: string; items: string[] }) {
 }
 
 // Read-only view of a template-v2 record, in the section order of its type.
-function V2RecordView({ record }: { record: ClinicalRecord }) {
-  const defs = TEMPLATE_SECTIONS[record.record_type as keyof typeof TEMPLATE_SECTIONS] ?? [];
+function V2RecordView({ record, template }: { record: ClinicalRecord; template?: RecordTemplate }) {
   const sections = record.sections ?? {};
+
+  if (template) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
+        {template.schema.map(def => {
+          const content = sections[def.key];
+          if (!content) return null;
+          const text = typeof content === 'string' ? content : Array.isArray(content) ? content.join(', ') : JSON.stringify(content);
+          return (
+            <div key={def.key} className="card" style={{ padding: '16px 20px' }}>
+              <p style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>{def.label}</p>
+              <p style={{ margin: 0, fontSize: 14, color: 'var(--s700)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{text}</p>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  const defs = TEMPLATE_SECTIONS[record.record_type as keyof typeof TEMPLATE_SECTIONS] ?? [];
   const mentalExam = (sections.mental_exam ?? null) as unknown as MentalExam | null;
   const riskNote = typeof sections.risk_note === 'string' ? sections.risk_note : '';
 

@@ -455,7 +455,8 @@ export function AppointmentPage() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const navigate = (to: string | number, opts?: any) => {
-    if (recording) { setBlockTarget(to); return; }
+    const path = typeof to === 'string' ? to : '';
+    if (recording && !path.startsWith('/clinical-records/')) { setBlockTarget(to); return; }
     rawNavigate(to as any, opts);
   };
 
