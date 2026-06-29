@@ -10,8 +10,9 @@ interface Props {
   disabled?: boolean;
 }
 
-function toggle(arr: string[], key: string): string[] {
-  return arr.includes(key) ? arr.filter(k => k !== key) : [...arr, key];
+function toggle(arr: string[] | null | undefined, key: string): string[] {
+  const a = Array.isArray(arr) ? arr : [];
+  return a.includes(key) ? a.filter(k => k !== key) : [...a, key];
 }
 
 // Session evaluation panel — combines:
@@ -30,11 +31,11 @@ export function SessionEvaluationPanel({ value, onChange, disabled }: Props) {
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {SESSION_AXIS_OPTIONS.map(opt => {
-            const active = value.axis.includes(opt.key);
+            const active = (value.axis ?? []).includes(opt.key);
             return (
               <button
                 key={opt.key} type="button" disabled={disabled}
-                onClick={() => set({ axis: toggle(value.axis, opt.key) })}
+                onClick={() => set({ axis: toggle(value.axis ?? [], opt.key) })}
                 style={{
                   padding: '5px 12px', borderRadius: 16, fontSize: 12, fontWeight: 600,
                   cursor: disabled ? 'default' : 'pointer',

@@ -165,7 +165,13 @@ export function recordToDraft(sections: RecordSections | undefined, risk?: RiskL
       } else if (k === 'task_adherence' && typeof v === 'object' && !Array.isArray(v)) {
         d.taskAdherence = v as unknown as TaskAdherenceData;
       } else if (k === 'session_evaluation' && typeof v === 'object' && !Array.isArray(v)) {
-        d.sessionEval = { ...defaultSessionEval(), ...(v as Partial<SessionEvalData>) };
+        const raw = v as Partial<SessionEvalData>;
+        d.sessionEval = {
+          ...defaultSessionEval(),
+          ...raw,
+          axis:     Array.isArray(raw.axis)     ? raw.axis     : [],
+          barriers: Array.isArray(raw.barriers) ? raw.barriers : [],
+        };
       } else if (k === 'task_checklist' && Array.isArray(v)) {
         d.taskChecklist = v as string[];
       } else if (k === 'functionality' && typeof v === 'object' && !Array.isArray(v)) {
@@ -553,7 +559,13 @@ export function RecordSectionsForm({ recordType, value, onChange, disabled }: Pr
   // F3 — EVOLUCIÓN (layout lineal, orden exacto del formato)
   // ════════════════════════════════════════════════════
   if (recordType === 'EVOLUTION') {
-    const sessionEval = { ...defaultSessionEval(), ...(value.sessionEval ?? {}) };
+    const rawEval: Partial<SessionEvalData> = value.sessionEval ?? {};
+    const sessionEval = {
+      ...defaultSessionEval(),
+      ...rawEval,
+      axis:     Array.isArray(rawEval.axis)     ? rawEval.axis     : [],
+      barriers: Array.isArray(rawEval.barriers) ? rawEval.barriers : [],
+    };
     const setEval = (patch: Partial<SessionEvalData>) =>
       onChange({ ...value, sessionEval: { ...sessionEval, ...patch } });
 
