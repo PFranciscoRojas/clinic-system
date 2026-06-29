@@ -1,13 +1,11 @@
 ## Sin tarea pendiente
 
-Sesión 18 cerrada limpiamente. RecordTemplatesSection reescrita y desplegada.
+Sesión 19 cerrada limpiamente. Solo investigación y documentación — sin código ni deploys.
 
 ## Sugerencia de siguiente paso
 
-1. **Acción no-técnica prioritaria: enviar mensaje de reclutamiento a las 2 psicólogas** — plantilla lista en BACKLOG.md → Validación. El cuello de botella sigue siendo distribución, no producto.
+1. **Acción no-técnica prioritaria: contactar las 2 psicólogas beta** — sigue siendo el cuello de botella. Plantilla de mensaje lista en BACKLOG.md → Validación. Sin señal de demanda externa, todo lo técnico es ruido.
 
-2. **Widgets clínicos personalizados** — Patrón documentado en BACKLOG. 3 pasos en 2 archivos (`TemplatedSectionsForm.tsx` + `RecordTemplatesSection.tsx`), sin backend. Buen siguiente feature clínico propio (ej. escala visual de humor).
+2. **Validar el módulo MBC con las betas** — al hablar con ellas, preguntar: *"¿Enviarías un cuestionario de 2 min a tus pacientes antes de cada sesión y verías la gráfica de progreso?"* Si 2 de 3 dicen sí → implementar Fase 1 del plan en `docs/ai/PLAN_ASSESSMENTS.md` (2–3 semanas, costo de licencias $0).
 
-3. **Investigar pruebas psicométricas** — una vez estén las betas activas, preguntar qué instrumentos usan y si tendría valor integrarlos. Ver guía en BACKLOG.md → Pruebas Psicológicas.
-
-4. **Marca + landing** — solo después de confirmar willingness-to-pay externa. Skill disponible: `/ui-ux-pro-max`.
+3. **Widgets clínicos personalizados** — patrón documentado en BACKLOG. 3 pasos en 2 archivos, sin backend. Buen feature para sesión corta.

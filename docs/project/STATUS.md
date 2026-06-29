@@ -27,11 +27,11 @@
 
 ### Últimos commits a `main`
 
+- `7d60df2` docs(backlog): plan MBC evaluaciones psicológicas — pendiente validación beta — 2026-06-28
+- `70f5468` docs: sesión 18 — rewrite RecordTemplatesSection + rm ui-styling skill — 2026-06-28
 - `ab50821` refactor(clinical): rewrite RecordTemplatesSection with app design system — 2026-06-28
 - `8ebfc45` docs: backlog pruebas psicométricas + marca + ui-styling skill instalada — 2026-06-27
 - `9e0c5ba` docs: sesión 17 — fix org Marcela + mobile redesign RecordTemplates — 2026-06-27
-- `8983ae1` feat(settings): mobile-first redesign of RecordTemplatesSection — 2026-06-27
-- `1042486` docs: sesión 16 — PDF renderer con plantillas custom completo — 2026-06-28
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 > **CI/CD:** `core-api` y `ai-service` se construyen en GitHub Actions y se despliegan a ghcr.io. El VPS solo hace `docker pull` — sin builds locales.
