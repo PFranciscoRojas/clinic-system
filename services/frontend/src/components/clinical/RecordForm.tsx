@@ -158,14 +158,29 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   }, [storageKey]);
 
   // Save to localStorage 600ms after the last change. The cleanup also saves
-  // immediately so content is never lost on SPA navigation (React Router
-  // unmounts the component without triggering window.beforeunload).
+  // immediately on SPA navigation (React Router unmounts the component, which
+  // does NOT fire window.beforeunload).
+  //
+  // That cleanup alone is not enough: on a full reload, tab close, or a phone
+  // switching apps/locking, the JS context can be torn down before React gets
+  // a chance to run effect cleanups at all — there is no unmount in that case,
+  // just termination. So we also save on 'pagehide' and 'visibilitychange'
+  // (visibilitychange is the reliable one on mobile Safari, where beforeunload
+  // is not always fired) as a belt-and-suspenders complement to the cleanup.
   useEffect(() => {
     const save = () => {
       try { localStorage.setItem(storageKey, JSON.stringify({ uiType, draft })); } catch { /* storage full */ }
     };
     const t = setTimeout(save, 600);
-    return () => { clearTimeout(t); save(); };
+    const onHide = () => save();
+    window.addEventListener('pagehide', onHide);
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      clearTimeout(t);
+      save();
+      window.removeEventListener('pagehide', onHide);
+      document.removeEventListener('visibilitychange', onHide);
+    };
   }, [storageKey, uiType, draft]);
 
   // Copy-forward: start from the latest approved-or-draft evolution note.
