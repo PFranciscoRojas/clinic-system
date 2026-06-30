@@ -46,6 +46,7 @@ export function AIDraftPage() {
   const [approving, setApproving] = useState(false);
   const [approveErr, setApproveErr] = useState('');
   const [createdRecordId, setCreatedRecordId] = useState('');
+  const [riskLevel, setRiskLevel] = useState('NONE');
   // Lets the professional correct the record type before approving
   const [showTranscript, setShowTranscript] = useState(false);
   // ICD-10 to assign on approve — seeded from the AI suggestion, confirmable.
@@ -109,6 +110,7 @@ export function AIDraftPage() {
           session_date: qsSessionDate || undefined,
           appointment_id: qsAppointmentId || undefined,
           template_id: customTemplate.id,
+          risk_level: riskLevel,
         };
       } else {
         // Integrated format path: text-only sections
@@ -122,6 +124,7 @@ export function AIDraftPage() {
           record_type: recordType,
           session_date: qsSessionDate || undefined,
           appointment_id: qsAppointmentId || undefined,
+          risk_level: riskLevel,
         };
       }
       const res = await aiDraftsApi.approve(id, approveBody);
@@ -343,6 +346,8 @@ export function AIDraftPage() {
           {/* ICD-10 suggestion in comparison mode */}
           <Icd10Suggestion value={icd10 ?? null} editable={true} onChange={setIcd10} />
 
+          <RiskLevelSelector value={riskLevel} onChange={setRiskLevel} />
+
           {/* Approve action */}
           <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
             <button
@@ -531,6 +536,8 @@ export function AIDraftPage() {
             />
           )}
 
+          {isReady && <RiskLevelSelector value={riskLevel} onChange={setRiskLevel} />}
+
           {/* Action bar */}
           {isReady && (
             <div style={{ display: 'flex', gap: 12 }}>
@@ -697,6 +704,41 @@ function Icd10Suggestion({ value, editable, onChange }: {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+const RISK_OPTIONS = [
+  { value: 'NONE',     label: 'Sin riesgo',           color: '#059669', bg: '#d1fae5' },
+  { value: 'IDEATION', label: 'Ideación suicida',      color: '#d97706', bg: '#fef3c7' },
+  { value: 'PLAN',     label: 'Plan suicida',          color: '#dc2626', bg: '#fee2e2' },
+  { value: 'ATTEMPT',  label: 'Intento / autolesión',  color: '#7c3aed', bg: '#ede9fe' },
+];
+
+function RiskLevelSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="card" style={{ padding: 18, marginBottom: 16, border: '1px solid #fecaca', background: '#fff5f5' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <AlertTriangle size={16} color="#dc2626" />
+        <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--s800)' }}>Nivel de riesgo</span>
+        <span style={{ fontSize: 11, color: '#dc2626', background: '#fee2e2', borderRadius: 6, padding: '1px 7px', fontWeight: 600 }}>obligatorio</span>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {RISK_OPTIONS.map(opt => (
+          <button
+            key={opt.value}
+            onClick={() => onChange(opt.value)}
+            style={{
+              padding: '6px 14px', borderRadius: 8, border: `1.5px solid ${value === opt.value ? opt.color : 'var(--s200)'}`,
+              background: value === opt.value ? opt.bg : '#fff',
+              color: value === opt.value ? opt.color : 'var(--s600)',
+              fontSize: 13, fontWeight: value === opt.value ? 700 : 500, cursor: 'pointer',
+            }}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

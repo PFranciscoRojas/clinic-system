@@ -73,7 +73,7 @@ func (s *Service) saveAudio(in UploadAudioInput) (string, error) {
 	}
 
 	dest := filepath.Join(dir, in.Filename)
-	f, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
+	f, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		return "", fmt.Errorf("create audio file: %w", err)
 	}

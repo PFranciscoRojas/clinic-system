@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -110,7 +111,20 @@ func (h *Handler) approveDraft(w http.ResponseWriter, r *http.Request) {
 
 	recordID, err := h.crr.Create(r.Context(), in)
 	if err != nil {
-		httputil.WriteError(w, http.StatusInternalServerError, "failed to create clinical record")
+		switch {
+		case errors.Is(err, clinicalrecords.ErrRiskRequired):
+			httputil.WriteError(w, http.StatusUnprocessableEntity, "nivel de riesgo es obligatorio")
+		case errors.Is(err, clinicalrecords.ErrMissingSection):
+			httputil.WriteError(w, http.StatusUnprocessableEntity, "una sección requerida está vacía")
+		case errors.Is(err, clinicalrecords.ErrNoOpenProcess):
+			httputil.WriteError(w, http.StatusUnprocessableEntity, "el paciente no tiene proceso clínico abierto — crea primero un registro INICIAL")
+		case errors.Is(err, clinicalrecords.ErrOpenProcessExists):
+			httputil.WriteError(w, http.StatusUnprocessableEntity, "el paciente ya tiene un proceso clínico abierto")
+		case errors.Is(err, clinicalrecords.ErrInvalidInput):
+			httputil.WriteError(w, http.StatusBadRequest, "datos inválidos para el registro clínico")
+		default:
+			httputil.WriteError(w, http.StatusInternalServerError, "error al crear el registro clínico")
+		}
 		return
 	}
 
