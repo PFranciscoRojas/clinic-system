@@ -27,15 +27,16 @@
 
 ### Últimos commits a `main`
 
-- `ecdeb46` feat(clinical): appointment_id FK + session_number + setup step + mutual exclusion — 2026-06-30
-- `5d60762` fix(clinical): audio re-upload overwrite + risk_level required in draft approve — 2026-06-29
-- `7454153` feat(clinical): comparison view manual record vs AI draft — field-by-field merge UI — 2026-06-29
-- `ea6bf7b` fix(clinical): move getDraftField before isEmptyDraft — fix TDZ crash on AI draft page — 2026-06-29
-- `58fc863` fix(clinical): 6 UX fixes — widget display, approve empty draft, recording warnings — 2026-06-29
+- `aec74c3` fix(clinical): PDF con códigos crudos sin traducir + vista previa incompleta — 2026-06-30
+- `b2b3057` fix(agenda): AssignPatient no vinculaba al profesional con el paciente — 2026-06-30
+- `1568af3` feat(clinical): autoguardado real en el servidor para registros clínicos (Fase 2) — 2026-06-30
+- `a368d42` fix(clinical): atacar la pérdida de contenido al escribir desde la raíz (Fase 1) — 2026-06-30
+- `e10237c`/`7dc76c3` fix(agenda): selector de profesional enviaba el ID del admin — 2026-06-30
+- `929ac9c`/`7f217cf`/`ec85011`/`ac1467a`/`00a7213` fix(clinical): picker de formato, 4 vs 7 formatos, crash SPA — 2026-06-30
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
-> **CI/CD:** `core-api` y `ai-service` se construyen en GitHub Actions y se despliegan a ghcr.io. El VPS solo hace `docker pull` — sin builds locales.
-> **Frontend:** se construye **manualmente** en el VPS (`docker run node:20-alpine npm run build`). El CI no tiene workflow para frontend.
+> **CI/CD:** `test → build → smoke`. `go test ./...` bloquea el build; `tsc --noEmit` corre en cada PR de frontend; smoke test de 8 pasos HTTP corre tras cada deploy al VPS.
+> **Frontend:** se construye **manualmente** en el VPS (`docker run node:20-alpine npm run build`). El CI no tiene workflow de deploy para frontend.
 
 ---
 
@@ -77,7 +78,7 @@
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción — rebuild local `ecdeb46` (migración 000047 aplicada) |
+| `core-api:8080` | ✅ producción — CI deploy `aec74c3` (migración 000048 aplicada) |
 | `ai-service` | ✅ producción — `ghcr.io/pfranciscorojas/clinic-system-ai-service:latest` (whisper.tiny + spaCy sm) |
 | `frontend` (Caddy :80/:443) | ✅ producción |
 | Backups | `pg_dump` cifrado GPG → Backblaze B2 |
@@ -92,7 +93,7 @@
 - `ALLOW_DATA_RESET=true` → cambiar a `false` en go-live (1.0.0)
 - Demo: `admin@demo.clinica.co` / `Admin1234!` · tenant ID `005e349d2fbc5d30000000003`
 - Marcela org (real, 5 usuarios): `aa2cbd1f-76b2-4cf9-bdde-dcf403ad1f04` (slug `marcela-chapues`) — token MP **live** ✅
-- Marcela org (legacy vacío, 0 pacientes): `fbf1fb3d-607d-4f4d-9870-05e95f63a1a3` (slug `marcelachapues`)
+- Marcela org #2 (`ps.marcelachapues@gmail.com`, CLINIC_ADMIN+PROFESSIONAL, 3 pacientes — **ya no vacía**, en uso activo desde sesión 23): `fbf1fb3d-607d-4f4d-9870-05e95f63a1a3` (slug `marcelachapues`)
 
 ---
 
@@ -103,7 +104,7 @@
 | `core-api` | `services/core-api/` | ✅ Go 1.25, prod |
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
-| Migrations | `services/core-api/migrations/` | Última: `000047_appointment_session_link` |
+| Migrations | `services/core-api/migrations/` | Última: `000048_clinical_record_autosave` (`finalized_at` en `clinical_records`) |
 | CI/CD | `.github/workflows/build-ai-service.yml` + `build-core-api.yml` | Build+push ghcr.io + deploy SSH al VPS (secrets: `VPS_HOST`, `VPS_SSH_KEY`, `GHCR_TOKEN`) |
 | Claude skills | `~/.claude/commands/` + `~/.claude/skills/` | `ui-ux-pro-max` instalada; `ui-styling` (Tailwind/shadcn) desinstalada 2026-06-28 — proyecto usa inline styles |
 

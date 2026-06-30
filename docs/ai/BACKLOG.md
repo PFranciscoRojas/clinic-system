@@ -42,6 +42,8 @@
 - **Disco VPS — Capa 2 (2026-06-24)** — Deferred (el usuario prefiere no aumentar el plan por ahora, no es producción real). Si el disco vuelve a apretar: añadir Hetzner Volume de 50 GB (~€2.5/mes) y mover el volumen `audio_data` ahí. Capa 1 (crons de limpieza + alerta email >80%) y Capa 3 (imagen ai-service a ghcr.io, whisper.tiny + spaCy sm, borrado de audio post-transcripción) ya implementadas.
 - **Migrar más servicios a build CI (2026-06-24)** — ✅ `core-api` y `ai-service` ya se construyen en GitHub Actions. El VPS solo hace `docker pull`.
 - **Prometheus + Grafana (cuando haya clientes reales pagando)** — añadir 2 contenedores al VPS: `prometheus` + `grafana` + `postgres_exporter`. Da gráficas de series de tiempo (conexiones, latencia, IOPS, etc.) con historial de días/semanas. ~300 MB RAM adicional. Diferir hasta tener carga real que justifique el overhead operativo.
+- **Smoke tests en deploy de frontend (2026-06-30)** — el job `smoke` en `build-core-api.yml` solo se activa cuando cambia `services/core-api/**`. Si se quiere cobertura total, añadir un `workflow_dispatch` standalone en un archivo `smoke.yml` separado que se pueda disparar manualmente o desde el futuro CI de frontend.
+- **Testing exploratorio con agente IA (2026-06-30)** — para detectar bugs visuales y de UX que un script de API no detecta, considerar `browser-use` (Python, integra Playwright + LLM) para sesiones periódicas manuales de exploración. No sirve como gate CI (no-determinístico, costoso), pero sí como herramienta del fundador antes de releases importantes. LangGraph/LangChain no aportan valor en este caso de uso.
 
 ## Pruebas Psicológicas / Psicométricas (investigar antes de implementar)
 
