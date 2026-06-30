@@ -12,8 +12,7 @@ import { BreakGlassModal } from '@/components/clinical/BreakGlassModal';
 import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
 import { RecordSectionsForm, recordToDraft, draftToPayload, validateDraft, toUIRecordType, type ClinicalDraft } from '@/components/clinical/RecordSectionsForm';
-import { TEMPLATE_SECTIONS, RECORD_TYPE_LABELS, DISCHARGE_REASONS, riskMeta } from '@/components/clinical/constants';
-import { type MentalExam } from '@/components/clinical/MentalExamChecklist';
+import { RECORD_TYPE_LABELS, DISCHARGE_REASONS, riskMeta } from '@/components/clinical/constants';
 import { isPureAdmin } from '@/lib/clinicalAccess';
 import TemplatedSectionsForm, { WidgetField, type SectionsState } from '@/components/clinical/TemplatedSectionsForm';
 import { recordTemplatesApi, type RecordTemplate, type SectionDef } from '@/api/recordTemplates';
@@ -284,15 +283,6 @@ export function ClinicalRecordPage() {
   );
 }
 
-function MentalExamRow({ label, items }: { label: string; items: string[] }) {
-  return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s700)', width: 160, flexShrink: 0 }}>{label}</span>
-      <span style={{ fontSize: 13, color: 'var(--s700)' }}>{items.join(' · ')}</span>
-    </div>
-  );
-}
-
 // Read-only view of a template-v2 record, in the section order of its type.
 function V2RecordView({ record, template }: { record: ClinicalRecord; template?: RecordTemplate }) {
   const sections = record.sections ?? {};
@@ -327,59 +317,24 @@ function V2RecordView({ record, template }: { record: ClinicalRecord; template?:
     );
   }
 
-  const defs = TEMPLATE_SECTIONS[record.record_type as keyof typeof TEMPLATE_SECTIONS] ?? [];
-  const mentalExam = (sections.mental_exam ?? null) as unknown as MentalExam | null;
+  // The disabled edit form is the single source of truth for what a v2 record
+  // contains — reusing it (instead of a parallel read-only renderer) is the
+  // only way the preview can never again drift out of sync with what "Editar"
+  // shows. The previous hand-rolled renderer only handled plain-string
+  // sections + a bespoke mental-exam summary, silently dropping every
+  // structured section (session_evaluation, task_adherence, spa_history,
+  // clinical_formulation, functional_analysis, etc.) from the preview.
   const riskNote = typeof sections.risk_note === 'string' ? sections.risk_note : '';
+  const draft = recordToDraft(sections, record.risk_level, record.discharge_reason);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-      {defs.map(def => {
-        const content = sections[def.key];
-        if (typeof content !== 'string' || !content) return null;
-        return (
-          <div key={def.key} className="card" style={{ padding: '16px 20px' }}>
-            <p style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>{def.label}</p>
-            <p style={{ margin: 0, fontSize: 14, color: 'var(--s700)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{content}</p>
-          </div>
-        );
-      })}
-
-      {mentalExam && typeof mentalExam === 'object' && (
-        <div className="card" style={{ padding: '16px 20px' }}>
-          <p style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>VI. Examen mental en consulta</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {(mentalExam.porte?.length ?? 0) > 0 && (
-              <MentalExamRow label="Porte y Actitud" items={mentalExam.porte} />
-            )}
-            {mentalExam.orientacion && (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s700)', width: 160, flexShrink: 0 }}>Orientación</span>
-                <span style={{ fontSize: 13, color: mentalExam.orientacion === 'desorientado' ? '#92400e' : '#065f46', fontWeight: 500 }}>
-                  {mentalExam.orientacion === 'orientado'
-                    ? 'Orientado globalmente'
-                    : `Desorientado en: ${(mentalExam.orientacion_areas ?? []).join(', ') || '—'}`}
-                </span>
-              </div>
-            )}
-            {(mentalExam.afecto?.length ?? 0) > 0 && (
-              <MentalExamRow label="Afecto" items={mentalExam.afecto} />
-            )}
-            {(mentalExam.pensamiento?.length ?? 0) > 0 && (
-              <MentalExamRow label="Pensamiento" items={mentalExam.pensamiento} />
-            )}
-            {mentalExam.percepcion && (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s700)', width: 160, flexShrink: 0 }}>Percepción</span>
-                <span style={{ fontSize: 13, color: 'var(--s700)', fontWeight: 500 }}>
-                  {mentalExam.percepcion === 'sin_alteraciones'
-                    ? 'Sin alteraciones'
-                    : `Alucinaciones${mentalExam.percepcion_spec ? ': ' + mentalExam.percepcion_spec : ''}`}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <RecordSectionsForm
+        recordType={toUIRecordType(record.record_type, sections)}
+        value={draft}
+        onChange={() => {}}
+        disabled
+      />
 
       {riskNote && (
         <div className="card" style={{ padding: '16px 20px', background: '#fffbeb', border: '1px solid #fde68a' }}>

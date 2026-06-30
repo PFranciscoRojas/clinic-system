@@ -63,16 +63,16 @@ type TemplateSectionDef struct {
 }
 
 type RenderInput struct {
-	Record           *clinicalrecords.ClinicalRecord
-	Org              OrgInfo
-	Patient          PatientInfo
-	Professional     ProfessionalInfo
-	SignaturePNG     []byte // optional handwritten signature stamp
-	SupervisorName   string // set when the record was cosigned
-	RecordType       string // Spanish label (e.g., "Evolución")
-	Diagnoses        []DiagnosisLine
-	Addenda          []*clinicalrecords.Addendum
-	ContentHash      string // SHA-256 integrity fingerprint stored at approval
+	Record         *clinicalrecords.ClinicalRecord
+	Org            OrgInfo
+	Patient        PatientInfo
+	Professional   ProfessionalInfo
+	SignaturePNG   []byte // optional handwritten signature stamp
+	SupervisorName string // set when the record was cosigned
+	RecordType     string // Spanish label (e.g., "Evolución")
+	Diagnoses      []DiagnosisLine
+	Addenda        []*clinicalrecords.Addendum
+	ContentHash    string // SHA-256 integrity fingerprint stored at approval
 	// When non-nil, overrides the hardcoded templateSections for rendering.
 	TemplateSections []TemplateSectionDef
 }
@@ -84,28 +84,70 @@ type sectionDef struct {
 
 // Section keys and labels mirror TEMPLATE_SECTIONS in
 // services/frontend/src/components/clinical/constants.ts — keep both in sync.
+// A key missing here is a key the PDF silently drops even when the
+// professional filled it in (the original bug report for this file).
+//
+// EVOLUTION also covers PLAN sessions (stored as record_type=EVOLUTION with
+// is_plan_session:true) — both sets of keys are listed together; whichever
+// ones are actually present in a given record are the only ones rendered
+// (renderSectionsV2 skips any key that doesn't exist on the record).
 var templateSections = map[string][]sectionDef{
 	"INITIAL": {
-		{key: "consultation_reason", title: "Motivo de consulta"},
-		{key: "current_problem", title: "Problema actual"},
+		{key: "consultation_reason", title: "Reporte textual"},
+		{key: "current_problem", title: "Análisis clínico del motivo de consulta"},
+		{key: "distress_level", title: "Nivel de malestar subjetivo"},
+		{key: "family_dynamics", title: "Historia familiar y dinámica de crianza"},
+		{key: "academic_history", title: "Historia académica y laboral"},
+		{key: "relational_history", title: "Historia relacional, social y red de apoyo"},
+		{key: "medical_history", title: "Antecedentes médicos y orgánicos"},
+		{key: "psychological_history", title: "Antecedentes psicológicos previos"},
+		{key: "psychiatric_history", title: "Antecedentes psiquiátricos previos"},
+		{key: "pharmacological_history", title: "Antecedentes farmacológicos"},
+		{key: "spa_history", title: "Historia de consumo de sustancias"},
+		{key: "family_mental_health", title: "Antecedentes familiares en salud mental"},
+		{key: "clinical_formulation", title: "Formulación clínica — modelo de los 5 factores"},
+		{key: "mental_exam", title: "Examen mental en consulta"},
+		{key: "diagnostic_impression", title: "Impresión diagnóstica o hipótesis clínica provisional"},
+		// Legacy/back-compat keys from earlier template versions.
 		{key: "personal_history", title: "Antecedentes personales"},
 		{key: "family_history", title: "Antecedentes familiares"},
 		{key: "psychosocial_context", title: "Contexto psicosocial"},
-		{key: "mental_exam", title: "Examen mental"},
-		{key: "diagnostic_impression", title: "Impresión diagnóstica"},
 		{key: "initial_plan", title: "Plan inicial"},
+		{key: "complaint_verbatim", title: "Motivo de consulta (verbatim)"},
 	},
 	"EVOLUTION": {
-		{key: "session_development", title: "Desarrollo de la sesión"},
-		{key: "interventions", title: "Intervenciones aplicadas"},
+		// Evolución (Formato 3)
+		{key: "distress_level", title: "Nivel de malestar subjetivo"},
+		{key: "session_development", title: "Estado actual y reporte subjetivo"},
+		{key: "task_adherence", title: "Seguimiento a compromisos — actividades"},
+		{key: "session_axis", title: "Eje de la sesión"},
+		{key: "interventions", title: "Intervención realizada en la sesión"},
+		{key: "session_evaluation", title: "Evaluación del cierre de sesión"},
+		{key: "task_checklist", title: "Nuevas tareas asignadas"},
+		// Plan terapéutico (Formato 2 — is_plan_session: true)
+		{key: "functional_analysis", title: "Análisis funcional de la conducta objeto"},
+		{key: "therapeutic_goal_1", title: "Objetivo terapéutico 1"},
+		{key: "therapeutic_goal_2", title: "Objetivo terapéutico 2"},
+		{key: "therapeutic_goal_3", title: "Objetivo terapéutico 3"},
+		{key: "therapeutic_goal_4", title: "Objetivo terapéutico 4"},
+		{key: "clinical_hypothesis", title: "Hipótesis y devolución clínica"},
+		{key: "achievement_indicators", title: "Indicadores de logro y bienestar"},
+		{key: "achievement_indicators_other", title: "Otro indicador de logro"},
+		{key: "techniques", title: "Enfoque y técnicas a utilizar"},
+		{key: "techniques_other", title: "Otra técnica"},
+		{key: "tasks_assigned", title: "¿Se asignaron tareas?"},
+		// Legacy/back-compat keys.
 		{key: "patient_response", title: "Análisis / respuesta del paciente"},
 		{key: "plan_tasks", title: "Plan y tareas"},
 	},
 	"DISCHARGE": {
-		{key: "discharge_summary", title: "Resumen del proceso"},
-		{key: "final_state", title: "Estado final"},
+		{key: "discharge_summary", title: "Resumen del motivo de consulta inicial"},
+		{key: "final_state", title: "Evaluación de logros terapéuticos y evolución"},
+		{key: "functionality", title: "Estado clínico al cierre"},
+		{key: "recommendations", title: "Recomendaciones y plan preventivo"},
+		{key: "dropout_sessions", title: "Sesiones consecutivas de inasistencia"},
+		// Legacy/back-compat keys.
 		{key: "goals_achieved", title: "Objetivos logrados"},
-		{key: "recommendations", title: "Recomendaciones"},
 		{key: "referral", title: "Remisión"},
 	},
 	"INTERCONSULTATION": {
@@ -134,6 +176,190 @@ var riskLabels = map[string]string{
 	"IDEATION": "Ideación",
 	"PLAN":     "Plan estructurado",
 	"ATTEMPT":  "Intento",
+}
+
+// Code → Spanish label maps for the structured widgets, mirrored from
+// services/frontend/src/components/clinical/constants.ts. Keep both in sync —
+// a code added to one side without the other prints the raw key instead of
+// its label.
+var sessionAxisLabels = map[string]string{
+	"emotional_processing":    "Procesamiento emocional",
+	"behavioral_modification": "Modificación conductual",
+	"technical_training":      "Entrenamiento técnico",
+}
+
+var insightLabels = map[string]string{"high": "Alto", "medium": "Medio", "low": "Bajo"}
+
+var resistanceBarrierLabels = map[string]string{
+	"tardiness":      "Tardanza",
+	"topic_change":   "Cambios de tema / Tácticas de desviación",
+	"omissions":      "Olvidos u omisiones de datos",
+	"exaggeration":   "Exageración o minimización del síntoma",
+	"contradictions": "Contradicciones en el relato",
+	"defensiveness":  "Conductas defensivas u hostilidad",
+	"silence_block":  "Silencios prolongados / Bloqueo",
+	"other":          "Otra",
+}
+
+var affectExitLabels = map[string]string{
+	"regulated": "Regulado", "emotionally_moved": "Movilizado emocionalmente", "anxious": "Ansioso",
+}
+
+var taskAdherenceLevelLabels = map[string]string{
+	"full": "Cumplió totalmente", "partial": "Cumplió parcialmente", "none": "No cumplió",
+}
+
+var functionalityLevelLabels = map[string]string{
+	"full": "Totalmente funcional", "supported": "Funcional con apoyos", "restricted": "Restringido",
+}
+
+var referralDestinationLabels = map[string]string{
+	"psychiatry": "Psiquiatría", "neuropsychology": "Neuropsicología",
+	"general_medicine": "Medicina General", "other": "Otro",
+}
+
+var achievementIndicatorLabels = map[string]string{
+	"symptom_reduction": "Disminución en frecuencia/intensidad del síntoma principal (Escala subjetiva)",
+	"activity_return":   "Retorno a actividades cotidianas que se encontraban evitadas o limitadas",
+	"coping_strategies": "Incorporación de estrategias de afrontamiento y autorregulación emocional autónomas",
+	"other":             "Otro (especificar en observaciones)",
+}
+
+var techniqueLabels = map[string]string{
+	"cognitive_restructuring": "Reestructuración Cognitiva",
+	"behavioral_activation":   "Activación Conductual",
+	"emotional_regulation":    "Regulación Emocional / Mindfulness",
+	"gradual_exposure":        "Exposición Gradual",
+	"skills_training":         "Entrenamiento en Habilidades",
+	"other":                   "Otro",
+}
+
+var physiologicalResponseLabels = map[string]string{
+	"tachycardia": "Taquicardia", "chest_pressure": "Opresión en el pecho",
+	"sweating": "Sudoración", "tension": "Tensión muscular",
+}
+
+var motorResponseLabels = map[string]string{
+	"crying": "Llorar", "isolating": "Aislarse", "fleeing": "Huir",
+	"complaining": "Reclamar", "smoking": "Fumar",
+}
+
+var consequenceLabels = map[string]string{
+	"relief": "Alivio inmediato", "anger": "Enojo", "guilt": "Culpa", "attention": "Atención de otros",
+}
+
+var onsetLabels = map[string]string{
+	"childhood": "Infancia", "adolescence": "Adolescencia",
+	"early_adulthood": "Adultez temprana", "recent_event": "Evento reciente",
+}
+
+var pathwayLabels = map[string]string{
+	"direct_conditioning":      "Condicionamiento directo (vivió experiencia estresante/traumática)",
+	"vicarious_learning":       "Aprendizaje vicario (lo observó en figuras cercanas)",
+	"information_transmission": `Transmisión de información (reglas verbales: "el mundo es peligroso")`,
+}
+
+var predispositionLabels = map[string]string{
+	"family_mh":                "Antecedentes familiares de SM",
+	"overprotective_parenting": "Estilo parental sobreprotector",
+	"authoritarian_parenting":  "Estilo parental autoritario / rígido",
+	"neglect_abuse":            "Negligencia, abusos o abandono temprano",
+	"harm_avoidance":           "Rasgo: Alta evitación al daño / Temor",
+	"perfectionism":            "Rasgo: Perfeccionismo / Rigidez",
+	"affective_dependency":     "Rasgo: Dependencia afectiva / Inseguridad",
+	"prior_medical":            "Enfermedad médica o crónica previa",
+}
+
+var triggerLabels = map[string]string{
+	"breakup_divorce":  "Ruptura de pareja / Divorcio",
+	"grief":            "Duelo / Muerte de un ser querido",
+	"family_conflict":  "Conflictos familiares inmediatos",
+	"relocation":       "Mudanza / Cambio de ciudad o entorno",
+	"life_cycle":       "Cambio de ciclo vital (graduación, vejez)",
+	"job_loss":         "Despido / Desempleo / Crisis económica",
+	"work_overload":    "Aumento drástico de carga laboral / Estrés",
+	"illness_accident": "Enfermedad o accidente reciente",
+}
+
+var maintenanceLabels = map[string]string{
+	"avoidance":        "Evitación / Escape",
+	"secondary_gain":   "Ganancia secundaria",
+	"skills_deficit":   "Déficit de habilidades (asertividad, resolución conflictos)",
+	"invalidating_env": "Entorno invalidante o permisivo",
+	"hostile_work":     "Ambiente laboral o académico hostil activo",
+}
+
+var protectionLabels = map[string]string{
+	"insight":            "Alta capacidad de introspección (Insight)",
+	"motivation":         "Alta motivación manifiesta al cambio",
+	"adherence":          "Adherencia, disciplina y puntualidad",
+	"support_network":    "Red de apoyo familiar / pareja activa",
+	"economic_stability": "Estabilidad económica",
+	"healthy_lifestyle":  "Estilo de vida saludable (ej. ejercicio)",
+}
+
+var familyMHLabels = map[string]string{
+	"anxiety": "Ansiedad", "depression": "Depresión", "suicide": "Suicidio", "psychosis": "Psicosis",
+}
+
+// Flattened from TASK_CHECKLIST_AREAS (6 areas, 4 tasks each).
+var taskChecklistLabels = map[string]string{
+	"autorregistro_abc":         "Autorregistro ABC",
+	"identificacion_sesgos":     "Identificación de sesgos",
+	"reatribucion_cognitiva":    "Reatribución cognitiva",
+	"parada_pensamiento":        "Parada de pensamiento",
+	"respiracion_diafragmatica": "Respiración diafragmática",
+	"relajacion_jacobson":       "Relajación de Jacobson",
+	"grounding_54321":           "Grounding 5-4-3-2-1",
+	"termometro_emocional":      "Termómetro emocional",
+	"defusion_cognitiva":        "Defusión cognitiva",
+	"aceptacion_radical":        "Aceptación radical",
+	"mindfulness_cotidiano":     "Mindfulness cotidiano",
+	"habilidades_tipp":          "Habilidades TIPP",
+	"activacion_conductual":     "Activación conductual",
+	"exposicion_gradual":        "Exposición gradual",
+	"experimento_conductual":    "Experimento conductual",
+	"postergacion_preocupacion": "Postergación de la preocupación",
+	"solucion_problemas":        "Solución de problemas",
+	"chunking":                  "Fragmentación / Chunking",
+	"control_estimulos":         "Control de estímulos",
+	"comunicacion_asertiva":     "Comunicación asertiva",
+	"registro_limites":          "Registro de límites",
+	"higiene_sueno":             "Higiene del sueño",
+	"escritura_terapeutica":     "Escritura terapéutica",
+}
+
+// labelOf returns the Spanish label for a code, or the raw code itself when
+// unmapped — never silently drops content the professional actually entered.
+func labelOf(m map[string]string, key string) string {
+	if l, ok := m[key]; ok {
+		return l
+	}
+	return key
+}
+
+// labelJoin translates each item in a code array and joins for display —
+// the fix for values that printed as Go's raw "[code1 code2]" slice syntax.
+func labelJoin(m map[string]string, items []string) string {
+	if len(items) == 0 {
+		return ""
+	}
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		out = append(out, labelOf(m, it))
+	}
+	return strings.Join(out, ", ")
+}
+
+// integratedWidgetAlias maps an integrated-format section key to the shared
+// widget formatter name when their data shapes differ from the custom
+// clinical-record-template widget of the same concept (see WidgetField on
+// the frontend, e.g. "spa_history" there is a {spa, familyMH} wrapper, while
+// the integrated format stores them as two separate flat top-level keys).
+var integratedWidgetAlias = map[string]string{
+	"clinical_formulation": "formulation_5f",
+	"distress_level":       "distress_scale",
+	"spa_history":          "spa_history_flat",
 }
 
 const (
@@ -473,7 +699,13 @@ func renderSectionsV2(doc *fpdf.Fpdf, tr func(string) string, rec *clinicalrecor
 		} else {
 			// Non-string value (e.g. mental_exam object): delegate to the widget
 			// renderer so the output is human-readable rather than a raw Go value.
-			content = renderWidgetValue(sec.key, val)
+			// integratedWidgetAlias covers keys whose shape differs from the
+			// custom-template widget of the same name (see its doc comment).
+			widgetName := sec.key
+			if alias, ok := integratedWidgetAlias[sec.key]; ok {
+				widgetName = alias
+			}
+			content = renderWidgetValue(widgetName, val)
 		}
 
 		if strings.TrimSpace(content) == "" {
@@ -583,58 +815,163 @@ func renderWidgetValue(name string, val any) string {
 		}
 		var b strings.Builder
 		for _, item := range items {
-			b.WriteString("• " + item + "\n")
+			b.WriteString("• " + labelOf(taskChecklistLabels, item) + "\n")
 		}
 		return b.String()
 
+	case "achievement_indicators":
+		items, _ := toStringSlice(val)
+		return labelJoin(achievementIndicatorLabels, items)
+
+	case "techniques":
+		items, _ := toStringSlice(val)
+		return labelJoin(techniqueLabels, items)
+
+	case "tasks_assigned":
+		if b, ok := val.(bool); ok {
+			if b {
+				return "Sí"
+			}
+			return "No"
+		}
+		return ""
+
 	case "risk":
 		if s, ok := val.(string); ok {
-			if label := riskLabels[s]; label != "" {
-				return label
-			}
-			return s
+			return labelOf(riskLabels, s)
 		}
 
+	// formulation_5f is the custom-template widget name AND the alias target
+	// for the integrated format's "clinical_formulation" key (same shape).
 	case "formulation_5f":
-		return formatOrderedMap(val, []string{
-			"predisposition:Predisposición",
-			"acquisition:Adquisición",
-			"triggers:Desencadenantes",
-			"maintenance:Mantenimiento",
-			"protection:Factores de protección",
-		})
+		m, ok := val.(map[string]any)
+		if !ok {
+			return ""
+		}
+		var b strings.Builder
+		factor := func(title, key string, labels map[string]string) {
+			f := asMap(m, key)
+			if f == nil {
+				return
+			}
+			sel, notes := asStrings(f, "selected"), asString(f, "notes")
+			if len(sel) == 0 && notes == "" {
+				return
+			}
+			b.WriteString(title + ":\n")
+			if len(sel) > 0 {
+				b.WriteString("  • " + labelJoin(labels, sel) + "\n")
+			}
+			if notes != "" {
+				b.WriteString("  Notas: " + notes + "\n")
+			}
+		}
+		factor("Predisposición", "predisposition", predispositionLabels)
+		if acq := asMap(m, "acquisition"); acq != nil {
+			onset, pathway, notes := asString(acq, "onset"), asStrings(acq, "pathway"), asString(acq, "notes")
+			if onset != "" || len(pathway) > 0 || notes != "" {
+				b.WriteString("Adquisición:\n")
+				if onset != "" {
+					b.WriteString("  • Época de inicio: " + labelOf(onsetLabels, onset) + "\n")
+				}
+				if len(pathway) > 0 {
+					b.WriteString("  • Vía de aprendizaje: " + labelJoin(pathwayLabels, pathway) + "\n")
+				}
+				if notes != "" {
+					b.WriteString("  Notas: " + notes + "\n")
+				}
+			}
+		}
+		factor("Desencadenantes", "triggers", triggerLabels)
+		factor("Mantenimiento", "maintenance", maintenanceLabels)
+		factor("Factores de protección", "protection", protectionLabels)
+		return b.String()
 
 	case "functional_analysis":
-		return formatOrderedMap(val, []string{
-			"antecedents:Antecedentes",
-			"cognitive_response:Respuesta cognitiva",
-			"physiological_response:Respuesta fisiológica",
-			"behavioral_response:Respuesta conductual",
-			"emotional_response:Respuesta emocional",
-			"consequences:Consecuencias",
-		})
+		m, ok := val.(map[string]any)
+		if !ok {
+			return ""
+		}
+		var b strings.Builder
+		line := func(label, v string) {
+			if v != "" {
+				b.WriteString(label + ": " + v + "\n")
+			}
+		}
+		line("Antecedentes", asString(m, "antecedents"))
+		line("Respuesta cognitiva", asString(m, "cognitive_response"))
+		phys := joinExtra(labelJoin(physiologicalResponseLabels, asStrings(m, "physiological_response")), asString(m, "physiological_other"))
+		line("Respuesta fisiológica", phys)
+		motor := joinExtra(labelJoin(motorResponseLabels, asStrings(m, "motor_response")), asString(m, "motor_other"))
+		line("Respuesta motora/conductual", motor)
+		cons := joinExtra(labelJoin(consequenceLabels, asStrings(m, "consequences")), asString(m, "consequences_other"))
+		line("Consecuencias", cons)
+		return b.String()
 
 	case "task_adherence":
-		return formatOrderedMap(val, []string{
-			"level:Nivel de adherencia",
-			"observations:Observaciones",
-		})
+		m, ok := val.(map[string]any)
+		if !ok {
+			return ""
+		}
+		var b strings.Builder
+		if asBool(m, "assigned") {
+			b.WriteString("Se asignaron tareas: Sí\n")
+		}
+		if level := asString(m, "level"); level != "" {
+			b.WriteString("Nivel de adherencia: " + labelOf(taskAdherenceLevelLabels, level) + "\n")
+		}
+		if obs := asString(m, "observations"); obs != "" {
+			b.WriteString("Observaciones: " + obs + "\n")
+		}
+		return b.String()
 
+	// The exact bug reported: axis/barriers are code arrays that used to print
+	// as Go's raw "[code1 code2]" slice syntax instead of translated labels.
 	case "session_evaluation":
-		return formatOrderedMap(val, []string{
-			"axis:Eje de trabajo",
-			"patient_feedback:Percepción del paciente",
-			"insight:Nivel de insight",
-			"barriers:Barreras identificadas",
-			"next_objective:Objetivo próxima sesión",
-		})
+		m, ok := val.(map[string]any)
+		if !ok {
+			return ""
+		}
+		var b strings.Builder
+		if axis := labelJoin(sessionAxisLabels, asStrings(m, "axis")); axis != "" {
+			b.WriteString("Eje de trabajo: " + axis + "\n")
+		}
+		if fb := asString(m, "patient_feedback"); fb != "" {
+			b.WriteString("Percepción del paciente: " + fb + "\n")
+		}
+		if insight := asString(m, "insight"); insight != "" {
+			b.WriteString("Nivel de insight: " + labelOf(insightLabels, insight) + "\n")
+		}
+		barriers := joinExtra(labelJoin(resistanceBarrierLabels, asStrings(m, "barriers")), asString(m, "barriers_other"))
+		if barriers != "" {
+			b.WriteString("Barreras identificadas: " + barriers + "\n")
+		}
+		if exit := asString(m, "affect_exit"); exit != "" {
+			b.WriteString("Estado del afecto al salir: " + labelOf(affectExitLabels, exit) + "\n")
+		}
+		return b.String()
 
 	case "functionality":
-		return formatOrderedMap(val, []string{
-			"level:Nivel de funcionalidad",
-			"referral_destination:Remisión",
-		})
+		m, ok := val.(map[string]any)
+		if !ok {
+			return ""
+		}
+		var b strings.Builder
+		if level := asString(m, "level"); level != "" {
+			b.WriteString("Nivel de funcionalidad: " + labelOf(functionalityLevelLabels, level) + "\n")
+		}
+		if dest := asString(m, "referral_destination"); dest != "" {
+			d := labelOf(referralDestinationLabels, dest)
+			if other := asString(m, "referral_destination_other"); dest == "other" && other != "" {
+				d = other
+			}
+			b.WriteString("Destino de remisión: " + d + "\n")
+		}
+		return b.String()
 
+	// spa_history is the custom-template widget name; its data is a single
+	// {spa, familyMH} wrapper (see WidgetField on the frontend) — different
+	// from the integrated format's two separate flat keys, handled below.
 	case "spa_history":
 		m, ok := val.(map[string]any)
 		if !ok {
@@ -658,37 +995,59 @@ func renderWidgetValue(name string, val any) string {
 			}
 		}
 		return strings.Join(parts, "\n")
+
+	// Integrated format's flat "spa_history" key (aliased here by
+	// integratedWidgetAlias) — present + alcohol/tobacco/other sub-objects.
+	case "spa_history_flat":
+		m, ok := val.(map[string]any)
+		if !ok || !asBool(m, "present") {
+			return ""
+		}
+		var parts []string
+		sub := func(label, key string) {
+			s := asMap(m, key)
+			if s == nil || !asBool(s, "present") {
+				return
+			}
+			line := label
+			if freq := asString(s, "frequency"); freq != "" {
+				line += " (" + freq + ")"
+			}
+			parts = append(parts, line)
+		}
+		sub("Alcohol", "alcohol")
+		sub("Tabaco", "tobacco")
+		if other := asMap(m, "other"); other != nil && asBool(other, "present") {
+			line := "Otra"
+			if s := asString(other, "substance"); s != "" {
+				line += ": " + s
+			}
+			if freq := asString(other, "frequency"); freq != "" {
+				line += " (" + freq + ")"
+			}
+			parts = append(parts, line)
+		}
+		if len(parts) == 0 {
+			return "Consumo reportado (sin detalle)"
+		}
+		return strings.Join(parts, "\n")
+
+	case "family_mental_health":
+		m, ok := val.(map[string]any)
+		if !ok {
+			return ""
+		}
+		var parts []string
+		for _, k := range []string{"anxiety", "depression", "suicide", "psychosis"} {
+			if asBool(m, k) {
+				parts = append(parts, familyMHLabels[k])
+			}
+		}
+		return strings.Join(parts, ", ")
 	}
 
 	// Generic fallback for widgets not handled above.
 	return fmt.Sprintf("%v", val)
-}
-
-// formatOrderedMap renders a map[string]any in a fixed field order, skipping
-// empty values. Labels are declared as "key:Label" pairs.
-func formatOrderedMap(val any, fields []string) string {
-	m, ok := val.(map[string]any)
-	if !ok {
-		return ""
-	}
-	var b strings.Builder
-	for _, spec := range fields {
-		parts := strings.SplitN(spec, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key, label := parts[0], parts[1]
-		v, exists := m[key]
-		if !exists || v == nil {
-			continue
-		}
-		s := fmt.Sprintf("%v", v)
-		if strings.TrimSpace(s) == "" {
-			continue
-		}
-		b.WriteString(label + ": " + s + "\n")
-	}
-	return b.String()
 }
 
 // toStringSlice coerces an []any or []string to []string.
@@ -704,6 +1063,43 @@ func toStringSlice(val any) ([]string, bool) {
 		return out, true
 	}
 	return nil, false
+}
+
+// asString/asBool/asMap/asStrings read a typed sub-field from a decoded JSON
+// object (map[string]any) — every clinical_records.Sections value comes from
+// json.Unmarshal into map[string]any, so nested objects/arrays/bools arrive
+// untyped and need this kind of safe access.
+func asString(m map[string]any, k string) string {
+	s, _ := m[k].(string)
+	return s
+}
+
+func asBool(m map[string]any, k string) bool {
+	b, _ := m[k].(bool)
+	return b
+}
+
+func asMap(m map[string]any, k string) map[string]any {
+	sub, _ := m[k].(map[string]any)
+	return sub
+}
+
+func asStrings(m map[string]any, k string) []string {
+	items, _ := toStringSlice(m[k])
+	return items
+}
+
+// joinExtra appends an "other" free-text value to an already-translated,
+// comma-joined list of labels — the common "selected options + free text"
+// pattern used across several widgets (barriers, achievement indicators…).
+func joinExtra(base, extra string) string {
+	if extra == "" {
+		return base
+	}
+	if base == "" {
+		return extra
+	}
+	return base + ", " + extra
 }
 
 // formatMentalExam walks the domains in fixed order so output is deterministic.
