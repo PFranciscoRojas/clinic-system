@@ -124,31 +124,48 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         const saved = JSON.parse(raw);
-        // Ignore a saved draft whose type the process rule no longer permits.
         if (saved.uiType && !allowedTypes.includes(saved.uiType)) return;
         if (saved.uiType) setUIType(saved.uiType);
-        if (saved.draft) { setDraft({ ...emptyDraft(), ...saved.draft }); setRestored(true); }
+        if (saved.draft) {
+          const def = emptyDraft();
+          const sd = saved.draft as Partial<typeof def>;
+          // Deep-merge nested objects so old/partial drafts don't crash on render
+          // (e.g. spaHistory without alcohol/tobacco/other would cause undefined errors).
+          const merged: ClinicalDraft = {
+            ...def,
+            ...sd,
+            spaHistory: sd.spaHistory ? (() => {
+              const defSPA = def.spaHistory!;
+              return {
+                ...defSPA,
+                ...sd.spaHistory,
+                alcohol: { ...defSPA.alcohol, ...(sd.spaHistory.alcohol ?? {}) },
+                tobacco: { ...defSPA.tobacco, ...(sd.spaHistory.tobacco ?? {}) },
+                other:   { ...defSPA.other,   ...(sd.spaHistory.other   ?? {}) },
+              };
+            })() : def.spaHistory,
+            familyMH: sd.familyMH ? { ...def.familyMH, ...sd.familyMH } : def.familyMH,
+            taskAdherence: sd.taskAdherence
+              ? { ...def.taskAdherence, ...sd.taskAdherence }
+              : def.taskAdherence,
+          };
+          setDraft(merged);
+          setRestored(true);
+        }
       }
     } catch { /* corrupt draft — start clean */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey]);
 
-  useEffect(() => {
-    const t = setTimeout(() => {
-      try { localStorage.setItem(storageKey, JSON.stringify({ uiType, draft })); } catch { /* storage full */ }
-    }, 600);
-    return () => clearTimeout(t);
-  }, [storageKey, uiType, draft]);
-
-  // Force-save immediately on page unload so the 600ms debounce doesn't lose
-  // content typed just before F5 or navigating away.
+  // Save to localStorage 600ms after the last change. The cleanup also saves
+  // immediately so content is never lost on SPA navigation (React Router
+  // unmounts the component without triggering window.beforeunload).
   useEffect(() => {
     const save = () => {
-      try { localStorage.setItem(storageKey, JSON.stringify({ uiType, draft })); } catch { /* ignore */ }
+      try { localStorage.setItem(storageKey, JSON.stringify({ uiType, draft })); } catch { /* storage full */ }
     };
-    window.addEventListener('beforeunload', save);
-    return () => window.removeEventListener('beforeunload', save);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    const t = setTimeout(save, 600);
+    return () => { clearTimeout(t); save(); };
   }, [storageKey, uiType, draft]);
 
   // Copy-forward: start from the latest approved-or-draft evolution note.

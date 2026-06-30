@@ -1027,19 +1027,6 @@ export function AppointmentPage() {
                         <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal-d, var(--teal))', background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 5, padding: '2px 8px', flexShrink: 0 }}>integrado</span>
                       </button>
                     ))}
-                    {setupTemplates.map(t => (
-                      <button key={t.id} type="button"
-                        onClick={() => { setSetupType(t.record_type as UIRecordType); setSetupTemplateId(t.id); confirmSetup(); }}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s, background 0.15s' }}
-                        onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLButtonElement).style.background = '#f0fdfa'; }}
-                        onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--s200)'; (e.currentTarget as HTMLButtonElement).style.background = '#fff'; }}
-                      >
-                        <div>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>{t.name}</div>
-                          <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>Plantilla personalizada</div>
-                        </div>
-                      </button>
-                    ))}
                   </div>
                 </div>
               ) : showRecordForm ? (
@@ -1526,30 +1513,6 @@ export function AppointmentPage() {
                   <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal-d)', background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 5, padding: '2px 7px', flexShrink: 0 }}>integrado</span>
                 </button>
               ))}
-              {/* Custom templates — each is its own format */}
-              {setupTemplates.map(t => {
-                const allowed: UIRecordType[] = hasOpenProcess === undefined ? ['INITIAL','PLAN','EVOLUTION','DISCHARGE'] : hasOpenProcess ? ['PLAN','EVOLUTION','DISCHARGE'] : ['INITIAL'];
-                if (!allowed.includes(t.record_type as UIRecordType)) return null;
-                return (
-                  <button key={t.id} type="button"
-                    onClick={() => { setSetupType(t.record_type as UIRecordType); setSetupTemplateId(t.id); confirmSetup(); }}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s, background 0.15s' }}
-                    onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLButtonElement).style.background = '#f0fdfa'; }}
-                    onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--s200)'; (e.currentTarget as HTMLButtonElement).style.background = '#fff'; }}
-                  >
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--s800)' }}>{t.name}</div>
-                      <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 1 }}>Plantilla personalizada</div>
-                    </div>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--s600)', background: 'var(--s100)', border: '1px solid var(--s200)', borderRadius: 5, padding: '2px 7px', flexShrink: 0 }}>{RECORD_TYPE_LABEL[t.record_type] ?? t.record_type}</span>
-                  </button>
-                );
-              })}
-              {/* Fallback button for explicit confirm (shouldn't normally be needed) */}
-              <button onClick={confirmSetup} disabled={!setupType}
-                style={{ display: setupType ? 'none' : 'flex', padding: '10px 20px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 9, cursor: setupType ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 700, alignItems: 'center', gap: 7, alignSelf: 'flex-start', opacity: setupType ? 1 : 0.5 }}>
-                <FileText size={14} /> Comenzar registro
-              </button>
             </div>
           </div>
         ) : showRecordForm ? (
