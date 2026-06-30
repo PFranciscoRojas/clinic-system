@@ -32,6 +32,10 @@ export interface ClinicalRecord {
   supervisor_cosigned_at?: string;
   created_at: string;
   updated_at: string;
+  /** False for an autosave draft that has never passed strict validation —
+   *  it's scratch work in progress, not a real authored note yet. */
+  finalized?: boolean;
+  finalized_at?: string;
 }
 
 export interface RecordMeta {
@@ -51,6 +55,8 @@ export interface RecordMeta {
   supervisor_id: string;
   created_at: string;
   session_number?: number | null;
+  finalized?: boolean;
+  finalized_at?: string;
 }
 
 export interface Consent {
@@ -108,6 +114,16 @@ export const clinicalRecordsApi = {
     api.post<{ id: string }>(`/patients/${patientId}/records`, body),
   update:    (id: string, body: UpdateRecordInput) =>
     api.patch<void>(`/clinical-records/${id}`, body),
+  // Autosave: lenient validation, no audit trail — periodic background saves
+  // while the professional is still writing. Never the explicit "Guardar".
+  autosaveCreate: (patientId: string, body: CreateRecordInput) =>
+    api.post<{ id: string }>(`/patients/${patientId}/records/autosave`, body),
+  autosaveUpdate: (id: string, body: UpdateRecordInput) =>
+    api.patch<void>(`/clinical-records/${id}/autosave`, body),
+  // Finalize: strict validation + audit, on a record that already has an
+  // autosave draft — the explicit "Guardar" for that case.
+  finalize:  (id: string, body: UpdateRecordInput) =>
+    api.post<void>(`/clinical-records/${id}/finalize`, body),
   approve:   (id: string) =>
     api.post<void>(`/clinical-records/${id}/approve`, {}),
   cosign:    (id: string) =>

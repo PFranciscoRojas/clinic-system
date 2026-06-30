@@ -8,19 +8,31 @@ import (
 )
 
 func (r *Repository) Update(ctx context.Context, p clinicalrecords.UpdateParams) error {
+	// Finalize=true (the explicit "Guardar"/finalize path) sets finalized_at
+	// and assigns session_number the first time, both via COALESCE so a
+	// record that's already finalized is untouched. Finalize=false (lenient
+	// autosave PATCH) leaves both alone.
 	tag, err := r.q(ctx).Exec(ctx, `
 		UPDATE clinical_records
 		SET sections_enc     = $3,
 		    risk_level       = COALESCE($4, risk_level),
 		    discharge_reason = COALESCE($5, discharge_reason),
 		    content_hash     = $6,
-		    updated_at       = NOW()
+		    updated_at       = NOW(),
+		    finalized_at     = CASE WHEN $7 THEN COALESCE(finalized_at, NOW()) ELSE finalized_at END,
+		    session_number   = CASE WHEN $7 THEN COALESCE(session_number, (
+		        SELECT COALESCE(MAX(cr2.session_number), 0) + 1
+		        FROM clinical_records cr2
+		        WHERE cr2.patient_id = clinical_records.patient_id
+		          AND cr2.organization_id = clinical_records.organization_id
+		    )) ELSE session_number END
 		WHERE id = $1 AND organization_id = $2 AND status = 'DRAFT'
 	`,
 		p.ID, p.OrganizationID,
 		nullableBytes(p.SectionsEnc),
 		p.RiskLevel, p.DischargeReason,
 		nullableString(p.ContentHash),
+		p.Finalize,
 	)
 	if err != nil {
 		return fmt.Errorf("update clinical_record: %w", err)
@@ -32,6 +44,9 @@ func (r *Repository) Update(ctx context.Context, p clinicalrecords.UpdateParams)
 }
 
 func (r *Repository) Approve(ctx context.Context, orgID, recordID, approvedBy string) error {
+	// finalized_at IS NOT NULL guards against approving a record that's still
+	// only a lenient autosave draft — it must go through Finalize (strict
+	// validation) first.
 	tag, err := r.q(ctx).Exec(ctx, `
 		UPDATE clinical_records
 		SET status      = 'APPROVED',
@@ -39,6 +54,7 @@ func (r *Repository) Approve(ctx context.Context, orgID, recordID, approvedBy st
 		    updated_at  = NOW()
 		WHERE id = $1 AND organization_id = $2
 		  AND status = 'DRAFT'
+		  AND finalized_at IS NOT NULL
 		  AND (requires_cosign = FALSE OR supervisor_cosigned_at IS NOT NULL)
 	`, recordID, orgID)
 	if err != nil {

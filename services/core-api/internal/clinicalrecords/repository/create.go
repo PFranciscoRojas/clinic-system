@@ -22,8 +22,12 @@ func (r *Repository) CreateEncKey(ctx context.Context, encryptedDEK []byte, keyS
 
 func (r *Repository) Create(ctx context.Context, p clinicalrecords.CreateParams) (string, error) {
 	var id string
-	// The CTE atomically assigns the next session_number for this patient,
-	// reserving the slot at DRAFT creation — not just at APPROVED time.
+	// The CTE atomically assigns the next session_number for this patient.
+	// A lenient autosave draft (Finalized=false) leaves session_number and
+	// finalized_at NULL — the slot is only reserved once the record is
+	// actually finalized, so an abandoned draft never burns a number or
+	// counts toward the open-process rule (GetProcessDates filters on
+	// finalized_at).
 	err := r.q(ctx).QueryRow(ctx, `
 		WITH next_num AS (
 			SELECT COALESCE(MAX(session_number), 0) + 1 AS num
@@ -35,14 +39,15 @@ func (r *Repository) Create(ctx context.Context, p clinicalrecords.CreateParams)
 			appointment_id, dek_id, record_type, session_date,
 			requires_cosign, supervisor_id, content_hash,
 			template_version, template_id, sections_enc, risk_level, discharge_reason,
-			session_number
+			session_number, finalized_at
 		)
 		SELECT
 			$1, $2, $3, $4,
 			$5, $6, $7, $8,
 			$9, $10, $11,
 			$12, $13, $14, $15, $16,
-			next_num.num
+			CASE WHEN $17 THEN next_num.num ELSE NULL END,
+			CASE WHEN $17 THEN NOW() ELSE NULL END
 		FROM next_num
 		RETURNING id
 	`,
@@ -51,6 +56,7 @@ func (r *Repository) Create(ctx context.Context, p clinicalrecords.CreateParams)
 		p.RequiresCosign, nullableString(p.SupervisorID), nullableString(p.ContentHash),
 		templateVersionOrDefault(p.TemplateVersion), nullableString(p.TemplateID),
 		nullableBytes(p.SectionsEnc), p.RiskLevel, p.DischargeReason,
+		p.Finalized,
 	).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("insert clinical_record: %w", err)

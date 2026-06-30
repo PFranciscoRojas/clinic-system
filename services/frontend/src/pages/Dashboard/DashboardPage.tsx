@@ -440,7 +440,11 @@ export function DashboardPage() {
     })),
   });
   const recordsReady = recordQueries.every(q => q.isSuccess);
-  const notedApptIds = new Set(recordQueries.flatMap(q => q.data?.items?.map(r => r.appointment_id) ?? []));
+  // finalized !== false: an unfinalized autosave draft must NOT count as "the
+  // note is done" — that's exactly the reminder this inbox exists to give.
+  const notedApptIds = new Set(
+    recordQueries.flatMap(q => (q.data?.items ?? []).filter(r => r.finalized !== false).map(r => r.appointment_id)),
+  );
   const pendingNotes = recordsReady ? completedApptsToday.filter(a => !notedApptIds.has(a.id)) : [];
 
   const inboxCount = unfinishedToday.length + pendingNotes.length;

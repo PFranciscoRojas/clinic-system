@@ -10,6 +10,7 @@ import (
 func (h *Handler) PatientRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.With(middleware.RequirePermission("clinical_records:create")).Post("/", h.create)
+	r.With(middleware.RequirePermission("clinical_records:create")).Post("/autosave", h.autosaveCreate)
 	r.With(middleware.RequirePermission("clinical_records:read")).Get("/", h.list)
 	return r
 }
@@ -23,6 +24,8 @@ func (h *Handler) Routes() chi.Router {
 	r.With(middleware.RequirePermission("clinical_records:read")).Get("/{id}/addenda", h.listAddenda)
 	r.With(middleware.RequirePermission("clinical_records:update")).Post("/{id}/addenda", h.addAddendum)
 	r.With(middleware.RequirePermission("clinical_records:update")).Patch("/{id}", h.update)
+	r.With(middleware.RequirePermission("clinical_records:update")).Patch("/{id}/autosave", h.autosavePatch)
+	r.With(middleware.RequirePermission("clinical_records:create")).Post("/{id}/finalize", h.finalize)
 	r.With(middleware.RequirePermission("clinical_records:approve")).Post("/{id}/approve", h.approve)
 	r.With(middleware.RequirePermission("clinical_records:cosign")).Post("/{id}/cosign", h.cosign)
 	return r

@@ -149,6 +149,55 @@ func TestValidateTemplateV2(t *testing.T) {
 	}
 }
 
+func TestValidateTemplateV2Lenient(t *testing.T) {
+	cases := []struct {
+		name     string
+		rt       RecordType
+		sections map[string]any
+		wantErr  error
+	}{
+		{
+			name:     "empty sections accepted — no required-field check",
+			rt:       RecordTypeEvolution,
+			sections: map[string]any{},
+			wantErr:  nil,
+		},
+		{
+			name:     "partial sections accepted",
+			rt:       RecordTypeInitial,
+			sections: map[string]any{"consultation_reason": "still typing"},
+			wantErr:  nil,
+		},
+		{
+			name:     "unknown section key still rejected",
+			rt:       RecordTypeEvolution,
+			sections: map[string]any{"not_a_real_section": "x"},
+			wantErr:  ErrInvalidInput,
+		},
+		{
+			name:     "interconsultation has no v2 template",
+			rt:       RecordTypeInterconsultation,
+			sections: map[string]any{},
+			wantErr:  ErrInvalidInput,
+		},
+		{
+			name:     "discharge with no reason accepted — lenient skips it",
+			rt:       RecordTypeDischarge,
+			sections: map[string]any{"discharge_summary": "draft"},
+			wantErr:  nil,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateTemplateV2Lenient(tc.rt, tc.sections)
+			if err != tc.wantErr {
+				t.Fatalf("got %v, want %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestProcessDatesHasOpenProcess(t *testing.T) {
 	d1 := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)
 	d2 := time.Date(2026, 3, 5, 0, 0, 0, 0, time.UTC)

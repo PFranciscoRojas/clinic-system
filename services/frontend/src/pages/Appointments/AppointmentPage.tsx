@@ -609,8 +609,11 @@ export function AppointmentPage() {
   const treatmentConsent = activeConsents.find(c => c.consent_type === 'TREATMENT');
   const [viewConsentId, setViewConsentId] = useState<string | null>(null);
 
-  // Open process = an INITIAL more recent than the last DISCHARGE.
-  const allRecords = recordsData?.items ?? [];
+  // Open process = a finalized INITIAL more recent than the last finalized
+  // DISCHARGE. Only finalized records count — same rule the server enforces
+  // (GetProcessDates) — so a started-and-abandoned autosave draft can never
+  // permanently fake-open or fake-close a patient's process.
+  const allRecords = (recordsData?.items ?? []).filter(r => r.finalized !== false);
   const lastInitial   = allRecords.filter(r => r.record_type === 'INITIAL').map(r => r.session_date).sort().pop();
   const lastDischarge = allRecords.filter(r => r.record_type === 'DISCHARGE').map(r => r.session_date).sort().pop();
   const hasOpenProcess = !!lastInitial && (!lastDischarge || lastInitial > lastDischarge);
@@ -621,9 +624,32 @@ export function AppointmentPage() {
 
   // Records linked to this appointment
   const linkedRecords: RecordMeta[] = (recordsData?.items ?? []).filter(r => r.appointment_id === id);
+  // finalizedRecords are real, authored notes — everything that today's UI
+  // logic (gating, lists, mutual exclusion) should treat as "a note exists".
+  // autosaveDraft is the one not-yet-finalized scratch row (if any) for this
+  // appointment — used only to resume the form / pass to RecordForm so it can
+  // recover server-side content on a fresh device.
+  const finalizedRecords = linkedRecords.filter(r => r.finalized !== false);
+  const autosaveDraft = linkedRecords.find(r => r.finalized === false && r.status === 'DRAFT');
   // Mutual exclusion: an APPROVED manual record blocks new AI draft; an APPROVED AI draft blocks new manual record.
-  const hasApprovedRecord = linkedRecords.some(r => r.status === 'APPROVED');
+  const hasApprovedRecord = finalizedRecords.some(r => r.status === 'APPROVED');
   const hasApprovedDraft = linkedDraft?.status === 'APPROVED';
+
+  // Resume straight into the editor when there's an unfinalized autosave
+  // draft and no finalized note yet — covers a fresh device/browser where
+  // the local setup-state (sghcp_sess_${id}) isn't available, but the
+  // server-side draft still has the content. The exact UI type (e.g.
+  // PLAN vs EVOLUTION) gets corrected moments later by RecordForm's own
+  // restore-from-server effect; this only needs to get the form open.
+  useEffect(() => {
+    if (appt?.status !== 'IN_PROGRESS') return;
+    if (!autosaveDraft || finalizedRecords.length > 0) return;
+    if (showRecordForm || setupOpen) return;
+    setSetupType(autosaveDraft.record_type as UIRecordType);
+    setSetupTemplateId(autosaveDraft.template_id ?? '');
+    setShowRecordForm(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appt?.status, autosaveDraft?.id, finalizedRecords.length]);
 
   const handleStatusChange = async (status: AppointmentStatus) => {
     if (!id) return;
@@ -779,7 +805,7 @@ export function AppointmentPage() {
   const isScheduled = appt.status === 'SCHEDULED';
   // Grace window: the note can be written during the session or right after
   // finishing it (next patient may be waiting) — no "extemporáneo" flag here.
-  const canWriteNote = isInProgress || (appt.status === 'COMPLETED' && linkedRecords.length === 0);
+  const canWriteNote = isInProgress || (appt.status === 'COMPLETED' && finalizedRecords.length === 0);
   // The note carries the real session date, not the writing date.
   const apptDate = (() => {
     const d = new Date(appt.scheduled_at);
@@ -1045,7 +1071,7 @@ export function AppointmentPage() {
                   </div>
                 </div>
               ) : showRecordForm ? (
-                <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={setupType ? (setupType === 'PLAN' ? 'EVOLUTION' : setupType as RecordType) : defaultRecordType} lockedTemplateId={setupType !== null ? setupTemplateId : undefined} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} hasOpenProcess={hasOpenProcess} onTypeChange={setSelectedRecordType} onTemplateChange={setSelectedTemplateId} onSaved={handleRecordSaved} />
+                <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={setupType ? (setupType === 'PLAN' ? 'EVOLUTION' : setupType as RecordType) : defaultRecordType} lockedTemplateId={setupType !== null ? setupTemplateId : undefined} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} hasOpenProcess={hasOpenProcess} existingDraftId={autosaveDraft?.id} onTypeChange={setSelectedRecordType} onTemplateChange={setSelectedTemplateId} onSaved={handleRecordSaved} />
               ) : (
                 <div className="card" style={{ textAlign: 'center', padding: '40px 0' }}>
                   <FileText size={32} color="var(--s200)" style={{ marginBottom: 12 }} />
@@ -1085,7 +1111,7 @@ export function AppointmentPage() {
                       templateId={selectedTemplateId}
                       sessionDate={apptDate}
                       processing={processingAudio}
-                      linkedRecordId={linkedRecords[0]?.id}
+                      linkedRecordId={finalizedRecords[0]?.id}
                       onDraftCreated={handleDraftCreated}
                     />
                   )}
@@ -1326,7 +1352,7 @@ export function AppointmentPage() {
                 Finalizar sesión
               </button>
             )}
-            {isScheduled && linkedRecords.length === 0 && (
+            {isScheduled && finalizedRecords.length === 0 && (
               <>
                 <button
                   onClick={() => { setCancelOpen(v => !v); setReagendarOpen(false); }}
@@ -1453,7 +1479,7 @@ export function AppointmentPage() {
             </div>
             <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--s800)' }}>Historia clínica</span>
           </div>
-          {linkedRecords.length > 0 && !showRecordForm && !setupOpen && canWriteNote && !hasApprovedDraft && (
+          {finalizedRecords.length > 0 && !showRecordForm && !setupOpen && canWriteNote && !hasApprovedDraft && (
             <button
               onClick={openSetup}
               style={{ fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, border: '1px solid var(--teal)', background: '#f0fdfa', color: 'var(--teal)', cursor: 'pointer' }}
@@ -1463,9 +1489,9 @@ export function AppointmentPage() {
           )}
         </div>
 
-        {linkedRecords.length > 0 && !showRecordForm && !setupOpen ? (
+        {finalizedRecords.length > 0 && !showRecordForm && !setupOpen ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {linkedRecords.map(rec => (
+            {finalizedRecords.map(rec => (
               <div key={rec.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'var(--s50)', borderRadius: 10, border: '1px solid var(--s200)' }}>
                 <FileText size={16} color="var(--teal)" />
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -1563,7 +1589,7 @@ export function AppointmentPage() {
                 <span><b>Registro extemporáneo</b> — motivo: {lateReason}. Quedará declarado en la historia y en el PDF.</span>
               </div>
             )}
-            <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={setupType ? (setupType === 'PLAN' ? 'EVOLUTION' : setupType as RecordType) : defaultRecordType} lockedTemplateId={setupType !== null ? setupTemplateId : undefined} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} hasOpenProcess={hasOpenProcess} onTypeChange={setSelectedRecordType} onTemplateChange={setSelectedTemplateId} onSaved={handleRecordSaved} />
+            <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={setupType ? (setupType === 'PLAN' ? 'EVOLUTION' : setupType as RecordType) : defaultRecordType} lockedTemplateId={setupType !== null ? setupTemplateId : undefined} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} hasOpenProcess={hasOpenProcess} existingDraftId={autosaveDraft?.id} onTypeChange={setSelectedRecordType} onTemplateChange={setSelectedTemplateId} onSaved={handleRecordSaved} />
           </div>
         ) : canWriteNote && !hasApprovedDraft ? (
           <div style={{ textAlign: 'center', padding: '24px 0' }}>

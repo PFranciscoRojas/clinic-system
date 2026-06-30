@@ -31,7 +31,7 @@ func (r *Repository) FindByID(ctx context.Context, orgID, recordID string) (*cli
 		       sections_enc, risk_level::text, discharge_reason::text,
 		       status, approved_at, requires_cosign,
 		       COALESCE(supervisor_id::text, ''), supervisor_cosigned_at,
-		       created_at, updated_at
+		       created_at, updated_at, finalized_at
 		FROM clinical_records
 		WHERE id = $1 AND organization_id = $2
 	`, recordID, orgID)
@@ -46,7 +46,7 @@ func (r *Repository) FindByID(ctx context.Context, orgID, recordID string) (*cli
 		&rec.SectionsEnc, &rec.RiskLevel, &rec.DischargeReason,
 		&rec.Status, &rec.ApprovedAt, &rec.RequiresCosign,
 		&rec.SupervisorID, &rec.SupervisorCosignedAt,
-		&rec.CreatedAt, &rec.UpdatedAt,
+		&rec.CreatedAt, &rec.UpdatedAt, &rec.FinalizedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -65,7 +65,7 @@ func scanRecordMeta(rows interface {
 		&m.AppointmentID, &m.RecordType,
 		&m.SessionDate, &m.TemplateVersion, &m.TemplateID, &m.RiskLevel,
 		&m.Status, &m.RequiresCosign,
-		&m.SupervisorID, &m.CreatedAt, &m.SessionNumber,
+		&m.SupervisorID, &m.CreatedAt, &m.SessionNumber, &m.FinalizedAt,
 	)
 }
 
@@ -74,7 +74,7 @@ const metaCols = `
 	COALESCE(cr.appointment_id::text, ''), cr.record_type,
 	cr.session_date, cr.template_version, COALESCE(cr.template_id::text, ''), cr.risk_level::text,
 	cr.status, cr.requires_cosign,
-	COALESCE(cr.supervisor_id::text, ''), cr.created_at, cr.session_number`
+	COALESCE(cr.supervisor_id::text, ''), cr.created_at, cr.session_number, cr.finalized_at`
 
 func (r *Repository) List(ctx context.Context, f clinicalrecords.ListFilter) ([]*clinicalrecords.RecordMeta, error) {
 	rows, err := r.q(ctx).Query(ctx, `
@@ -129,6 +129,8 @@ func (r *Repository) ListByOrg(ctx context.Context, f clinicalrecords.OrgListFil
 
 // GetProcessDates returns the latest INITIAL and DISCHARGE session dates for
 // a patient, the basis of the open-process rules for template v2 records.
+// Only finalized records count — a lenient autosave draft that was started
+// and abandoned must never permanently block (or fake-close) a real process.
 func (r *Repository) GetProcessDates(ctx context.Context, orgID, patientID string) (clinicalrecords.ProcessDates, error) {
 	var d clinicalrecords.ProcessDates
 	err := r.q(ctx).QueryRow(ctx, `
@@ -136,7 +138,7 @@ func (r *Repository) GetProcessDates(ctx context.Context, orgID, patientID strin
 			MAX(session_date) FILTER (WHERE record_type = 'INITIAL'),
 			MAX(session_date) FILTER (WHERE record_type = 'DISCHARGE')
 		FROM clinical_records
-		WHERE organization_id = $1 AND patient_id = $2
+		WHERE organization_id = $1 AND patient_id = $2 AND finalized_at IS NOT NULL
 	`, orgID, patientID).Scan(&d.LastInitial, &d.LastDischarge)
 	if err != nil {
 		return d, fmt.Errorf("get process dates: %w", err)

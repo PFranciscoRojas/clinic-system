@@ -45,6 +45,10 @@ type ClinicalRecord struct {
 	SupervisorCosignedAt *time.Time
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
+	// FinalizedAt is nil for an autosave draft that has never passed strict
+	// validation — set once, the first time the record is created or
+	// finalized through the validated path.
+	FinalizedAt          *time.Time
 }
 
 // RawRecord is the DB representation — the section payload is encrypted BYTEA.
@@ -70,6 +74,7 @@ type RawRecord struct {
 	SupervisorCosignedAt *time.Time
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
+	FinalizedAt          *time.Time
 }
 
 // RecordMeta is the lightweight metadata returned by the list endpoint (no decryption).
@@ -89,7 +94,8 @@ type RecordMeta struct {
 	RequiresCosign     bool
 	SupervisorID       string
 	CreatedAt          time.Time
-	SessionNumber      *int16 // consecutive per patient, reserved at DRAFT creation
+	SessionNumber      *int16 // consecutive per patient, assigned at finalize
+	FinalizedAt        *time.Time
 }
 
 // CreateParams carries the pre-encrypted section payload and hashed content for the INSERT.
@@ -110,6 +116,10 @@ type CreateParams struct {
 	RequiresCosign     bool
 	SupervisorID       string
 	ContentHash        string
+	// Finalized controls whether this INSERT is a real, validated record
+	// (finalized_at = NOW(), session_number assigned) or a lenient autosave
+	// draft (both left NULL until Finalize).
+	Finalized          bool
 }
 
 // UpdateParams carries the re-encrypted section payload for a PATCH on a DRAFT record.
@@ -120,6 +130,10 @@ type UpdateParams struct {
 	RiskLevel       *string
 	DischargeReason *string
 	ContentHash     string
+	// Finalize, when true, sets finalized_at (if not already set) and assigns
+	// session_number (if not already assigned) — used by the explicit
+	// "Guardar"/finalize path, never by lenient autosave PATCHes.
+	Finalize        bool
 }
 
 // ProcessDates carries the latest INITIAL and DISCHARGE session dates for a

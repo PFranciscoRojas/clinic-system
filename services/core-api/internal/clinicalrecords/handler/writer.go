@@ -107,6 +107,132 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// POST /api/v1/patients/{patient_id}/records/autosave — creates the first
+// autosave row for an in-progress note (lenient validation, no audit log
+// entry: typing is not a clinically-meaningful event). Mirrors create's body
+// exactly so the first tick can carry responsible_staff_id/supervisor_id.
+func (h *Handler) autosaveCreate(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	patientID := chi.URLParam(r, "patient_id")
+
+	var body struct {
+		ResponsibleStaffID string         `json:"responsible_staff_id"`
+		AppointmentID      string         `json:"appointment_id"`
+		RecordType         string         `json:"record_type"`
+		SessionDate        string         `json:"session_date"` // "2006-01-02"
+		TemplateID         string         `json:"template_id"`
+		Sections           map[string]any `json:"sections"`
+		RiskLevel          string         `json:"risk_level"`
+		DischargeReason    string         `json:"discharge_reason"`
+		SupervisorID       string         `json:"supervisor_id"`
+	}
+	if err := httputil.DecodeJSON(r, &body); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	sessionDate, err := time.Parse("2006-01-02", body.SessionDate)
+	if err != nil {
+		httputil.WriteError(w, http.StatusUnprocessableEntity, "session_date must be YYYY-MM-DD")
+		return
+	}
+
+	responsibleID := body.ResponsibleStaffID
+	if responsibleID == "" {
+		responsibleID = claims.UserID
+	}
+
+	requiresCosign := false
+	for _, role := range claims.Roles {
+		if role == "INTERN" {
+			requiresCosign = true
+			break
+		}
+	}
+
+	id, err := h.svc.CreateDraft(r.Context(), crrsvc.CreateInput{
+		OrganizationID:     claims.OrganizationID,
+		PatientID:          patientID,
+		ResponsibleStaffID: responsibleID,
+		CreatedBy:          claims.UserID,
+		AppointmentID:      body.AppointmentID,
+		RecordType:         clinicalrecords.RecordType(body.RecordType),
+		SessionDate:        sessionDate,
+		TemplateID:         body.TemplateID,
+		Sections:           body.Sections,
+		RiskLevel:          clinicalrecords.RiskLevel(body.RiskLevel),
+		DischargeReason:    clinicalrecords.DischargeReason(body.DischargeReason),
+		RequiresCosign:     requiresCosign,
+		SupervisorID:       body.SupervisorID,
+	})
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusCreated, map[string]string{"id": id})
+}
+
+// PATCH /api/v1/clinical-records/{id}/autosave — re-encrypts an existing
+// autosave draft. Lenient validation, no audit log entry.
+func (h *Handler) autosavePatch(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	recordID := chi.URLParam(r, "id")
+
+	var body struct {
+		Sections        map[string]any `json:"sections"`
+		RiskLevel       string         `json:"risk_level"`
+		DischargeReason string         `json:"discharge_reason"`
+	}
+	if err := httputil.DecodeJSON(r, &body); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	if err := h.svc.UpdateDraft(r.Context(), crrsvc.UpdateInput{
+		ID:              recordID,
+		OrganizationID:  claims.OrganizationID,
+		Sections:        body.Sections,
+		RiskLevel:       clinicalrecords.RiskLevel(body.RiskLevel),
+		DischargeReason: clinicalrecords.DischargeReason(body.DischargeReason),
+	}); err != nil {
+		writeErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// POST /api/v1/clinical-records/{id}/finalize — the real "Guardar" on a
+// record that already has an autosave draft: strict validation, then marks
+// the row finalized. Audits the same "CLINICAL_RECORD_CREATE" action used by
+// today's create, so the audit trail reads identically either way.
+func (h *Handler) finalize(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	recordID := chi.URLParam(r, "id")
+
+	var body struct {
+		Sections        map[string]any `json:"sections"`
+		RiskLevel       string         `json:"risk_level"`
+		DischargeReason string         `json:"discharge_reason"`
+	}
+	if err := httputil.DecodeJSON(r, &body); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	if err := h.svc.Finalize(r.Context(), crrsvc.UpdateInput{
+		ID:              recordID,
+		OrganizationID:  claims.OrganizationID,
+		Sections:        body.Sections,
+		RiskLevel:       clinicalrecords.RiskLevel(body.RiskLevel),
+		DischargeReason: clinicalrecords.DischargeReason(body.DischargeReason),
+	}); err != nil {
+		writeErr(w, err)
+		return
+	}
+	h.audit.Record(r, "CLINICAL_RECORD_CREATE", "clinical_record", recordID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // POST /api/v1/clinical-records/{id}/approve
 func (h *Handler) approve(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())

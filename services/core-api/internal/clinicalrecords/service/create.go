@@ -74,6 +74,7 @@ func (s *Service) createV2(ctx context.Context, in CreateInput) (string, error) 
 		RequiresCosign:     in.RequiresCosign,
 		SupervisorID:       in.SupervisorID,
 		ContentHash:        contentHashV2(sectionsJSON, risk, string(in.DischargeReason)),
+		Finalized:          true,
 	}
 	if in.RecordType == clinicalrecords.RecordTypeDischarge {
 		reason := string(in.DischargeReason)
@@ -82,18 +83,39 @@ func (s *Service) createV2(ctx context.Context, in CreateInput) (string, error) 
 	return s.repo.Create(ctx, params)
 }
 
-// validateCustomTemplate checks the section payload against the custom
-// template schema. It still enforces the system-level risk-level rules.
-func (s *Service) validateCustomTemplate(ctx context.Context, in CreateInput) error {
+// loadActiveCustomTemplate fetches and validates a custom template is usable,
+// shared by both the strict and lenient validation paths below.
+func (s *Service) loadActiveCustomTemplate(ctx context.Context, orgID, templateID string) (*recordtemplates.Template, error) {
 	if s.tmplRepo == nil {
-		return clinicalrecords.ErrInvalidInput
+		return nil, clinicalrecords.ErrInvalidInput
 	}
-	tpl, err := s.tmplRepo.Get(ctx, in.OrganizationID, in.TemplateID)
+	tpl, err := s.tmplRepo.Get(ctx, orgID, templateID)
 	if err != nil {
-		return clinicalrecords.ErrInvalidInput
+		return nil, clinicalrecords.ErrInvalidInput
 	}
 	if tpl.Status != recordtemplates.StatusActive {
-		return clinicalrecords.ErrInvalidInput
+		return nil, clinicalrecords.ErrInvalidInput
+	}
+	return tpl, nil
+}
+
+// allowedCustomKeys builds the section-key whitelist for a custom template —
+// shared by the strict and lenient key checks.
+func allowedCustomKeys(tpl *recordtemplates.Template) map[string]recordtemplates.SectionDef {
+	allowed := make(map[string]recordtemplates.SectionDef, len(tpl.Schema))
+	for _, sec := range tpl.Schema {
+		allowed[sec.Key] = sec
+	}
+	return allowed
+}
+
+// validateCustomTemplate checks the section payload against the custom
+// template schema. It still enforces the system-level risk-level rules.
+// Used by the strict create/finalize paths only.
+func (s *Service) validateCustomTemplate(ctx context.Context, in CreateInput) error {
+	tpl, err := s.loadActiveCustomTemplate(ctx, in.OrganizationID, in.TemplateID)
+	if err != nil {
+		return err
 	}
 
 	// Risk level is always required regardless of template format.
@@ -106,11 +128,7 @@ func (s *Service) validateCustomTemplate(ctx context.Context, in CreateInput) er
 		}
 	}
 
-	// Validate sections against the template schema.
-	allowed := make(map[string]recordtemplates.SectionDef, len(tpl.Schema))
-	for _, sec := range tpl.Schema {
-		allowed[sec.Key] = sec
-	}
+	allowed := allowedCustomKeys(tpl)
 	for k := range in.Sections {
 		if _, ok := allowed[k]; !ok {
 			return clinicalrecords.ErrInvalidInput
@@ -122,6 +140,24 @@ func (s *Service) validateCustomTemplate(ctx context.Context, in CreateInput) er
 		}
 		if clinicalrecords.IsEmptySection(in.Sections[sec.Key]) {
 			return clinicalrecords.ErrMissingSection
+		}
+	}
+	return nil
+}
+
+// validateCustomTemplateLenient only checks the template is active and that
+// every section key actually belongs to its schema — no required-field or
+// risk-level enforcement. Used by autosave (CreateDraft/UpdateDraft) so a
+// mid-thought custom-template draft never gets rejected for being incomplete.
+func (s *Service) validateCustomTemplateLenient(ctx context.Context, orgID, templateID string, sections map[string]any) error {
+	tpl, err := s.loadActiveCustomTemplate(ctx, orgID, templateID)
+	if err != nil {
+		return err
+	}
+	allowed := allowedCustomKeys(tpl)
+	for k := range sections {
+		if _, ok := allowed[k]; !ok {
+			return clinicalrecords.ErrInvalidInput
 		}
 	}
 	return nil

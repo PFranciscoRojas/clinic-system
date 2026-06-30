@@ -46,6 +46,11 @@ func (s *Service) updateV2(ctx context.Context, raw *clinicalrecords.RawRecord, 
 		SectionsEnc:    sectionsEnc,
 		RiskLevel:      &risk,
 		ContentHash:    contentHashV2(sectionsJSON, risk, string(in.DischargeReason)),
+		// This is the existing strict-edit path (editing a DRAFT before
+		// approval) — the record is already finalized via the strict
+		// create; Finalize:true is a no-op COALESCE here, kept for clarity
+		// and so any future caller of this exact path stays finalized.
+		Finalize: true,
 	}
 	if raw.RecordType == clinicalrecords.RecordTypeDischarge {
 		reason := string(in.DischargeReason)

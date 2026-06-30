@@ -145,6 +145,33 @@ func ValidateTemplateV2(rt RecordType, sections map[string]any, risk RiskLevel, 
 	return nil
 }
 
+// ValidateTemplateV2Lenient checks only that the record type is known and
+// every section key is one this template actually has — it protects the
+// encrypted blob's integrity against garbage/typo'd keys, but skips the
+// required-section and risk-level checks ValidateTemplateV2 enforces. Used
+// for autosave ticks, where the professional may still be mid-thought and
+// hasn't necessarily filled every required field or picked a risk level yet.
+// The explicit "Guardar"/finalize path always uses the strict ValidateTemplateV2.
+func ValidateTemplateV2Lenient(rt RecordType, sections map[string]any) error {
+	tpl, ok := templateSections[rt]
+	if !ok {
+		return ErrInvalidInput
+	}
+	allowed := make(map[string]bool, len(tpl.required)+len(tpl.optional))
+	for _, k := range tpl.required {
+		allowed[k] = true
+	}
+	for _, k := range tpl.optional {
+		allowed[k] = true
+	}
+	for k := range sections {
+		if !allowed[k] {
+			return ErrInvalidInput
+		}
+	}
+	return nil
+}
+
 func isEmptySection(v any) bool {
 	switch s := v.(type) {
 	case nil:

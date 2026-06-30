@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AlertTriangle, Save, Copy } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { clinicalRecordsApi, type RecordType, type RiskLevel } from '@/api/clinicalRecords';
+import { ApiError } from '@/api/client';
 import { recordTemplatesApi } from '@/api/recordTemplates';
 import { Spinner } from '@/components/ui/Spinner';
-import { RecordSectionsForm, emptyDraft, draftToPayload, recordToDraft, validateDraft, type ClinicalDraft, type UIRecordType } from './RecordSectionsForm';
+import { RecordSectionsForm, emptyDraft, draftToPayload, recordToDraft, validateDraft, toUIRecordType, type ClinicalDraft, type UIRecordType } from './RecordSectionsForm';
 import { RECORD_TYPE_LABELS } from './constants';
 import TemplatedSectionsForm, { type SectionsState } from './TemplatedSectionsForm';
 
@@ -31,6 +32,11 @@ interface RecordFormProps {
   onTemplateChange?: (templateId: string | undefined) => void;
   /** When set, the template selector is hidden and this template is used directly. */
   lockedTemplateId?: string;
+  /** ID of an existing, not-yet-finalized autosave draft for this appointment
+   *  (discovered by the parent from the appointment's linked records) — lets
+   *  the form recover server-side content on a fresh device/browser where
+   *  localStorage has nothing. */
+  existingDraftId?: string;
   onSaved: () => void;
 }
 
@@ -48,26 +54,35 @@ function draftHasContent(d: ClinicalDraft): boolean {
   return false;
 }
 
+type AutosaveState = 'idle' | 'saving' | 'saved' | 'error' | 'offline';
+
 // Small ticking "Guardado hace Xs" label, isolated so it doesn't re-render the
 // whole form every few seconds — just visible proof the autosave is alive.
-function SavedIndicator({ at }: { at: number }) {
+// serverState reflects the periodic server-side autosave (Fase 2); "at" is
+// always the localStorage save, which is the immediate, always-on net.
+function SavedIndicator({ at, serverState }: { at: number; serverState: AutosaveState }) {
   const [, forceTick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => forceTick(n => n + 1), 5_000);
     return () => clearInterval(t);
   }, []);
   const secs = Math.max(0, Math.round((Date.now() - at) / 1000));
-  const label = secs < 5 ? 'Guardado' : secs < 60 ? `Guardado hace ${secs}s` : `Guardado hace ${Math.round(secs / 60)} min`;
+  const localLabel = secs < 5 ? 'Guardado' : secs < 60 ? `Guardado hace ${secs}s` : `Guardado hace ${Math.round(secs / 60)} min`;
+  const serverNote = serverState === 'saved' ? ' · en el servidor'
+    : serverState === 'saving' ? ' · guardando en el servidor…'
+    : serverState === 'offline' ? ' · sin conexión, solo local'
+    : '';
   return (
     <span style={{ fontSize: 11.5, color: 'var(--s400)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
       <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--teal)', display: 'inline-block' }} />
-      {label}
+      {localLabel}{serverNote}
     </span>
   );
 }
 
-export function RecordForm({ patientId, appointmentId, defaultType, sessionDate: sessionDateProp, lateEntryReason, treatmentConsentSigned, hasOpenProcess, onTypeChange, onTemplateChange, lockedTemplateId, onSaved }: RecordFormProps) {
+export function RecordForm({ patientId, appointmentId, defaultType, sessionDate: sessionDateProp, lateEntryReason, treatmentConsentSigned, hasOpenProcess, onTypeChange, onTemplateChange, lockedTemplateId, existingDraftId, onSaved }: RecordFormProps) {
   const storageKey = appointmentId ? `clinical-draft-${appointmentId}` : `clinical-draft-patient-${patientId}`;
+  const serverIdKey = `${storageKey}-serverid`;
   // Only the types the open-process rule permits are offered, so the user can't
   // pick a format the server will reject on save.
   const allowedTypes: UIRecordType[] = hasOpenProcess === undefined
@@ -91,6 +106,15 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   const [blockedRestoreType, setBlockedRestoreType] = useState<UIRecordType | null>(null);
   const [pendingType, setPendingType] = useState<UIRecordType | null>(null);
   const [err, setErr] = useState('');
+
+  // Fase 2 — server-side autosave. serverDraftId is the id of the lenient
+  // DRAFT row backing this session (created on the first tick with content);
+  // dirty tracks whether there's anything new since the last successful tick.
+  const [serverDraftId, setServerDraftId] = useState<string | null>(
+    existingDraftId ?? (() => { try { return localStorage.getItem(serverIdKey); } catch { return null; } })(),
+  );
+  const [dirty, setDirty] = useState(false);
+  const [autosaveState, setAutosaveState] = useState<AutosaveState>('idle');
 
   const apiType: RecordType = uiType === 'PLAN' ? 'EVOLUTION' : uiType;
 
@@ -122,6 +146,9 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   }, [selectedTemplateId, onTemplateChange]);
 
   // Discard the draft and switch format — wiped because each format has its own fields.
+  // The old server-side autosave draft (if any) is left as-is, not deleted —
+  // it's harmless (never finalized, doesn't burn a session number or block a
+  // real process) and stays recoverable. A fresh format starts a fresh row.
   const switchType = (val: UIRecordType) => {
     setUIType(val);
     setDraft(emptyDraft());
@@ -130,7 +157,13 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
     setErr('');
     setRestored(false);
     setPendingType(null);
-    try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
+    setServerDraftId(null);
+    setDirty(false);
+    setAutosaveState('idle');
+    try {
+      localStorage.removeItem(storageKey);
+      localStorage.removeItem(serverIdKey);
+    } catch { /* ignore */ }
   };
 
   // Switching with content asks first; empty drafts switch immediately.
@@ -143,9 +176,14 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   // Keep the audio/AI draft aligned with the format being filled.
   useEffect(() => { onTypeChange?.(apiType); }, [apiType, onTypeChange]);
 
-  // Autosave: the in-progress note survives a closed tab or session lock.
-  // Nothing reaches the server until the professional saves explicitly.
+  // Restore on mount. localStorage is the fast, always-on path (same device,
+  // same tab session). The server draft (existingDraftId, Fase 2) is only
+  // used as a fallback when localStorage has nothing usable — a different
+  // device/browser, cleared storage, or private browsing. Server wins only
+  // when local is empty; same-device sessions just keep using local and
+  // PATCH the same server row underneath.
   useEffect(() => {
+    let restoredLocally = false;
     try {
       const raw = localStorage.getItem(storageKey);
       if (raw) {
@@ -154,40 +192,81 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
           // Don't restore — the open-process rule changed since this was saved
           // — but tell the professional instead of letting it vanish silently.
           setBlockedRestoreType(saved.uiType);
-          return;
-        }
-        if (saved.uiType) setUIType(saved.uiType);
-        if (saved.draft) {
-          const def = emptyDraft();
-          const sd = saved.draft as Partial<typeof def>;
-          // Deep-merge nested objects so old/partial drafts don't crash on render
-          // (e.g. spaHistory without alcohol/tobacco/other would cause undefined errors).
-          const merged: ClinicalDraft = {
-            ...def,
-            ...sd,
-            spaHistory: sd.spaHistory ? (() => {
-              const defSPA = def.spaHistory!;
-              return {
-                ...defSPA,
-                ...sd.spaHistory,
-                alcohol: { ...defSPA.alcohol, ...(sd.spaHistory.alcohol ?? {}) },
-                tobacco: { ...defSPA.tobacco, ...(sd.spaHistory.tobacco ?? {}) },
-                other:   { ...defSPA.other,   ...(sd.spaHistory.other   ?? {}) },
-              };
-            })() : def.spaHistory,
-            familyMH: sd.familyMH ? { ...def.familyMH, ...sd.familyMH } : def.familyMH,
-            taskAdherence: sd.taskAdherence
-              ? { ...def.taskAdherence, ...sd.taskAdherence }
-              : def.taskAdherence,
-          };
-          setDraft(merged);
-          setRestored(true);
-          setLastSavedAt(Date.now());
+          restoredLocally = true; // a blocked restore still counts — don't also fetch the server
+        } else {
+          if (saved.uiType) setUIType(saved.uiType);
+          if (saved.draft) {
+            const def = emptyDraft();
+            const sd = saved.draft as Partial<typeof def>;
+            // Deep-merge nested objects so old/partial drafts don't crash on render
+            // (e.g. spaHistory without alcohol/tobacco/other would cause undefined errors).
+            const merged: ClinicalDraft = {
+              ...def,
+              ...sd,
+              spaHistory: sd.spaHistory ? (() => {
+                const defSPA = def.spaHistory!;
+                return {
+                  ...defSPA,
+                  ...sd.spaHistory,
+                  alcohol: { ...defSPA.alcohol, ...(sd.spaHistory.alcohol ?? {}) },
+                  tobacco: { ...defSPA.tobacco, ...(sd.spaHistory.tobacco ?? {}) },
+                  other:   { ...defSPA.other,   ...(sd.spaHistory.other   ?? {}) },
+                };
+              })() : def.spaHistory,
+              familyMH: sd.familyMH ? { ...def.familyMH, ...sd.familyMH } : def.familyMH,
+              taskAdherence: sd.taskAdherence
+                ? { ...def.taskAdherence, ...sd.taskAdherence }
+                : def.taskAdherence,
+            };
+            setDraft(merged);
+            setRestored(true);
+            setLastSavedAt(Date.now());
+            restoredLocally = true;
+          }
         }
       }
     } catch { /* corrupt draft — start clean */ }
+
+    if (restoredLocally || !existingDraftId) return;
+    // Nothing usable locally but the parent found a not-yet-finalized server
+    // draft for this appointment — fetch and hydrate from it.
+    (async () => {
+      try {
+        const rec = await clinicalRecordsApi.get(existingDraftId);
+        if (rec.template_id) {
+          setSelectedTemplateId(rec.template_id);
+          setCustomSections((rec.sections ?? {}) as SectionsState);
+        } else {
+          const restoredType = toUIRecordType(rec.record_type, rec.sections);
+          if (allowedTypes.includes(restoredType)) {
+            setUIType(restoredType);
+            setDraft(recordToDraft(rec.sections, rec.risk_level, rec.discharge_reason));
+          }
+        }
+        setRestored(true);
+        setLastSavedAt(Date.now());
+      } catch { /* server draft unreachable — start clean, autosave will recreate it */ }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey]);
+
+  // Persist serverDraftId so a reload picks up the same row instead of
+  // creating a duplicate before the parent's existingDraftId prop catches up.
+  useEffect(() => {
+    try {
+      if (serverDraftId) localStorage.setItem(serverIdKey, serverDraftId);
+      else localStorage.removeItem(serverIdKey);
+    } catch { /* ignore */ }
+  }, [serverDraftId, serverIdKey]);
+
+  // Marks the draft as having unsynced changes — cleared after a successful
+  // autosave tick. Also fires once on mount with whatever was restored
+  // (localStorage or server), which is correct: that content may not be on
+  // the server yet, so the next tick should sync it. The autosave tick itself
+  // is a no-op while the draft is still empty (see content check below).
+  useEffect(() => {
+    setDirty(true);
+  }, [uiType, draft, customSections, selectedTemplateId]);
 
   // Save to localStorage 600ms after the last change. The cleanup also saves
   // immediately on SPA navigation (React Router unmounts the component, which
@@ -218,13 +297,94 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
     };
   }, [storageKey, uiType, draft]);
 
+  // Fase 2 — server-side autosave. A ref mirrors the latest content-bearing
+  // state so the 25s interval (created once, stable) never reads stale
+  // closures while still avoiding being torn down and recreated on every
+  // keystroke. autosaveTickRef.current is read fresh on every tick.
+  const autosaveTickRef = useRef({ uiType, draft, customSections, selectedTemplate, serverDraftId, dirty });
+  useEffect(() => {
+    autosaveTickRef.current = { uiType, draft, customSections, selectedTemplate, serverDraftId, dirty };
+  });
+
+  useEffect(() => {
+    let stopped = false;
+
+    const tick = async () => {
+      if (stopped) return;
+      const { uiType: ut, draft: d, customSections: cs, selectedTemplate: st, serverDraftId: sid, dirty: dt } = autosaveTickRef.current;
+      if (!dt) return;
+      const hasContent = st ? Object.keys(cs).length > 0 : draftHasContent(d);
+      if (!hasContent) return;
+
+      const body: Parameters<typeof clinicalRecordsApi.autosaveCreate>[1] = st
+        ? {
+            ...(appointmentId ? { appointment_id: appointmentId } : {}),
+            record_type: apiType,
+            session_date: sessionDate,
+            template_id: st.id,
+            sections: cs,
+            ...(cs.risk ? { risk_level: cs.risk as RiskLevel } : {}),
+          }
+        : (() => {
+            const payload = draftToPayload(ut, d);
+            if (lateEntryReason?.trim()) payload.sections.late_entry_reason = lateEntryReason.trim();
+            return {
+              ...(appointmentId ? { appointment_id: appointmentId } : {}),
+              record_type: ut === 'PLAN' ? 'EVOLUTION' as RecordType : ut as RecordType,
+              session_date: sessionDate,
+              ...payload,
+            };
+          })();
+
+      setAutosaveState('saving');
+      try {
+        if (!sid) {
+          const { id } = await clinicalRecordsApi.autosaveCreate(patientId, body);
+          setServerDraftId(id);
+        } else {
+          await clinicalRecordsApi.autosaveUpdate(sid, body);
+        }
+        setDirty(false);
+        setAutosaveState('saved');
+      } catch (e) {
+        // 403/404: the record was approved/deleted, or access was revoked
+        // mid-session — stop trying and fall back to localStorage-only.
+        // Anything else (network blip, 5xx) just retries on the next tick;
+        // never blocks typing, never surfaces an error to the form.
+        if (e instanceof ApiError && (e.status === 403 || e.status === 404)) {
+          stopped = true;
+          setServerDraftId(null);
+          setAutosaveState('offline');
+          return;
+        }
+        setAutosaveState('error');
+      }
+    };
+
+    const interval = setInterval(tick, 25_000);
+    // Best-effort flush on the same exit signals already wired for
+    // localStorage — opportunistic, never awaited (must not delay unload).
+    const onHide = () => { void tick(); };
+    window.addEventListener('pagehide', onHide);
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      stopped = true;
+      clearInterval(interval);
+      window.removeEventListener('pagehide', onHide);
+      document.removeEventListener('visibilitychange', onHide);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patientId, appointmentId, sessionDate]);
+
   // Copy-forward: start from the latest approved-or-draft evolution note.
   // Risk is intentionally NOT copied — it must be re-assessed every session.
   const handleCopyForward = async () => {
     setCopying(true); setErr('');
     try {
       const { items } = await clinicalRecordsApi.list(patientId);
-      const lastEvolution = items.find(m => m.record_type === 'EVOLUTION' && m.template_version >= 2);
+      // finalized excludes scratch autosave drafts that were started and
+      // abandoned — only a real, authored evolution is a valid source to copy.
+      const lastEvolution = items.find(m => m.record_type === 'EVOLUTION' && m.template_version >= 2 && m.finalized);
       if (!lastEvolution) { setErr('No hay una evolución anterior para copiar.'); return; }
       const rec = await clinicalRecordsApi.get(lastEvolution.id);
       const base = recordToDraft(rec.sections, undefined, undefined);
@@ -280,8 +440,17 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
         };
       }
 
-      await clinicalRecordsApi.create(patientId, createBody);
+      // If autosave already created a server-side draft for this session,
+      // finalize it (strict validation, same as create) instead of creating
+      // a second row. Falls back to today's create when autosave never fired
+      // (e.g. the professional was offline the whole time).
+      if (serverDraftId) {
+        await clinicalRecordsApi.finalize(serverDraftId, createBody);
+      } else {
+        await clinicalRecordsApi.create(patientId, createBody);
+      }
       localStorage.removeItem(storageKey);
+      localStorage.removeItem(serverIdKey);
       onSaved();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : '';
@@ -434,7 +603,7 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
 
       {lastSavedAt && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-          <SavedIndicator at={lastSavedAt} />
+          <SavedIndicator at={lastSavedAt} serverState={autosaveState} />
         </div>
       )}
 

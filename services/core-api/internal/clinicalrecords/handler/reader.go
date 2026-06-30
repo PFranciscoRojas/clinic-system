@@ -120,6 +120,8 @@ func toResponse(r *clinicalrecords.ClinicalRecord) map[string]any {
 		"supervisor_cosigned_at": r.SupervisorCosignedAt,
 		"created_at":             r.CreatedAt,
 		"updated_at":             r.UpdatedAt,
+		"finalized_at":           r.FinalizedAt,
+		"finalized":              r.FinalizedAt != nil,
 	}
 }
 
@@ -140,6 +142,9 @@ func toMetaResponse(m *clinicalrecords.RecordMeta) map[string]any {
 		"requires_cosign":      m.RequiresCosign,
 		"supervisor_id":        m.SupervisorID,
 		"created_at":           m.CreatedAt,
+		"session_number":       m.SessionNumber,
+		"finalized_at":         m.FinalizedAt,
+		"finalized":            m.FinalizedAt != nil,
 	}
 }
 

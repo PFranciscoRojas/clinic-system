@@ -15,6 +15,9 @@ type svcPort interface {
 	List(ctx context.Context, f clinicalrecords.ListFilter) ([]*clinicalrecords.RecordMeta, error)
 	ListByOrg(ctx context.Context, f clinicalrecords.OrgListFilter) ([]*clinicalrecords.RecordMeta, error)
 	Update(ctx context.Context, in crrsvc.UpdateInput) error
+	CreateDraft(ctx context.Context, in crrsvc.CreateInput) (string, error)
+	UpdateDraft(ctx context.Context, in crrsvc.UpdateInput) error
+	Finalize(ctx context.Context, in crrsvc.UpdateInput) error
 	Approve(ctx context.Context, orgID, recordID string, callerRoles []string) (string, error)
 	Cosign(ctx context.Context, orgID, recordID, supervisorID string) error
 	AddAddendum(ctx context.Context, orgID, recordID, createdBy, content string) (string, error)

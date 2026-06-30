@@ -549,7 +549,9 @@ export function PatientProfilePage() {
     enabled: !!id,
     retry: false,
   });
-  const records: RecordMeta[] = recordsData?.items ?? [];
+  // Exclude unfinalized autosave drafts (scratch work in progress or
+  // abandoned) — the patient's history should only show real authored notes.
+  const records: RecordMeta[] = (recordsData?.items ?? []).filter(r => r.finalized !== false);
   const noPatientAccess = recordsIsError && recordsError instanceof ApiError && recordsError.message === 'NO_PATIENT_ACCESS';
 
   // Consent evidence — Ley 1581/Ley 1090 require it before treatment

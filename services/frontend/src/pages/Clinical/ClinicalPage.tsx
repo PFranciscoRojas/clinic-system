@@ -167,11 +167,16 @@ export function ClinicalPage() {
     refetchInterval: 30_000,
   });
 
-  const { data: records = [], isLoading: recordsLoading } = useQuery({
+  const { data: allRecords = [], isLoading: recordsLoading } = useQuery({
     queryKey: ['clinical-records-all', recordFilter],
     queryFn: () => clinicalRecordsApi.listAll(recordFilter === 'ALL' ? undefined : recordFilter),
     enabled: !!user && tab === 'records',
   });
+  // Exclude unfinalized autosave drafts — they're scratch work in progress
+  // (or abandoned), not real authored notes pending review. They share
+  // status: 'DRAFT' with normal drafts, so this list would otherwise be
+  // polluted with notes nobody actually saved.
+  const records = allRecords.filter(r => r.finalized !== false);
 
   const pendingDrafts = drafts.filter(d => d.status === 'DRAFT_READY').length;
 
