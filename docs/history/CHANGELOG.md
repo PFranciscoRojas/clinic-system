@@ -13,6 +13,10 @@
 
 ---
 
+## 2026-06-29 (sesión 21)
+
+- fix(clinical): 5 bugs adicionales post-grabación (`58fc863`). (1) `V2RecordView` renderizaba `JSON.stringify` para campos widget (formulation_5f, mental_exam, etc.) en registros de plantilla — ahora usa los componentes deshabilitados reales (`WidgetField` exportado de `TemplatedSectionsForm`). (2) Botón "Aprobar historia clínica" en `AIDraftPage` no aparecía cuando el borrador IA estaba vacío (sin contenido clínico) — removido el gate `&& content` para que el profesional pueda editar manualmente y aprobar. (3) Banner de advertencia cuando se guarda un registro mientras la grabación sigue activa — recuerda usar "Finalizar sesión". (4) Interceptor de clic a nivel de documento mientras hay grabación — captura `<Link>/<a>` del sidebar/navbar y muestra el modal de bloqueo (mismo que back/forward del browser). (5) Prompt de recap pre-sesión ajustado (≤2 oraciones por campo, ≤3 focus_points); worker limita historia a últimas 5 sesiones para recap. Desplegado: frontend rebuild + `ai-service` restart en VPS.
+
 ## 2026-06-29 (sesión 20)
 
 - fix(clinical/grabación): 6 bugs UX en `AppointmentPage`, `RecordForm`, `RecordTemplatesSection` y `AIDraftPage` (`a6a737f`). (1) página en blanco al cambiar tipo de registro: `switchType` ahora resetea `selectedTemplateId`+`customSections`; (2) página en blanco al iniciar sesión: `scrollTo(0,0)` tras cambio de layout; (3) badge `★ Predeterminada` → badge `Activo` en plantillas, botón estrella eliminado, `★` quitado del dropdown de formatos; (4) segunda grabación falla tras recovery por F5: timestamp en filename evita colisión `O_EXCL` del backend; (5) botón "Guardar cambios" en AIDraftPage renombrado a "Listo" (no persistía en servidor — solo cerraba modo edición); (6) selector de tipo editable en AIDraftPage eliminado (el tipo lo fija el profesional al grabar, no en el borrador); (7) `useBlocker` intercepta navegación de React Router mientras hay grabación activa y muestra diálogo de confirmación. **Frontend pendiente de rebuild en VPS.**
