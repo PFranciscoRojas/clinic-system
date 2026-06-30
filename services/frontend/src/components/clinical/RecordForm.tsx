@@ -209,14 +209,21 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   // Keep the audio/AI draft aligned with the format being filled.
   useEffect(() => { onTypeChange?.(apiType); }, [apiType, onTypeChange]);
 
-  // Restore on mount. localStorage is the fast, always-on path (same device,
-  // same tab session). The server draft (existingDraftId, Fase 2) is only
-  // used as a fallback when localStorage has nothing usable — a different
-  // device/browser, cleared storage, or private browsing. Server wins only
-  // when local is empty; same-device sessions just keep using local and
-  // PATCH the same server row underneath.
+  // Restore on mount. Split into two effects on purpose: existingDraftId is
+  // discovered by the parent from an async query (the appointment's linked
+  // records) and is often still undefined on this component's very first
+  // render. A single effect keyed only on [storageKey] would capture that
+  // undefined value in its closure and never re-check once the real id
+  // arrives — exactly the bug that left a professional's content
+  // unrecoverable after a server-only restore was needed (local had nothing,
+  // but the fallback to the server draft never fired). Refs (not state) carry
+  // the "did local already give us something" result across both effects
+  // without retriggering renders.
+  const localRestoreDoneRef = useRef(false);
+  const gotContentRef = useRef(false);
+
+  // Effect 1 — localStorage, the fast same-device path. Runs once on mount.
   useEffect(() => {
-    let restoredLocally = false;
     try {
       const raw = localStorage.getItem(storageKey);
       if (raw) {
@@ -227,22 +234,28 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
           // read-only instead of just describing that it exists.
           setBlockedRestoreType(saved.uiType);
           if (saved.draft) setBlockedRestoreDraft(mergeSavedDraft(saved.draft as Partial<ClinicalDraft>));
-          restoredLocally = true; // a blocked restore still counts — don't also fetch the server
+          gotContentRef.current = true; // a blocked restore still counts — don't also fetch the server
         } else {
           if (saved.uiType) setUIType(saved.uiType);
           if (saved.draft) {
             setDraft(mergeSavedDraft(saved.draft as Partial<ClinicalDraft>));
             setRestored(true);
             setLastSavedAt(Date.now());
-            restoredLocally = true;
+            gotContentRef.current = true;
           }
         }
       }
     } catch { /* corrupt draft — start clean */ }
+    localRestoreDoneRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
 
-    if (restoredLocally || !existingDraftId) return;
-    // Nothing usable locally but the parent found a not-yet-finalized server
-    // draft for this appointment — fetch and hydrate from it.
+  // Effect 2 — server fallback. Depends on existingDraftId so it re-runs the
+  // moment the parent's query resolves and the prop changes from undefined
+  // to a real id, even if that happens well after mount. Only fetches when
+  // effect 1 has already run AND found nothing usable locally.
+  useEffect(() => {
+    if (!localRestoreDoneRef.current || gotContentRef.current || !existingDraftId) return;
     (async () => {
       try {
         const rec = await clinicalRecordsApi.get(existingDraftId);
@@ -256,12 +269,13 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
             setDraft(recordToDraft(rec.sections, rec.risk_level, rec.discharge_reason));
           }
         }
+        gotContentRef.current = true;
         setRestored(true);
         setLastSavedAt(Date.now());
       } catch { /* server draft unreachable — start clean, autosave will recreate it */ }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storageKey]);
+  }, [existingDraftId, storageKey]);
 
   // Persist serverDraftId so a reload picks up the same row instead of
   // creating a duplicate before the parent's existingDraftId prop catches up.
