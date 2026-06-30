@@ -1429,9 +1429,9 @@ function TeamCard({ selfId }: { selfId: string }) {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ['org-users'],
-    queryFn: () => authApi.listOrgUsers(),
+    queryFn: () => authApi.listOrgUsers().then(r => r.items),
   });
-  const users = data?.items ?? [];
+  const users = data ?? [];
   const [rowErr, setRowErr] = useState<Record<string, string>>({});
   const [pendingRemove, setPendingRemove] = useState<typeof users[0] | null>(null);
   const [reactivatingRole, setReactivatingRole] = useState<Record<string, string>>({});

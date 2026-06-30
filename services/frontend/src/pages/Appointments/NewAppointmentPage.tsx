@@ -681,16 +681,20 @@ export function NewAppointmentPage() {
   const [confirmed,        setConfirmed]       = useState<boolean>(false);
   const [selectedStaffId,  setSelectedStaffId] = useState<string>(user?.user_id ?? '');
 
-  // Org members (for admin staff selector)
-  const { data: orgUsers = [] } = useQuery({
+  // Org members (for admin staff selector). Shares the ['org-users'] cache key
+  // with AppointmentPage/SettingsPage — must return the same raw shape (full
+  // array, unfiltered) or a stale cache hit from those pages would silently
+  // swap in the wrong data shape here. Filtering happens locally below.
+  const { data: allOrgUsers = [] } = useQuery({
     queryKey: ['org-users'],
-    queryFn: async () => {
-      const res = await authApi.listOrgUsers();
-      return res.items.filter(u => u.is_active && (u.role_name === 'PROFESSIONAL' || u.role_name === 'INTERN'));
-    },
+    queryFn: () => authApi.listOrgUsers().then(r => r.items),
     enabled: isAdmin,
     staleTime: 60_000,
   });
+  const orgUsers = useMemo(
+    () => allOrgUsers.filter(u => u.is_active && (u.role_name === 'PROFESSIONAL' || u.role_name === 'INTERN')),
+    [allOrgUsers],
+  );
 
   // Set default selectedStaffId to first professional when list loads (if admin has no PROFESSIONAL role)
   useEffect(() => {
