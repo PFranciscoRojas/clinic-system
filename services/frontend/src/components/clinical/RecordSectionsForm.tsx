@@ -149,9 +149,17 @@ export function recordToDraft(sections: RecordSections | undefined, risk?: RiskL
       } else if (k === 'distress_level' && typeof v === 'number') {
         d.distressLevel = v;
       } else if (k === 'spa_history' && typeof v === 'object' && !Array.isArray(v)) {
-        d.spaHistory = v as unknown as SPAHistoryData;
+        const raw = v as Partial<SPAHistoryData>;
+        const def = defaultSPAHistory();
+        d.spaHistory = {
+          ...def,
+          ...raw,
+          alcohol: { ...def.alcohol, ...(raw.alcohol ?? {}) },
+          tobacco: { ...def.tobacco, ...(raw.tobacco ?? {}) },
+          other: { ...def.other, ...(raw.other ?? {}) },
+        };
       } else if (k === 'family_mental_health' && typeof v === 'object' && !Array.isArray(v)) {
-        d.familyMH = v as unknown as FamilyMentalHealthData;
+        d.familyMH = { ...defaultFamilyMH(), ...(v as Partial<FamilyMentalHealthData>) };
       } else if (k === 'clinical_formulation' && typeof v === 'object' && !Array.isArray(v)) {
         d.clinicalFormulation = v as unknown as Formulation5FData;
       } else if (k === 'functional_analysis' && typeof v === 'object' && !Array.isArray(v)) {
