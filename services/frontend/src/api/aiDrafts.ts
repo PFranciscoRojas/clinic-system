@@ -6,6 +6,7 @@ export interface AIDraft {
   id: string;
   organization_id: string;
   patient_id: string;
+  appointment_id?: string;
   status: DraftStatus;
   ai_model_version: string;
   whisper_model: string;
@@ -35,6 +36,7 @@ export interface DraftMeta {
   status: DraftStatus;
   patient_id: string;
   patient_code: number | null;
+  appointment_id?: string;
   clinical_record_id?: string;
   created_at: string;
 }

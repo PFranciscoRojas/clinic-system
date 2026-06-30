@@ -50,6 +50,7 @@ export interface RecordMeta {
   requires_cosign: boolean;
   supervisor_id: string;
   created_at: string;
+  session_number?: number | null;
 }
 
 export interface Consent {

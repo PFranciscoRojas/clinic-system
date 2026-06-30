@@ -13,9 +13,9 @@ import (
 
 func (r *Repository) FindByID(ctx context.Context, orgID, draftID string) (*aidrafts.AIDraft, error) {
 	var d aidrafts.AIDraft
-	var clinicalRecordID, resolvedBy, errorMessage *string
+	var clinicalRecordID, appointmentID, resolvedBy, errorMessage *string
 	err := dbctx.From(ctx, r.db).QueryRow(ctx, `
-		SELECT id, organization_id, clinical_record_id, patient_id,
+		SELECT id, organization_id, clinical_record_id, appointment_id, patient_id,
 		       requested_by, dek_id, audio_path_enc, transcription_enc,
 		       draft_content_enc, ai_model_version, whisper_model,
 		       status, error_message, processed_at, resolved_at, resolved_by,
@@ -23,7 +23,7 @@ func (r *Repository) FindByID(ctx context.Context, orgID, draftID string) (*aidr
 		FROM ai_drafts
 		WHERE id = $1 AND organization_id = $2
 	`, draftID, orgID).Scan(
-		&d.ID, &d.OrganizationID, &clinicalRecordID, &d.PatientID,
+		&d.ID, &d.OrganizationID, &clinicalRecordID, &appointmentID, &d.PatientID,
 		&d.RequestedBy, &d.DEKID, &d.AudioPathEnc, &d.TranscriptionEnc,
 		&d.DraftContentEnc, &d.AIModelVersion, &d.WhisperModel,
 		&d.Status, &errorMessage, &d.ProcessedAt, &d.ResolvedAt, &resolvedBy,
@@ -38,6 +38,9 @@ func (r *Repository) FindByID(ctx context.Context, orgID, draftID string) (*aidr
 	if clinicalRecordID != nil {
 		d.ClinicalRecordID = *clinicalRecordID
 	}
+	if appointmentID != nil {
+		d.AppointmentID = *appointmentID
+	}
 	if resolvedBy != nil {
 		d.ResolvedBy = *resolvedBy
 	}
@@ -50,6 +53,7 @@ func (r *Repository) FindByID(ctx context.Context, orgID, draftID string) (*aidr
 func (r *Repository) ListByOrg(ctx context.Context, orgID, status string) ([]*aidrafts.DraftMeta, error) {
 	rows, err := dbctx.From(ctx, r.db).Query(ctx, `
 		SELECT d.id, d.status, d.patient_id, p.patient_code,
+		       COALESCE(d.appointment_id::text, ''),
 		       COALESCE(d.clinical_record_id::text, ''), d.created_at
 		FROM ai_drafts d
 		LEFT JOIN patients p ON p.id = d.patient_id
@@ -66,7 +70,8 @@ func (r *Repository) ListByOrg(ctx context.Context, orgID, status string) ([]*ai
 	var result []*aidrafts.DraftMeta
 	for rows.Next() {
 		var m aidrafts.DraftMeta
-		if err := rows.Scan(&m.ID, &m.Status, &m.PatientID, &m.PatientCode, &m.ClinicalRecordID, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.Status, &m.PatientID, &m.PatientCode,
+			&m.AppointmentID, &m.ClinicalRecordID, &m.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan draft_meta: %w", err)
 		}
 		result = append(result, &m)

@@ -89,6 +89,7 @@ type RecordMeta struct {
 	RequiresCosign     bool
 	SupervisorID       string
 	CreatedAt          time.Time
+	SessionNumber      *int16 // consecutive per patient, reserved at DRAFT creation
 }
 
 // CreateParams carries the pre-encrypted section payload and hashed content for the INSERT.

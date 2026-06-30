@@ -17,6 +17,7 @@ import { recordingStore } from '@/lib/recordingStore';
 import { useIsCompact } from '@/lib/useMediaQuery';
 import { CLR_DANGER, CLR_WARN, CLR_SUCCESS, CLR_INFO, CLR_PROC, CLR_NEUTRAL } from '@/lib/tokens';
 import { clinicalRecordsApi, consentsApi, type RecordMeta, type RecordType } from '@/api/clinicalRecords';
+import { recordTemplatesApi } from '@/api/recordTemplates';
 import { ConsentViewModal } from '@/components/consents/ConsentViewModal';
 import { UnifiedConsentSignModal } from '@/components/consents/UnifiedConsentSignModal';
 import { RecordForm } from '@/components/clinical/RecordForm';
@@ -330,6 +331,10 @@ export function AppointmentPage() {
   const [reagendaring,   setReagendaring]   = useState(false);
   const [reagendarErr,   setReagendarErr]   = useState('');
   const [showRecordForm, setShowRecordForm] = useState(false);
+  // Session setup step: professional chooses type + format BEFORE opening the form
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [setupType, setSetupType] = useState<RecordType | null>(null);
+  const [setupTemplateId, setSetupTemplateId] = useState<string>('');
   // When true, the edit modal is open and closing it after saving starts the session
   const [completeDataOpen, setCompleteDataOpen] = useState(false);
   const [signConsentOpen, setSignConsentOpen] = useState(false);
@@ -541,6 +546,22 @@ export function AppointmentPage() {
     queryFn: () => authApi.listOrgUsers().then(r => r.items),
     staleTime: 5 * 60_000,
   });
+
+  // Draft linked to this appointment (for mutual-exclusion check)
+  const { data: linkedDraft } = useQuery({
+    queryKey: ['ai-draft', draftId],
+    queryFn: () => aiDraftsApi.get(draftId),
+    enabled: !!draftId,
+    staleTime: 10_000,
+  });
+
+  // Templates available for the setup step — fetched lazily when setup opens
+  const setupApiType: RecordType = setupType ?? 'EVOLUTION';
+  const { data: setupTemplates = [] } = useQuery({
+    queryKey: ['record-templates', setupApiType],
+    queryFn: () => recordTemplatesApi.list(setupApiType),
+    enabled: setupOpen && !!setupType,
+  });
   const staffMember = orgUsers.find(u => u.id === appt?.staff_id);
   const staffName = staffMember?.display_name ?? staffMember?.email ?? null;
   const activeConsents = (consentsData?.items ?? []).filter(c => !c.revoked_at);
@@ -559,6 +580,9 @@ export function AppointmentPage() {
 
   // Records linked to this appointment
   const linkedRecords: RecordMeta[] = (recordsData?.items ?? []).filter(r => r.appointment_id === id);
+  // Mutual exclusion: an APPROVED manual record blocks new AI draft; an APPROVED AI draft blocks new manual record.
+  const hasApprovedRecord = linkedRecords.some(r => r.status === 'APPROVED');
+  const hasApprovedDraft = linkedDraft?.status === 'APPROVED';
 
   const handleStatusChange = async (status: AppointmentStatus) => {
     if (!id) return;
@@ -676,6 +700,18 @@ export function AppointmentPage() {
     }
   };
 
+  const openSetup = () => {
+    setSetupType(defaultRecordType);
+    setSetupTemplateId('');
+    setSetupOpen(true);
+    setShowRecordForm(false);
+  };
+
+  const confirmSetup = () => {
+    setSetupOpen(false);
+    setShowRecordForm(true);
+  };
+
   const handleRecordSaved = async () => {
     // When recording is active, keep the appointment IN_PROGRESS so the
     // professional can continue the session and end it via "Finalizar sesión"
@@ -689,6 +725,9 @@ export function AppointmentPage() {
     await refetchRecords();
     queryClient.invalidateQueries({ queryKey: ['clinical-records', 'patient', appt?.patient_id] });
     setShowRecordForm(false);
+    setSetupOpen(false);
+    setSetupType(null);
+    setSetupTemplateId('');
     if (recording) setSavedWhileRecording(true);
   };
 
@@ -925,7 +964,7 @@ export function AppointmentPage() {
                   <span><b>Registro extemporáneo</b> — motivo: {lateReason}. Quedará declarado en la historia y en el PDF.</span>
                 </div>
               )}
-              <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} hasOpenProcess={hasOpenProcess} onTypeChange={setSelectedRecordType} onTemplateChange={setSelectedTemplateId} onSaved={handleRecordSaved} />
+              <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={setupType ?? defaultRecordType} lockedTemplateId={setupTemplateId || undefined} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} hasOpenProcess={hasOpenProcess} onTypeChange={setSelectedRecordType} onTemplateChange={setSelectedTemplateId} onSaved={handleRecordSaved} />
             </div>
 
             {/* ASIDE — recap + borrador IA como apoyo (sticky en desktop) */}
@@ -943,17 +982,23 @@ export function AppointmentPage() {
                       <span style={{ fontSize: 11, color: 'var(--s400)' }}>Audio → transcripción → borrador</span>
                     </div>
                   </div>
-                  <AudioSection
-                    appointmentId={id!}
-                    patientId={appt.patient_id}
-                    draftId={draftId}
-                    recordType={aiRecordType}
-                    templateId={selectedTemplateId}
-                    sessionDate={apptDate}
-                    processing={processingAudio}
-                    linkedRecordId={linkedRecords[0]?.id}
-                    onDraftCreated={handleDraftCreated}
-                  />
+                  {hasApprovedRecord ? (
+                    <div style={{ fontSize: 12, color: '#065f46', background: '#d1fae5', borderRadius: 8, padding: '10px 13px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <CheckCircle2 size={13} /> Registro clínico aprobado — no se pueden agregar borradores IA a esta sesión.
+                    </div>
+                  ) : (
+                    <AudioSection
+                      appointmentId={id!}
+                      patientId={appt.patient_id}
+                      draftId={draftId}
+                      recordType={aiRecordType}
+                      templateId={selectedTemplateId}
+                      sessionDate={apptDate}
+                      processing={processingAudio}
+                      linkedRecordId={linkedRecords[0]?.id}
+                      onDraftCreated={handleDraftCreated}
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -1288,16 +1333,22 @@ export function AppointmentPage() {
                   <span style={{ fontSize: 11, color: 'var(--s400)' }}>Audio → transcripción → borrador automático</span>
                 </div>
               </div>
-              <AudioSection
-                appointmentId={id!}
-                patientId={appt.patient_id}
-                draftId={draftId}
-                recordType={aiRecordType}
-                templateId={selectedTemplateId}
-                sessionDate={apptDate}
-                processing={processingAudio}
-                onDraftCreated={handleDraftCreated}
-              />
+              {hasApprovedRecord ? (
+                <div style={{ fontSize: 12, color: '#065f46', background: '#d1fae5', borderRadius: 8, padding: '10px 13px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <CheckCircle2 size={13} /> Registro clínico aprobado — no se pueden agregar borradores IA a esta sesión.
+                </div>
+              ) : (
+                <AudioSection
+                  appointmentId={id!}
+                  patientId={appt.patient_id}
+                  draftId={draftId}
+                  recordType={aiRecordType}
+                  templateId={selectedTemplateId}
+                  sessionDate={apptDate}
+                  processing={processingAudio}
+                  onDraftCreated={handleDraftCreated}
+                />
+              )}
             </div>
           )}
         </div>
@@ -1312,9 +1363,9 @@ export function AppointmentPage() {
             </div>
             <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--s800)' }}>Historia clínica</span>
           </div>
-          {linkedRecords.length > 0 && !showRecordForm && canWriteNote && (
+          {linkedRecords.length > 0 && !showRecordForm && !setupOpen && canWriteNote && !hasApprovedDraft && (
             <button
-              onClick={() => setShowRecordForm(true)}
+              onClick={openSetup}
               style={{ fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, border: '1px solid var(--teal)', background: '#f0fdfa', color: 'var(--teal)', cursor: 'pointer' }}
             >
               + Nuevo
@@ -1322,15 +1373,22 @@ export function AppointmentPage() {
           )}
         </div>
 
-        {linkedRecords.length > 0 && !showRecordForm ? (
+        {linkedRecords.length > 0 && !showRecordForm && !setupOpen ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {linkedRecords.map(rec => (
               <div key={rec.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'var(--s50)', borderRadius: 10, border: '1px solid var(--s200)' }}>
                 <FileText size={16} color="var(--teal)" />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--s800)' }}>
-                    {RECORD_TYPE_LABEL[rec.record_type] ?? rec.record_type}
-                  </p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--s800)' }}>
+                      {RECORD_TYPE_LABEL[rec.record_type] ?? rec.record_type}
+                    </p>
+                    {rec.session_number != null && (
+                      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10.5, fontWeight: 700, color: 'var(--teal-d)', background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 5, padding: '1px 6px' }}>
+                        #{rec.session_number}
+                      </span>
+                    )}
+                  </div>
                   <p style={{ margin: 0, fontSize: 12, color: 'var(--s400)' }}>{rec.session_date}</p>
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 6, background: rec.status === 'APPROVED' ? '#d1fae5' : '#fef3c7', color: rec.status === 'APPROVED' ? '#065f46' : '#92400e' }}>
@@ -1344,12 +1402,56 @@ export function AppointmentPage() {
                 </button>
               </div>
             ))}
+            {hasApprovedDraft && (
+              <div style={{ fontSize: 12, color: '#92400e', background: '#fef3c7', borderRadius: 8, padding: '10px 13px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Brain size={13} color="#f59e0b" /> Hay un borrador IA aprobado para esta sesión — no se puede crear un registro clínico adicional.
+              </div>
+            )}
+          </div>
+        ) : setupOpen ? (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s600)' }}>Configurar registro</span>
+              <button aria-label="Cancelar" onClick={() => setSetupOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)', padding: 6, minWidth: 32, minHeight: 32 }}><X size={16} /></button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, color: 'var(--s500)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Tipo de registro</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {(['INITIAL', 'EVOLUTION', 'DISCHARGE', 'INTERCONSULTATION'] as RecordType[]).map(t => (
+                    <button key={t} onClick={() => { setSetupType(t); setSetupTemplateId(''); }}
+                      style={{ padding: '7px 14px', borderRadius: 8, border: `1.5px solid ${setupType === t ? 'var(--teal)' : 'var(--s200)'}`, background: setupType === t ? '#f0fdfa' : '#fff', color: setupType === t ? 'var(--teal-d)' : 'var(--s600)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                      {RECORD_TYPE_LABEL[t] ?? t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {setupTemplates.length > 0 && (
+                <div>
+                  <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, color: 'var(--s500)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Formato de registro</p>
+                  <select value={setupTemplateId} onChange={e => setSetupTemplateId(e.target.value)}
+                    style={{ borderRadius: 8, border: '1.5px solid var(--s200)', padding: '7px 10px', fontSize: 13, color: 'var(--s700)', width: '100%', maxWidth: 320 }}>
+                    <option value="">Formato integrado (Colombia)</option>
+                    {setupTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+              )}
+              <button onClick={confirmSetup} disabled={!setupType}
+                style={{ padding: '10px 20px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 9, cursor: setupType ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 7, alignSelf: 'flex-start', opacity: setupType ? 1 : 0.5 }}>
+                <FileText size={14} /> Comenzar registro
+              </button>
+            </div>
           </div>
         ) : showRecordForm ? (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s600)' }}>Nuevo registro clínico</span>
-              <button aria-label="Cerrar registro clínico" onClick={() => setShowRecordForm(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)', padding: 6, minWidth: 32, minHeight: 32 }}><X size={16} /></button>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s600)' }}>
+                Nuevo registro · {RECORD_TYPE_LABEL[setupType ?? defaultRecordType] ?? (setupType ?? defaultRecordType)}
+                {setupTemplateId && setupTemplates.find(t => t.id === setupTemplateId) && (
+                  <span style={{ fontWeight: 400, color: 'var(--s400)', marginLeft: 6 }}>— {setupTemplates.find(t => t.id === setupTemplateId)!.name}</span>
+                )}
+              </span>
+              <button aria-label="Cerrar registro clínico" onClick={() => { setShowRecordForm(false); setSetupOpen(false); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)', padding: 6, minWidth: 32, minHeight: 32 }}><X size={16} /></button>
             </div>
             {lateReason && (
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 9, padding: '10px 14px', marginBottom: 12, fontSize: 12.5, color: '#92400e' }}>
@@ -1357,20 +1459,27 @@ export function AppointmentPage() {
                 <span><b>Registro extemporáneo</b> — motivo: {lateReason}. Quedará declarado en la historia y en el PDF.</span>
               </div>
             )}
-            <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={defaultRecordType} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} hasOpenProcess={hasOpenProcess} onTypeChange={setSelectedRecordType} onTemplateChange={setSelectedTemplateId} onSaved={handleRecordSaved} />
+            <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={setupType ?? defaultRecordType} lockedTemplateId={setupTemplateId || undefined} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} hasOpenProcess={hasOpenProcess} onTypeChange={setSelectedRecordType} onTemplateChange={setSelectedTemplateId} onSaved={handleRecordSaved} />
           </div>
-        ) : canWriteNote ? (
+        ) : canWriteNote && !hasApprovedDraft ? (
           <div style={{ textAlign: 'center', padding: '24px 0' }}>
             <FileText size={36} color="var(--s200)" style={{ marginBottom: 12 }} />
             <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--s500)' }}>
               {isInProgress ? 'Sin registro para esta sesión' : 'La sesión terminó sin nota — regístrala ahora con la fecha real de la sesión.'}
             </p>
             <button
-              onClick={() => setShowRecordForm(true)}
+              onClick={openSetup}
               style={{ padding: '10px 20px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 7 }}
             >
               <FileText size={14} /> Crear registro clínico
             </button>
+          </div>
+        ) : canWriteNote && hasApprovedDraft ? (
+          <div style={{ textAlign: 'center', padding: '24px 0' }}>
+            <Brain size={36} color="#f59e0b" style={{ marginBottom: 12 }} />
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--s500)' }}>
+              El borrador IA de esta sesión ya fue aprobado como registro clínico.
+            </p>
           </div>
         ) : isScheduled ? (
           <div style={{ textAlign: 'center', padding: '24px 0' }}>

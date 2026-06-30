@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
 	"sghcp/core-api/internal/aidrafts"
@@ -18,8 +19,9 @@ type Service struct {
 	km       *crypto.KeyManager
 	rdb      *redis.Client
 	audioDir string
+	db       *pgxpool.Pool
 }
 
-func New(repo aidrafts.Repository, km *crypto.KeyManager, rdb *redis.Client, audioDir string) *Service {
-	return &Service{repo: repo, km: km, rdb: rdb, audioDir: audioDir}
+func New(repo aidrafts.Repository, km *crypto.KeyManager, rdb *redis.Client, audioDir string, db *pgxpool.Pool) *Service {
+	return &Service{repo: repo, km: km, rdb: rdb, audioDir: audioDir, db: db}
 }

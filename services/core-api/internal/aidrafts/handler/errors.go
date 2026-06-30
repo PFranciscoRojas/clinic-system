@@ -18,6 +18,8 @@ var draftErrors = httputil.ErrorMapper(func(err error) (int, string) {
 		return http.StatusUnprocessableEntity, "invalid input"
 	case errors.Is(err, aidrafts.ErrNotReady):
 		return http.StatusConflict, "draft is not ready for approval"
+	case errors.Is(err, aidrafts.ErrConflict):
+		return http.StatusConflict, err.Error()
 	default:
 		return 0, ""
 	}

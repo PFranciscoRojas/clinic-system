@@ -23,14 +23,15 @@ func (r *Repository) CreateEncKey(ctx context.Context, encryptedDEK []byte, keyS
 func (r *Repository) Create(ctx context.Context, p aidrafts.CreateParams) (string, error) {
 	const q = `
 		INSERT INTO ai_drafts
-		       (organization_id, patient_id, requested_by, dek_id,
+		       (organization_id, appointment_id, patient_id, requested_by, dek_id,
 		        audio_path_enc, ai_model_version, whisper_model)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id`
 
 	var id string
 	err := dbctx.From(ctx, r.db).QueryRow(ctx, q,
 		p.OrganizationID,
+		nullableStr(p.AppointmentID),
 		p.PatientID,
 		p.RequestedBy,
 		p.DEKID,
@@ -39,4 +40,11 @@ func (r *Repository) Create(ctx context.Context, p aidrafts.CreateParams) (strin
 		p.WhisperModel,
 	).Scan(&id)
 	return id, err
+}
+
+func nullableStr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }

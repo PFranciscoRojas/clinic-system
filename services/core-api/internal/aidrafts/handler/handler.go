@@ -20,7 +20,7 @@ type Handler struct {
 func New(db *pgxpool.Pool, km *crypto.KeyManager, rdb *redis.Client, audioDir string) *Handler {
 	repo := aidraftsrepo.New(db)
 	return &Handler{
-		svc: aidraftssvc.New(repo, km, rdb, audioDir),
+		svc: aidraftssvc.New(repo, km, rdb, audioDir, db),
 		crr: crrsvc.New(crrrepo.New(db), km),
 		db:  db,
 	}

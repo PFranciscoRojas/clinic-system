@@ -29,6 +29,8 @@ interface RecordFormProps {
   onTypeChange?: (t: RecordType) => void;
   /** Emitted when the selected template changes so the audio upload can pass template_id. */
   onTemplateChange?: (templateId: string | undefined) => void;
+  /** When set, the template selector is hidden and this template is used directly. */
+  lockedTemplateId?: string;
   onSaved: () => void;
 }
 
@@ -46,7 +48,7 @@ function draftHasContent(d: ClinicalDraft): boolean {
   return false;
 }
 
-export function RecordForm({ patientId, appointmentId, defaultType, sessionDate: sessionDateProp, lateEntryReason, treatmentConsentSigned, hasOpenProcess, onTypeChange, onTemplateChange, onSaved }: RecordFormProps) {
+export function RecordForm({ patientId, appointmentId, defaultType, sessionDate: sessionDateProp, lateEntryReason, treatmentConsentSigned, hasOpenProcess, onTypeChange, onTemplateChange, lockedTemplateId, onSaved }: RecordFormProps) {
   const storageKey = appointmentId ? `clinical-draft-${appointmentId}` : `clinical-draft-patient-${patientId}`;
   // Only the types the open-process rule permits are offered, so the user can't
   // pick a format the server will reject on save.
@@ -66,8 +68,8 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
 
   const apiType: RecordType = uiType === 'PLAN' ? 'EVOLUTION' : uiType;
 
-  // Custom template selection
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+  // Custom template selection — overridden by lockedTemplateId from parent
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(lockedTemplateId ?? '');
   const [customSections, setCustomSections] = useState<SectionsState>({});
 
   const { data: templates = [] } = useQuery({
@@ -77,14 +79,16 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
 
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
 
-  // Apply default template when apiType changes and a default is available
+  // Apply default template when apiType changes and a default is available.
+  // Skipped when a template is locked by the parent — it already pre-selected one.
   useEffect(() => {
+    if (lockedTemplateId) return;
     const def = templates.find(t => t.is_default);
     if (def && !selectedTemplateId) {
       setSelectedTemplateId(def.id);
       setCustomSections({});
     }
-  }, [templates, selectedTemplateId]);
+  }, [templates, selectedTemplateId, lockedTemplateId]);
 
   // Notify parent of template changes (for audio upload targeting)
   useEffect(() => {
@@ -285,8 +289,8 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
           Recuerda registrar el <strong>consentimiento informado</strong> del paciente (pestaña Consentimientos del perfil) — es obligatorio antes de iniciar tratamiento.
         </p>
       )}
-      {/* Template selector — shown when custom templates exist for this record type */}
-      {templates.length > 0 && (
+      {/* Template selector — hidden when lockedTemplateId is set (chosen during session setup) */}
+      {templates.length > 0 && !lockedTemplateId && (
         <div style={{ marginBottom: 14 }}>
           <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 700, color: 'var(--s500)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
             Formato de registro

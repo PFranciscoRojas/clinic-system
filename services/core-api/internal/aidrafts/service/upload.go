@@ -23,6 +23,20 @@ func (s *Service) UploadAudio(ctx context.Context, in UploadAudioInput) (string,
 		return "", fmt.Errorf("%w: audio file is required", aidrafts.ErrInvalidInput)
 	}
 
+	// Block upload when the appointment already has an APPROVED clinical record.
+	if in.AppointmentID != "" {
+		var hasApproved bool
+		_ = s.db.QueryRow(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM clinical_records
+				WHERE appointment_id = $1 AND status = 'APPROVED'
+			)
+		`, in.AppointmentID).Scan(&hasApproved)
+		if hasApproved {
+			return "", fmt.Errorf("%w: la cita ya tiene un registro clínico aprobado", aidrafts.ErrConflict)
+		}
+	}
+
 	audioPath, err := s.saveAudio(in)
 	if err != nil {
 		return "", fmt.Errorf("save audio: %w", err)
@@ -46,6 +60,7 @@ func (s *Service) UploadAudio(ctx context.Context, in UploadAudioInput) (string,
 
 	draftID, err := s.repo.Create(ctx, aidrafts.CreateParams{
 		OrganizationID: in.OrganizationID,
+		AppointmentID:  in.AppointmentID,
 		PatientID:      in.PatientID,
 		RequestedBy:    in.RequestedBy,
 		DEKID:          dekID,

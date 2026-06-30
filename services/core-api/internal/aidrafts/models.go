@@ -6,6 +6,7 @@ type AIDraft struct {
 	ID               string
 	OrganizationID   string
 	ClinicalRecordID string
+	AppointmentID    string
 	PatientID        string
 	RequestedBy      string
 	DEKID            string
@@ -25,6 +26,7 @@ type AIDraft struct {
 
 type CreateParams struct {
 	OrganizationID string
+	AppointmentID  string
 	PatientID      string
 	RequestedBy    string
 	DEKID          string
@@ -39,6 +41,7 @@ type DraftMeta struct {
 	Status           string
 	PatientID        string
 	PatientCode      *int
+	AppointmentID    string
 	ClinicalRecordID string
 	CreatedAt        time.Time
 }

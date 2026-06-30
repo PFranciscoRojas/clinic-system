@@ -65,7 +65,7 @@ func scanRecordMeta(rows interface {
 		&m.AppointmentID, &m.RecordType,
 		&m.SessionDate, &m.TemplateVersion, &m.TemplateID, &m.RiskLevel,
 		&m.Status, &m.RequiresCosign,
-		&m.SupervisorID, &m.CreatedAt,
+		&m.SupervisorID, &m.CreatedAt, &m.SessionNumber,
 	)
 }
 
@@ -74,7 +74,7 @@ const metaCols = `
 	COALESCE(cr.appointment_id::text, ''), cr.record_type,
 	cr.session_date, cr.template_version, COALESCE(cr.template_id::text, ''), cr.risk_level::text,
 	cr.status, cr.requires_cosign,
-	COALESCE(cr.supervisor_id::text, ''), cr.created_at`
+	COALESCE(cr.supervisor_id::text, ''), cr.created_at, cr.session_number`
 
 func (r *Repository) List(ctx context.Context, f clinicalrecords.ListFilter) ([]*clinicalrecords.RecordMeta, error) {
 	rows, err := r.q(ctx).Query(ctx, `
