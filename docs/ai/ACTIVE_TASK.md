@@ -1,25 +1,13 @@
 ## Sin tarea pendiente
 
-Sesión 21 cerrada limpiamente. 5 bugs UX corregidos (`58fc863`) + desplegados a VPS (frontend rebuild + ai-service restart).
-
-## Issues completados esta sesión
-
-- ✅ Issue 1: V2RecordView renderiza widgets de plantilla correctamente (no más JSON.stringify)
-- ✅ Issue 3: Banner de advertencia al guardar registro mientras graba
-- ✅ Issue 4: Interceptor de clic captura `<Link>/<a>` del sidebar/navbar durante grabación
-- ✅ Issue 7: Prompt recap tightened + historial limitado a 5 sesiones
-- ✅ Issue 8: Botón aprobar visible incluso cuando borrador IA está vacío
-
-## Issues no implementados (revisados, no necesarios o diferidos)
-
-- Issue 2 (PDF JSON): el path `renderCustomTemplate` → `renderWidgetValue` ya maneja todos los widgets; PDF funciona correctamente
-- Issue 5 (recovery + complemento): el fix de Issue 4 (interceptor de clic) previene la mayoría de casos; persistir form state en localStorage es feature mayor → BACKLOG
-- Issue 6 (AI draft complementa manual): ya implementado con `draftEdit[key] ?? baseContent[key]` — funciona correctamente
+Sesión 22 cerrada limpiamente. 3 mejoras arquitectónicas + 3 fixes previos desplegados a VPS (migración 000047, core-api rebuild, frontend rebuild).
 
 ## Sugerencia de siguiente paso
 
-Basándome en STATUS.md y BACKLOG.md, lo más valioso ahora es:
+Basándome en STATUS.md (bloqueantes + roadmap) y BACKLOG.md, lo más valioso a atacar ahora es:
 
-1. **Contactar las 2 psicólogas beta** — sigue siendo el cuello de botella real. Sin validación de demanda externa, todo lo técnico es ruido. La plantilla de mensaje está en BACKLOG → Validación.
+1. **Validación de demanda con beta testers** — el bloqueante más crítico no es técnico. Contactar las 2 colegas de la esposa con el mensaje plantilla del BACKLOG. Sin señal de willingness-to-pay externa, cualquier feature nueva es ruido. Prioridad máxima.
 
-2. **Módulo MBC / evaluaciones psicológicas (Fase 1)** — validar con beta testers si enviarían cuestionario PHQ-9/GAD-7 antes de sesión. Si respuesta positiva: ~2 semanas para Fase 1 (tabla `patient_assessments`, PDF de instrumento, gráfica de progreso). Ver `docs/ai/PLAN_ASSESSMENTS.md`.
+2. **PHQ-9 / Escalas MBC (Fase 1)** — si la validación beta confirma interés, la Fase 1 del plan MBC (tabla `patient_evaluations`, PHQ-9 + GAD-7 de dominio público, visualización de progreso) es el diferenciador más claro frente a la competencia colombiana. Ver `docs/ai/PLAN_ASSESSMENTS.md` para el plan completo.
+
+3. **Go-live 1.0.0** — si hay al menos 1 beta confirmando pago: cambiar `ALLOW_DATA_RESET=false` en VPS, subir precio real ($180.000/mes), revisar ToS con abogado. Luego landing page y pauta digital.

@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-06-29)
+## Estado actual (2026-06-30)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -27,11 +27,11 @@
 
 ### Últimos commits a `main`
 
+- `ecdeb46` feat(clinical): appointment_id FK + session_number + setup step + mutual exclusion — 2026-06-30
+- `5d60762` fix(clinical): audio re-upload overwrite + risk_level required in draft approve — 2026-06-29
+- `7454153` feat(clinical): comparison view manual record vs AI draft — field-by-field merge UI — 2026-06-29
+- `ea6bf7b` fix(clinical): move getDraftField before isEmptyDraft — fix TDZ crash on AI draft page — 2026-06-29
 - `58fc863` fix(clinical): 6 UX fixes — widget display, approve empty draft, recording warnings — 2026-06-29
-- `fef8bf4` fix(clinical): template records show content in view/edit — 2026-06-29
-- `74668e0` fix(clinical): guard null barriers in SessionEvaluationPanel — 2026-06-29
-- `0aef9cb` fix(clinical): guard null axis/barriers in sessionEval — 2026-06-29
-- `4feec83` fix(agenda): replace useBlocker with safeNavigate — BrowserRouter compat — 2026-06-29
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 > **CI/CD:** `core-api` y `ai-service` se construyen en GitHub Actions y se despliegan a ghcr.io. El VPS solo hace `docker pull` — sin builds locales.
@@ -77,7 +77,7 @@
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción — imagen `ghcr.io/pfranciscorojas/clinic-system-core-api:latest` (build en CI) |
+| `core-api:8080` | ✅ producción — rebuild local `ecdeb46` (migración 000047 aplicada) |
 | `ai-service` | ✅ producción — `ghcr.io/pfranciscorojas/clinic-system-ai-service:latest` (whisper.tiny + spaCy sm) |
 | `frontend` (Caddy :80/:443) | ✅ producción |
 | Backups | `pg_dump` cifrado GPG → Backblaze B2 |
@@ -103,7 +103,7 @@
 | `core-api` | `services/core-api/` | ✅ Go 1.25, prod |
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
-| Migrations | `services/core-api/migrations/` | Última: `000046_record_templates` |
+| Migrations | `services/core-api/migrations/` | Última: `000047_appointment_session_link` |
 | CI/CD | `.github/workflows/build-ai-service.yml` + `build-core-api.yml` | Build+push ghcr.io + deploy SSH al VPS (secrets: `VPS_HOST`, `VPS_SSH_KEY`, `GHCR_TOKEN`) |
 | Claude skills | `~/.claude/commands/` + `~/.claude/skills/` | `ui-ux-pro-max` instalada; `ui-styling` (Tailwind/shadcn) desinstalada 2026-06-28 — proyecto usa inline styles |
 

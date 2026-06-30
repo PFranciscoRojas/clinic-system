@@ -58,7 +58,7 @@
 
 ## Historia clínica — UX pendiente (sesión 20)
 
-- **Picker de formato antes de iniciar sesión (2026-06-29)** — al dar "Iniciar sesión", mostrar un selector inline (no modal completo) con: tipo de registro (Apertura / Evolución / Alta) + plantilla custom si hay disponibles. La IA necesita saber desde el inicio qué formato generar. Actualmente `aiRecordType` se deriva del `defaultRecordType` inferido del historial, que no es la elección explícita del profesional. Implementación: estado `[showFormatPicker, pickerType, pickerTemplateId]` en `AppointmentPage`; `useQuery` de templates para el picker; al confirmar → iniciar sesión con los valores seleccionados. RecordForm recibe los valores preseleccionados para arrancar directo con el formato elegido. Dificultad: media (solo frontend, sin backend).
+- ✅ **Picker de formato antes de abrir el RecordForm (2026-06-30)** — implementado como "paso de configuración" inline: al hacer clic en "Crear registro clínico" o "+ Nuevo", se muestra una tarjeta de setup con selector de tipo + selector de plantilla (cuando hay templates disponibles). Al confirmar, RecordForm abre con `defaultType` y `lockedTemplateId` preseleccionados y el selector de formato oculto. `AppointmentPage` con estados `setupOpen/setupType/setupTemplateId`; `RecordForm` con prop `lockedTemplateId`.
 
 ## Plantillas de registro — Fase 2 (post sesión 15)
 
