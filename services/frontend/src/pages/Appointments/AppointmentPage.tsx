@@ -673,10 +673,11 @@ export function AppointmentPage() {
   };
 
   const handleRecordSaved = async () => {
-    // The session note closes the appointment lifecycle: once the clinical
-    // record exists the appointment is done — no manual step, and the cancel
-    // button disappears with it.
-    if (appt && (appt.status === 'SCHEDULED' || appt.status === 'IN_PROGRESS')) {
+    // When recording is active, keep the appointment IN_PROGRESS so the
+    // professional can continue the session and end it via "Finalizar sesión"
+    // (which uploads the audio and creates the AI draft for comparison).
+    // Only auto-complete when there's no active recording.
+    if (!recording && appt && (appt.status === 'SCHEDULED' || appt.status === 'IN_PROGRESS')) {
       try { await appointmentsApi.updateStatus(id!, 'COMPLETED'); } catch { /* note saved; status stays */ }
       queryClient.invalidateQueries({ queryKey: ['appointment', id] });
     }

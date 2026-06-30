@@ -468,16 +468,12 @@ func renderSectionsV2(doc *fpdf.Fpdf, tr func(string) string, rec *clinicalrecor
 		}
 
 		var content string
-		if sec.key == "mental_exam" {
-			exam, ok := val.(map[string]any)
-			if !ok {
-				continue
-			}
-			content = formatMentalExam(exam)
-		} else if s, ok := val.(string); ok {
+		if s, ok := val.(string); ok {
 			content = s
 		} else {
-			content = fmt.Sprintf("%v", val)
+			// Non-string value (e.g. mental_exam object): delegate to the widget
+			// renderer so the output is human-readable rather than a raw Go value.
+			content = renderWidgetValue(sec.key, val)
 		}
 
 		if strings.TrimSpace(content) == "" {

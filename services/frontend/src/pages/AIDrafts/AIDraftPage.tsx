@@ -160,6 +160,9 @@ export function AIDraftPage() {
   const isPending = draft.status === 'PENDING' || draft.status === 'PROCESSING';
   const isReady = draft.status === 'DRAFT_READY';
 
+  // While the template schema is loading (async), don't show phantom integrated fields.
+  const templateLoading = !!draft.template_id && !customTemplate;
+
   const contentRaw = draft.draft_content_plain as Record<string, unknown> | null;
   // Drafts carry the clinical-record sections for the record type.
   const recordType = (qsRecordType || (contentRaw?.record_type as string) || 'EVOLUTION') as keyof typeof TEMPLATE_SECTIONS;
@@ -169,6 +172,11 @@ export function AIDraftPage() {
     (TEMPLATE_SECTIONS[recordType] ?? TEMPLATE_SECTIONS.EVOLUTION).map((d: SectionDef) => ({ key: d.key, label: d.label, description: d.placeholder }));
   // Whether to render with the data-driven template form or the plain-text form
   const useCustomTemplate = !!customTemplate;
+
+  // True when there is genuinely no AI content and the professional has not
+  // added any manual content either — shows a clean "empty draft" state.
+  const isEmptyDraft = isReady && !editing && !useCustomTemplate
+    && sectionDefs.every(({ key }) => !getDraftField(key).trim());
 
   const getDraftField = (key: string) => draftEdit[key] ?? baseContent[key] ?? '';
 
@@ -240,9 +248,55 @@ export function AIDraftPage() {
         </div>
       )}
 
+      {/* Template schema loading — avoid showing phantom integrated-format fields */}
+      {(isReady || draft.status === 'APPROVED') && templateLoading && (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+          <Spinner size={24} color="var(--teal)" />
+        </div>
+      )}
+
       {/* Draft content */}
-      {(isReady || draft.status === 'APPROVED') && (
+      {(isReady || draft.status === 'APPROVED') && !templateLoading && (
         <>
+          {/* Empty draft with no user edits: skip the form entirely, show a clean state */}
+          {isEmptyDraft ? (
+            <div className="card" style={{ padding: 32, textAlign: 'center' }}>
+              <AlertTriangle size={32} color="#d97706" style={{ marginBottom: 12 }} />
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--s800)', margin: '0 0 8px' }}>
+                Sin contenido clínico detectado
+              </h2>
+              <p style={{ color: 'var(--s500)', fontSize: 14, margin: '0 0 20px', lineHeight: 1.6 }}>
+                {transcription
+                  ? 'La IA transcribió el audio pero no encontró contenido clínico para estructurar. Revisa la transcripción abajo.'
+                  : 'La IA no encontró contenido clínico en este audio. Puedes redactar el registro manualmente.'}
+              </p>
+              <button
+                onClick={() => setEditing(true)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
+              >
+                <Edit3 size={15} /> Redactar manualmente
+              </button>
+              {transcription && (
+                <div className="card" style={{ padding: 0, marginTop: 20, overflow: 'hidden', textAlign: 'left' }}>
+                  <button
+                    onClick={() => setShowTranscript(v => !v)}
+                    style={{ width: '100%', padding: '12px 18px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--s700)' }}>
+                      <FileText size={14} color="var(--s400)" /> Transcripción del audio
+                    </span>
+                    {showTranscript ? <ChevronUp size={16} color="var(--s400)" /> : <ChevronDown size={16} color="var(--s400)" />}
+                  </button>
+                  {showTranscript && (
+                    <div style={{ padding: '0 18px 16px', borderTop: '1px solid var(--s100)' }}>
+                      <p style={{ margin: '12px 0 0', fontSize: 13, color: 'var(--s600)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{transcription}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+          <>
           <div style={{
             display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 16,
             background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10,
@@ -256,18 +310,6 @@ export function AIDraftPage() {
               (Ley 23/1981 · Res. 1995/1999).
             </p>
           </div>
-
-          {/* Empty draft: the audio was transcribed but had no clinical content
-              to structure (e.g. a test recording). Make that explicit. */}
-          {sectionDefs.every(({ key }) => !getDraftField(key).trim()) && (
-            <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
-              <AlertTriangle size={15} color="#d97706" style={{ flexShrink: 0, marginTop: 1 }} />
-              <span style={{ fontSize: 12.5, color: '#92400e', lineHeight: 1.6 }}>
-                Se transcribió el audio pero la IA no encontró contenido clínico para estructurar
-                {transcription ? ' (revisa la transcripción abajo).' : '.'} Puedes escribir el registro a mano o grabar de nuevo.
-              </span>
-            </div>
-          )}
 
           {/* Transcription — always available once processed, even if the
               sections are empty, so the professional can confirm what was heard */}
@@ -426,6 +468,8 @@ export function AIDraftPage() {
                 </button>
               )}
             </div>
+          )}
+          </>
           )}
         </>
       )}
