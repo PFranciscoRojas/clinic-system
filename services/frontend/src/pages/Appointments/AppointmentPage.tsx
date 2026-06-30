@@ -74,10 +74,11 @@ interface AudioSectionProps {
   templateId?: string;
   sessionDate: string;
   processing?: boolean;
+  linkedRecordId?: string;
   onDraftCreated: (draftId: string) => void;
 }
 
-function AudioSection({ appointmentId, patientId, draftId, recordType, templateId, sessionDate, processing, onDraftCreated }: AudioSectionProps) {
+function AudioSection({ appointmentId, patientId, draftId, recordType, templateId, sessionDate, processing, linkedRecordId, onDraftCreated }: AudioSectionProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState('');
@@ -144,8 +145,11 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
           </div>
         </div>
         {(draft.status === 'DRAFT_READY' || draft.status === 'APPROVED') && (
-          <a href={`/ai-drafts/${draftId}?appointment_id=${appointmentId}&session_date=${sessionDate}&record_type=${recordType}`} style={{ padding: '7px 14px', background: '#f59e0b', color: '#fff', borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Brain size={13} /> Revisar borrador
+          <a
+            href={`/ai-drafts/${draftId}?appointment_id=${appointmentId}&session_date=${sessionDate}&record_type=${recordType}${linkedRecordId ? `&record_id=${linkedRecordId}` : ''}`}
+            style={{ padding: '7px 14px', background: linkedRecordId ? 'var(--teal)' : '#f59e0b', color: '#fff', borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <Brain size={13} /> {linkedRecordId ? 'Comparar con IA' : 'Revisar borrador'}
           </a>
         )}
       </div>
@@ -947,6 +951,7 @@ export function AppointmentPage() {
                     templateId={selectedTemplateId}
                     sessionDate={apptDate}
                     processing={processingAudio}
+                    linkedRecordId={linkedRecords[0]?.id}
                     onDraftCreated={handleDraftCreated}
                   />
                 </div>
