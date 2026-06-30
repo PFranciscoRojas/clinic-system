@@ -2,7 +2,10 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
+	"github.com/jackc/pgx/v5"
 
 	"sghcp/core-api/internal/appointments"
 )
@@ -29,18 +32,35 @@ func (r *Repository) UpdateStatus(ctx context.Context, orgID, appointmentID, sta
 
 // AssignPatient links a registered patient to a guest reservation.
 // Only open appointments can be re-assigned; guest_name is cleared.
+//
+// _psr mirrors the auto-registration done at appointment Create() (Res.
+// 1995/1999 Art. 14): a guest booking that gets linked to a registered
+// patient here must establish the same patient_staff_rel, or the assigned
+// professional — including the one who just linked the patient — would never
+// be able to view that patient's clinical history.
 func (r *Repository) AssignPatient(ctx context.Context, orgID, appointmentID, patientID string) error {
-	tag, err := r.q(ctx).Exec(ctx, `
-		UPDATE appointments
-		SET patient_id = $3, guest_name = NULL, updated_at = NOW()
-		WHERE id = $1 AND organization_id = $2
-		  AND status NOT IN ('CANCELLED', 'COMPLETED', 'NO_SHOW')
-	`, appointmentID, orgID, patientID)
+	var dummy int
+	err := r.q(ctx).QueryRow(ctx, `
+		WITH updated AS (
+			UPDATE appointments
+			SET patient_id = $3, guest_name = NULL, updated_at = NOW()
+			WHERE id = $1 AND organization_id = $2
+			  AND status NOT IN ('CANCELLED', 'COMPLETED', 'NO_SHOW')
+			RETURNING organization_id, patient_id, staff_id
+		),
+		_psr AS (
+			INSERT INTO patient_staff_rel (organization_id, patient_id, staff_id, relation_type)
+			SELECT organization_id, patient_id, staff_id, 'PRIMARY_THERAPIST'::staff_relation_type
+			FROM updated
+			ON CONFLICT DO NOTHING
+		)
+		SELECT 1 FROM updated
+	`, appointmentID, orgID, patientID).Scan(&dummy)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return appointments.ErrAlreadyDone
+	}
 	if err != nil {
 		return fmt.Errorf("assign patient to appointment: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return appointments.ErrAlreadyDone
 	}
 	return nil
 }
