@@ -11,6 +11,7 @@ import {
 
 import { appointmentsApi, Appointment } from '../../api/appointments';
 import { patientsApi, Patient } from '../../api/patients';
+import { authApi } from '../../api/auth';
 import { ApiError } from '../../api/client';
 import { Spinner } from '../../components/ui/Spinner';
 import { PatientSearchBox } from '../../components/patients/PatientSearchBox';
@@ -664,18 +665,38 @@ export function NewAppointmentPage() {
     return t && /^\d{2}:\d{2}$/.test(t) ? t : '';
   })();
 
-  const [patient,     setPatient]     = useState<Patient | null>(null);
-  const [guestName,   setGuestName]   = useState<string>('');
-  const [date,        setDate]        = useState<string>(initialDate);
-  const [time,        setTime]        = useState<string>(initialTime);
-  const [sessionType, setSessionType] = useState<SessionType | null>(SESSION_TYPES[1]);
-  const [duration,    setDuration]    = useState<number>(50);
-  const [modality,    setModality]    = useState<Modality>('presencial');
-  const [recurrence,  setRecurrence]  = useState<Recurrence>('none');
-  const [notes,       setNotes]       = useState<string>('');
-  const [reminder,    setReminder]    = useState<boolean>(true);
-  const [showModal,   setShowModal]   = useState<boolean>(false);
-  const [confirmed,   setConfirmed]   = useState<boolean>(false);
+  const isAdmin = user?.roles?.includes('CLINIC_ADMIN') ?? false;
+
+  const [patient,          setPatient]         = useState<Patient | null>(null);
+  const [guestName,        setGuestName]       = useState<string>('');
+  const [date,             setDate]            = useState<string>(initialDate);
+  const [time,             setTime]            = useState<string>(initialTime);
+  const [sessionType,      setSessionType]     = useState<SessionType | null>(SESSION_TYPES[1]);
+  const [duration,         setDuration]        = useState<number>(50);
+  const [modality,         setModality]        = useState<Modality>('presencial');
+  const [recurrence,       setRecurrence]      = useState<Recurrence>('none');
+  const [notes,            setNotes]           = useState<string>('');
+  const [reminder,         setReminder]        = useState<boolean>(true);
+  const [showModal,        setShowModal]       = useState<boolean>(false);
+  const [confirmed,        setConfirmed]       = useState<boolean>(false);
+  const [selectedStaffId,  setSelectedStaffId] = useState<string>(user?.user_id ?? '');
+
+  // Org members (for admin staff selector)
+  const { data: orgUsers = [] } = useQuery({
+    queryKey: ['org-users'],
+    queryFn: async () => {
+      const res = await authApi.listOrgUsers();
+      return res.items.filter(u => u.is_active && (u.role_name === 'PROFESSIONAL' || u.role_name === 'INTERN'));
+    },
+    enabled: isAdmin,
+    staleTime: 60_000,
+  });
+
+  // Set default selectedStaffId to first professional when list loads (if admin has no PROFESSIONAL role)
+  useEffect(() => {
+    if (!isAdmin || !orgUsers.length || selectedStaffId) return;
+    setSelectedStaffId(orgUsers[0].id);
+  }, [isAdmin, orgUsers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pre-load patient from URL param (e.g. coming from patient profile)
   useEffect(() => {
@@ -683,16 +704,18 @@ export function NewAppointmentPage() {
     patientsApi.get(returnPatientId).then(setPatient).catch(() => {});
   }, [returnPatientId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const effectiveStaffId = selectedStaffId || user?.user_id || '';
+
   // ── Staff appointments for the selected day (slot blocking + workload) ────────
   const { data: dayAppointments = [] } = useQuery<Appointment[]>({
-    queryKey: ['appointments-day', date, user?.user_id],
+    queryKey: ['appointments-day', date, effectiveStaffId],
     queryFn: () => appointmentsApi.list({
-      staff_id: user?.user_id,
+      staff_id: effectiveStaffId,
       date_from: localISO(date, '00:00'),
       date_to:   localISO(date, '23:59'),
       limit: 50,
     }),
-    enabled: !!date && !!user?.user_id,
+    enabled: !!date && !!effectiveStaffId,
   });
 
   // ── Patient appointments for the selected day (double-booking check) ──────────
@@ -781,7 +804,7 @@ export function NewAppointmentPage() {
       return appointmentsApi.create({
         patient_id:   patient?.id,
         guest_name:   patient ? undefined : guestName.trim(),
-        staff_id:     user!.user_id,
+        staff_id:     effectiveStaffId,
         scheduled_at: localISO(date, time),   // timezone-aware: no UTC shift
         duration_min: duration,
         modality:     modality === 'presencial' ? 'IN_PERSON' : 'VIRTUAL',
@@ -914,6 +937,27 @@ export function NewAppointmentPage() {
               <b>{patient ? `${patient.first_name} ${patient.paternal_last_name}` : 'Este paciente'}</b> ya tiene una cita activa este día — puedes agendar otra si así lo decides.
             </span>
           </div>
+        )}
+
+        {/* Staff selector — only for CLINIC_ADMIN */}
+        {isAdmin && orgUsers.length > 0 && (
+          <Section icon={User} title="Profesional asignado">
+            <select
+              value={selectedStaffId}
+              onChange={e => { setSelectedStaffId(e.target.value); setTime(''); }}
+              style={{
+                width: '100%', padding: '9px 12px', borderRadius: 9,
+                border: '1.5px solid var(--s200)', fontSize: 13,
+                color: 'var(--s700)', background: '#fff', cursor: 'pointer',
+              }}
+            >
+              {orgUsers.map(u => (
+                <option key={u.id} value={u.id}>
+                  {u.display_name || u.email}
+                </option>
+              ))}
+            </select>
+          </Section>
         )}
 
         {/* Time slots */}
