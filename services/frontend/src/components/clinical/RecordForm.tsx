@@ -140,6 +140,17 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
     return () => clearTimeout(t);
   }, [storageKey, uiType, draft]);
 
+  // Force-save immediately on page unload so the 600ms debounce doesn't lose
+  // content typed just before F5 or navigating away.
+  useEffect(() => {
+    const save = () => {
+      try { localStorage.setItem(storageKey, JSON.stringify({ uiType, draft })); } catch { /* ignore */ }
+    };
+    window.addEventListener('beforeunload', save);
+    return () => window.removeEventListener('beforeunload', save);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey, uiType, draft]);
+
   // Copy-forward: start from the latest approved-or-draft evolution note.
   // Risk is intentionally NOT copied — it must be re-assessed every session.
   const handleCopyForward = async () => {
