@@ -54,6 +54,34 @@ function draftHasContent(d: ClinicalDraft): boolean {
   return false;
 }
 
+// Deep-merges a localStorage-saved draft over emptyDraft() so old/partial
+// drafts don't crash on render (e.g. spaHistory without alcohol/tobacco/other
+// would cause undefined errors). Shared by the normal restore path and the
+// blocked-type path (saved format no longer fits the open-process rule) —
+// both need the same safe merge, the blocked one just doesn't get applied as
+// the live draft.
+function mergeSavedDraft(saved: Partial<ClinicalDraft>): ClinicalDraft {
+  const def = emptyDraft();
+  return {
+    ...def,
+    ...saved,
+    spaHistory: saved.spaHistory ? (() => {
+      const defSPA = def.spaHistory!;
+      return {
+        ...defSPA,
+        ...saved.spaHistory,
+        alcohol: { ...defSPA.alcohol, ...(saved.spaHistory.alcohol ?? {}) },
+        tobacco: { ...defSPA.tobacco, ...(saved.spaHistory.tobacco ?? {}) },
+        other:   { ...defSPA.other,   ...(saved.spaHistory.other   ?? {}) },
+      };
+    })() : def.spaHistory,
+    familyMH: saved.familyMH ? { ...def.familyMH, ...saved.familyMH } : def.familyMH,
+    taskAdherence: saved.taskAdherence
+      ? { ...def.taskAdherence, ...saved.taskAdherence }
+      : def.taskAdherence,
+  };
+}
+
 type AutosaveState = 'idle' | 'saving' | 'saved' | 'error' | 'offline';
 
 // Small ticking "Guardado hace Xs" label, isolated so it doesn't re-render the
@@ -103,7 +131,12 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   // Set when a localStorage draft exists but its uiType no longer fits the
   // current open-process rule — content is NOT silently discarded, the
   // professional just needs to know it's there instead of seeing it vanish.
+  // blockedRestoreDraft holds the actual content so it can still be shown
+  // read-only (and optionally recovered into the active draft) instead of
+  // just being described in a message.
   const [blockedRestoreType, setBlockedRestoreType] = useState<UIRecordType | null>(null);
+  const [blockedRestoreDraft, setBlockedRestoreDraft] = useState<ClinicalDraft | null>(null);
+  const [showBlockedContent, setShowBlockedContent] = useState(false);
   const [pendingType, setPendingType] = useState<UIRecordType | null>(null);
   const [err, setErr] = useState('');
 
@@ -189,36 +222,16 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
       if (raw) {
         const saved = JSON.parse(raw);
         if (saved.uiType && !allowedTypes.includes(saved.uiType)) {
-          // Don't restore — the open-process rule changed since this was saved
-          // — but tell the professional instead of letting it vanish silently.
+          // Don't load it as the live draft — submitting that type would be
+          // rejected by the server — but still show the actual content
+          // read-only instead of just describing that it exists.
           setBlockedRestoreType(saved.uiType);
+          if (saved.draft) setBlockedRestoreDraft(mergeSavedDraft(saved.draft as Partial<ClinicalDraft>));
           restoredLocally = true; // a blocked restore still counts — don't also fetch the server
         } else {
           if (saved.uiType) setUIType(saved.uiType);
           if (saved.draft) {
-            const def = emptyDraft();
-            const sd = saved.draft as Partial<typeof def>;
-            // Deep-merge nested objects so old/partial drafts don't crash on render
-            // (e.g. spaHistory without alcohol/tobacco/other would cause undefined errors).
-            const merged: ClinicalDraft = {
-              ...def,
-              ...sd,
-              spaHistory: sd.spaHistory ? (() => {
-                const defSPA = def.spaHistory!;
-                return {
-                  ...defSPA,
-                  ...sd.spaHistory,
-                  alcohol: { ...defSPA.alcohol, ...(sd.spaHistory.alcohol ?? {}) },
-                  tobacco: { ...defSPA.tobacco, ...(sd.spaHistory.tobacco ?? {}) },
-                  other:   { ...defSPA.other,   ...(sd.spaHistory.other   ?? {}) },
-                };
-              })() : def.spaHistory,
-              familyMH: sd.familyMH ? { ...def.familyMH, ...sd.familyMH } : def.familyMH,
-              taskAdherence: sd.taskAdherence
-                ? { ...def.taskAdherence, ...sd.taskAdherence }
-                : def.taskAdherence,
-            };
-            setDraft(merged);
+            setDraft(mergeSavedDraft(saved.draft as Partial<ClinicalDraft>));
             setRestored(true);
             setLastSavedAt(Date.now());
             restoredLocally = true;
@@ -550,9 +563,35 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
         </p>
       )}
       {blockedRestoreType && (
-        <p style={{ margin: '0 0 12px', fontSize: 12.5, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px' }}>
-          Tenías contenido sin guardar en formato <strong>{RECORD_TYPE_LABELS[blockedRestoreType]}</strong>, pero ya no aplica al estado actual del proceso clínico — no se restauró automáticamente. Sigue guardado localmente; contáctanos si lo necesitas recuperar.
-        </p>
+        <div style={{ margin: '0 0 12px', fontSize: 12.5, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px' }}>
+          <p style={{ margin: '0 0 8px', lineHeight: 1.5 }}>
+            Tenías contenido sin guardar en formato <strong>{RECORD_TYPE_LABELS[blockedRestoreType]}</strong>, pero ya no aplica al estado actual del proceso clínico — no se cargó automáticamente para evitar guardar un formato inválido.
+          </p>
+          {blockedRestoreDraft && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setShowBlockedContent(v => !v)}
+                style={{ padding: '6px 12px', background: '#fff', color: '#92400e', border: '1.5px solid #fde68a', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+              >{showBlockedContent ? 'Ocultar contenido' : 'Ver contenido'}</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDraft(blockedRestoreDraft);
+                  setBlockedRestoreType(null);
+                  setBlockedRestoreDraft(null);
+                  setShowBlockedContent(false);
+                }}
+                style={{ padding: '6px 12px', background: '#92400e', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+              >Recuperar en {RECORD_TYPE_LABELS[uiType]}</button>
+            </div>
+          )}
+          {showBlockedContent && blockedRestoreDraft && (
+            <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid var(--s200)' }}>
+              <RecordSectionsForm recordType={blockedRestoreType} value={blockedRestoreDraft} onChange={() => {}} disabled />
+            </div>
+          )}
+        </div>
       )}
 
       {uiType === 'INITIAL' && !treatmentConsentSigned && (
