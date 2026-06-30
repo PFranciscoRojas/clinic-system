@@ -231,7 +231,7 @@ function ChecklistField({
   );
 }
 
-function WidgetField({
+export function WidgetField({
   name,
   value,
   onChange,

@@ -282,7 +282,9 @@ class AIWorker:
         diagnoses = [dict(r) for r in diag_rows]
 
         # 4. Assemble → anonymize (strip any residual PII) → Claude.
-        history = render_history(records, diagnoses)
+        # For the pre-session recap, only the most recent 5 sessions are relevant.
+        history_records = records[-5:] if kind == "recap" else records
+        history = render_history(history_records, diagnoses)
         source_hash = hashlib.sha256(history.encode()).hexdigest()
         anonymized = anonymize(history)
 

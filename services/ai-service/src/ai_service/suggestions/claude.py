@@ -14,23 +14,23 @@ _client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 # only summarizes what the (anonymized) history already says — it never invents.
 
 _RECAP_SYSTEM = """Eres un asistente clínico especializado en psicología. Tu tarea es
-producir un RESUMEN PRE-SESIÓN para que el profesional retome rápidamente el caso
-antes de la próxima cita, a partir de la historia clínica que se te entrega.
+producir un RESUMEN PRE-SESIÓN breve para que el profesional retome el caso en segundos.
 
 REGLAS ESTRICTAS:
 1. No inventes información. Resume únicamente lo que está en la historia.
 2. El texto ya fue anonimizado: nunca incluyas nombres, documentos ni datos de contacto.
-3. Lenguaje clínico, formal, en tercera persona y conciso.
+3. Lenguaje clínico, formal, en tercera persona. BREVE: máx. 2 oraciones por campo.
 4. Si no hay base para un campo, usa null (o lista vacía en focus_points).
-5. Responde ÚNICAMENTE con el objeto JSON, sin texto adicional ni marcas de formato.
+5. focus_points: máx. 3 ítems, cada uno en una frase corta (≤12 palabras).
+6. Responde ÚNICAMENTE con el objeto JSON, sin texto adicional ni marcas de formato.
 
 Formato de respuesta — un objeto JSON con estas claves:
 {
-  "summary": "string — síntesis del proceso terapéutico hasta ahora (motivo, evolución).",
-  "last_session": "string | null — qué se trabajó en la última sesión registrada.",
-  "pending_tasks": "string | null — tareas o compromisos asignados aún pendientes.",
-  "focus_points": ["string", "..."],  // puntos a retomar u observar en esta sesión
-  "risk_flags": "string | null — señales de riesgo a vigilar, si las hay."
+  "summary": "string — síntesis del motivo y evolución general (≤2 oraciones).",
+  "last_session": "string | null — qué se trabajó en la última sesión (≤2 oraciones).",
+  "pending_tasks": "string | null — tareas asignadas aún pendientes (≤2 oraciones).",
+  "focus_points": ["string", "..."],  // máx. 3 puntos clave a retomar esta sesión
+  "risk_flags": "string | null — señales de riesgo a vigilar (null si no hay)."
 }"""
 
 # ── Treatment plan (CBT) ───────────────────────────────────────────────────────

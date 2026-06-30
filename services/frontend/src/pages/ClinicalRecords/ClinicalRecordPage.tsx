@@ -15,8 +15,8 @@ import { RecordSectionsForm, recordToDraft, draftToPayload, validateDraft, toUIR
 import { TEMPLATE_SECTIONS, RECORD_TYPE_LABELS, DISCHARGE_REASONS, riskMeta } from '@/components/clinical/constants';
 import { type MentalExam } from '@/components/clinical/MentalExamChecklist';
 import { isPureAdmin } from '@/lib/clinicalAccess';
-import TemplatedSectionsForm, { type SectionsState } from '@/components/clinical/TemplatedSectionsForm';
-import { recordTemplatesApi, type RecordTemplate } from '@/api/recordTemplates';
+import TemplatedSectionsForm, { WidgetField, type SectionsState } from '@/components/clinical/TemplatedSectionsForm';
+import { recordTemplatesApi, type RecordTemplate, type SectionDef } from '@/api/recordTemplates';
 
 export function ClinicalRecordPage() {
   const { id } = useParams<{ id: string }>();
@@ -300,10 +300,22 @@ function V2RecordView({ record, template }: { record: ClinicalRecord; template?:
   if (template) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-        {template.schema.map(def => {
+        {template.schema.map((def: SectionDef) => {
           const content = sections[def.key];
-          if (!content) return null;
-          const text = typeof content === 'string' ? content : Array.isArray(content) ? content.join(', ') : JSON.stringify(content);
+          if (content === null || content === undefined || content === '') return null;
+          if (def.type === 'widget' && def.widget) {
+            return (
+              <div key={def.key} className="card" style={{ padding: '16px 20px' }}>
+                <p style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>{def.label}</p>
+                <WidgetField name={def.widget} value={content} onChange={() => {}} disabled={true} />
+              </div>
+            );
+          }
+          const text = typeof content === 'string' ? content
+            : Array.isArray(content) ? (content as string[]).join(', ')
+            : typeof content === 'number' ? `${content}${def.scale_max ? ` / ${def.scale_max}` : ''}`
+            : '';
+          if (!text) return null;
           return (
             <div key={def.key} className="card" style={{ padding: '16px 20px' }}>
               <p style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>{def.label}</p>

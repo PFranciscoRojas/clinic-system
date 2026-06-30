@@ -363,6 +363,7 @@ export function AppointmentPage() {
   const [recPaused, setRecPaused] = useState(false);
   const [recStart, setRecStart] = useState(0);
   const [recNote, setRecNote] = useState('');
+  const [savedWhileRecording, setSavedWhileRecording] = useState(false);
   const [micError, setMicError] = useState('');
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   // true between "Finalizar sesión" and the draft appearing — drives the
@@ -460,7 +461,7 @@ export function AppointmentPage() {
     rawNavigate(to as any, opts);
   };
 
-  // Intercept browser back/forward while recording
+  // Intercept browser back/forward and <Link>/<a> clicks while recording
   useEffect(() => {
     if (!recording) return;
     window.history.pushState(null, '', window.location.href);
@@ -468,8 +469,21 @@ export function AppointmentPage() {
       window.history.pushState(null, '', window.location.href);
       setBlockTarget(-1);
     };
+    const onClick = (e: MouseEvent) => {
+      const anchor = (e.target as Element).closest('a[href]') as HTMLAnchorElement | null;
+      if (!anchor) return;
+      const href = anchor.getAttribute('href') ?? '';
+      if (href.startsWith('/clinical-records/') || href.startsWith('#') || !href.startsWith('/')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setBlockTarget(href);
+    };
     window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
+    document.addEventListener('click', onClick, { capture: true });
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      document.removeEventListener('click', onClick, { capture: true });
+    };
   }, [recording]);
 
   // Releases the mic if the user navigates away mid-recording
@@ -670,6 +684,7 @@ export function AppointmentPage() {
     await refetchRecords();
     queryClient.invalidateQueries({ queryKey: ['clinical-records', 'patient', appt?.patient_id] });
     setShowRecordForm(false);
+    if (recording) setSavedWhileRecording(true);
   };
 
   if (isLoading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><Spinner size={28} color="var(--teal)" /></div>;
@@ -804,6 +819,13 @@ export function AppointmentPage() {
             {recNote && (
               <div role="alert" style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, fontSize: 12.5, color: '#92400e' }}>
                 <AlertTriangle size={13} /> {recNote}
+              </div>
+            )}
+            {savedWhileRecording && recording && (
+              <div role="alert" style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 9, fontSize: 13, color: '#78350f' }}>
+                <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+                <span style={{ flex: 1 }}>Registro guardado. La grabación <strong>sigue activa</strong> — usa <strong>Finalizar sesión</strong> para enviar el audio a la IA.</span>
+                <button onClick={() => setSavedWhileRecording(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#92400e', padding: '2px 6px', fontSize: 16, lineHeight: 1 }}>×</button>
               </div>
             )}
             {recoveredChunks.length > 0 && !recording && !pureAdmin && (

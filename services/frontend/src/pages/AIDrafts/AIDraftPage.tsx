@@ -167,7 +167,6 @@ export function AIDraftPage() {
   const baseContent: Record<string, string> = (contentRaw?.sections as Record<string, string>) ?? {};
   const sectionDefs: { key: string; label: string; description: string }[] =
     (TEMPLATE_SECTIONS[recordType] ?? TEMPLATE_SECTIONS.EVOLUTION).map((d: SectionDef) => ({ key: d.key, label: d.label, description: d.placeholder }));
-  const content = contentRaw; // truthiness gate for the render below
   // Whether to render with the data-driven template form or the plain-text form
   const useCustomTemplate = !!customTemplate;
 
@@ -242,7 +241,7 @@ export function AIDraftPage() {
       )}
 
       {/* Draft content */}
-      {(isReady || draft.status === 'APPROVED') && content && (
+      {(isReady || draft.status === 'APPROVED') && (
         <>
           <div style={{
             display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 16,
