@@ -173,12 +173,12 @@ export function AIDraftPage() {
   // Whether to render with the data-driven template form or the plain-text form
   const useCustomTemplate = !!customTemplate;
 
+  const getDraftField = (key: string) => draftEdit[key] ?? baseContent[key] ?? '';
+
   // True when there is genuinely no AI content and the professional has not
   // added any manual content either — shows a clean "empty draft" state.
   const isEmptyDraft = isReady && !editing && !useCustomTemplate
     && sectionDefs.every(({ key }) => !getDraftField(key).trim());
-
-  const getDraftField = (key: string) => draftEdit[key] ?? baseContent[key] ?? '';
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', padding: isMobile ? '0 12px 32px' : 0 }}>
