@@ -219,43 +219,62 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
     }
   };
 
+  // When setup locked the format, lockedTemplateId is a string (even ''); undefined means no lock.
+  const formatLocked = lockedTemplateId !== undefined;
+
   return (
     <div>
-      {/* Record type selector */}
-      <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, color: 'var(--s500)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
-        Tipo de registro <span style={{ fontWeight: 400, textTransform: 'none', color: 'var(--s400)' }}>— elige el formato y se validan solo sus campos obligatorios</span>
-      </p>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        {UI_TYPES.filter(v => allowedTypes.includes(v)).map(val => (
-          <button
-            key={val}
-            onClick={() => requestTypeChange(val)}
-            style={{
-              padding: '6px 14px', borderRadius: 20, border: '1.5px solid',
-              borderColor: uiType === val ? 'var(--teal)' : 'var(--s200)',
-              background: uiType === val ? 'var(--teal)' : '#fff',
-              color: uiType === val ? '#fff' : 'var(--s600)',
-              fontSize: 12, fontWeight: 600, cursor: 'pointer',
-            }}
-          >{RECORD_TYPE_LABELS[val]}</button>
-        ))}
-        {uiType === 'EVOLUTION' && (
+      {/* Record type selector — hidden when format was chosen during session setup */}
+      {!formatLocked && (
+        <>
+          <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, color: 'var(--s500)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
+            Tipo de registro <span style={{ fontWeight: 400, textTransform: 'none', color: 'var(--s400)' }}>— elige el formato y se validan solo sus campos obligatorios</span>
+          </p>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            {UI_TYPES.filter(v => allowedTypes.includes(v)).map(val => (
+              <button
+                key={val}
+                onClick={() => requestTypeChange(val)}
+                style={{
+                  padding: '6px 14px', borderRadius: 20, border: '1.5px solid',
+                  borderColor: uiType === val ? 'var(--teal)' : 'var(--s200)',
+                  background: uiType === val ? 'var(--teal)' : '#fff',
+                  color: uiType === val ? '#fff' : 'var(--s600)',
+                  fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                }}
+              >{RECORD_TYPE_LABELS[val]}</button>
+            ))}
+            {uiType === 'EVOLUTION' && (
+              <button
+                onClick={handleCopyForward}
+                disabled={copying}
+                style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 20, border: '1.5px dashed var(--s300)', background: '#fff', color: 'var(--s600)', fontSize: 12, fontWeight: 600, cursor: copying ? 'wait' : 'pointer' }}
+              >
+                {copying ? <Spinner size={12} color="var(--s500)" /> : <Copy size={12} />}
+                Partir de la evolución anterior
+              </button>
+            )}
+          </div>
+          {hasOpenProcess !== undefined && (
+            <p style={{ margin: '0 0 10px', fontSize: 11.5, color: 'var(--s400)' }}>
+              {hasOpenProcess
+                ? 'El paciente tiene un proceso abierto — registra Evolución, Plan o Alta (la Apertura ya existe).'
+                : 'El paciente no tiene proceso abierto — se registra la Apertura de la historia.'}
+            </p>
+          )}
+        </>
+      )}
+      {formatLocked && uiType === 'EVOLUTION' && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
           <button
             onClick={handleCopyForward}
             disabled={copying}
-            style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 20, border: '1.5px dashed var(--s300)', background: '#fff', color: 'var(--s600)', fontSize: 12, fontWeight: 600, cursor: copying ? 'wait' : 'pointer' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 20, border: '1.5px dashed var(--s300)', background: '#fff', color: 'var(--s600)', fontSize: 12, fontWeight: 600, cursor: copying ? 'wait' : 'pointer' }}
           >
             {copying ? <Spinner size={12} color="var(--s500)" /> : <Copy size={12} />}
             Partir de la evolución anterior
           </button>
-        )}
-      </div>
-      {hasOpenProcess !== undefined && (
-        <p style={{ margin: '0 0 10px', fontSize: 11.5, color: 'var(--s400)' }}>
-          {hasOpenProcess
-            ? 'El paciente tiene un proceso abierto — registra Evolución, Plan o Alta (la Apertura ya existe).'
-            : 'El paciente no tiene proceso abierto — se registra la Apertura de la historia.'}
-        </p>
+        </div>
       )}
 
       {/* Format-switch confirmation: each format has its own fields, so changing
@@ -289,8 +308,8 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
           Recuerda registrar el <strong>consentimiento informado</strong> del paciente (pestaña Consentimientos del perfil) — es obligatorio antes de iniciar tratamiento.
         </p>
       )}
-      {/* Template selector — hidden when lockedTemplateId is set (chosen during session setup) */}
-      {templates.length > 0 && !lockedTemplateId && (
+      {/* Template selector — hidden when format was locked in session setup */}
+      {templates.length > 0 && !formatLocked && (
         <div style={{ marginBottom: 14 }}>
           <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 700, color: 'var(--s500)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
             Formato de registro

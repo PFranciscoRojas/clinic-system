@@ -21,6 +21,7 @@ import { recordTemplatesApi } from '@/api/recordTemplates';
 import { ConsentViewModal } from '@/components/consents/ConsentViewModal';
 import { UnifiedConsentSignModal } from '@/components/consents/UnifiedConsentSignModal';
 import { RecordForm } from '@/components/clinical/RecordForm';
+import type { UIRecordType } from '@/components/clinical/RecordSectionsForm';
 import { RecapCard } from '@/components/clinical/RecapCard';
 import { RiskBanner } from '@/components/clinical/RiskBanner';
 import { aiDraftsApi } from '@/api/aiDrafts';
@@ -333,7 +334,7 @@ export function AppointmentPage() {
   const [showRecordForm, setShowRecordForm] = useState(false);
   // Session setup step: professional chooses type + format BEFORE opening the form
   const [setupOpen, setSetupOpen] = useState(false);
-  const [setupType, setSetupType] = useState<RecordType | null>(null);
+  const [setupType, setSetupType] = useState<UIRecordType | null>(null);
   const [setupTemplateId, setSetupTemplateId] = useState<string>('');
   // When true, the edit modal is open and closing it after saving starts the session
   const [completeDataOpen, setCompleteDataOpen] = useState(false);
@@ -555,13 +556,38 @@ export function AppointmentPage() {
     staleTime: 10_000,
   });
 
-  // Templates available for the setup step — fetched lazily when setup opens
-  const setupApiType: RecordType = setupType ?? 'EVOLUTION';
+  // All templates fetched once when setup opens — unified format picker
   const { data: setupTemplates = [] } = useQuery({
-    queryKey: ['record-templates', setupApiType],
-    queryFn: () => recordTemplatesApi.list(setupApiType),
-    enabled: setupOpen && !!setupType,
+    queryKey: ['record-templates-all'],
+    queryFn: () => recordTemplatesApi.list(),
+    enabled: setupOpen,
+    staleTime: 60_000,
   });
+
+  // Session-level persistence: survives F5 while the appointment is IN_PROGRESS.
+  const setupKey = `sghcp_sess_${id}`;
+  useEffect(() => {
+    if (!appt || appt.status !== 'IN_PROGRESS') return;
+    try {
+      const raw = sessionStorage.getItem(setupKey);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (s.setupType) {
+        setSetupType(s.setupType as UIRecordType);
+        setSetupTemplateId(s.setupTemplateId ?? '');
+        if (s.showRecordForm) setShowRecordForm(true);
+      }
+    } catch { /* corrupt entry — ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appt?.status, setupKey]);
+
+  // Write session state whenever the form/setup changes.
+  useEffect(() => {
+    if (!id || (!showRecordForm && !setupOpen)) return;
+    try {
+      sessionStorage.setItem(setupKey, JSON.stringify({ setupType, setupTemplateId, showRecordForm }));
+    } catch { /* storage full */ }
+  }, [showRecordForm, setupOpen, setupType, setupTemplateId, id, setupKey]);
   const staffMember = orgUsers.find(u => u.id === appt?.staff_id);
   const staffName = staffMember?.display_name ?? staffMember?.email ?? null;
   const activeConsents = (consentsData?.items ?? []).filter(c => !c.revoked_at);
@@ -714,6 +740,7 @@ export function AppointmentPage() {
 
   const handleRecordSaved = async () => {
     sessionStorage.removeItem(lateReasonKey);
+    try { sessionStorage.removeItem(setupKey); } catch { /* ignore */ }
     await refetchRecords();
     queryClient.invalidateQueries({ queryKey: ['clinical-records', 'patient', appt?.patient_id] });
     setShowRecordForm(false);
@@ -956,7 +983,7 @@ export function AppointmentPage() {
                   <span><b>Registro extemporáneo</b> — motivo: {lateReason}. Quedará declarado en la historia y en el PDF.</span>
                 </div>
               )}
-              <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={setupType ?? defaultRecordType} lockedTemplateId={setupTemplateId || undefined} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} hasOpenProcess={hasOpenProcess} onTypeChange={setSelectedRecordType} onTemplateChange={setSelectedTemplateId} onSaved={handleRecordSaved} />
+              <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={setupType ? (setupType === 'PLAN' ? 'EVOLUTION' : setupType as RecordType) : defaultRecordType} lockedTemplateId={setupType !== null ? setupTemplateId : undefined} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} hasOpenProcess={hasOpenProcess} onTypeChange={setSelectedRecordType} onTemplateChange={setSelectedTemplateId} onSaved={handleRecordSaved} />
             </div>
 
             {/* ASIDE — recap + borrador IA como apoyo (sticky en desktop) */}
@@ -1182,7 +1209,7 @@ export function AppointmentPage() {
                   if (!canStartSession) return;
                   const missing = !patient?.document_number || !patient?.birth_date;
                   if (missing) { setCompleteDataOpen(true); }
-                  else { handleStartSession(); }
+                  else { handleStartSession(); openSetup(); }
                 }}
                 disabled={statusLoading || !canStartSession}
                 style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 20px', background: canStartSession ? '#059669' : 'var(--s200)', color: canStartSession ? '#fff' : 'var(--s400)', border: 'none', borderRadius: 9, cursor: statusLoading || !canStartSession ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 700, opacity: statusLoading ? 0.7 : 1 }}
@@ -1403,33 +1430,55 @@ export function AppointmentPage() {
         ) : setupOpen ? (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s600)' }}>Configurar registro</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s600)' }}>¿Qué formato vas a registrar?</span>
               <button aria-label="Cancelar" onClick={() => setSetupOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)', padding: 6, minWidth: 32, minHeight: 32 }}><X size={16} /></button>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, color: 'var(--s500)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Tipo de registro</p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {(['INITIAL', 'EVOLUTION', 'DISCHARGE', 'INTERCONSULTATION'] as RecordType[]).map(t => (
-                    <button key={t} onClick={() => { setSetupType(t); setSetupTemplateId(''); }}
-                      style={{ padding: '7px 14px', borderRadius: 8, border: `1.5px solid ${setupType === t ? 'var(--teal)' : 'var(--s200)'}`, background: setupType === t ? '#f0fdfa' : '#fff', color: setupType === t ? 'var(--teal-d)' : 'var(--s600)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                      {RECORD_TYPE_LABEL[t] ?? t}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {setupTemplates.length > 0 && (
-                <div>
-                  <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, color: 'var(--s500)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Formato de registro</p>
-                  <select value={setupTemplateId} onChange={e => setSetupTemplateId(e.target.value)}
-                    style={{ borderRadius: 8, border: '1.5px solid var(--s200)', padding: '7px 10px', fontSize: 13, color: 'var(--s700)', width: '100%', maxWidth: 320 }}>
-                    <option value="">Formato integrado (Colombia)</option>
-                    {setupTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                </div>
-              )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {/* Built-in formats — one card per type, filtered by process state */}
+              {([
+                { type: 'INITIAL' as UIRecordType, label: 'Apertura', desc: 'Historia clínica inicial del proceso' },
+                { type: 'EVOLUTION' as UIRecordType, label: 'Evolución', desc: 'Nota de sesión de seguimiento' },
+                { type: 'PLAN' as UIRecordType, label: 'Plan TCC', desc: 'Plan terapéutico estructurado' },
+                { type: 'DISCHARGE' as UIRecordType, label: 'Alta', desc: 'Cierre y egreso del proceso' },
+              ].filter(f => {
+                const allowed: UIRecordType[] = hasOpenProcess === undefined ? ['INITIAL','PLAN','EVOLUTION','DISCHARGE'] : hasOpenProcess ? ['PLAN','EVOLUTION','DISCHARGE'] : ['INITIAL'];
+                return allowed.includes(f.type);
+              })).map(f => (
+                <button key={f.type} type="button"
+                  onClick={() => { setSetupType(f.type); setSetupTemplateId(''); confirmSetup(); }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s, background 0.15s' }}
+                  onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLButtonElement).style.background = '#f0fdfa'; }}
+                  onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--s200)'; (e.currentTarget as HTMLButtonElement).style.background = '#fff'; }}
+                >
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--s800)' }}>{f.label}</div>
+                    <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 1 }}>{f.desc}</div>
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal-d)', background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 5, padding: '2px 7px', flexShrink: 0 }}>integrado</span>
+                </button>
+              ))}
+              {/* Custom templates — each is its own format */}
+              {setupTemplates.map(t => {
+                const allowed: UIRecordType[] = hasOpenProcess === undefined ? ['INITIAL','PLAN','EVOLUTION','DISCHARGE'] : hasOpenProcess ? ['PLAN','EVOLUTION','DISCHARGE'] : ['INITIAL'];
+                if (!allowed.includes(t.record_type as UIRecordType)) return null;
+                return (
+                  <button key={t.id} type="button"
+                    onClick={() => { setSetupType(t.record_type as UIRecordType); setSetupTemplateId(t.id); confirmSetup(); }}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s, background 0.15s' }}
+                    onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLButtonElement).style.background = '#f0fdfa'; }}
+                    onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--s200)'; (e.currentTarget as HTMLButtonElement).style.background = '#fff'; }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--s800)' }}>{t.name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 1 }}>Plantilla personalizada</div>
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--s600)', background: 'var(--s100)', border: '1px solid var(--s200)', borderRadius: 5, padding: '2px 7px', flexShrink: 0 }}>{RECORD_TYPE_LABEL[t.record_type] ?? t.record_type}</span>
+                  </button>
+                );
+              })}
+              {/* Fallback button for explicit confirm (shouldn't normally be needed) */}
               <button onClick={confirmSetup} disabled={!setupType}
-                style={{ padding: '10px 20px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 9, cursor: setupType ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 7, alignSelf: 'flex-start', opacity: setupType ? 1 : 0.5 }}>
+                style={{ display: setupType ? 'none' : 'flex', padding: '10px 20px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 9, cursor: setupType ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 700, alignItems: 'center', gap: 7, alignSelf: 'flex-start', opacity: setupType ? 1 : 0.5 }}>
                 <FileText size={14} /> Comenzar registro
               </button>
             </div>
@@ -1451,7 +1500,7 @@ export function AppointmentPage() {
                 <span><b>Registro extemporáneo</b> — motivo: {lateReason}. Quedará declarado en la historia y en el PDF.</span>
               </div>
             )}
-            <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={setupType ?? defaultRecordType} lockedTemplateId={setupTemplateId || undefined} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} hasOpenProcess={hasOpenProcess} onTypeChange={setSelectedRecordType} onTemplateChange={setSelectedTemplateId} onSaved={handleRecordSaved} />
+            <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={setupType ? (setupType === 'PLAN' ? 'EVOLUTION' : setupType as RecordType) : defaultRecordType} lockedTemplateId={setupType !== null ? setupTemplateId : undefined} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} hasOpenProcess={hasOpenProcess} onTypeChange={setSelectedRecordType} onTemplateChange={setSelectedTemplateId} onSaved={handleRecordSaved} />
           </div>
         ) : canWriteNote && !hasApprovedDraft ? (
           <div style={{ textAlign: 'center', padding: '24px 0' }}>
@@ -1509,6 +1558,7 @@ export function AppointmentPage() {
           onSaved={() => {
             queryClient.invalidateQueries({ queryKey: ['patient', appt?.patient_id] });
             handleStartSession();
+            openSetup();
           }}
         />
       )}
