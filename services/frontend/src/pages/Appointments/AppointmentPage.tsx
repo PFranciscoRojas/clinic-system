@@ -576,11 +576,15 @@ export function AppointmentPage() {
   });
 
   // Session-level persistence: survives F5 while the appointment is IN_PROGRESS.
+  // Uses localStorage (not sessionStorage) so it also survives opening the
+  // appointment in a new tab/window — sessionStorage is tab-scoped, so a new
+  // tab would show the format picker again even though the actual draft
+  // content (also in localStorage) is still there.
   const setupKey = `sghcp_sess_${id}`;
   useEffect(() => {
     if (!appt || appt.status !== 'IN_PROGRESS') return;
     try {
-      const raw = sessionStorage.getItem(setupKey);
+      const raw = localStorage.getItem(setupKey);
       if (!raw) return;
       const s = JSON.parse(raw);
       if (s.setupType) {
@@ -596,7 +600,7 @@ export function AppointmentPage() {
   useEffect(() => {
     if (!id || (!showRecordForm && !setupOpen)) return;
     try {
-      sessionStorage.setItem(setupKey, JSON.stringify({ setupType, setupTemplateId, showRecordForm }));
+      localStorage.setItem(setupKey, JSON.stringify({ setupType, setupTemplateId, showRecordForm }));
     } catch { /* storage full */ }
   }, [showRecordForm, setupOpen, setupType, setupTemplateId, id, setupKey]);
   const staffMember = orgUsers.find(u => u.id === appt?.staff_id);
@@ -750,7 +754,7 @@ export function AppointmentPage() {
 
   const handleRecordSaved = async () => {
     sessionStorage.removeItem(lateReasonKey);
-    try { sessionStorage.removeItem(setupKey); } catch { /* ignore */ }
+    try { localStorage.removeItem(setupKey); } catch { /* ignore */ }
     await refetchRecords();
     queryClient.invalidateQueries({ queryKey: ['clinical-records', 'patient', appt?.patient_id] });
     setShowRecordForm(false);

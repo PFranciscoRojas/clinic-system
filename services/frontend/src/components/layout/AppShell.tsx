@@ -16,6 +16,7 @@ import { getLockConfig, onLockConfigChange } from '@/lib/screenLock';
 import { authApi } from '@/api/auth';
 import { legalApi } from '@/api/legal';
 import { Markdown } from '@/components/common/Markdown';
+import { hasPendingUpdate, onSwUpdate, reloadNow } from '@/lib/swUpdate';
 
 // Facturación is shown to CLINIC_ADMIN (billing:reports) — see the conditional
 // nav entry below.
@@ -92,6 +93,19 @@ export function AppShell({ children }: Props) {
 
   // Re-arm the auto-lock effect whenever the user changes the lock config in Settings.
   useEffect(() => onLockConfigChange(() => setLockCfgTick(t => t + 1)), []);
+
+  // A new deploy activated a new service worker (see main.tsx). Show a dismissible
+  // banner instead of reloading mid-edit; if the tab goes hidden while an update
+  // is pending, it's safe to reload immediately since nobody's looking.
+  const [swUpdateAvailable, setSwUpdateAvailable] = useState(hasPendingUpdate);
+  useEffect(() => onSwUpdate(() => setSwUpdateAvailable(true)), []);
+  useEffect(() => {
+    if (!swUpdateAvailable) return;
+    const onHidden = () => { if (document.visibilityState === 'hidden') reloadNow(); };
+    document.addEventListener('visibilitychange', onHidden);
+    return () => document.removeEventListener('visibilitychange', onHidden);
+  }, [swUpdateAvailable]);
+  const [swBannerDismissed, setSwBannerDismissed] = useState(false);
 
   // Auto-lock after the configured idle window — only when a PIN is set (without
   // a PIN there is nothing to unlock with) and the lock is enabled.
@@ -175,6 +189,28 @@ export function AppShell({ children }: Props) {
         />
       )}
       {locked && <LockScreen userId={user?.user_id} onUnlock={() => setLocked(false)} />}
+      {swUpdateAvailable && !swBannerDismissed && (
+        <div style={{
+          position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14,
+          padding: '10px 16px', background: 'var(--s800)', color: '#fff', fontSize: 13,
+        }}>
+          <span>Hay una versión nueva disponible — tu borrador está guardado.</span>
+          <button
+            onClick={reloadNow}
+            style={{ padding: '5px 14px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12.5, fontWeight: 700 }}
+          >
+            Recargar
+          </button>
+          <button
+            onClick={() => setSwBannerDismissed(true)}
+            aria-label="Cerrar aviso"
+            style={{ background: 'none', border: 'none', color: 'var(--s300)', cursor: 'pointer', padding: 4 }}
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
       <div style={{ display: 'flex', height: '100dvh', overflow: 'hidden' }}>
 
         {/* ── Sidebar ─────────────────────────────────────────── */}

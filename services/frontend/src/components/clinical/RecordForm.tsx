@@ -48,6 +48,24 @@ function draftHasContent(d: ClinicalDraft): boolean {
   return false;
 }
 
+// Small ticking "Guardado hace Xs" label, isolated so it doesn't re-render the
+// whole form every few seconds — just visible proof the autosave is alive.
+function SavedIndicator({ at }: { at: number }) {
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => forceTick(n => n + 1), 5_000);
+    return () => clearInterval(t);
+  }, []);
+  const secs = Math.max(0, Math.round((Date.now() - at) / 1000));
+  const label = secs < 5 ? 'Guardado' : secs < 60 ? `Guardado hace ${secs}s` : `Guardado hace ${Math.round(secs / 60)} min`;
+  return (
+    <span style={{ fontSize: 11.5, color: 'var(--s400)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--teal)', display: 'inline-block' }} />
+      {label}
+    </span>
+  );
+}
+
 export function RecordForm({ patientId, appointmentId, defaultType, sessionDate: sessionDateProp, lateEntryReason, treatmentConsentSigned, hasOpenProcess, onTypeChange, onTemplateChange, lockedTemplateId, onSaved }: RecordFormProps) {
   const storageKey = appointmentId ? `clinical-draft-${appointmentId}` : `clinical-draft-patient-${patientId}`;
   // Only the types the open-process rule permits are offered, so the user can't
@@ -63,6 +81,14 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   const [saving, setSaving] = useState(false);
   const [copying, setCopying] = useState(false);
   const [restored, setRestored] = useState(false);
+  // Timestamp of the last successful localStorage write — drives a small
+  // "Guardado hace Xs" indicator so the professional has visible proof the
+  // autosave is actually running (and an early signal if it ever stops).
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  // Set when a localStorage draft exists but its uiType no longer fits the
+  // current open-process rule — content is NOT silently discarded, the
+  // professional just needs to know it's there instead of seeing it vanish.
+  const [blockedRestoreType, setBlockedRestoreType] = useState<UIRecordType | null>(null);
   const [pendingType, setPendingType] = useState<UIRecordType | null>(null);
   const [err, setErr] = useState('');
 
@@ -124,7 +150,12 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         const saved = JSON.parse(raw);
-        if (saved.uiType && !allowedTypes.includes(saved.uiType)) return;
+        if (saved.uiType && !allowedTypes.includes(saved.uiType)) {
+          // Don't restore — the open-process rule changed since this was saved
+          // — but tell the professional instead of letting it vanish silently.
+          setBlockedRestoreType(saved.uiType);
+          return;
+        }
         if (saved.uiType) setUIType(saved.uiType);
         if (saved.draft) {
           const def = emptyDraft();
@@ -151,6 +182,7 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
           };
           setDraft(merged);
           setRestored(true);
+          setLastSavedAt(Date.now());
         }
       }
     } catch { /* corrupt draft — start clean */ }
@@ -169,7 +201,10 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   // is not always fired) as a belt-and-suspenders complement to the cleanup.
   useEffect(() => {
     const save = () => {
-      try { localStorage.setItem(storageKey, JSON.stringify({ uiType, draft })); } catch { /* storage full */ }
+      try {
+        localStorage.setItem(storageKey, JSON.stringify({ uiType, draft }));
+        if (draftHasContent(draft)) setLastSavedAt(Date.now());
+      } catch { /* storage full */ }
     };
     const t = setTimeout(save, 600);
     const onHide = () => save();
@@ -345,6 +380,11 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
           Borrador restaurado automáticamente.
         </p>
       )}
+      {blockedRestoreType && (
+        <p style={{ margin: '0 0 12px', fontSize: 12.5, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px' }}>
+          Tenías contenido sin guardar en formato <strong>{RECORD_TYPE_LABELS[blockedRestoreType]}</strong>, pero ya no aplica al estado actual del proceso clínico — no se restauró automáticamente. Sigue guardado localmente; contáctanos si lo necesitas recuperar.
+        </p>
+      )}
 
       {uiType === 'INITIAL' && !treatmentConsentSigned && (
         <p style={{ margin: '0 0 12px', fontSize: 12.5, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px' }}>
@@ -389,6 +429,12 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#fee2e2', borderRadius: 8, marginBottom: 12 }}>
           <AlertTriangle size={14} color="#dc2626" />
           <span style={{ fontSize: 13, color: '#991b1b' }}>{err}</span>
+        </div>
+      )}
+
+      {lastSavedAt && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <SavedIndicator at={lastSavedAt} />
         </div>
       )}
 
