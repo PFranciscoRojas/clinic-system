@@ -679,7 +679,10 @@ export function NewAppointmentPage() {
   const [reminder,         setReminder]        = useState<boolean>(true);
   const [showModal,        setShowModal]       = useState<boolean>(false);
   const [confirmed,        setConfirmed]       = useState<boolean>(false);
-  const [selectedStaffId,  setSelectedStaffId] = useState<string>(user?.user_id ?? '');
+  // Admin's own id is never a valid default — they're CLINIC_ADMIN, not staff,
+  // so it would never match an <option> in the professional <select> below and
+  // would silently submit as staff_id while the UI shows a different name.
+  const [selectedStaffId,  setSelectedStaffId] = useState<string>(isAdmin ? '' : (user?.user_id ?? ''));
 
   // Org members (for admin staff selector). Shares the ['org-users'] cache key
   // with AppointmentPage/SettingsPage — must return the same raw shape (full
@@ -708,7 +711,10 @@ export function NewAppointmentPage() {
     patientsApi.get(returnPatientId).then(setPatient).catch(() => {});
   }, [returnPatientId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const effectiveStaffId = selectedStaffId || user?.user_id || '';
+  // Mirrors the auto-select effect above so a fast submit can't race ahead of
+  // it: while orgUsers is still loading, fall back to the first professional
+  // instead of the admin's own (non-staff) id.
+  const effectiveStaffId = selectedStaffId || (isAdmin ? (orgUsers[0]?.id ?? '') : (user?.user_id ?? ''));
 
   // ── Staff appointments for the selected day (slot blocking + workload) ────────
   const { data: dayAppointments = [] } = useQuery<Appointment[]>({
