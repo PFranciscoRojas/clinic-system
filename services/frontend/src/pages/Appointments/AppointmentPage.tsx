@@ -122,6 +122,14 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
   };
 
   if (draftId && draft) {
+    // A DRAFT_READY status only means the pipeline finished — it says nothing
+    // about whether the AI actually found clinical content to structure. Check
+    // the same way the draft page itself decides whether to show its "empty"
+    // state, so the badge here never promises a draft that isn't there.
+    const sections = (draft.draft_content_plain as Record<string, unknown> | null)?.sections as Record<string, string> | undefined;
+    const isEmptyDraft = draft.status === 'DRAFT_READY'
+      && (!sections || Object.values(sections).every(v => !(v ?? '').toString().trim()));
+
     const statusCfg: Record<string, { label: string; color: string; bg: string; pulse?: boolean }> = {
       PENDING:     { label: 'En cola',             color: CLR_NEUTRAL.icon, bg: CLR_NEUTRAL.bg },
       PROCESSING:  { label: 'Procesando',           color: CLR_PROC.text,    bg: CLR_PROC.bg, pulse: true },
@@ -129,7 +137,9 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
       APPROVED:    { label: 'Aprobado',             color: '#fff',           bg: CLR_SUCCESS.icon },
       ERROR:       { label: 'Error',                color: CLR_DANGER.text,  bg: CLR_DANGER.bg },
     };
-    const cfg = statusCfg[draft.status] ?? statusCfg.PENDING;
+    const cfg = isEmptyDraft
+      ? { label: 'Sin contenido clínico', color: CLR_WARN.text, bg: CLR_WARN.bg }
+      : (statusCfg[draft.status] ?? statusCfg.PENDING);
     const isProcessing = draft.status === 'PENDING' || draft.status === 'PROCESSING';
 
     return (
@@ -144,14 +154,15 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
               {cfg.label}
             </span>
             {isProcessing && <span style={{ fontSize: 11, color: 'var(--s400)' }}>Actualizando cada 3s…</span>}
+            {isEmptyDraft && <span style={{ fontSize: 11, color: 'var(--s400)' }}>La IA no encontró nada que estructurar — redacta manualmente.</span>}
           </div>
         </div>
         {(draft.status === 'DRAFT_READY' || draft.status === 'APPROVED') && (
           <a
             href={`/ai-drafts/${draftId}?appointment_id=${appointmentId}&session_date=${sessionDate}&record_type=${recordType}${linkedRecordId ? `&record_id=${linkedRecordId}` : ''}`}
-            style={{ padding: '7px 14px', background: linkedRecordId ? 'var(--teal)' : '#f59e0b', color: '#fff', borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
+            style={{ padding: '7px 14px', background: linkedRecordId ? 'var(--teal)' : isEmptyDraft ? 'var(--s400)' : '#f59e0b', color: '#fff', borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
           >
-            <Brain size={13} /> {linkedRecordId ? 'Comparar con IA' : 'Revisar borrador'}
+            <Brain size={13} /> {linkedRecordId ? 'Comparar con IA' : isEmptyDraft ? 'Redactar manualmente' : 'Revisar borrador'}
           </a>
         )}
       </div>
