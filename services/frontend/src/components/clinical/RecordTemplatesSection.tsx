@@ -8,20 +8,6 @@ import {
 } from '../../api/recordTemplates';
 import { RecordType } from '../../api/clinicalRecords';
 
-// ── Labels ──────────────────────────────────────────────────────────────────
-const RECORD_TYPE_LABELS: Record<RecordType, string> = {
-  INITIAL: 'Apertura / Inicial',
-  EVOLUTION: 'Evolución',
-  DISCHARGE: 'Alta',
-  INTERCONSULTATION: 'Interconsulta',
-};
-
-const RECORD_TYPE_SHORT: Record<RecordType, string> = {
-  INITIAL: 'Apertura',
-  EVOLUTION: 'Evolución',
-  DISCHARGE: 'Alta',
-  INTERCONSULTATION: 'Interconsulta',
-};
 
 const WIDGET_LABELS: Record<string, string> = {
   mental_exam: 'Examen mental',
@@ -196,9 +182,7 @@ interface EditorProps {
 function TemplateEditor({ initial, onClose }: EditorProps) {
   const qc = useQueryClient();
   const [name, setName] = useState(initial?.name ?? '');
-  const [recordType, setRecordType] = useState<RecordType>(
-    (initial?.record_type as RecordType) ?? 'EVOLUTION',
-  );
+  const recordType: RecordType = (initial?.record_type as RecordType) ?? 'EVOLUTION';
   const [markdown, setMarkdown] = useState(initial?.source_markdown ?? '');
   const [isDefault, setIsDefault] = useState(initial?.is_default ?? false);
   const [preview, setPreview] = useState<SectionDef[]>(initial?.schema ?? []);
@@ -207,7 +191,6 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
 
   const nameFocus = useFocus();
   const mdFocus = useFocus();
-  const selectFocus = useFocus();
 
   const parsePreview = useCallback(async (md: string) => {
     if (!md.trim()) { setPreview([]); setPreviewError(''); return; }
@@ -276,39 +259,17 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
       {/* Body */}
       <div style={{ padding: '18px 18px 0' }}>
 
-        {/* Name + Type row */}
-        <div className="grid-2" style={{ marginBottom: 16 }}>
-          <div>
-            <label style={S.label}>Nombre</label>
-            <input
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="Nombre de la plantilla"
-              style={{ ...S.input, ...(nameFocus.focused ? S.inputFocus : {}) }}
-              onFocus={nameFocus.onFocus}
-              onBlur={nameFocus.onBlur}
-            />
-          </div>
-          {!initial && (
-            <div>
-              <label style={S.label}>Tipo de registro</label>
-              <select
-                value={recordType}
-                onChange={e => setRecordType(e.target.value as RecordType)}
-                style={{
-                  ...S.select,
-                  width: '100%',
-                  ...(selectFocus.focused ? { boxShadow: '0 0 0 2px var(--teal-10)', border: '1px solid var(--teal)' } : {}),
-                }}
-                onFocus={selectFocus.onFocus}
-                onBlur={selectFocus.onBlur}
-              >
-                {(['INITIAL', 'EVOLUTION', 'DISCHARGE'] as RecordType[]).map(rt => (
-                  <option key={rt} value={rt}>{RECORD_TYPE_LABELS[rt]}</option>
-                ))}
-              </select>
-            </div>
-          )}
+        {/* Name */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={S.label}>Nombre</label>
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="Nombre de la plantilla"
+            style={{ ...S.input, ...(nameFocus.focused ? S.inputFocus : {}) }}
+            onFocus={nameFocus.onFocus}
+            onBlur={nameFocus.onBlur}
+          />
         </div>
 
         {/* Markdown editor */}
@@ -526,19 +487,6 @@ function TemplateCard({ tpl }: { tpl: RecordTemplate }) {
             }}>
               Activo
             </span>
-            <span style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              fontSize: 11,
-              background: 'var(--teal-l)',
-              color: 'var(--teal-dark)',
-              border: '1px solid var(--teal-100)',
-              borderRadius: 99,
-              padding: '1px 8px',
-              fontWeight: 600,
-            }}>
-              {RECORD_TYPE_SHORT[tpl.record_type as RecordType] ?? tpl.record_type}
-            </span>
           </div>
           <p style={{ fontSize: 12, color: 'var(--s400)' }}>
             {tpl.schema.length} {tpl.schema.length === 1 ? 'sección' : 'secciones'} · v{tpl.version}
@@ -625,12 +573,10 @@ function TemplateCard({ tpl }: { tpl: RecordTemplate }) {
 // ── Main component ──────────────────────────────────────────────────────────
 export default function RecordTemplatesSection() {
   const [creating, setCreating] = useState(false);
-  const [filterType, setFilterType] = useState<RecordType | ''>('');
-  const filterFocus = useFocus();
 
   const { data: templates = [], isLoading } = useQuery({
-    queryKey: ['record-templates', filterType],
-    queryFn: () => recordTemplatesApi.list(filterType as RecordType || undefined),
+    queryKey: ['record-templates'],
+    queryFn: () => recordTemplatesApi.list(),
   });
 
   return (
@@ -659,25 +605,6 @@ export default function RecordTemplatesSection() {
           {creating ? 'Cancelar' : 'Nueva plantilla'}
         </button>
       </div>
-
-      {/* Filter */}
-      <select
-        value={filterType}
-        onChange={e => setFilterType(e.target.value as RecordType | '')}
-        style={{
-          ...S.select,
-          width: '100%',
-          maxWidth: 260,
-          ...(filterFocus.focused ? { boxShadow: '0 0 0 2px var(--teal-10)', border: '1px solid var(--teal)' } : {}),
-        }}
-        onFocus={filterFocus.onFocus}
-        onBlur={filterFocus.onBlur}
-      >
-        <option value="">Todos los tipos</option>
-        {(['INITIAL', 'EVOLUTION', 'DISCHARGE'] as RecordType[]).map(rt => (
-          <option key={rt} value={rt}>{RECORD_TYPE_LABELS[rt]}</option>
-        ))}
-      </select>
 
       {/* Inline create panel */}
       {creating && (

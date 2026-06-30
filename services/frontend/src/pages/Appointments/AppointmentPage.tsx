@@ -631,7 +631,6 @@ export function AppointmentPage() {
     // appears while the professional can still react — not mid-session.
     if (recordingConsent) await startRecording();
     await handleStatusChange('IN_PROGRESS');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleFinishSession = async () => {
@@ -1486,12 +1485,28 @@ export function AppointmentPage() {
         ) : showRecordForm ? (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s600)' }}>
-                Nuevo registro · {RECORD_TYPE_LABEL[setupType ?? defaultRecordType] ?? (setupType ?? defaultRecordType)}
-                {setupTemplateId && setupTemplates.find(t => t.id === setupTemplateId) && (
-                  <span style={{ fontWeight: 400, color: 'var(--s400)', marginLeft: 6 }}>— {setupTemplates.find(t => t.id === setupTemplateId)!.name}</span>
-                )}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s600)' }}>
+                  {RECORD_TYPE_LABEL[setupType ?? defaultRecordType] ?? (setupType ?? defaultRecordType)}
+                  {setupTemplateId && setupTemplates.find(t => t.id === setupTemplateId) && (
+                    <span style={{ fontWeight: 400, color: 'var(--s400)', marginLeft: 6 }}>— {setupTemplates.find(t => t.id === setupTemplateId)!.name}</span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const draftKey = `clinical-draft-${id}`;
+                    const hasDraft = (() => { try { return !!localStorage.getItem(draftKey); } catch { return false; } })();
+                    if (hasDraft && !confirm('¿Cambiar formato? El contenido que hayas escrito se perderá.')) return;
+                    try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
+                    setShowRecordForm(false);
+                    setSetupOpen(true);
+                  }}
+                  style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal-d, var(--teal))', background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 6, padding: '3px 9px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                >
+                  Cambiar formato
+                </button>
+              </div>
               <button aria-label="Cerrar registro clínico" onClick={() => { setShowRecordForm(false); setSetupOpen(false); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)', padding: 6, minWidth: 32, minHeight: 32 }}><X size={16} /></button>
             </div>
             {lateReason && (

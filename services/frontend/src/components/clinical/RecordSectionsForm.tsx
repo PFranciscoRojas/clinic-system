@@ -699,20 +699,24 @@ export function RecordSectionsForm({ recordType, value, onChange, disabled }: Pr
           <div>
             <p style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600, color: 'var(--s700)' }}>
               Barreras de resistencia observadas
-              <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--s400)', marginLeft: 6 }}>(marcar con X solo si aplica)</span>
+              <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--s400)', marginLeft: 6 }}>(marca solo si aplica)</span>
             </p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: sessionEval.barriers.includes('other') ? 8 : 0 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: sessionEval.barriers.includes('other') ? 8 : 0 }}>
               {RESISTANCE_BARRIER_OPTIONS.map(opt => {
                 const active = sessionEval.barriers.includes(opt.key);
                 return (
-                  <label key={opt.key} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: disabled ? 'default' : 'pointer' }}>
-                    <input
-                      type="checkbox" checked={active} disabled={disabled}
-                      onChange={() => setEval({ barriers: toggleArr(sessionEval.barriers, opt.key) })}
-                      style={{ accentColor: '#dc2626', cursor: disabled ? 'default' : 'pointer' }}
-                    />
-                    <span style={{ fontSize: 12, color: 'var(--s700)' }}>{opt.label}</span>
-                  </label>
+                  <button
+                    key={opt.key} type="button" disabled={disabled}
+                    onClick={() => setEval({ barriers: toggleArr(sessionEval.barriers, opt.key) })}
+                    style={{
+                      padding: '5px 14px', borderRadius: 16, fontSize: 12, fontWeight: 600,
+                      cursor: disabled ? 'default' : 'pointer',
+                      border: `1.5px solid ${active ? 'transparent' : 'var(--s200)'}`,
+                      background: active ? '#dc2626' : '#fff',
+                      color: active ? '#fff' : 'var(--s600)',
+                      transition: 'all 0.15s',
+                    }}
+                  >{opt.label}</button>
                 );
               })}
             </div>
