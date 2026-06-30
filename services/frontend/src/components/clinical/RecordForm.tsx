@@ -163,9 +163,15 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
 
   // Apply default template when apiType changes and a default is available.
-  // Skipped when a template is locked by the parent — it already pre-selected one.
+  // Skipped when a template is locked by the parent — it already pre-selected
+  // one. lockedTemplateId is '' (not undefined) when the parent explicitly
+  // locked to the *built-in* integrated format — `if (lockedTemplateId)`
+  // treats '' as falsy and would fall through, silently switching the
+  // professional into a default custom template (and wiping customSections)
+  // even though they chose the built-in format. Must check !== undefined to
+  // match formatLocked's own definition below.
   useEffect(() => {
-    if (lockedTemplateId) return;
+    if (lockedTemplateId !== undefined) return;
     const def = templates.find(t => t.is_default);
     if (def && !selectedTemplateId) {
       setSelectedTemplateId(def.id);
@@ -223,21 +229,41 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   const gotContentRef = useRef(false);
 
   // Effect 1 — localStorage, the fast same-device path. Runs once on mount.
+  //
+  // Custom-template records keep their content in customSections, not draft
+  // — a record using a template (lockedTemplateId/setupTemplateId set to a
+  // real id) never touches `draft` at all. Restoring only {uiType, draft}
+  // here, as this used to, silently restored *nothing* for every
+  // template-based record: the saved draft was always present but always
+  // empty, so this effect believed it had recovered something and never let
+  // effect 2 fall back to the server — while the professional's actual
+  // typed content (customSections) was never part of what got saved here in
+  // the first place. gotContentRef is only set when there's something a
+  // human actually typed, checked with the same logic the autosave tick
+  // uses to decide whether there's anything worth sending.
   useEffect(() => {
     try {
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         const saved = JSON.parse(raw);
+        const savedCustomSections = (saved.customSections ?? {}) as SectionsState;
+        const hasTemplateContent = Object.keys(savedCustomSections).length > 0;
         if (saved.uiType && !allowedTypes.includes(saved.uiType)) {
           // Don't load it as the live draft — submitting that type would be
           // rejected by the server — but still show the actual content
           // read-only instead of just describing that it exists.
           setBlockedRestoreType(saved.uiType);
           if (saved.draft) setBlockedRestoreDraft(mergeSavedDraft(saved.draft as Partial<ClinicalDraft>));
-          gotContentRef.current = true; // a blocked restore still counts — don't also fetch the server
+          if (hasTemplateContent || saved.draft) gotContentRef.current = true; // a blocked restore still counts — don't also fetch the server
         } else {
           if (saved.uiType) setUIType(saved.uiType);
-          if (saved.draft) {
+          if (saved.selectedTemplateId) setSelectedTemplateId(saved.selectedTemplateId);
+          if (hasTemplateContent) {
+            setCustomSections(savedCustomSections);
+            setRestored(true);
+            setLastSavedAt(Date.now());
+            gotContentRef.current = true;
+          } else if (saved.draft && draftHasContent(mergeSavedDraft(saved.draft as Partial<ClinicalDraft>))) {
             setDraft(mergeSavedDraft(saved.draft as Partial<ClinicalDraft>));
             setRestored(true);
             setLastSavedAt(Date.now());
@@ -308,8 +334,10 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   useEffect(() => {
     const save = () => {
       try {
-        localStorage.setItem(storageKey, JSON.stringify({ uiType, draft }));
-        if (draftHasContent(draft)) setLastSavedAt(Date.now());
+        // customSections/selectedTemplateId must travel with uiType/draft —
+        // a custom-template record's real content lives there, not in draft.
+        localStorage.setItem(storageKey, JSON.stringify({ uiType, draft, customSections, selectedTemplateId }));
+        if (draftHasContent(draft) || Object.keys(customSections).length > 0) setLastSavedAt(Date.now());
       } catch { /* storage full */ }
     };
     const t = setTimeout(save, 600);
@@ -322,7 +350,7 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
       window.removeEventListener('pagehide', onHide);
       document.removeEventListener('visibilitychange', onHide);
     };
-  }, [storageKey, uiType, draft]);
+  }, [storageKey, uiType, draft, customSections, selectedTemplateId]);
 
   // Fase 2 — server-side autosave. A ref mirrors the latest content-bearing
   // state so the 25s interval (created once, stable) never reads stale
