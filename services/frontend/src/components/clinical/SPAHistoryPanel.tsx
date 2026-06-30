@@ -51,7 +51,15 @@ function Checkbox({ id, checked, onChange, label, disabled }: {
   );
 }
 
-export function SPAHistoryPanel({ spa, familyMH, onSPAChange, onFamilyMHChange, disabled }: Props) {
+export function SPAHistoryPanel({ spa: rawSpa, familyMH, onSPAChange, onFamilyMHChange, disabled }: Props) {
+  // Guarantee nested objects are always defined regardless of data source
+  // (old localStorage drafts may have saved spaHistory without alcohol/tobacco/other).
+  const spa: SPAHistoryData = {
+    present: rawSpa?.present ?? false,
+    alcohol: Object.assign({ present: false, frequency: '' },                rawSpa?.alcohol ?? {}),
+    tobacco: Object.assign({ present: false, frequency: '' },                rawSpa?.tobacco ?? {}),
+    other:   Object.assign({ present: false, substance: '', frequency: '' }, rawSpa?.other   ?? {}),
+  };
   const setSPA = (patch: Partial<SPAHistoryData>) => onSPAChange({ ...spa, ...patch });
   const setFMH = (patch: Partial<FamilyMentalHealthData>) => onFamilyMHChange({ ...familyMH, ...patch });
 
