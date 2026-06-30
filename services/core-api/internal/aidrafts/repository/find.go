@@ -59,6 +59,32 @@ func (r *Repository) ListByOrg(ctx context.Context, orgID, status string) ([]*ai
 		LEFT JOIN patients p ON p.id = d.patient_id
 		WHERE d.organization_id = $1
 		  AND ($2 = '' OR d.status::text = $2)
+		  -- hide orphan drafts superseded by an approved record or draft on the same appointment
+		  AND NOT (
+		    d.appointment_id IS NOT NULL
+		    AND d.status NOT IN ('APPROVED', 'REJECTED')
+		    AND (
+		      EXISTS (
+		        SELECT 1 FROM ai_drafts d2
+		        WHERE d2.appointment_id = d.appointment_id
+		          AND d2.organization_id = $1
+		          AND d2.status = 'APPROVED'
+		          AND d2.id <> d.id
+		      )
+		      OR EXISTS (
+		        SELECT 1 FROM clinical_records cr
+		        WHERE cr.appointment_id = d.appointment_id
+		          AND cr.organization_id = $1
+		          AND cr.status = 'APPROVED'
+		      )
+		    )
+		  )
+		  -- hide empty stubs (no audio, no content) left by interrupted uploads
+		  AND NOT (
+		    d.audio_path_enc IS NULL
+		    AND d.draft_content_enc IS NULL
+		    AND d.status IN ('PENDING', 'ERROR')
+		  )
 		ORDER BY d.created_at DESC
 		LIMIT 100
 	`, orgID, status)
