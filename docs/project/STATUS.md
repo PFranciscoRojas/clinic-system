@@ -27,12 +27,12 @@
 
 ### Últimos commits a `main`
 
+- `2a04904` fix(clinical): customSections (plantillas personalizadas) nunca se guardaba ni restauraba — 2026-06-30
+- `31108ab` fix(clinical): condición de carrera en la recuperación desde el servidor — 2026-06-30
+- `0e53e1d` fix(clinical): borrador bloqueado ahora es visible y recuperable — 2026-06-30
 - `aec74c3` fix(clinical): PDF con códigos crudos sin traducir + vista previa incompleta — 2026-06-30
 - `b2b3057` fix(agenda): AssignPatient no vinculaba al profesional con el paciente — 2026-06-30
 - `1568af3` feat(clinical): autoguardado real en el servidor para registros clínicos (Fase 2) — 2026-06-30
-- `a368d42` fix(clinical): atacar la pérdida de contenido al escribir desde la raíz (Fase 1) — 2026-06-30
-- `e10237c`/`7dc76c3` fix(agenda): selector de profesional enviaba el ID del admin — 2026-06-30
-- `929ac9c`/`7f217cf`/`ec85011`/`ac1467a`/`00a7213` fix(clinical): picker de formato, 4 vs 7 formatos, crash SPA — 2026-06-30
 
 > Commits directos a `main` (flujo actual). Branch protection sigue pendiente (BACKLOG → Infraestructura).
 > **CI/CD:** `test → build → smoke`. `go test ./...` bloquea el build; `tsc --noEmit` corre en cada PR de frontend; smoke test de 8 pasos HTTP corre tras cada deploy al VPS.
@@ -92,7 +92,7 @@
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google Calendar OAuth (añadidos 2026-06-24)
 - `ALLOW_DATA_RESET=true` → cambiar a `false` en go-live (1.0.0)
 - Demo: `admin@demo.clinica.co` / `Admin1234!` · tenant ID `005e349d2fbc5d30000000003`
-- Marcela org (real, 5 usuarios): `aa2cbd1f-76b2-4cf9-bdde-dcf403ad1f04` (slug `marcela-chapues`) — token MP **live** ✅
+- Marcela org (real, 5 usuarios): `aa2cbd1f-76b2-4cf9-bdde-dcf403ad1f04` (slug `marcela-chapues`) — token MP **live** ✅ · desde sesión 24 usa **plantillas personalizadas para los 4 formatos** (Apertura `ee720934`, Plan Terapéutico `6c0c21db`, Nota de Evolución `9e3d4685`, Informe de Cierre `89995be0`) — ya no formato integrado
 - Marcela org #2 (`ps.marcelachapues@gmail.com`, CLINIC_ADMIN+PROFESSIONAL, 3 pacientes — **ya no vacía**, en uso activo desde sesión 23): `fbf1fb3d-607d-4f4d-9870-05e95f63a1a3` (slug `marcelachapues`)
 
 ---

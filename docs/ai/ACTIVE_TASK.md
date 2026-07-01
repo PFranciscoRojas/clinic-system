@@ -1,13 +1,13 @@
 ## Sin tarea pendiente
 
-Sesión 23 cerrada limpiamente. Todo lo trabajado quedó implementado, probado y desplegado a producción (frontend + backend vía CI + migración 000048 aplicada manualmente en VPS). Fase 1 y Fase 2 del fix de pérdida de contenido completas — ya no queda diseño pendiente de implementar.
+Sesión 24 cerrada limpiamente. Bug crítico de pérdida de contenido real en producción (registros con plantilla personalizada) encontrado, corregido y confirmado funcionando por el usuario ("funciono perfecto"). Todo desplegado a producción.
 
 ## Sugerencia de siguiente paso
 
 Basándome en STATUS.md (bloqueantes + roadmap) y BACKLOG.md, lo más valioso a atacar ahora es:
 
-1. **Validación de demanda con beta testers** — el bloqueante más crítico sigue sin iniciar formalmente, aunque en la práctica Marcela Chapues ya está operando como beta real desde esta sesión (2 organizaciones activas, reportando bugs reales en producción). Vale la pena preguntarle directamente si pagaría y a qué precio, y contactar a la segunda colega disponible con el mensaje plantilla del BACKLOG.
+1. **Seguir de cerca a Marcela como beta activa** — ya está usando el sistema en producción con plantillas personalizadas en los 4 formatos y reportando bugs reales según van apareciendo. Cada sesión reciente (21-24) ha sido resolver fricción real de su uso diario — esto ES la validación de demanda, solo falta preguntarle directamente si pagaría y a qué precio.
 
-2. **PHQ-9 / Escalas MBC (Fase 1)** — si la validación beta confirma interés, la Fase 1 del plan MBC (`docs/ai/PLAN_ASSESSMENTS.md`) es el diferenciador más claro frente a la competencia colombiana. Costo de licencias $0.
+2. **Visor de borrador bloqueado + plantillas personalizadas (BACKLOG, sesión 24)** — gap menor identificado pero no implementado: si un borrador bloqueado (tipo ya no válido) usaba plantilla personalizada, el visor de recuperación no lo muestra. Bajo impacto pero vale cerrarlo dado que ahora todo el uso real de Marcela pasa por plantillas.
 
-3. **Go-live 1.0.0** — si hay al menos 1 beta confirmando pago: cambiar `ALLOW_DATA_RESET=false` en VPS, precio real ($180.000/mes), validación legal ToS/privacidad con abogado.
+3. **PHQ-9 / Escalas MBC (Fase 1)** — si la validación beta confirma interés, la Fase 1 del plan MBC (`docs/ai/PLAN_ASSESSMENTS.md`) es el diferenciador más claro frente a la competencia colombiana. Costo de licencias $0.

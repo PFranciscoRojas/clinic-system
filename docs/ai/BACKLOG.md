@@ -61,6 +61,7 @@
 ## Historia clínica — UX pendiente (sesión 20)
 
 - ✅ **Picker de formato antes de abrir el RecordForm (2026-06-30)** — implementado como "paso de configuración" inline: al hacer clic en "Crear registro clínico" o "+ Nuevo", se muestra una tarjeta de setup con selector de tipo + selector de plantilla (cuando hay templates disponibles). Al confirmar, RecordForm abre con `defaultType` y `lockedTemplateId` preseleccionados y el selector de formato oculto. `AppointmentPage` con estados `setupOpen/setupType/setupTemplateId`; `RecordForm` con prop `lockedTemplateId`.
+- **Visor de "borrador bloqueado" no cubre plantillas personalizadas (2026-06-30, sesión 24)** — El fix de `0e53e1d` (mostrar/recuperar contenido cuando el formato ya no aplica al proceso clínico) solo renderiza `blockedRestoreDraft` vía `RecordSectionsForm` (formato integrado). Si el borrador bloqueado usaba una plantilla personalizada (`customSections`), el visor de solo-lectura no lo muestra — necesitaría capturar también `customSections`/`selectedTemplateId` en el estado bloqueado y renderizar con `TemplatedSectionsForm` cuando corresponda. Dado que la org de Marcela ahora usa plantillas personalizadas para los 4 formatos, este caso ya no es marginal.
 
 ## Plantillas de registro — Fase 2 (post sesión 15)
 
