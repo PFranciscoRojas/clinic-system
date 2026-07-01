@@ -217,6 +217,22 @@ func (r *Repository) FindGoalByID(ctx context.Context, orgID, planID, goalID str
 	return g, nil
 }
 
+func (r *Repository) DeleteGoal(ctx context.Context, orgID, planID, goalID string) error {
+	tag, err := r.q(ctx).Exec(ctx, `
+		DELETE FROM treatment_goals g
+		USING treatment_plans p
+		WHERE g.id = $1 AND g.plan_id = $2 AND p.id = g.plan_id
+		  AND p.organization_id = $3
+	`, goalID, planID, orgID)
+	if err != nil {
+		return fmt.Errorf("delete treatment_goal: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return treatmentplans.ErrGoalNotFound
+	}
+	return nil
+}
+
 func (r *Repository) UpdateGoal(ctx context.Context, p treatmentplans.UpdateGoalParams) error {
 	tag, err := r.q(ctx).Exec(ctx, `
 		UPDATE treatment_goals g SET

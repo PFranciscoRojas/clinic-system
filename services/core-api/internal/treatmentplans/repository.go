@@ -58,4 +58,5 @@ type Repository interface {
 	ListGoalsByPlan(ctx context.Context, planID string) ([]*RawGoal, error)
 	FindGoalByID(ctx context.Context, orgID, planID, goalID string) (*RawGoal, error)
 	UpdateGoal(ctx context.Context, p UpdateGoalParams) error
+	DeleteGoal(ctx context.Context, orgID, planID, goalID string) error
 }

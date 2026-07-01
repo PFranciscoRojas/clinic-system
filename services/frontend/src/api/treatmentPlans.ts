@@ -52,4 +52,6 @@ export const treatmentPlansApi = {
     api.post<{ id: string }>(`/treatment-plans/${planId}/goals`, body),
   updateGoal: (planId: string, goalId: string, body: UpdateGoalInput) =>
     api.patch<void>(`/treatment-plans/${planId}/goals/${goalId}`, body),
+  deleteGoal: (planId: string, goalId: string) =>
+    api.delete<void>(`/treatment-plans/${planId}/goals/${goalId}`),
 };

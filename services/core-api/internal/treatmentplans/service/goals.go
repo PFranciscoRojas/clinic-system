@@ -60,6 +60,13 @@ type UpdateGoalInput struct {
 	TargetDate     *time.Time
 }
 
+// DeleteGoal removes a goal outright — treatment-plan goals are a living
+// working checklist (unlike clinical_records, which is the legally retained
+// historia clínica), so a hard delete is appropriate here.
+func (s *Service) DeleteGoal(ctx context.Context, orgID, planID, goalID string) error {
+	return s.repo.DeleteGoal(ctx, orgID, planID, goalID)
+}
+
 func (s *Service) UpdateGoal(ctx context.Context, in UpdateGoalInput) error {
 	plan, err := s.repo.FindPlanByID(ctx, in.OrganizationID, in.PlanID)
 	if err != nil {

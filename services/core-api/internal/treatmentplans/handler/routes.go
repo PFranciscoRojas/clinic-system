@@ -22,5 +22,6 @@ func (h *Handler) Routes() chi.Router {
 	r.With(middleware.RequirePermission("treatment_plans:update")).Patch("/{id}", h.updatePlan)
 	r.With(middleware.RequirePermission("treatment_plans:update")).Post("/{id}/goals", h.addGoal)
 	r.With(middleware.RequirePermission("treatment_plans:update")).Patch("/{id}/goals/{goal_id}", h.updateGoal)
+	r.With(middleware.RequirePermission("treatment_plans:update")).Delete("/{id}/goals/{goal_id}", h.deleteGoal)
 	return r
 }

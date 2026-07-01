@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Target, Plus, X, ChevronDown, ChevronUp, CheckCircle2, Sparkles } from 'lucide-react';
+import { Target, Plus, X, ChevronDown, ChevronUp, CheckCircle2, Sparkles, Pencil, Trash2, Check } from 'lucide-react';
+import { AutoGrowTextarea } from './AutoGrowTextarea';
 import {
   treatmentPlansApi,
   type TreatmentPlan,
@@ -202,11 +203,11 @@ function NewPlanCard({ patientId, onCreated, onError }: { patientId: string; onC
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--s600)', display: 'block', marginBottom: 5 }}>Objetivos iniciales</label>
             {goals.map((g, i) => (
-              <input
-                key={i} value={g}
+              <AutoGrowTextarea
+                key={i} value={g} minRows={1}
                 onChange={e => setGoals(gs => gs.map((v, j) => (j === i ? e.target.value : v)))}
                 placeholder={`Objetivo ${i + 1}…`}
-                style={{ width: '100%', padding: '9px 12px', borderRadius: 9, border: '1.5px solid var(--s200)', fontSize: 13, color: 'var(--s700)', boxSizing: 'border-box', background: '#fff', marginBottom: 6 }}
+                style={{ marginBottom: 6 }}
               />
             ))}
             <button
@@ -336,6 +337,10 @@ function GoalRow({ planId, goal, last, onChange, onError }: {
 }) {
   const [expanded, setExpanded] = useState(false);
   const [notes, setNotes] = useState(goal.progress_notes ?? '');
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(goal.description);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [busy, setBusy] = useState(false);
   const cfg = GOAL_CFG[goal.status];
 
   const handleStatus = async (status: GoalStatus) => {
@@ -355,33 +360,103 @@ function GoalRow({ planId, goal, last, onChange, onError }: {
     } catch { onError('Error al guardar las notas de progreso.'); }
   };
 
+  const saveEdit = async () => {
+    if (!editText.trim()) return;
+    if (editText.trim() === goal.description) { setEditing(false); return; }
+    setBusy(true); onError('');
+    try {
+      await treatmentPlansApi.updateGoal(planId, goal.id, { description: editText.trim() });
+      setEditing(false);
+      onChange();
+    } catch { onError('Error al editar el objetivo.'); }
+    finally { setBusy(false); }
+  };
+
+  const handleDelete = async () => {
+    setBusy(true); onError('');
+    try {
+      await treatmentPlansApi.deleteGoal(planId, goal.id);
+      onChange();
+    } catch { onError('Error al eliminar el objetivo.'); setConfirmingDelete(false); }
+    finally { setBusy(false); }
+  };
+
   return (
     <div style={{ borderBottom: last ? 'none' : '1px solid var(--s100)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 180 }}>
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--s700)', fontWeight: 500, textDecoration: goal.status === 'ABANDONED' ? 'line-through' : 'none' }}>
-            {goal.description}
-          </p>
-          {goal.target_date && (
+          {editing ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <AutoGrowTextarea
+                value={editText} onChange={e => setEditText(e.target.value)}
+                minRows={1} autoFocus
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(); } if (e.key === 'Escape') { setEditText(goal.description); setEditing(false); } }}
+                style={{ fontSize: 13 }}
+              />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={saveEdit} disabled={busy}
+                  style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: 'none', background: 'var(--teal)', color: '#fff', cursor: 'pointer' }}>
+                  <Check size={11} /> Guardar
+                </button>
+                <button onClick={() => { setEditText(goal.description); setEditing(false); }}
+                  style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s600)', cursor: 'pointer' }}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--s700)', fontWeight: 500, textDecoration: goal.status === 'ABANDONED' ? 'line-through' : 'none' }}>
+              {goal.description}
+            </p>
+          )}
+          {goal.target_date && !editing && (
             <p style={{ margin: 0, fontSize: 11, color: 'var(--s400)' }}>Meta: {fmtDate(goal.target_date)}</p>
           )}
         </div>
-        <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 6, background: cfg.bg, color: cfg.color }}>{cfg.label}</span>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {GOAL_NEXT[goal.status].map(next => (
-            <button key={next} onClick={() => handleStatus(next)}
-              style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s600)', cursor: 'pointer' }}>
-              {GOAL_CFG[next].label}
+        {!editing && (
+          <>
+            <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 6, background: cfg.bg, color: cfg.color }}>{cfg.label}</span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {GOAL_NEXT[goal.status].map(next => (
+                <button key={next} onClick={() => handleStatus(next)}
+                  style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s600)', cursor: 'pointer' }}>
+                  {GOAL_CFG[next].label}
+                </button>
+              ))}
+            </div>
+            {confirmingDelete ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 11, color: 'var(--s500)' }}>¿Eliminar?</span>
+                <button onClick={handleDelete} disabled={busy}
+                  style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: 'none', background: '#dc2626', color: '#fff', cursor: 'pointer' }}>
+                  Sí
+                </button>
+                <button onClick={() => setConfirmingDelete(false)}
+                  style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s600)', cursor: 'pointer' }}>
+                  No
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 2 }}>
+                <button onClick={() => setEditing(true)} title="Editar objetivo"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)', padding: 4 }}>
+                  <Pencil size={14} />
+                </button>
+                <button onClick={() => setConfirmingDelete(true)} title="Eliminar objetivo"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)', padding: 4 }}>
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            )}
+            <button onClick={() => setExpanded(e => !e)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)', padding: 2 }}
+              title="Notas de progreso">
+              {expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
             </button>
-          ))}
-        </div>
-        <button onClick={() => setExpanded(e => !e)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)', padding: 2 }}
-          title="Notas de progreso">
-          {expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-        </button>
+          </>
+        )}
       </div>
-      {expanded && (
+      {expanded && !editing && (
         <div style={{ padding: '0 20px 14px' }}>
           <textarea
             value={notes} onChange={e => setNotes(e.target.value)} onBlur={saveNotes}

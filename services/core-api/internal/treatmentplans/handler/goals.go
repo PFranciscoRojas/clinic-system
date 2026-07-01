@@ -48,6 +48,21 @@ func (h *Handler) addGoal(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusCreated, map[string]string{"id": goalID})
 }
 
+// DELETE /api/v1/treatment-plans/{id}/goals/{goal_id}
+func (h *Handler) deleteGoal(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	planID := chi.URLParam(r, "id")
+	goalID := chi.URLParam(r, "goal_id")
+
+	if err := h.svc.DeleteGoal(r.Context(), claims.OrganizationID, planID, goalID); err != nil {
+		writeErr(w, err)
+		return
+	}
+
+	h.audit.Record(r, "TREATMENT_GOAL_DELETE", "treatment_goal", goalID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // PATCH /api/v1/treatment-plans/{id}/goals/{goal_id}
 func (h *Handler) updateGoal(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
