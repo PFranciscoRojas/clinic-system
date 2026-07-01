@@ -1,5 +1,15 @@
 # Ideas y Tareas Futuras (No procesar aún)
 
+## Producto — Auditoría 360° (2026-07-01, "lo que falta para completo")
+
+> Los hallazgos técnicos de la auditoría tienen plan de ejecución en `PLAN_AUDIT_FIXES.md`; aquí van solo los features de producto, diferidos post-validación.
+
+- **Portal del paciente (2026-07-01)** — ver sus citas, pagar, firmar consentimientos y recibir recordatorios desde un link propio. Reduce no-shows y es requisito típico del tier Clínica. Reusar la infraestructura de tokens públicos del booking/consentimientos.
+- **Teleconsulta: embeber, no construir (2026-07-01)** — para la videollamada del roadmap (post-1.0), usar embed de Jitsi/Whereby con el link adjunto a la cita; video propio no aporta diferenciación y sí costo de mantenimiento.
+- **Runbook de backup/DR verificable (2026-07-01)** — para vender confidencialidad hay que poder responder "¿y si se cae tu servidor?": documentar y probar restauración completa (Postgres + MASTER_KEY + SEARCH_PEPPER + volúmenes) con un simulacro cronometrado; respaldo offsite del dump cifrado.
+- **Búsqueda de pacientes — mitigar la fricción del match exacto (2026-07-01)** — el hash sobre cifrado impide fuzzy/prefijos por diseño. Mitigaciones que no rompen el modelo: lista "mis pacientes recientes" prominente (alimentada por `patient_staff_rel`/citas), búsqueda por `patient_code`, y si la beta confirma la queja, hash adicional de prefijo fonético.
+- **Anonimización IA — upgrade de modelo NER (2026-07-01)** — pasar de `es_core_news_sm` a `md`/`lg` (mejor recall de nombres) cuando el disco del VPS lo permita (hoy bloqueado por espacio; ver Capa 2 de disco en Infraestructura). El reemplazo literal de nombres conocidos (Fase 3 del plan de auditoría) cubre el grueso mientras tanto.
+
 ## Validación / Go-to-market
 
 - **Beta de diseño con 2-3 psicólogas externas (2026-06-27)** — dar acceso gratis 2 semanas a colegas de la esposa (2 contactos ya identificados); acompañar la 1ª carga de paciente + grabación en vivo (do things that don't scale); anotar bugs/fricción reales que el founder solo nunca detecta; al cierre preguntar "¿lo seguirías usando? ¿cuánto pagarías?". Objetivo: separar hobby de negocio antes de invertir más en features.
