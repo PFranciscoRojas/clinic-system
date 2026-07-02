@@ -31,6 +31,17 @@ CONSUMER_NAME = "ai-worker-1"
 BLOCK_MS = 4_000
 BATCH_SIZE = 5
 
+# Orphaned-job recovery: entries stuck in the PEL (consumer crashed mid-job or
+# a failure path skipped the ack) are reclaimed after this idle time; after
+# MAX_DELIVERIES attempts the job is dead-lettered (draft ERROR / suggestion
+# FAILED, visible in the UI) and acked.
+RECLAIM_IDLE_MS = 300_000
+MAX_DELIVERIES = 3
+
+# History budget for treatment_plan / risk_detection: newest sessions win.
+HISTORY_MAX_RECORDS = 20
+HISTORY_MAX_CHARS = 30_000
+
 
 class AIWorker:
     """Consumes ai_jobs from Redis Streams and processes audio through the AI pipeline."""
@@ -69,8 +80,13 @@ class AIWorker:
 
     async def _run(self) -> None:
         logger.info("ai worker started", extra={"stream": STREAM_NAME, "group": CONSUMER_GROUP})
+        try:
+            await self._sweep_stuck()
+        except Exception as exc:
+            logger.exception("startup sweep failed", exc_info=exc)
         while True:
             try:
+                await self._reclaim_stale()
                 messages = await self._redis.xreadgroup(  # type: ignore[union-attr]
                     groupname=CONSUMER_GROUP,
                     consumername=CONSUMER_NAME,
@@ -166,25 +182,12 @@ class AIWorker:
         tone: str = "formal",
         template_id: str | None = None,
     ) -> None:
-        # 1. Transcribe locally — audio never leaves the server
-        transcription = await asyncio.to_thread(transcribe_audio, audio_path)
-
-        # 2. Anonymize — strip names, document numbers, phones before Claude sees anything
-        anonymized = anonymize(transcription)
-
-        # 3. Load custom template schema (if provided) to drive the AI prompt
-        template_sections = await self._load_template_sections(template_id) if template_id else None
-
-        # 4. Generate the clinical-record sections via Claude API with anonymized text only
-        clinical_draft = await generate_clinical_draft(
-            anonymized, record_type, note_style, tone, template_sections
-        )
-
-        # 5. Encrypt both outputs with the draft's DEK before storing
+        # 1. Resolve the draft's DEK and patient up front — fail fast before
+        #    spending Whisper/Claude work on a draft that no longer exists.
         assert self._db is not None
         row = await self._db.fetchrow(
             """
-            SELECT d.dek_id, k.encrypted_dek, k.key_source
+            SELECT d.patient_id, d.dek_id, k.encrypted_dek, k.key_source
             FROM ai_drafts d
             JOIN encryption_keys k ON k.id = d.dek_id
             WHERE d.id = $1
@@ -194,6 +197,24 @@ class AIWorker:
         if row is None:
             raise RuntimeError(f"ai_draft {draft_id} not found")
 
+        # 2. Transcribe locally — audio never leaves the server
+        transcription = await asyncio.to_thread(transcribe_audio, audio_path)
+
+        # 3. Anonymize — the patient's real name parts (decrypted here) are
+        #    replaced literally, then NER/regex strip everything else
+        known_names = await self._patient_known_names(row["patient_id"])
+        anonymized = anonymize(transcription, known_names)
+
+        # 4. Load custom template schema (if provided) to drive the AI prompt
+        template_sections = await self._load_template_sections(template_id) if template_id else None
+
+        # 5. Generate the clinical-record sections via Claude API with anonymized text only
+        clinical_draft = await generate_clinical_draft(
+            anonymized, record_type, note_style, tone, template_sections
+        )
+        clinical_draft = await self._validate_suggested_icd10(clinical_draft)
+
+        # 6. Encrypt both outputs with the draft's DEK before storing
         dek = self._decrypt_dek(row["key_source"], bytes(row["encrypted_dek"]))
         transcription_enc = seal(dek, transcription.encode())
         draft_content_enc = seal(dek, clinical_draft.encode())
@@ -282,11 +303,18 @@ class AIWorker:
         diagnoses = [dict(r) for r in diag_rows]
 
         # 4. Assemble → anonymize (strip any residual PII) → Claude.
-        # For the pre-session recap, only the most recent 5 sessions are relevant.
-        history_records = records[-5:] if kind == "recap" else records
-        history = render_history(history_records, diagnoses)
+        # For the pre-session recap, only the most recent 5 sessions are relevant;
+        # risk/plan get the full history under a budget (newest sessions win).
+        if kind == "recap":
+            history = render_history(records[-5:], diagnoses)
+        else:
+            history = render_history(
+                records, diagnoses,
+                max_records=HISTORY_MAX_RECORDS, max_chars=HISTORY_MAX_CHARS,
+            )
         source_hash = hashlib.sha256(history.encode()).hexdigest()
-        anonymized = anonymize(history)
+        known_names = await self._patient_known_names(patient_id)
+        anonymized = anonymize(history, known_names)
 
         if kind == "recap":
             content = await generate_recap(anonymized)
@@ -305,6 +333,130 @@ class AIWorker:
             """,
             suggestion_id, content_enc, source_hash,
         )
+
+    async def _patient_known_names(self, patient_id: str) -> list[str]:
+        """Decrypt the patient's name parts for literal anonymization.
+
+        Best-effort: a missing patient or an undecryptable field must not block
+        the pipeline (NER still runs), so failures return what we have.
+        """
+        assert self._db is not None
+        row = await self._db.fetchrow(
+            """
+            SELECT p.first_name_enc, p.middle_name_enc,
+                   p.paternal_last_name_enc, p.maternal_last_name_enc,
+                   k.encrypted_dek, k.key_source
+            FROM patients p
+            JOIN encryption_keys k ON k.id = p.dek_id
+            WHERE p.id = $1
+            """,
+            patient_id,
+        )
+        if row is None:
+            return []
+        try:
+            dek = self._decrypt_dek(row["key_source"], bytes(row["encrypted_dek"]))
+        except ValueError as exc:
+            logger.warning("cannot decrypt patient DEK for anonymization", extra={"err": str(exc)})
+            return []
+        names: list[str] = []
+        for col in ("first_name_enc", "middle_name_enc", "paternal_last_name_enc", "maternal_last_name_enc"):
+            if row[col] is None:
+                continue
+            try:
+                names.append(open_(dek, bytes(row[col])).decode())
+            except ValueError as exc:
+                logger.warning("cannot decrypt patient name field", extra={"field": col, "err": str(exc)})
+        return [n for n in (name.strip() for name in names) if n]
+
+    async def _validate_suggested_icd10(self, clinical_draft: str) -> str:
+        """Null out suggested_icd10 when the code is not in the ICD-10 catalog
+        (the model can hallucinate plausible-looking codes)."""
+        assert self._db is not None
+        try:
+            draft = json.loads(clinical_draft)
+        except json.JSONDecodeError:
+            return clinical_draft
+        suggested = draft.get("suggested_icd10")
+        if not isinstance(suggested, dict) or not suggested.get("code"):
+            return clinical_draft
+        code = str(suggested["code"]).strip().upper()
+        exists = await self._db.fetchval("SELECT 1 FROM icd10_codes WHERE code = $1", code)
+        if exists:
+            return clinical_draft
+        logger.warning("suggested ICD-10 not in catalog, dropping", extra={"code": code})
+        draft["suggested_icd10"] = None
+        return json.dumps(draft, ensure_ascii=False)
+
+    async def _reclaim_stale(self) -> None:
+        """Recover PEL entries whose consumer died mid-job or whose failure path
+        skipped the ack; dead-letter after MAX_DELIVERIES attempts."""
+        assert self._redis is not None
+        pending = await self._redis.xpending_range(
+            STREAM_NAME, CONSUMER_GROUP,
+            min="-", max="+", count=BATCH_SIZE, idle=RECLAIM_IDLE_MS,
+        )
+        for entry in pending:
+            message_id = entry["message_id"]
+            claimed = await self._redis.xclaim(
+                STREAM_NAME, CONSUMER_GROUP, CONSUMER_NAME,
+                min_idle_time=RECLAIM_IDLE_MS, message_ids=[message_id],
+            )
+            if not claimed:
+                continue  # another consumer got it first
+            mid, fields = claimed[0]
+            if fields is None:
+                # Entry was trimmed from the stream; nothing left to process.
+                await self._ack(mid)
+                continue
+            if entry["times_delivered"] >= MAX_DELIVERIES:
+                await self._dead_letter(mid, fields, entry["times_delivered"])
+            else:
+                logger.info(
+                    "reclaiming stale job",
+                    extra={"message_id": mid, "deliveries": entry["times_delivered"]},
+                )
+                await self._handle(mid, fields)
+
+    async def _dead_letter(self, message_id: str, fields: dict[str, Any], deliveries: int) -> None:
+        """Mark the job's row as failed (visible in the UI) and ack the entry
+        so it stops cycling through the PEL."""
+        reason = f"processing failed after {deliveries} attempts"
+        kind = fields.get("kind")
+        if kind in ("recap", "treatment_plan", "risk_detection"):
+            suggestion_id = fields.get("suggestion_id")
+            if suggestion_id:
+                await self._set_suggestion_error(suggestion_id, reason)
+        else:
+            draft_id = fields.get("draft_id")
+            if draft_id:
+                await self._set_error(draft_id, reason)
+        logger.error(
+            "job dead-lettered",
+            extra={"message_id": message_id, "kind": kind or "draft", "deliveries": deliveries},
+        )
+        await self._ack(message_id)
+
+    async def _sweep_stuck(self) -> None:
+        """Startup sweep: rows left in PROCESSING with no live job (e.g. the
+        stream entry was acked or trimmed before the crash) become recoverable
+        errors instead of spinning forever in the UI."""
+        assert self._db is not None
+        res_d = await self._db.execute(
+            """
+            UPDATE ai_drafts
+            SET status = 'ERROR', error_message = 'processing interrupted (worker restart)'
+            WHERE status = 'PROCESSING' AND created_at < NOW() - INTERVAL '30 minutes'
+            """
+        )
+        res_s = await self._db.execute(
+            """
+            UPDATE ai_suggestions
+            SET status = 'FAILED', error = 'processing interrupted (worker restart)', updated_at = NOW()
+            WHERE status = 'PROCESSING' AND updated_at < NOW() - INTERVAL '30 minutes'
+            """
+        )
+        logger.info("startup sweep done", extra={"drafts": res_d, "suggestions": res_s})
 
     async def _set_suggestion_status(self, suggestion_id: str, status: str) -> None:
         assert self._db is not None

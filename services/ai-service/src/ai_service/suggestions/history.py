@@ -63,14 +63,32 @@ def render_diagnoses(diagnoses: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def render_history(records: list[dict[str, Any]], diagnoses: list[dict[str, Any]]) -> str:
-    """Assemble the full history (oldest → newest) plus diagnoses into one block."""
-    blocks: list[str] = []
+def render_history(
+    records: list[dict[str, Any]],
+    diagnoses: list[dict[str, Any]],
+    max_records: int | None = None,
+    max_chars: int | None = None,
+) -> str:
+    """Assemble the history (oldest → newest) plus diagnoses into one block.
+
+    When budgets are given, the newest records win: max_records keeps only the
+    most recent N, and max_chars drops the oldest rendered blocks until the
+    total fits (the newest record and the diagnoses always survive).
+    """
+    if max_records is not None:
+        records = records[-max_records:]
+
     diag = render_diagnoses(diagnoses)
-    if diag:
-        blocks.append(diag)
+    rec_blocks: list[str] = []
     for r in records:
         block = render_record(r["record_type"], r.get("session_date"), r.get("sections") or {})
         if block.strip():
-            blocks.append(block)
+            rec_blocks.append(block)
+
+    if max_chars is not None:
+        total = len(diag) + sum(len(b) + 2 for b in rec_blocks)
+        while len(rec_blocks) > 1 and total > max_chars:
+            total -= len(rec_blocks.pop(0)) + 2
+
+    blocks = ([diag] if diag else []) + rec_blocks
     return "\n\n".join(blocks)
