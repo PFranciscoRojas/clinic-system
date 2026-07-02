@@ -74,11 +74,6 @@ export const patientsApi = {
 
   deactivate: (id: string) => api.delete<void>(`/patients/${id}`),
 
-  exportCSV: async (): Promise<Blob> => {
-    const res = await fetch('/api/v1/patients/export.csv', {
-      headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` },
-    });
-    if (!res.ok) throw new Error('No se pudo generar el CSV');
-    return res.blob();
-  },
+  exportCSV: (): Promise<Blob> =>
+    api.getBlob('/patients/export.csv', 'No se pudo generar el CSV'),
 };

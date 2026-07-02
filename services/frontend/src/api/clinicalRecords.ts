@@ -131,16 +131,8 @@ export const clinicalRecordsApi = {
   listAddenda: (id: string) => api.get<{ items: Addendum[] }>(`/clinical-records/${id}/addenda`),
   addAddendum: (id: string, content: string) =>
     api.post<{ id: string }>(`/clinical-records/${id}/addenda`, { content }),
-  exportPDF: async (id: string): Promise<Blob> => {
-    const res = await fetch(`/api/v1/clinical-records/${id}/export`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` },
-    });
-    if (!res.ok) {
-      throw new Error(`Failed to export PDF: ${res.statusText}`);
-    }
-    return res.blob();
-  },
+  exportPDF: (id: string): Promise<Blob> =>
+    api.getBlob(`/clinical-records/${id}/export`, 'No se pudo exportar el PDF'),
 };
 
 export interface ConsentTemplate {
