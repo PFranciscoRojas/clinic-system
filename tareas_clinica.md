@@ -14,9 +14,9 @@
 
 ## 🤖 Lógica de IA
 
-- [ ] **2. Resumen del borrador no se adapta al formato clínico configurado.** (Ligado al punto 1.) El resumen siempre muestra los mismos campos — estado actual, descripción clínica de la sesión, diagnóstico CIE-10 sugerido y nivel de riesgo — aunque el formato en uso tenga más secciones. Parece haber una estructura quemada (hardcoded); el borrador debe generarse según el formato/plantilla que se está llenando.
-- [ ] **6. Perfil profesional: campo "enfoque terapéutico".** Añadir al perfil del psicólogo su enfoque (humanista, terapia cognitivo-conductual, sistémico, etc.).
-- [ ] **7. Salidas de IA orientadas al enfoque terapéutico.** El plan terapéutico debe variar según el enfoque seleccionado (punto 6), y también respuestas, resúmenes, recaps, sugerencias y demás salidas de IA deben orientarse a ese enfoque.
+- [ ] **2. Resumen del borrador no se adapta al formato clínico configurado.** (Ligado al punto 1.) El resumen siempre muestra los mismos campos — estado actual, descripción clínica de la sesión, diagnóstico CIE-10 sugerido y nivel de riesgo — aunque el formato en uso tenga más secciones. **Diagnóstico hecho (2026-07-02):** 3 bugs combinados — `template_id` no se persiste en `ai_drafts` ni lo devuelve el GET (la página siempre cae al formato integrado quemado), los schemas del formato integrado están triplicados y desincronizados (Python 4 claves / frontend 2 / Go superset), y el `template_id` se pierde al subir el audio si el formulario no está abierto. Plan de fix en [docs/ai/PLAN_IA_puntos_2_6_7.md](docs/ai/PLAN_IA_puntos_2_6_7.md) (PRs A y B).
+- [ ] **6. Perfil profesional: campo "enfoque terapéutico".** Añadir al perfil del psicólogo su enfoque (humanista, terapia cognitivo-conductual, sistémico, etc.). **Planificado:** extender `ai_prefs` JSONB (catálogo cerrado de enfoques) + selector en Settings/onboarding — ver [docs/ai/PLAN_IA_puntos_2_6_7.md](docs/ai/PLAN_IA_puntos_2_6_7.md).
+- [ ] **7. Salidas de IA orientadas al enfoque terapéutico.** El plan terapéutico debe variar según el enfoque seleccionado (punto 6), y también respuestas, resúmenes, recaps, sugerencias y demás salidas de IA deben orientarse a ese enfoque. **Planificado:** hoy el prompt del plan está quemado a TCC; se parametrizará por enfoque (solo instrucciones, nunca el shape JSON del contrato con el frontend); riesgo queda deliberadamente agnóstico — ver [docs/ai/PLAN_IA_puntos_2_6_7.md](docs/ai/PLAN_IA_puntos_2_6_7.md).
 
 ---
 
