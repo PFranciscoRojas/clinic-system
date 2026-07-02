@@ -1,12 +1,10 @@
 package handler
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -419,78 +417,10 @@ func computeAlerts(h systemHealthResponse) []alertItem {
 	return alerts
 }
 
-// ── actions handler ────────────────────────────────────────────────────────────
-
-// safeActions es la lista blanca de comandos que el operador puede ejecutar
-// desde la UI. Cada uno es destructivo solo de artefactos intermedios de Docker,
-// nunca de datos de producción (volúmenes, contenedores corriendo, BD).
-var safeActions = map[string]struct {
-	args        []string
-	description string
-}{
-	"builder_prune": {
-		args:        []string{"docker", "builder", "prune", "-af"},
-		description: "Elimina el cache de builds de Docker (principal causante del problema de disco).",
-	},
-	"image_prune": {
-		args:        []string{"docker", "image", "prune", "-f"},
-		description: "Elimina imágenes huérfanas (sin tag, no usadas por ningún contenedor).",
-	},
-	"system_prune": {
-		args:        []string{"docker", "system", "prune", "-f"},
-		description: "Elimina contenedores detenidos, redes sin uso e imágenes huérfanas. No toca volúmenes ni contenedores activos.",
-	},
-}
-
-type actionRequest struct {
-	Action string `json:"action"`
-}
-
-type actionResponse struct {
-	Action      string `json:"action"`
-	Description string `json:"description"`
-	Output      string `json:"output"`
-	Ok          bool   `json:"ok"`
-	DurationMs  int64  `json:"duration_ms"`
-}
-
-// POST /api/v1/admin/system/actions — SYSTEM_ADMIN only.
-// Ejecuta un comando de mantenimiento de la lista blanca.
-func (h *Handler) systemAction(w http.ResponseWriter, r *http.Request) {
-	var body actionRequest
-	if err := httputil.DecodeJSON(r, &body); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid body")
-		return
-	}
-
-	action, ok := safeActions[body.Action]
-	if !ok {
-		httputil.WriteError(w, http.StatusBadRequest, "unknown action — allowed: builder_prune, image_prune, system_prune")
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
-	defer cancel()
-
-	t0 := time.Now()
-	out, err := exec.CommandContext(ctx, action.args[0], action.args[1:]...).CombinedOutput()
-	elapsed := time.Since(t0).Milliseconds()
-
-	resp := actionResponse{
-		Action:      body.Action,
-		Description: action.description,
-		Output:      string(out),
-		Ok:          err == nil,
-		DurationMs:  elapsed,
-	}
-	if err != nil {
-		slog.Error("system-action failed", "action", body.Action, "err", err, "output", string(out))
-	} else {
-		slog.Info("system-action ok", "action", body.Action, "duration_ms", elapsed)
-	}
-
-	httputil.WriteJSON(w, http.StatusOK, resp)
-}
+// NOTE: the Docker maintenance actions (builder/image/system prune) that used
+// to live here required mounting /var/run/docker.sock into this container —
+// root-equivalent host access from the API process. Removed 2026-07-01; disk
+// cleanup now runs as a weekly cron on the VPS host (see STATUS.md).
 
 func round2(v float64) float64 {
 	return float64(int(v*100+0.5)) / 100

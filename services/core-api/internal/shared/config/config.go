@@ -19,6 +19,11 @@ type Config struct {
 
 	MasterKey string
 
+	// SearchPepper keys the HMAC-SHA256 search hashes over PII (email, last
+	// name, document number). Independent from MASTER_KEY so either secret can
+	// rotate without touching the other.
+	SearchPepper string
+
 	JWTSecret         string
 	JWTAccessTTLMin   int
 	JWTRefreshTTLDays int
@@ -82,6 +87,8 @@ func Load() Config {
 		RedisPassword: mustGetEnv("REDIS_PASSWORD"),
 
 		MasterKey: mustGetEnv("MASTER_KEY"),
+
+		SearchPepper: mustGetEnv("SEARCH_PEPPER"),
 
 		JWTSecret:         mustGetEnv("JWT_SECRET"),
 		JWTAccessTTLMin:   getEnvInt("JWT_ACCESS_TTL_MINUTES", 60),

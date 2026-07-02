@@ -23,7 +23,10 @@ VALUES (
 ON CONFLICT (slug) DO NOTHING;
 
 -- ── CLINIC_ADMIN user ─────────────────────────────────────────────────────────
--- email_hash  : SHA-256(lowercase(trim(email)))
+-- email_hash  : placeholder — production hashes are HMAC-SHA256 keyed with
+--               SEARCH_PEPPER, which SQL cannot compute. After seeding, run
+--               `docker compose exec core-api ./rehash` (or `go run ./cmd/rehash`)
+--               to recompute it from the plaintext email; login fails until then.
 -- password    : Admin1234!  (bcrypt cost 10 via pgcrypto)
 INSERT INTO users (
     id, organization_id,

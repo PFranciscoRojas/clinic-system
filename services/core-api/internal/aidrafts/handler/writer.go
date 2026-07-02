@@ -2,12 +2,14 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	aidraftssvc "sghcp/core-api/internal/aidrafts/service"
 	"sghcp/core-api/internal/shared/httputil"
@@ -24,10 +26,26 @@ var allowedAudioExtensions = map[string]bool{
 // POST /api/v1/appointments/{appointment_id}/audio
 func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
-	appointmentID := chi.URLParam(r, "appointment_id")
 
-	if err := r.ParseMultipartForm(maxAudioSize); err != nil {
-		httputil.WriteError(w, http.StatusRequestEntityTooLarge, "audio file too large (max 200 MB)")
+	// The appointment id becomes the audio filename on disk — reject anything
+	// that is not a UUID before it can reach the filesystem.
+	appointmentID := chi.URLParam(r, "appointment_id")
+	if _, err := uuid.Parse(appointmentID); err != nil {
+		httputil.WriteError(w, http.StatusUnprocessableEntity, "invalid appointment id")
+		return
+	}
+
+	// MaxBytesReader is the real size cap: ParseMultipartForm's argument only
+	// bounds the in-memory portion — without this, an oversized body would
+	// spool to temp files on disk without limit.
+	r.Body = http.MaxBytesReader(w, r.Body, maxAudioSize)
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			httputil.WriteError(w, http.StatusRequestEntityTooLarge, "audio file too large (max 200 MB)")
+			return
+		}
+		httputil.WriteError(w, http.StatusBadRequest, "malformed multipart body")
 		return
 	}
 
