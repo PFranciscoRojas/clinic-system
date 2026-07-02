@@ -146,14 +146,8 @@ export const invoicesApi = {
   recordPayment: (id: string, input: RecordPaymentInput) =>
     api.post<Invoice>(`/invoices/${id}/payments`, input),
   send: (id: string) => api.post<{ sent: boolean; email?: string }>(`/invoices/${id}/send`, {}),
-  downloadReceipt: async (id: string): Promise<Blob> => {
-    const res = await fetch(`/api/v1/invoices/${id}/receipt`, {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` },
-    });
-    if (!res.ok) throw new Error('No se pudo generar el comprobante');
-    return res.blob();
-  },
+  downloadReceipt: (id: string): Promise<Blob> =>
+    api.getBlob(`/invoices/${id}/receipt`, 'No se pudo generar el comprobante'),
 };
 
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
@@ -170,11 +164,11 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
 };
 
 export const INVOICE_STATUS_META: Record<InvoiceStatus, { label: string; color: string; bg: string }> = {
-  DRAFT:     { label: 'Borrador',     color: '#475569', bg: '#f1f5f9' },
+  DRAFT:     { label: 'Borrador',     color: '#4a4560', bg: '#f4eedd' },
   ISSUED:    { label: 'Emitida',      color: '#0369a1', bg: '#e0f2fe' },
   PARTIAL:   { label: 'Pago parcial', color: '#b45309', bg: '#fef3c7' },
   PAID:      { label: 'Pagada',       color: '#065f46', bg: '#d1fae5' },
-  INSURED:   { label: 'Por seguro',   color: '#0f766e', bg: '#ccfbf1' },
+  INSURED:   { label: 'Por seguro',   color: '#2a2769', bg: '#e4e2f6' },
   CANCELLED: { label: 'Anulada',      color: '#991b1b', bg: '#fee2e2' },
 };
 

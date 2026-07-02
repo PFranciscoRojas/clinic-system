@@ -15,12 +15,13 @@ import (
 )
 
 // refreshPayload is stored as JSON in Redis under the refresh token key.
+// Deliberately minimal: Refresh reloads the user (roles, permissions, email)
+// from the database, so the payload is a pointer, not a snapshot — a cached
+// snapshot would keep revoked roles alive for the whole refresh TTL. Old
+// payloads with extra keys (org/roles/perms) still parse fine.
 type refreshPayload struct {
-	UserID string   `json:"uid"`
-	OrgID  string   `json:"org"`
-	Roles  []string `json:"roles"`
-	Perms  []string `json:"perms"`
-	Epoch  int64    `json:"ep"` // password epoch this token was issued under
+	UserID string `json:"uid"`
+	Epoch  int64  `json:"ep"` // password epoch this token was issued under
 }
 
 // passwordEpoch returns the user's current password epoch (0 when unset).
@@ -68,9 +69,6 @@ func (s *Service) issueTokenPair(ctx context.Context, user *auth.User) (*token.P
 
 	payload := refreshPayload{
 		UserID: user.ID,
-		OrgID:  user.OrganizationID,
-		Roles:  user.Roles,
-		Perms:  user.Permissions,
 		Epoch:  s.passwordEpoch(ctx, user.ID),
 	}
 	payloadJSON, _ := json.Marshal(payload)
