@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -67,6 +68,7 @@ func (s *Service) UploadAudio(ctx context.Context, in UploadAudioInput) (string,
 		AudioPathEnc:   audioPathEnc,
 		AIModelVersion: aiModelVer,
 		WhisperModel:   whisperModel,
+		TemplateID:     in.TemplateID,
 	})
 	if err != nil {
 		return "", err
@@ -116,6 +118,13 @@ func (s *Service) enqueue(ctx context.Context, draftID, audioPath, recordType, t
 	}
 	if templateID != "" {
 		values["template_id"] = templateID
+	} else if schema, ok := aidrafts.IntegratedPromptSchema[recordType]; ok {
+		// Integrated format: ship the section schema with the job so the
+		// worker prompts for exactly what the review page renders — the
+		// worker's own hardcoded fallback only covers legacy queued jobs.
+		if b, err := json.Marshal(schema); err == nil {
+			values["sections_schema"] = string(b)
+		}
 	}
 	return s.rdb.XAdd(ctx, &redis.XAddArgs{
 		Stream: aiStream,

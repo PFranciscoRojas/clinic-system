@@ -119,6 +119,9 @@ class AIWorker:
         note_style = fields.get("note_style") or "structured"
         tone = fields.get("tone") or "formal"
         template_id = fields.get("template_id")  # optional — custom record template
+        # Integrated-format section schema shipped by core-api (JSON array of
+        # {key,type,hint}) — the single source of truth for what to generate.
+        sections_schema = fields.get("sections_schema")
 
         if not draft_id or not audio_path:
             logger.warning("ai_job missing fields", extra={"message_id": message_id, "fields": list(fields.keys())})
@@ -128,7 +131,7 @@ class AIWorker:
         logger.info("processing ai draft", extra={"draft_id": draft_id, "template_id": template_id})
         try:
             await self._set_status(draft_id, "PROCESSING")
-            await self._process_draft(draft_id, audio_path, record_type, note_style, tone, template_id)
+            await self._process_draft(draft_id, audio_path, record_type, note_style, tone, template_id, sections_schema)
             await self._ack(message_id)
         except Exception as exc:
             logger.error("draft processing failed", extra={"draft_id": draft_id, "err": str(exc)})
@@ -181,6 +184,7 @@ class AIWorker:
         note_style: str = "structured",
         tone: str = "formal",
         template_id: str | None = None,
+        sections_schema: str | None = None,
     ) -> None:
         # 1. Resolve the draft's DEK and patient up front — fail fast before
         #    spending Whisper/Claude work on a draft that no longer exists.
@@ -205,8 +209,18 @@ class AIWorker:
         known_names = await self._patient_known_names(row["patient_id"])
         anonymized = anonymize(transcription, known_names)
 
-        # 4. Load custom template schema (if provided) to drive the AI prompt
+        # 4. Resolve the section schema that drives the AI prompt: a custom
+        #    template (from DB) or the integrated-format schema shipped in the
+        #    job by core-api. Only legacy jobs carry neither and fall back to
+        #    the hardcoded schemas in drafts/claude.py.
         template_sections = await self._load_template_sections(template_id) if template_id else None
+        if template_sections is None and sections_schema:
+            try:
+                parsed_schema = json.loads(sections_schema)
+                if isinstance(parsed_schema, list) and parsed_schema:
+                    template_sections = parsed_schema
+            except json.JSONDecodeError:
+                logger.warning("invalid sections_schema in job; using hardcoded fallback", extra={"draft_id": draft_id})
 
         # 5. Generate the clinical-record sections via Claude API with anonymized text only
         clinical_draft = await generate_clinical_draft(

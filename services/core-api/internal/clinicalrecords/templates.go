@@ -101,6 +101,25 @@ func IsValidDischargeReason(d DischargeReason) bool {
 // service/create.go can reuse the same emptiness check.
 func IsEmptySection(v any) bool { return isEmptySection(v) }
 
+// AllowedSectionKeys returns the section-key whitelist template v2 accepts for
+// rt (required ∪ optional), or nil for record types without a v2 template.
+// Exported so callers that assemble sections from external sources (e.g. the
+// AI-draft approve path) can drop unknown keys instead of failing validation.
+func AllowedSectionKeys(rt RecordType) map[string]bool {
+	tpl, ok := templateSections[rt]
+	if !ok {
+		return nil
+	}
+	allowed := make(map[string]bool, len(tpl.required)+len(tpl.optional))
+	for _, k := range tpl.required {
+		allowed[k] = true
+	}
+	for _, k := range tpl.optional {
+		allowed[k] = true
+	}
+	return allowed
+}
+
 // keep the unexported variant for internal use in ValidateTemplateV2.
 func validRiskLevel(r RiskLevel) bool   { return IsValidRiskLevel(r) }
 func validDischargeReason(d DischargeReason) bool { return IsValidDischargeReason(d) }

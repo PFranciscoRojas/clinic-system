@@ -71,7 +71,7 @@ func (h *Handler) getDraft(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+	resp := map[string]any{
 		"id":                  draft.ID,
 		"organization_id":     draft.OrganizationID,
 		"patient_id":          draft.PatientID,
@@ -84,5 +84,14 @@ func (h *Handler) getDraft(w http.ResponseWriter, r *http.Request) {
 		"processed_at":        draft.ProcessedAt,
 		"resolved_at":         draft.ResolvedAt,
 		"created_at":          draft.CreatedAt,
-	})
+	}
+	// Without template_id the review page cannot load the custom format the
+	// draft was generated with and falls back to the integrated sections.
+	if draft.TemplateID != "" {
+		resp["template_id"] = draft.TemplateID
+	}
+	if draft.AppointmentID != "" {
+		resp["appointment_id"] = draft.AppointmentID
+	}
+	httputil.WriteJSON(w, http.StatusOK, resp)
 }
