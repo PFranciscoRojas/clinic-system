@@ -7,14 +7,20 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"sghcp/core-api/internal/shared/dbctx"
 )
 
 // IsAssignedToPatient returns true when the staff user is either (a) in an
 // active patient_staff_rel row for the patient, or (b) the assigned supervisor
 // on any clinical record for that patient that requires co-sign.
+//
+// It must run on the request-scoped tenant connection: both tables carry a
+// FORCE RLS tenant policy, so a raw pool connection (no app.current_org GUC)
+// would silently see zero rows and deny every caller.
 func IsAssignedToPatient(ctx context.Context, db *pgxpool.Pool, orgID, userID, patientID string) (bool, error) {
 	var exists bool
-	err := db.QueryRow(ctx, `
+	err := dbctx.From(ctx, db).QueryRow(ctx, `
 		SELECT EXISTS (
 			SELECT 1 FROM patient_staff_rel
 			WHERE organization_id = $1
