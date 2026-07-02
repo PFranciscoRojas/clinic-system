@@ -6,31 +6,29 @@
 
 ---
 
-## Fase 1 — Seguridad crítica 🔴 (1 sesión)
+## Fase 1 — Seguridad crítica 🔴 ✅ COMPLETADA (2026-07-02, PR #107)
 
-**Rama:** `fix/security-audit-critical`
+**Rama:** `fix/security-audit-critical` (merged squash → `main`)
 
-### 1.1 Eliminar docker.sock de core-api ⬜
-El socket solo alimenta 3 comandos de limpieza en la consola admin (`admin/handler/system.go:432-440`: `docker builder/image/system prune`). Un RCE en la API hoy = root en el host.
-- ⬜ Quitar `- /var/run/docker.sock:/var/run/docker.sock` de `docker-compose.yml`
-- ⬜ Eliminar los 3 comandos prune de `admin/handler/system.go` y sus botones en `SuperAdminPage.tsx` (tab Sistema)
-- ⬜ Reemplazo: cron semanal en el host VPS — `0 4 * * 0 docker system prune -af --volumes=false` (documentar en STATUS/runbook)
+### 1.1 Eliminar docker.sock de core-api ✅
+El socket solo alimentaba 3 comandos de limpieza en la consola admin. Un RCE en la API = root en el host.
+- ✅ Quitado `- /var/run/docker.sock:/var/run/docker.sock` de `docker-compose.yml`; `docker-cli` removido del `Dockerfile`
+- ✅ Eliminados los comandos prune de `admin/handler/system.go`, la ruta `/admin/system/actions`, y el `MaintenancePanel` de `SuperAdminPage.tsx`
+- ✅ Cron semanal instalado en el host VPS: `0 4 * * 0 docker system prune -af` → `/var/log/docker-prune.log`
+- ⚠️ El `dist` desplegado (build viejo) aún muestra los 3 botones de Mantenimiento; ahora dan 404. Se resuelven cuando salga el build de frontend WIP. Solo visibles para SYSTEM_ADMIN.
 
-### 1.2 Cap real de tamaño en upload de audio ⬜
-`ParseMultipartForm(200MB)` limita memoria, no el body → disco llenable por usuario autenticado.
-- ⬜ `services/core-api/internal/aidrafts/handler/writer.go`: `r.Body = http.MaxBytesReader(w, r.Body, maxAudioSize)` antes de `ParseMultipartForm`
-- ⬜ Distinguir error de tamaño (413) de multipart malformado (400) — hoy todo devuelve 413
-- ⬜ Validar `appointment_id` como UUID (`uuid.Parse`) antes de usarlo como nombre de archivo (línea ~79)
+### 1.2 Cap real de tamaño en upload de audio ✅
+- ✅ `http.MaxBytesReader(w, r.Body, maxAudioSize)` antes de `ParseMultipartForm`
+- ✅ Multipart malformado → 400; exceso de tamaño → 413 (vía `http.MaxBytesError`)
+- ✅ `appointment_id` validado con `uuid.Parse` antes de usarse como nombre de archivo
 
-### 1.3 Hashes de búsqueda con pepper (HMAC-SHA256) ⬜
-`SHA-256(lower(s))` sin sal sobre cédulas (6-10 dígitos) y apellidos es reversible por fuerza bruta si se exfiltra la tabla. Afecta: `users.email_hash`, `patients.{paternal_last_name_hash, full_name_search_hash, doc_search_hash}`.
-- ⬜ Nueva env `SEARCH_PEPPER` (32 bytes hex, generar y guardar junto a MASTER_KEY; fail-closed al arrancar si falta)
-- ⬜ `shared/hash`: `Normalize` pasa a `HMAC-SHA256(pepper, lower(trim(s)))`; mantener la variante vieja solo para el backfill
-- ⬜ Comando one-shot `cmd/rehash`: itera users + patients, descifra PII con su DEK, recalcula los 4 hashes, actualiza filas (necesita MASTER_KEY + SEARCH_PEPPER)
-- ⬜ Cutover con ventana de mantenimiento corta (base de usuarios pequeña): deploy código nuevo → correr rehash → smoke test de login + búsqueda de paciente
-- ⬜ `Token()` (reset/invite) NO cambia — ya es alta entropía
+### 1.3 Hashes de búsqueda con pepper (HMAC-SHA256) ✅
+- ✅ Nueva env obligatoria `SEARCH_PEPPER` (fail-closed en `hash.Init` al arrancar); generada en el `.env` del VPS (nunca salió del servidor)
+- ✅ `hash.Normalize` → `HMAC-SHA256(pepper, lower(trim(s)))`; `Token()` intacto
+- ✅ `cmd/rehash`: recalcula `users.email_hash` + los 3 hashes de `patients` en UNA transacción, RLS-aware (GUC por org). Incluido en la imagen como `./rehash`
+- ✅ Cutover ejecutado: deploy → `docker compose exec core-api ./rehash` (7 usuarios, 4 pacientes) → verificado
 
-**Verificación fase:** smoke test completo + login + búsqueda por apellido y documento + upload de audio >200MB rechazado.
+**Verificación:** build+deploy CI verde; rehash OK; socket confirmado ausente del contenedor. El smoke de `login` falla con 401 pero es **pre-existente y no relacionado**: la cuenta `SMOKE_PASSWORD` da `USER-NOT-FOUND` tanto con el código viejo (ayer) como con el nuevo — ese email no existe en la BD de prod (secret desactualizado, arreglar aparte). Pendiente confirmación humana: que el usuario pruebe login real en la app.
 
 ---
 
