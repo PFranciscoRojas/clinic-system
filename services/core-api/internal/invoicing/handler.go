@@ -59,13 +59,7 @@ type rateBody struct {
 }
 
 func (b rateBody) toInput() RateInput {
-	return RateInput{
-		Name:        b.Name,
-		Description: b.Description,
-		Amount:      b.Amount,
-		Currency:    b.Currency,
-		Modality:    b.Modality,
-	}
+	return RateInput(b)
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {

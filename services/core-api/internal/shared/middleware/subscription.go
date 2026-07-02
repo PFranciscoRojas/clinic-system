@@ -3,10 +3,22 @@ package middleware
 import (
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// entitlementTTL bounds how stale a cached subscription row may be. A change
+// made by a webhook or the operator takes at most this long to be enforced —
+// acceptable grace for payment gating, and it removes one SELECT per request.
+const entitlementTTL = 60 * time.Second
+
+type entitlementEntry struct {
+	status      string
+	accessUntil *time.Time
+	fetchedAt   time.Time
+}
 
 // SubscriptionGate blocks clinical access once a tenant's trial or paid period
 // has lapsed, returning 402 Payment Required so the SPA can show a reactivation
@@ -20,6 +32,11 @@ import (
 // manual activation by the operator (cash/transfer). On any lookup error the
 // gate fails open, so an infrastructure hiccup never locks a paying tenant out.
 func SubscriptionGate(pool *pgxpool.Pool) func(http.Handler) http.Handler {
+	// One entry per organization (tenant counts are small, growth is bounded);
+	// lookup errors are never cached so fail-open stays a per-request decision.
+	var mu sync.Mutex
+	cache := make(map[string]entitlementEntry)
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			path := r.URL.Path
@@ -43,19 +60,31 @@ func SubscriptionGate(pool *pgxpool.Pool) func(http.Handler) http.Handler {
 				}
 			}
 
-			var status string
-			var accessUntil *time.Time
-			err := pool.QueryRow(r.Context(),
-				`SELECT subscription_status, COALESCE(current_period_end, trial_ends_at)
-				 FROM organizations WHERE id = $1`,
-				claims.OrganizationID,
-			).Scan(&status, &accessUntil)
-			if err != nil {
-				next.ServeHTTP(w, r) // fail open on lookup error
-				return
+			mu.Lock()
+			entry, ok := cache[claims.OrganizationID]
+			mu.Unlock()
+			if !ok || time.Since(entry.fetchedAt) > entitlementTTL {
+				var status string
+				var accessUntil *time.Time
+				err := pool.QueryRow(r.Context(),
+					`SELECT subscription_status, COALESCE(current_period_end, trial_ends_at)
+					 FROM organizations WHERE id = $1`,
+					claims.OrganizationID,
+				).Scan(&status, &accessUntil)
+				if err != nil {
+					next.ServeHTTP(w, r) // fail open on lookup error
+					return
+				}
+				entry = entitlementEntry{status: status, accessUntil: accessUntil, fetchedAt: time.Now()}
+				mu.Lock()
+				cache[claims.OrganizationID] = entry
+				mu.Unlock()
 			}
 
-			if !Entitled(status, accessUntil) {
+			// Entitled re-evaluates the deadline against the wall clock, so a
+			// period that lapses mid-TTL is denied immediately; only status
+			// flips (e.g. reactivation) wait out the remaining TTL.
+			if !Entitled(entry.status, entry.accessUntil) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusPaymentRequired)
 				_, _ = w.Write([]byte(`{"error":"subscription_required"}`))
