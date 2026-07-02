@@ -104,26 +104,33 @@ Restricción: el VPS no tiene disco para `es_core_news_lg` (por eso está `sm`).
 
 ---
 
-## Fase 5 — Tests (la deuda #1) 🔴 (2 sesiones, luego continuo)
+## Fase 5 — Tests (la deuda #1) 🔴 ✅ NÚCLEO COMPLETADO (2026-07-02, PR #111) — 2 ítems de continuación
 
-**Rama:** `test/integration-foundation`
+**Rama:** `test/integration-foundation` (merged squash → `main`, `231b1f8`)
 
-> Hoy: 6 archivos de test para 24k LOC de backend clínico, 0 en frontend. Los bugs de pérdida de contenido de las sesiones 22–24 eran atrapables con estos tests.
+> Antes: 6 archivos de test para 24k LOC. Ahora: suite de integración contra Postgres 16 real (testcontainers, TODAS las migraciones, conectando como `sghcp_app` NOSUPERUSER — la topología exacta de prod) + vitest en frontend. 20 subtests backend en ~5s, 8 en frontend.
 
-### 5.1 Backend — integración con Postgres real ⬜
-- ⬜ Setup testcontainers-go (Postgres 16 + migraciones)
-- ⬜ **Test de aislamiento RLS**: org A no lee/escribe filas de org B en las 6 tablas con policy (el test más importante del sistema)
-- ⬜ Ciclo de vida clinical record: crear → autosave → aprobar → inmutable → adenda
-- ⬜ Dinero: invoice + payments + balance (NUMERIC end-to-end, redondeos)
-- ⬜ Auth: login (lockout, enumeración), refresh (rotación, epoch, roles revocados — cubre 2.3)
-- ⬜ `patient_staff_rel` need-to-know: profesional sin relación → 403
+### 5.1 Backend — integración con Postgres real ✅ (1 pendiente)
+- ✅ Setup testcontainers-go (`internal/integration`, 1 contenedor compartido por run, migraciones como owner + `setup_app_role.sql`)
+- ✅ **Test de aislamiento RLS** sobre 10 tablas con policy: SELECT scoped, GUC en blanco fail-closed, UPDATE/DELETE cross-tenant → 0 filas, WITH CHECK rechaza INSERT/re-etiquetado
+- ✅ **Guard de cobertura RLS**: cualquier tabla futura con `organization_id` sin policy rompe la suite (allow-list documentada)
+- ✅ Dinero: NUMERIC end-to-end con montos hostiles a float64 (1333.43×3), ciclo DRAFT→ISSUED→PARTIAL→PAID, sobrepago rechazado, `SUM(payments)==total_paid` en SQL
+- ✅ Auth: login (lockout a 5, errores anti-enumeración) + refresh (replay de rotación, epoch, usuario inactivo, token basura — blinda 2.3)
+- ✅ `patient_staff_rel` need-to-know: terapeuta ✔, profesional sin relación ✘, supervisor co-firma ✔, sin scope fail-closed
+- ⬜ Ciclo de vida clinical record: crear → autosave → aprobar → inmutable → adenda (siguiente sesión de tests)
 
-### 5.2 Frontend — vitest + testing-library ⬜
-- ⬜ `client.ts`: single-flight de refresh (cubre 2.1), borrado selectivo (2.2)
+**🔴 2 defectos reales encontrados y corregidos por la suite:**
+1. `clinicalperm.IsAssignedToPatient` consultaba el pool crudo (sin GUC): su rama de `clinical_records` (FORCE RLS) veía 0 filas siempre — **el acceso del supervisor co-firmante estaba roto en prod silenciosamente**. Fix: `dbctx.From` (querier scoped)
+2. `patient_staff_rel` y `supervision_rel` tenían `organization_id` **sin policy RLS**. Migración `000049` les añade `tenant_isolation` + FORCE. Aplicada en prod (deploy del binario primero, migración después; `schema_migrations` → 49)
+
+### 5.2 Frontend — vitest ✅ (1 pendiente)
+- ✅ vitest + happy-dom (`vitest.config.ts` separado del build); 8 tests de `client.ts`: single-flight (3×401 concurrentes → 1 refresh), borrado selectivo (drafts clínicos sobreviven), retry acotado a 1, mapeo de errores, `getBlob`
+- ✅ Nota: vitest pineado a v3 (v4 exige vite ≥6 y anidaba un vite 8 con lockfile roto en npm 10)
 - ⬜ `RecordForm`: autosave localStorage + restauración + merge con servidor (la zona de los bugs de sesión 22–24)
 
-### 5.3 Gate de CI ⬜
-- ⬜ `go test ./...` ya bloquea build — añadir los nuevos; vitest al CI de frontend
+### 5.3 Gate de CI ✅
+- ✅ `go test ./...` ya corre la suite de integración en CI (ubuntu-latest trae Docker); verificado verde en el pipeline post-merge
+- ✅ `npm test` añadido a `check-frontend.yml` tras tsc + eslint
 
 ---
 
