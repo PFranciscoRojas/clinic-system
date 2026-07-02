@@ -33,3 +33,7 @@ jobs:
       - name: ESLint
         working-directory: services/frontend
         run: npm run lint
+
+      - name: Unit tests
+        working-directory: services/frontend
+        run: npm test
