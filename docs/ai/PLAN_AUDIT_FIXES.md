@@ -32,29 +32,26 @@ El socket solo alimentaba 3 comandos de limpieza en la consola admin. Un RCE en 
 
 ---
 
-## Fase 2 — Bugs de sesión/auth 🟠 (1 sesión)
+## Fase 2 — Bugs de sesión/auth 🟠 ✅ COMPLETADA (2026-07-02, PR #108)
 
-**Rama:** `fix/session-refresh-races`
+**Rama:** `fix/session-refresh-races` (merged squash → `main`)
 
-### 2.1 Single-flight en el refresh de token ⬜
-Dos 401 concurrentes → dos `tryRefresh()` con el mismo token rotado → el segundo falla → logout en plena sesión.
-- ⬜ `services/frontend/src/api/client.ts`: promesa compartida module-level (`let refreshing: Promise<boolean> | null`); todos los 401 esperan la misma
+### 2.1 Single-flight en el refresh de token ✅
+- ✅ `client.ts`: promesa compartida module-level; todos los 401 esperan el mismo refresh; retry acotado a 1 intento por request
 
-### 2.2 No arrasar localStorage al expirar sesión ⬜
-`localStorage.clear()` (client.ts:27) destruye los borradores clínicos autoguardados — el safety net que protege la nota.
-- ⬜ Reemplazar por borrado selectivo de claves de auth (`access_token`, `refresh_token`); conservar `sghcp_*` de drafts y onboarding
+### 2.2 No arrasar localStorage al expirar sesión ✅
+- ✅ Borrado selectivo (`access_token` + `refresh_token`); drafts clínicos y flags de onboarding sobreviven — igual que el logout explícito de `AuthContext`
 
-### 2.3 Refresh releyendo identidad y permisos desde BD ⬜
-`refresh.go` reconstruye el usuario desde el payload de Redis: (a) roles/permisos revocados sobreviven todo el TTL, (b) `Email`/`DisplayName` salen vacíos en el nuevo access token.
-- ⬜ `auth/service/refresh.go`: tras validar el token, cargar el usuario fresco de BD (repo `FindByID` con roles+perms); rechazar si `is_active = false`
-- ⬜ El payload de Redis queda solo con `uid` + `epoch`
+### 2.3 Refresh releyendo identidad y permisos desde BD ✅
+- ✅ `Refresh` usa `FindUserByID` (ya existía con roles+perms); rechaza `is_active=false` con 403
+- ✅ Payload de Redis reducido a `{uid, epoch}` (tokens viejos siguen parseando)
+- ✅ Bonus: los errores de refresh mapeaban a 500 (no estaban en el ErrorMapper); ahora 401/403 con sentinelas
 
-### 2.4 Unificar los 3 fetch ad-hoc en client.ts ⬜
-`clinicalRecords.ts:137`, `invoices.ts:152`, `patients.ts:79` no pasan por el refresh de 401 → fallo aparente con token expirado.
-- ⬜ Añadir `api.getBlob(path)` a client.ts (mismo pipeline de 401/refresh, devuelve Blob)
-- ⬜ Migrar los 3 usos y eliminar los `localStorage.getItem` dispersos
+### 2.4 Unificar los 3 fetch ad-hoc en client.ts ✅
+- ✅ `api.getBlob(path, mensajeError)` con el mismo pipeline auth+401-refresh (`authedFetch` compartido)
+- ✅ Migrados `exportPDF`, `downloadReceipt`, `exportCSV`; cero `Bearer ${localStorage...}` fuera de client.ts
 
-**Verificación fase:** simular expiración (TTL corto en dev): dos requests paralelos se recuperan sin logout; descarga de PDF con token expirado se recupera; borrador local sobrevive a un logout forzado.
+**Verificación:** `go build/vet/test` + `tsc` verdes; backend desplegado vía CI (`6948ef1`) y frontend reconstruido en el VPS; probado en prod que refresh con token inválido devuelve 401 (antes 500). Nota: `invoices.ts` aterrizó con 2 líneas de colores del rediseño WIP (autocontenidas). Los tests automatizados de single-flight quedan para Fase 5.2.
 
 ---
 
