@@ -89,17 +89,18 @@ Restricción: el VPS no tiene disco para `es_core_news_lg` (por eso está `sm`).
 
 ---
 
-## Fase 4 — Plataforma y rendimiento 🟡 (½ sesión)
+## Fase 4 — Plataforma y rendimiento 🟡 ✅ COMPLETADA (2026-07-02, PR #110)
 
-**Rama:** `enhancement/platform-perf`
+**Rama:** `enhancement/platform-perf` (merged squash → `main`, `fc8149d`)
 
-### 4.1 Cache del SubscriptionGate ⬜
-Un `SELECT organizations` por cada request protegido.
-- ⬜ Cache in-memory por org con TTL 60s (map + mutex); invalidación best-effort no necesaria (60s de gracia es aceptable para gating de pago)
+### 4.1 Cache del SubscriptionGate ✅
+- ✅ Cache in-memory por org con TTL 60s (map + mutex); los errores de lookup NO se cachean (fail-open sigue siendo por request); `Entitled()` sigue evaluando el deadline contra el reloj, así que un periodo que vence a mitad de TTL se niega al instante — solo los cambios de status esperan el TTL restante
 
-### 4.2 Análisis estático en CI ⬜
-- ⬜ Añadir `staticcheck` y (opcional) `deadcode` al workflow de core-api; arreglar findings iniciales
-- ⬜ `eslint` ya existe — asegurar que corre en CI de frontend junto a `tsc --noEmit`
+### 4.2 Análisis estático en CI ✅
+- ✅ Job `lint` en `build-core-api.yml`: `go vet` + `staticcheck` (pinned v0.7.0); `build` ahora requiere `[test, lint]`. Un único finding pre-existente arreglado (S1016 en `invoicing/handler.go`)
+- ✅ `eslint` en `check-frontend.yml` junto a `tsc --noEmit`. Sorpresa: el script `lint` existía pero eslint nunca se instaló ni había config — se montó eslint 10 flat config (typescript-eslint + react-hooks). Reglas base en `error` (pasan hoy, 0 errores); los 43 findings pre-existentes (react-hooks v6 + `no-explicit-any`) quedan en `warn` hasta que aterrice el rediseño WIP (ratchet en BACKLOG)
+
+**Verificación:** `go build/vet/staticcheck/test` verdes; eslint 0 errores contra `main` limpio (worktree temporal) y contra el working tree con WIP; pipeline post-merge: `lint`+`test`+`build`(deploy) verdes — `smoke` falla por el secret `SMOKE_PASSWORD` pre-existente (BACKLOG), API sana y contenedor arriba.
 
 ---
 
