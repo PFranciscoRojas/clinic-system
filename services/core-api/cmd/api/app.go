@@ -19,6 +19,7 @@ import (
 	"sghcp/core-api/internal/shared/config"
 	"sghcp/core-api/internal/shared/crypto"
 	"sghcp/core-api/internal/shared/db"
+	"sghcp/core-api/internal/shared/hash"
 	"sghcp/core-api/internal/shared/outbox"
 	"sghcp/core-api/internal/whatsapp"
 )
@@ -50,6 +51,12 @@ func newApp(cfg config.Config) (*app, error) {
 	km, err := crypto.NewKeyManager(cfg.MasterKey)
 	if err != nil {
 		return nil, fmt.Errorf("key manager: %w", err)
+	}
+
+	// Same rationale for the search pepper: a missing/malformed value must
+	// crash on boot, not surface later as lookups that silently match nothing.
+	if err := hash.Init(cfg.SearchPepper); err != nil {
+		return nil, fmt.Errorf("search pepper: %w", err)
 	}
 
 	pool, err := db.Connect(cfg.DatabaseURL)

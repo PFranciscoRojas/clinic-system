@@ -39,7 +39,9 @@ services:
       AUDIO_DIR: /data/audio
     volumes:
       - audio_data:/data/audio
-      - /var/run/docker.sock:/var/run/docker.sock
+      # NEVER mount /var/run/docker.sock here: it grants root-equivalent host
+      # access to the API process (removed 2026-07-01 — Docker disk cleanup
+      # runs as a weekly cron on the VPS host instead).
       - /var/lib/sghcp:/backup-status:ro
     networks:
       - sghcp_net

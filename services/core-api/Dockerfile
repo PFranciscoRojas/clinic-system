@@ -9,14 +9,16 @@ RUN go mod download
 
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/core-api ./cmd/api
+# One-shot search-hash migration, run manually via `docker compose exec core-api ./rehash`
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/rehash ./cmd/rehash
 
 # ─── runtime stage ────────────────────────────────────────────────────────────
 FROM alpine:3.19
 
-RUN apk --no-cache add ca-certificates tzdata docker-cli
+RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /root/
-COPY --from=build /bin/core-api .
+COPY --from=build /bin/core-api /bin/rehash ./
 
 EXPOSE 8080
 ENTRYPOINT ["./core-api"]
