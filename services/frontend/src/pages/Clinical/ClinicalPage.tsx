@@ -5,6 +5,7 @@ import { Brain, FileText, Clock, CheckCircle2, AlertTriangle, Loader2, XCircle }
 import { useAuth } from '@/context/AuthContext';
 import { aiDraftsApi, type DraftMeta, type DraftStatus } from '@/api/aiDrafts';
 import { clinicalRecordsApi, type RecordMeta, type RecordStatus } from '@/api/clinicalRecords';
+import { fmtDateOnly } from '@/lib/dates';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -120,7 +121,7 @@ function RecordRow({ m, onClick }: { m: RecordMeta; onClick: () => void }) {
       <span style={{ fontSize: 13, color: 'var(--s600)' }}>
         {RECORD_TYPE_LABEL[m.record_type] ?? m.record_type}
       </span>
-      <span style={{ fontSize: 12, color: 'var(--s400)' }}>{fmtDate(m.session_date)}</span>
+      <span style={{ fontSize: 12, color: 'var(--s400)' }}>{fmtDateOnly(m.session_date)}</span>
       {m.risk_level && m.risk_level !== 'NONE' && (
         <span style={{ fontSize: 11, fontWeight: 700, color: RISK_COLOR[m.risk_level] ?? '#6b7280' }}>
           ⚠ {m.risk_level}

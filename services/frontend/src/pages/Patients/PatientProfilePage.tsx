@@ -12,6 +12,7 @@ import { EditPatientModal } from '@/components/patients/EditPatientModal';
 import { LateSessionModal } from '@/components/appointments/LateSessionModal';
 import { patientsApi } from '@/api/patients';
 import { calcAge } from '@/lib/age';
+import { fmtDateOnly } from '@/lib/dates';
 import { useIsMobile } from '@/lib/useMediaQuery';
 import { appointmentsApi, type Appointment } from '@/api/appointments';
 import { clinicalRecordsApi, consentsApi, type RecordMeta, type Consent, type ConsentType } from '@/api/clinicalRecords';
@@ -259,7 +260,7 @@ function HistoriaTab({
             const cfg = CR_STATUS_CONFIG[rec.status] ?? CR_STATUS_CONFIG.DRAFT;
             return (
               <div key={rec.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 110px 90px 90px', minWidth: 580, gap: 8, alignItems: 'center', padding: '12px 20px', borderBottom: idx < records.length - 1 ? '1px solid var(--s100)' : 'none' }}>
-                <span style={{ fontSize: 13, color: 'var(--s700)' }}>{fmtDate(rec.session_date)}</span>
+                <span style={{ fontSize: 13, color: 'var(--s700)' }}>{fmtDateOnly(rec.session_date, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                 <span style={{ fontSize: 13, color: 'var(--s600)' }}>{RECORD_TYPE_LABEL[rec.record_type] ?? rec.record_type}</span>
                 {(() => {
                   const rm = riskMeta(rec.risk_level);

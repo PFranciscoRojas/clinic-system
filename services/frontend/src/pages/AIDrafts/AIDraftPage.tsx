@@ -13,6 +13,7 @@ import { clinicalRecordsApi, type RecordSections, type ClinicalRecord } from '@/
 import { TEMPLATE_SECTIONS, RECORD_TYPE_LABELS, type SectionDef } from '@/components/clinical/constants';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
+import { todayLocalISO } from '@/lib/dates';
 import TemplatedSectionsForm, { type SectionsState } from '@/components/clinical/TemplatedSectionsForm';
 
 const STATUS_CONFIG: Record<DraftStatus, { label: string; color: string; bg: string; Icon: React.ElementType }> = {
@@ -97,7 +98,9 @@ export function AIDraftPage() {
   }, [draft]);
 
   const handleApprove = async () => {
-    if (!id) return;
+    // A record was already created from this draft — never create a second one,
+    // even if the draft's status refetch hasn't landed yet.
+    if (!id || approving || createdRecordId) return;
     setApproving(true);
     setApproveErr('');
     try {
@@ -107,7 +110,7 @@ export function AIDraftPage() {
         approveBody = {
           sections: customEdit,
           record_type: recordType,
-          session_date: qsSessionDate || undefined,
+          session_date: qsSessionDate || todayLocalISO(),
           appointment_id: qsAppointmentId || undefined,
           template_id: customTemplate.id,
           risk_level: riskLevel,
@@ -122,7 +125,7 @@ export function AIDraftPage() {
         approveBody = {
           sections: finalSections,
           record_type: recordType,
-          session_date: qsSessionDate || undefined,
+          session_date: qsSessionDate || todayLocalISO(),
           appointment_id: qsAppointmentId || undefined,
           risk_level: riskLevel,
         };
@@ -136,6 +139,9 @@ export function AIDraftPage() {
             icd10_code: icd10.code,
             clinical_record_id: res.clinical_record_id,
             diagnosis_type: 'PRINCIPAL',
+            // Anchor to the session's local date — the DB default is
+            // CURRENT_DATE on a UTC server, one day ahead in the evening.
+            diagnosed_at: qsSessionDate || todayLocalISO(),
           });
         } catch { /* record is approved; diagnosis can be added later from the profile */ }
       }
@@ -352,8 +358,8 @@ export function AIDraftPage() {
           <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
             <button
               onClick={handleApprove}
-              disabled={approving}
-              style={{ flex: 1, padding: 13, borderRadius: 11, background: 'var(--teal)', color: '#fff', border: 'none', cursor: approving ? 'not-allowed' : 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: approving ? 0.7 : 1 }}
+              disabled={approving || !!createdRecordId}
+              style={{ flex: 1, padding: 13, borderRadius: 11, background: 'var(--teal)', color: '#fff', border: 'none', cursor: (approving || createdRecordId) ? 'not-allowed' : 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (approving || createdRecordId) ? 0.7 : 1 }}
             >
               {approving ? <Spinner size={16} color="#fff" /> : <CheckCircle2 size={16} />}
               {approving ? 'Aprobando…' : 'Aprobar versión final'}
@@ -566,8 +572,8 @@ export function AIDraftPage() {
                   </button>
                   <button
                     onClick={handleApprove}
-                    disabled={approving}
-                    style={{ flex: 2, padding: 13, borderRadius: 11, background: 'var(--teal)', color: '#fff', border: 'none', cursor: approving ? 'not-allowed' : 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: approving ? 0.7 : 1 }}
+                    disabled={approving || !!createdRecordId}
+                    style={{ flex: 2, padding: 13, borderRadius: 11, background: 'var(--teal)', color: '#fff', border: 'none', cursor: (approving || createdRecordId) ? 'not-allowed' : 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (approving || createdRecordId) ? 0.7 : 1 }}
                   >
                     {approving ? <Spinner size={16} color="#fff" /> : <CheckCircle2 size={16} />}
                     {approving ? 'Aprobando…' : 'Aprobar historia clínica'}
