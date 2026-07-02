@@ -23,6 +23,10 @@ class Settings(BaseSettings):
 
     # Anthropic
     anthropic_api_key: str
+    anthropic_model: str = "claude-sonnet-4-6"
+    # Low temperature: clinical drafting must be deterministic and faithful to
+    # the source text, not creative.
+    anthropic_temperature: float = 0.2
 
     # Whisper
     whisper_model: str = "base"
