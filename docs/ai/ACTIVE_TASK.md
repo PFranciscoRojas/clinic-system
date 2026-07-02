@@ -1,13 +1,15 @@
 ## Sin tarea pendiente
 
-Sesión 24 cerrada limpiamente. Bug crítico de pérdida de contenido real en producción (registros con plantilla personalizada) encontrado, corregido y confirmado funcionando por el usuario ("funciono perfecto"). Todo desplegado a producción.
+Fases 1 y 2 de la auditoría 360° cerradas, mergeadas y desplegadas (PR #107, #108). El plan vive en `docs/ai/PLAN_AUDIT_FIXES.md` con las casillas de Fase 1-2 marcadas.
 
 ## Sugerencia de siguiente paso
 
-Basándome en STATUS.md (bloqueantes + roadmap) y BACKLOG.md, lo más valioso a atacar ahora es:
+Según el plan de auditoría, STATUS (bloqueantes) y BACKLOG, lo más valioso a atacar ahora:
 
-1. **Seguir de cerca a Marcela como beta activa** — ya está usando el sistema en producción con plantillas personalizadas en los 4 formatos y reportando bugs reales según van apareciendo. Cada sesión reciente (21-24) ha sido resolver fricción real de su uso diario — esto ES la validación de demanda, solo falta preguntarle directamente si pagaría y a qué precio.
+1. **Fase 3 — Guardrails de IA** (`enhancement/ai-guardrails`). Alto valor, deploy aislado (solo ai-service + compose): `temperature=0.2` en las 4 llamadas, anonimización reforzada (regex de email + reemplazo literal de nombres del paciente que el worker ya descifra), guardrail anti prompt-injection en los 4 system prompts, validar el ICD-10 sugerido contra el catálogo, cap de historia para risk/plan, y reclaim de jobs huérfanos del worker (`XAUTOCLAIM` + dead-letter). Es la fase con mejor relación impacto/riesgo antes de la beta.
 
-2. **Visor de borrador bloqueado + plantillas personalizadas (BACKLOG, sesión 24)** — gap menor identificado pero no implementado: si un borrador bloqueado (tipo ya no válido) usaba plantilla personalizada, el visor de recuperación no lo muestra. Bajo impacto pero vale cerrarlo dado que ahora todo el uso real de Marcela pasa por plantillas.
+2. **Adelantar Fase 5.1 — test de aislamiento RLS** (testcontainers). Blinda justo el cambio de hashes de la Fase 1 y es el test más importante del sistema (org A no lee filas de org B). Buen momento porque el modelo de datos está fresco en contexto.
 
-3. **PHQ-9 / Escalas MBC (Fase 1)** — si la validación beta confirma interés, la Fase 1 del plan MBC (`docs/ai/PLAN_ASSESSMENTS.md`) es el diferenciador más claro frente a la competencia colombiana. Costo de licencias $0.
+3. **Arreglar el secret `SMOKE_PASSWORD`** (rápido, en BACKLOG → DevOps): el gate de smoke está inútil hasta que el email del test exista en prod.
+
+Recomendación: Fase 3 primero (cierra los riesgos de IA antes de exponer el producto a las psicólogas beta), con la Fase 5.1 pegada después para asegurar el trabajo de seguridad ya hecho.

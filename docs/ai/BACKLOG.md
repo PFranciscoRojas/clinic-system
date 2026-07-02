@@ -54,6 +54,7 @@
 - **Prometheus + Grafana (cuando haya clientes reales pagando)** — añadir 2 contenedores al VPS: `prometheus` + `grafana` + `postgres_exporter`. Da gráficas de series de tiempo (conexiones, latencia, IOPS, etc.) con historial de días/semanas. ~300 MB RAM adicional. Diferir hasta tener carga real que justifique el overhead operativo.
 - **Smoke tests en deploy de frontend (2026-06-30)** — el job `smoke` en `build-core-api.yml` solo se activa cuando cambia `services/core-api/**`. Si se quiere cobertura total, añadir un `workflow_dispatch` standalone en un archivo `smoke.yml` separado que se pueda disparar manualmente o desde el futuro CI de frontend.
 - **Testing exploratorio con agente IA (2026-06-30)** — para detectar bugs visuales y de UX que un script de API no detecta, considerar `browser-use` (Python, integra Playwright + LLM) para sesiones periódicas manuales de exploración. No sirve como gate CI (no-determinístico, costoso), pero sí como herramienta del fundador antes de releases importantes. LangGraph/LangChain no aportan valor en este caso de uso.
+- **Arreglar secret `SMOKE_PASSWORD` del smoke test (2026-07-02)** — el paso `login` del smoke falla con `USER-NOT-FOUND` (comprobado en audit_log con código viejo y nuevo): el email/credencial que usa `scripts/smoke_test.py` no existe en la BD de prod. Crear una cuenta de smoke dedicada en la org demo y apuntar el secret ahí, o corregir el email en el script. No bloquea deploy pero deja el gate de smoke inútil.
 
 ## Pruebas Psicológicas / Psicométricas (investigar antes de implementar)
 

@@ -13,6 +13,15 @@
 
 ---
 
+## 2026-07-02 (sesión 25 — auditoría 360° + Fases 1-2)
+
+- **Auditoría técnica completa** (código, BD, IA, seguridad, UX, producto). Plan de 6 fases en `docs/ai/PLAN_AUDIT_FIXES.md`; features de producto → BACKLOG (`5f152e4`).
+- **Fase 1 seguridad (PR #107, `2375d8b`)**: (1) eliminado el montaje de `/var/run/docker.sock` en core-api — era RCE→root en el host; los 3 pruning del admin UI reemplazados por cron semanal en el host. (2) `hash.Normalize` pasa de SHA-256 sin sal a HMAC-SHA256 bajo nuevo env obligatorio `SEARCH_PEPPER` (fail-closed) — las cédulas de 6-10 dígitos eran reversibles desde un dump; `cmd/rehash` (en la imagen) migró los hashes existentes en una transacción RLS-aware (7 usuarios, 4 pacientes). (3) upload de audio con `MaxBytesReader` (cap real) + `appointment_id` validado como UUID.
+- **Fase 2 sesión/auth (PR #108, `6948ef1`)**: single-flight en el refresh (dos 401 concurrentes ya no se sacan mutuamente por el token rotado → no más logout en plena sesión); `localStorage` selectivo al expirar (los borradores clínicos sobreviven — antes `clear()` borraba la propia red de seguridad); `Refresh` relee el usuario desde BD vía `FindUserByID` (roles revocados e inactivos ya no sobreviven el TTL, y el token renovado conserva email/display_name); errores de refresh ahora 401/403 (antes 500); 3 fetch ad-hoc (PDF/comprobante/CSV) → `api.getBlob` con el pipeline compartido.
+- Ambas fases desplegadas y verificadas en prod (backend CI, frontend rebuild manual). Smoke `login` sigue fallando por secret `SMOKE_PASSWORD` desactualizado (pre-existente, ahora en QUEUE/BACKLOG).
+
+---
+
 ## 2026-06-30 (sesión 24)
 
 - fix(clinical): borrador bloqueado por cambio de proceso ahora es visible y recuperable — cuando el tipo guardado ya no aplica al estado del proceso clínico, en vez de solo describir que existía, se puede ver de solo-lectura (`RecordSectionsForm ... disabled`) o recuperar con un clic al formato válido actual (`0e53e1d`).
