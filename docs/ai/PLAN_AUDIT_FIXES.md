@@ -104,7 +104,7 @@ Restricción: el VPS no tiene disco para `es_core_news_lg` (por eso está `sm`).
 
 ---
 
-## Fase 5 — Tests (la deuda #1) 🔴 ✅ NÚCLEO COMPLETADO (2026-07-02, PR #111) — 2 ítems de continuación
+## Fase 5 — Tests (la deuda #1) 🔴 ✅ COMPLETADA (2026-07-02, PR #111 + #112)
 
 **Rama:** `test/integration-foundation` (merged squash → `main`, `231b1f8`)
 
@@ -117,16 +117,16 @@ Restricción: el VPS no tiene disco para `es_core_news_lg` (por eso está `sm`).
 - ✅ Dinero: NUMERIC end-to-end con montos hostiles a float64 (1333.43×3), ciclo DRAFT→ISSUED→PARTIAL→PAID, sobrepago rechazado, `SUM(payments)==total_paid` en SQL
 - ✅ Auth: login (lockout a 5, errores anti-enumeración) + refresh (replay de rotación, epoch, usuario inactivo, token basura — blinda 2.3)
 - ✅ `patient_staff_rel` need-to-know: terapeuta ✔, profesional sin relación ✘, supervisor co-firma ✔, sin scope fail-closed
-- ⬜ Ciclo de vida clinical record: crear → autosave → aprobar → inmutable → adenda (siguiente sesión de tests)
+- ✅ Ciclo de vida clinical record (PR #112): reglas de proceso abierto (EVOLUTION sin INITIAL ✘, segundo INITIAL ✘), autosave lenient (claves desconocidas ✘), Finalize estricto (`ErrMissingSection`), aprobar (interno ✘), inmutabilidad post-APPROVED, adendas solo en APPROVED con round-trip DEK y blob sin plaintext, co-firma bloquea Approve hasta que el supervisor firma
 
 **🔴 2 defectos reales encontrados y corregidos por la suite:**
 1. `clinicalperm.IsAssignedToPatient` consultaba el pool crudo (sin GUC): su rama de `clinical_records` (FORCE RLS) veía 0 filas siempre — **el acceso del supervisor co-firmante estaba roto en prod silenciosamente**. Fix: `dbctx.From` (querier scoped)
 2. `patient_staff_rel` y `supervision_rel` tenían `organization_id` **sin policy RLS**. Migración `000049` les añade `tenant_isolation` + FORCE. Aplicada en prod (deploy del binario primero, migración después; `schema_migrations` → 49)
 
-### 5.2 Frontend — vitest ✅ (1 pendiente)
+### 5.2 Frontend — vitest ✅
 - ✅ vitest + happy-dom (`vitest.config.ts` separado del build); 8 tests de `client.ts`: single-flight (3×401 concurrentes → 1 refresh), borrado selectivo (drafts clínicos sobreviven), retry acotado a 1, mapeo de errores, `getBlob`
 - ✅ Nota: vitest pineado a v3 (v4 exige vite ≥6 y anidaba un vite 8 con lockfile roto en npm 10)
-- ⬜ `RecordForm`: autosave localStorage + restauración + merge con servidor (la zona de los bugs de sesión 22–24)
+- ✅ `RecordForm` (PR #112, 6 tests): restauración desde localStorage + banner, persistencia con debounce 600ms, fallback al draft del servidor solo cuando local está vacío (lo local gana y suprime el fetch), cuarentena del formato bloqueado (contenido visible, nunca descartado ni sobreescrito), JSON corrupto arranca limpio
 
 ### 5.3 Gate de CI ✅
 - ✅ `go test ./...` ya corre la suite de integración en CI (ubuntu-latest trae Docker); verificado verde en el pipeline post-merge
