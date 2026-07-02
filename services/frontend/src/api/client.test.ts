@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { memoryStorage } from '@/test/memoryStorage';
 import { api, ApiError } from './client';
 
 type FetchMock = ReturnType<typeof vi.fn>;
@@ -30,21 +31,6 @@ function rotatingBackend(opts: { refreshStatus?: number; alwaysUnauthorized?: bo
 
 function refreshCalls(fetchMock: FetchMock): number {
   return fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/auth/refresh')).length;
-}
-
-/* Node ≥22 ships its own experimental `localStorage` global that shadows the
- * DOM environment's and reads as undefined without --localstorage-file. A
- * plain in-memory stub keeps the tests deterministic on any Node version. */
-function memoryStorage(): Storage {
-  const store = new Map<string, string>();
-  return {
-    get length() { return store.size; },
-    clear: () => store.clear(),
-    getItem: (k: string) => store.get(k) ?? null,
-    key: (i: number) => [...store.keys()][i] ?? null,
-    removeItem: (k: string) => { store.delete(k); },
-    setItem: (k: string, v: string) => { store.set(k, String(v)); },
-  };
 }
 
 beforeEach(() => {
