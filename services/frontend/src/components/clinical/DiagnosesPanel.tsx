@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stethoscope, Plus, Search, X } from 'lucide-react';
 import { diagnosesApi, type Diagnosis, type DiagnosisStatus, type ICD10Code } from '@/api/diagnoses';
 import { Spinner } from '@/components/ui/Spinner';
+import { fmtDateOnly, todayLocalISO } from '@/lib/dates';
 
 const STATUS_CFG: Record<DiagnosisStatus, { label: string; color: string; bg: string }> = {
   ACTIVE:    { label: 'Activo',     color: '#1e40af', bg: '#dbeafe' },
@@ -47,7 +48,7 @@ export function DiagnosesPanel({ patientId, reason }: { patientId: string; reaso
   const handleAdd = async (code: ICD10Code) => {
     setSaving(true); setErr('');
     try {
-      await diagnosesApi.create(patientId, { icd10_code: code.code });
+      await diagnosesApi.create(patientId, { icd10_code: code.code, diagnosed_at: todayLocalISO() });
       setAdding(false); setQuery('');
       refresh();
     } catch { setErr('Error al asignar el diagnóstico.'); }
@@ -127,8 +128,8 @@ export function DiagnosesPanel({ patientId, reason }: { patientId: string; reaso
               <div style={{ flex: 1, minWidth: 180 }}>
                 <p style={{ margin: 0, fontSize: 13, color: 'var(--s700)', fontWeight: 500 }}>{dx.description}</p>
                 <p style={{ margin: 0, fontSize: 11, color: 'var(--s400)' }}>
-                  Diagnosticado {new Date(dx.diagnosed_at).toLocaleDateString('es-CO')}
-                  {dx.resolved_at ? ` · cerrado ${new Date(dx.resolved_at).toLocaleDateString('es-CO')}` : ''}
+                  Diagnosticado {fmtDateOnly(dx.diagnosed_at, {})}
+                  {dx.resolved_at ? ` · cerrado ${fmtDateOnly(dx.resolved_at, {})}` : ''}
                 </p>
               </div>
               <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 6, background: cfg.bg, color: cfg.color }}>{cfg.label}</span>

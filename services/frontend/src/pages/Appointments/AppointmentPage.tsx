@@ -13,6 +13,7 @@ import { patientsApi, type Patient } from '@/api/patients';
 import { EditPatientModal } from '@/components/patients/EditPatientModal';
 import { PatientSearchBox } from '@/components/patients/PatientSearchBox';
 import { calcAge } from '@/lib/age';
+import { fmtDateOnly } from '@/lib/dates';
 import { recordingStore } from '@/lib/recordingStore';
 import { useIsCompact } from '@/lib/useMediaQuery';
 import { CLR_DANGER, CLR_WARN, CLR_SUCCESS, CLR_INFO, CLR_PROC, CLR_NEUTRAL } from '@/lib/tokens';
@@ -989,7 +990,7 @@ export function AppointmentPage() {
               <IdField label="Nombre completo" value={patientName} />
               {patient?.document_number && <IdField label="Documento" value={`${patient.document_type_code ?? ''} ${patient.document_number}`.trim()} />}
               {patientAge !== null && <IdField label="Edad" value={`${patientAge} años`} />}
-              {patient?.birth_date && <IdField label="F. nacimiento" value={new Date(patient.birth_date).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' })} />}
+              {patient?.birth_date && <IdField label="F. nacimiento" value={fmtDateOnly(patient.birth_date, { day: '2-digit', month: '2-digit', year: 'numeric' })} />}
               {patient?.gender && <IdField label="Género" value={patient.gender} />}
               {patient?.marital_status && <IdField label="Estado civil" value={patient.marital_status} />}
               {patient?.education && <IdField label="Escolaridad" value={patient.education} />}
