@@ -13,11 +13,11 @@ import (
 
 func (r *Repository) FindByID(ctx context.Context, orgID, draftID string) (*aidrafts.AIDraft, error) {
 	var d aidrafts.AIDraft
-	var clinicalRecordID, appointmentID, resolvedBy, errorMessage *string
+	var clinicalRecordID, appointmentID, resolvedBy, errorMessage, templateID *string
 	err := dbctx.From(ctx, r.db).QueryRow(ctx, `
 		SELECT id, organization_id, clinical_record_id, appointment_id, patient_id,
 		       requested_by, dek_id, audio_path_enc, transcription_enc,
-		       draft_content_enc, ai_model_version, whisper_model,
+		       draft_content_enc, ai_model_version, whisper_model, template_id,
 		       status, error_message, processed_at, resolved_at, resolved_by,
 		       created_at, delete_after
 		FROM ai_drafts
@@ -25,7 +25,7 @@ func (r *Repository) FindByID(ctx context.Context, orgID, draftID string) (*aidr
 	`, draftID, orgID).Scan(
 		&d.ID, &d.OrganizationID, &clinicalRecordID, &appointmentID, &d.PatientID,
 		&d.RequestedBy, &d.DEKID, &d.AudioPathEnc, &d.TranscriptionEnc,
-		&d.DraftContentEnc, &d.AIModelVersion, &d.WhisperModel,
+		&d.DraftContentEnc, &d.AIModelVersion, &d.WhisperModel, &templateID,
 		&d.Status, &errorMessage, &d.ProcessedAt, &d.ResolvedAt, &resolvedBy,
 		&d.CreatedAt, &d.DeleteAfter,
 	)
@@ -46,6 +46,9 @@ func (r *Repository) FindByID(ctx context.Context, orgID, draftID string) (*aidr
 	}
 	if errorMessage != nil {
 		d.ErrorMessage = *errorMessage
+	}
+	if templateID != nil {
+		d.TemplateID = *templateID
 	}
 	return &d, nil
 }

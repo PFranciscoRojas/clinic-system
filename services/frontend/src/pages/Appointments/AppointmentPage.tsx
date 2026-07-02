@@ -622,6 +622,11 @@ export function AppointmentPage() {
   // What the audio recording / AI draft targets: the type the professional is
   // actively filling (RecordForm), falling back to the inferred default.
   const aiRecordType: RecordType = selectedRecordType ?? defaultRecordType;
+  // Template for the AI draft: the one the form reports, falling back to the
+  // session-setup choice — the professional may record without ever opening
+  // the form, and losing the template here would make the AI generate (and
+  // the review page render) the wrong format.
+  const aiTemplateId = selectedTemplateId ?? (setupTemplateId || undefined);
 
   // Records linked to this appointment
   const linkedRecords: RecordMeta[] = (recordsData?.items ?? []).filter(r => r.appointment_id === id);
@@ -682,7 +687,7 @@ export function AppointmentPage() {
     await handleStatusChange('COMPLETED');
     if (audio && appt?.patient_id) {
       try {
-        const res = await appointmentsApi.uploadAudio(id!, appt.patient_id, audio, aiRecordType, selectedTemplateId);
+        const res = await appointmentsApi.uploadAudio(id!, appt.patient_id, audio, aiRecordType, aiTemplateId);
         handleDraftCreated(res.draft_id);
         recordingStore.clear(id!).catch(() => {});
         setRecoveredChunks([]);
@@ -706,7 +711,7 @@ export function AppointmentPage() {
     try {
       const blob = new Blob(recoveredChunks, { type: 'audio/webm' });
       const file = new File([blob], `session-${id}-${Date.now()}.webm`, { type: 'audio/webm' });
-      const res = await appointmentsApi.uploadAudio(id!, appt.patient_id, file, aiRecordType, selectedTemplateId);
+      const res = await appointmentsApi.uploadAudio(id!, appt.patient_id, file, aiRecordType, aiTemplateId);
       handleDraftCreated(res.draft_id);
       recordingStore.clear(id!).catch(() => {});
       setRecoveredChunks([]);
@@ -1109,7 +1114,7 @@ export function AppointmentPage() {
                       patientId={appt.patient_id}
                       draftId={draftId}
                       recordType={aiRecordType}
-                      templateId={selectedTemplateId}
+                      templateId={aiTemplateId}
                       sessionDate={apptDate}
                       processing={processingAudio}
                       linkedRecordId={finalizedRecords[0]?.id}
@@ -1460,7 +1465,7 @@ export function AppointmentPage() {
                   patientId={appt.patient_id}
                   draftId={draftId}
                   recordType={aiRecordType}
-                  templateId={selectedTemplateId}
+                  templateId={aiTemplateId}
                   sessionDate={apptDate}
                   processing={processingAudio}
                   onDraftCreated={handleDraftCreated}

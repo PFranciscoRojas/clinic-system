@@ -15,10 +15,12 @@ import (
 )
 
 // draftContent is the shape stored in ai_drafts.draft_content_enc by the AI
-// worker: the clinical-record sections for the session's record type.
+// worker: the clinical-record sections for the session's record type. Values
+// are strings for the integrated format but can be objects/arrays/numbers for
+// custom-template widgets, so they must decode as `any`.
 type draftContent struct {
-	RecordType string            `json:"record_type"`
-	Sections   map[string]string `json:"sections"`
+	RecordType string         `json:"record_type"`
+	Sections   map[string]any `json:"sections"`
 }
 
 // POST /api/v1/ai-drafts/{id}/approve
@@ -48,11 +50,14 @@ func (h *Handler) approveDraft(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Sections      map[string]string `json:"sections"`
-		SessionDate   string            `json:"session_date"` // "2006-01-02"; defaults to today
-		RecordType    string            `json:"record_type"`
-		AppointmentID string            `json:"appointment_id"`
-		RiskLevel     string            `json:"risk_level"`
+		// Sections values are typed (objects, arrays, numbers) when a custom
+		// template is in play — decoding them as strings would abort the whole
+		// body decode and silently discard the professional's edits.
+		Sections      map[string]any `json:"sections"`
+		SessionDate   string         `json:"session_date"` // "2006-01-02"; defaults to today
+		RecordType    string         `json:"record_type"`
+		AppointmentID string         `json:"appointment_id"`
+		RiskLevel     string         `json:"risk_level"`
 		// TemplateID propagates the custom template used during recording so
 		// the resulting clinical_record is validated and stored with it.
 		TemplateID string `json:"template_id"`
@@ -83,7 +88,15 @@ func (h *Handler) approveDraft(w http.ResponseWriter, r *http.Request) {
 
 	appointmentID := body.AppointmentID
 	if appointmentID == "" {
-		appointmentID = draft.ClinicalRecordID // reuse existing link if present
+		appointmentID = draft.AppointmentID // reuse existing link if present
+	}
+
+	// The template the recording was initiated with wins when the client
+	// doesn't (or can't) send it — otherwise a custom-format draft would be
+	// validated and stored as if it were the integrated format.
+	templateID := body.TemplateID
+	if templateID == "" {
+		templateID = draft.TemplateID
 	}
 
 	in := crrsvc.CreateInput{
@@ -94,18 +107,30 @@ func (h *Handler) approveDraft(w http.ResponseWriter, r *http.Request) {
 		AppointmentID:      appointmentID,
 		RecordType:         recordType,
 		SessionDate:        sessionDate,
-		TemplateID:         body.TemplateID,
+		TemplateID:         templateID,
 	}
 	if body.RiskLevel != "" {
 		in.RiskLevel = clinicalrecords.RiskLevel(body.RiskLevel)
 	}
 
 	if len(sections) > 0 {
+		// Integrated format: drop keys outside the template-v2 whitelist so a
+		// legacy draft (generated with an older AI schema) stays approvable —
+		// ValidateTemplateV2 rejects the whole payload on any unknown key. The
+		// original AI content remains readable on the immutable draft.
+		var allowed map[string]bool
+		if templateID == "" {
+			allowed = clinicalrecords.AllowedSectionKeys(recordType)
+		}
 		in.Sections = make(map[string]any, len(sections))
 		for k, v := range sections {
-			if v != "" {
-				in.Sections[k] = v
+			if clinicalrecords.IsEmptySection(v) {
+				continue
 			}
+			if allowed != nil && !allowed[k] {
+				continue
+			}
+			in.Sections[k] = v
 		}
 	}
 

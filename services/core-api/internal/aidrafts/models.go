@@ -15,6 +15,7 @@ type AIDraft struct {
 	DraftContentEnc  []byte
 	AIModelVersion   string
 	WhisperModel     string
+	TemplateID       string // custom record template; "" = integrated format
 	Status           string
 	ErrorMessage     string
 	ProcessedAt      *time.Time
@@ -33,6 +34,7 @@ type CreateParams struct {
 	AudioPathEnc   []byte
 	AIModelVersion string
 	WhisperModel   string
+	TemplateID     string // custom record template; "" = integrated format
 }
 
 // DraftMeta is the lightweight row returned by the list endpoint (no decryption).

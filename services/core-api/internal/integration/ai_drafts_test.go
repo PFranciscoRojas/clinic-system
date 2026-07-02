@@ -63,6 +63,69 @@ func TestAIDraftResolve(t *testing.T) {
 	}
 }
 
+// TestAIDraftTemplateRoundtrip pins the fix for the "draft ignores the custom
+// format" bug: template_id used to travel only in the Redis job, so the review
+// endpoint could never tell the SPA which format to render and it always fell
+// back to the hardcoded integrated sections.
+func TestAIDraftTemplateRoundtrip(t *testing.T) {
+	skipIfShort(t)
+	repo := adrepo.New(appPool)
+	tn := seedTenant(t, "drafts-c")
+
+	var templateID string
+	if err := adminPool.QueryRow(context.Background(),
+		`INSERT INTO clinical_record_templates
+		        (organization_id, name, record_type, source_markdown, schema, created_by)
+		 VALUES ($1, 'Formato test', 'EVOLUTION', '# t', '[{"key":"estado","label":"Estado","type":"text"}]', $2)
+		 RETURNING id`,
+		tn.OrgID, tn.UserID,
+	).Scan(&templateID); err != nil {
+		t.Fatalf("seed template: %v", err)
+	}
+
+	ctx := dbctx.WithQuerier(context.Background(), asOrg(t, tn.OrgID))
+	draftID, err := repo.Create(ctx, aidrafts.CreateParams{
+		OrganizationID: tn.OrgID,
+		PatientID:      tn.PatientID,
+		RequestedBy:    tn.UserID,
+		DEKID:          tn.DekID,
+		AIModelVersion: "test-model",
+		WhisperModel:   "test-whisper",
+		TemplateID:     templateID,
+	})
+	if err != nil {
+		t.Fatalf("create draft with template: %v", err)
+	}
+
+	draft, err := repo.FindByID(ctx, tn.OrgID, draftID)
+	if err != nil {
+		t.Fatalf("find draft: %v", err)
+	}
+	if draft.TemplateID != templateID {
+		t.Fatalf("draft.TemplateID = %q, want %q", draft.TemplateID, templateID)
+	}
+
+	// Integrated-format drafts keep NULL → empty string, never an error.
+	plainID, err := repo.Create(ctx, aidrafts.CreateParams{
+		OrganizationID: tn.OrgID,
+		PatientID:      tn.PatientID,
+		RequestedBy:    tn.UserID,
+		DEKID:          tn.DekID,
+		AIModelVersion: "test-model",
+		WhisperModel:   "test-whisper",
+	})
+	if err != nil {
+		t.Fatalf("create draft without template: %v", err)
+	}
+	plain, err := repo.FindByID(ctx, tn.OrgID, plainID)
+	if err != nil {
+		t.Fatalf("find plain draft: %v", err)
+	}
+	if plain.TemplateID != "" {
+		t.Fatalf("plain draft TemplateID = %q, want empty", plain.TemplateID)
+	}
+}
+
 // Without a tenant-scoped querier the repository falls back to the raw pool,
 // where the GUC is unset and RLS fails closed — Resolve must report the
 // failure (ErrNotFound), never pretend the draft was consumed.

@@ -122,6 +122,9 @@ export function AIDraftPage() {
           const v = (draftEdit[def.key] ?? baseContent[def.key] ?? '').trim();
           if (v) finalSections[def.key] = v;
         }
+        for (const [k, v] of extraSections) {
+          if (!(k in finalSections)) finalSections[k] = v;
+        }
         approveBody = {
           sections: finalSections,
           record_type: recordType,
@@ -191,6 +194,15 @@ export function AIDraftPage() {
   const useCustomTemplate = !!customTemplate;
 
   const getDraftField = (key: string) => draftEdit[key] ?? baseContent[key] ?? '';
+
+  // Sections the AI generated that the current integrated layout doesn't know
+  // (e.g. drafts produced with an older AI schema). Shown read-only and sent
+  // on approve so no clinical content is ever silently invisible or lost —
+  // the server drops any key its whitelist doesn't accept.
+  const extraSections: [string, string][] = !useCustomTemplate
+    ? Object.entries(baseContent).filter(([k, v]) =>
+        !sectionDefs.some(d => d.key === k) && typeof v === 'string' && v.trim() !== '')
+    : [];
 
   // True when there is genuinely no AI content and the professional has not
   // added any manual content either — shows a clean "empty draft" state.
@@ -529,6 +541,17 @@ export function AIDraftPage() {
                     </div>
                   );
                 })}
+                {extraSections.map(([key, value]) => (
+                  <div key={key} className="card" style={{ padding: '16px 20px', borderLeft: '3px solid #fde68a' }}>
+                    <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
+                      {key.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())}
+                    </p>
+                    <p style={{ margin: '0 0 10px', fontSize: 11.5, color: '#92400e' }}>
+                      Sección adicional generada por la IA (formato anterior) — se incluirá al aprobar.
+                    </p>
+                    <p style={{ margin: 0, fontSize: 14, color: 'var(--s700)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{value}</p>
+                  </div>
+                ))}
               </div>
             )}
           </div>
