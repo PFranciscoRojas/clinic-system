@@ -29,3 +29,7 @@ jobs:
       - name: TypeScript check
         working-directory: services/frontend
         run: npx tsc --noEmit
+
+      - name: ESLint
+        working-directory: services/frontend
+        run: npm run lint

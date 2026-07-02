@@ -23,8 +23,28 @@ jobs:
         working-directory: services/core-api
         run: go test ./...
 
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/core-api/go.mod
+          cache-dependency-path: services/core-api/go.sum
+
+      - name: go vet
+        working-directory: services/core-api
+        run: go vet ./...
+
+      - name: staticcheck
+        working-directory: services/core-api
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
+          staticcheck ./...
+
   build:
-    needs: test
+    needs: [test, lint]
     runs-on: ubuntu-latest
     permissions:
       contents: read
