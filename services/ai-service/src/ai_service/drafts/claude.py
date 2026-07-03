@@ -4,6 +4,7 @@ from typing import Any
 
 import anthropic
 
+from ai_service.approaches import wording_instruction
 from ai_service.config import settings
 
 logger = logging.getLogger(__name__)
@@ -168,6 +169,7 @@ async def generate_clinical_draft(
     note_style: str = "structured",
     tone: str = "formal",
     template_sections: list[dict[str, Any]] | None = None,
+    approach: str = "",
 ) -> str:
     """Send anonymized transcription to Claude and return the draft as a JSON string.
 
@@ -191,6 +193,10 @@ async def generate_clinical_draft(
 
     tone_instr  = _TONE_INSTRUCTIONS.get(tone, _TONE_INSTRUCTIONS["formal"])
     style_instr = _STYLE_INSTRUCTIONS.get(note_style, _STYLE_INSTRUCTIONS["structured"])
+    # The professional's therapeutic approach shades wording only — the section
+    # schema (and therefore the output JSON) is exactly the same.
+    if hint := wording_instruction(approach):
+        style_instr = f"{style_instr} {hint}"
 
     logger.info(
         "generating clinical draft",

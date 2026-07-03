@@ -122,6 +122,7 @@ class AIWorker:
         # Integrated-format section schema shipped by core-api (JSON array of
         # {key,type,hint}) — the single source of truth for what to generate.
         sections_schema = fields.get("sections_schema")
+        approach = fields.get("approach") or ""  # professional's therapeutic approach
 
         if not draft_id or not audio_path:
             logger.warning("ai_job missing fields", extra={"message_id": message_id, "fields": list(fields.keys())})
@@ -131,7 +132,7 @@ class AIWorker:
         logger.info("processing ai draft", extra={"draft_id": draft_id, "template_id": template_id})
         try:
             await self._set_status(draft_id, "PROCESSING")
-            await self._process_draft(draft_id, audio_path, record_type, note_style, tone, template_id, sections_schema)
+            await self._process_draft(draft_id, audio_path, record_type, note_style, tone, template_id, sections_schema, approach)
             await self._ack(message_id)
         except Exception as exc:
             logger.error("draft processing failed", extra={"draft_id": draft_id, "err": str(exc)})
@@ -142,6 +143,7 @@ class AIWorker:
         suggestion_id = fields.get("suggestion_id")
         patient_id = fields.get("patient_id")
         org_id = fields.get("org_id")
+        approach = fields.get("approach") or ""  # never set for risk_detection
 
         if not suggestion_id or not patient_id or not org_id:
             logger.warning("ai_suggestion job missing fields", extra={"message_id": message_id, "fields": list(fields.keys())})
@@ -151,7 +153,7 @@ class AIWorker:
         logger.info("processing ai suggestion", extra={"suggestion_id": suggestion_id, "kind": kind})
         try:
             await self._set_suggestion_status(suggestion_id, "PROCESSING")
-            await self._process_suggestion(suggestion_id, org_id, patient_id, kind)
+            await self._process_suggestion(suggestion_id, org_id, patient_id, kind, approach)
             await self._ack(message_id)
         except Exception as exc:
             logger.error("suggestion processing failed", extra={"suggestion_id": suggestion_id, "err": str(exc)})
@@ -185,6 +187,7 @@ class AIWorker:
         tone: str = "formal",
         template_id: str | None = None,
         sections_schema: str | None = None,
+        approach: str = "",
     ) -> None:
         # 1. Resolve the draft's DEK and patient up front — fail fast before
         #    spending Whisper/Claude work on a draft that no longer exists.
@@ -224,7 +227,7 @@ class AIWorker:
 
         # 5. Generate the clinical-record sections via Claude API with anonymized text only
         clinical_draft = await generate_clinical_draft(
-            anonymized, record_type, note_style, tone, template_sections
+            anonymized, record_type, note_style, tone, template_sections, approach
         )
         clinical_draft = await self._validate_suggested_icd10(clinical_draft)
 
@@ -256,7 +259,7 @@ class AIWorker:
         except OSError as exc:
             logger.warning("could not delete audio file", extra={"audio_path": audio_path, "err": str(exc)})
 
-    async def _process_suggestion(self, suggestion_id: str, org_id: str, patient_id: str, kind: str) -> None:
+    async def _process_suggestion(self, suggestion_id: str, org_id: str, patient_id: str, kind: str, approach: str = "") -> None:
         assert self._db is not None
 
         # 1. Resolve the suggestion's own DEK (used to seal the result).
@@ -331,11 +334,13 @@ class AIWorker:
         anonymized = anonymize(history, known_names)
 
         if kind == "recap":
-            content = await generate_recap(anonymized)
+            content = await generate_recap(anonymized, approach)
         elif kind == "risk_detection":
+            # Deliberately approach-agnostic: risk reading must stay conservative
+            # and never bend to a theoretical framework.
             content = await generate_risk_assessment(anonymized)
         else:
-            content = await generate_treatment_plan(anonymized)
+            content = await generate_treatment_plan(anonymized, approach)
 
         # 5. Seal the result with the suggestion's DEK and mark it READY.
         content_enc = seal(out_dek, content.encode())

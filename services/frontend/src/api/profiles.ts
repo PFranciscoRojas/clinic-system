@@ -1,5 +1,19 @@
 import { api } from './client';
 
+/** Therapeutic approach that orients AI outputs (plans, recaps, drafts).
+ *  Keys mirror the backend catalog (profiles/handler/aiprefs.go) and the
+ *  Python worker; '' = not set (approach-neutral behaviour). */
+export type TherapeuticApproach =
+  | '' | 'cbt' | 'humanistic' | 'psychodynamic' | 'systemic'
+  | 'gestalt' | 'act' | 'dbt' | 'integrative';
+
+export interface AIPrefs {
+  note_style?: string;
+  tone?: string;
+  approach?: TherapeuticApproach;
+  data_retain?: string;
+}
+
 export interface Specialty {
   id: string;
   code: string;
@@ -47,8 +61,8 @@ export const profilesApi = {
   saveSchedule: (schedule: unknown) =>
     api.put<{ status: string }>('/me/professional-profile/schedule', { schedule }),
   getAIPrefs: () =>
-    api.get<{ ai_prefs: { note_style: string; tone: string } }>('/me/professional-profile/ai-prefs'),
-  saveAIPrefs: (prefs: { note_style: string; tone: string }) =>
+    api.get<{ ai_prefs: AIPrefs }>('/me/professional-profile/ai-prefs'),
+  saveAIPrefs: (prefs: AIPrefs) =>
     api.put<{ status: string }>('/me/professional-profile/ai-prefs', { ai_prefs: prefs }),
 };
 

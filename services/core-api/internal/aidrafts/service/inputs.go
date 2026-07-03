@@ -13,7 +13,10 @@ type UploadAudioInput struct {
 	TemplateID string
 	NoteStyle  string
 	Tone       string
-	Filename   string
-	Audio      io.Reader
-	AudioSize  int64
+	// Approach is the professional's therapeutic approach (ai_prefs.approach);
+	// it orients the AI's wording, never the section schema.
+	Approach  string
+	Filename  string
+	Audio     io.Reader
+	AudioSize int64
 }

@@ -42,8 +42,10 @@ type Suggestion struct {
 
 // Request creates a PENDING suggestion (with its own DEK) and enqueues the AI
 // job. The worker resolves the patient's history, anonymizes it, calls Claude,
-// and writes the encrypted result back.
-func (s *Service) Request(ctx context.Context, orgID, patientID, kind string) (string, error) {
+// and writes the encrypted result back. requestedBy is the professional asking
+// — their therapeutic approach (ai_prefs) orients recap and treatment-plan
+// wording (risk detection stays approach-agnostic by design).
+func (s *Service) Request(ctx context.Context, orgID, patientID, kind, requestedBy string) (string, error) {
 	if !validKinds[kind] {
 		return "", fmt.Errorf("%w: unknown suggestion kind", ErrInvalidInput)
 	}
@@ -71,15 +73,22 @@ func (s *Service) Request(ctx context.Context, orgID, patientID, kind string) (s
 		return "", err
 	}
 
+	values := map[string]any{
+		"kind":          kind,
+		"suggestion_id": id,
+		"patient_id":    patientID,
+		"org_id":        orgID,
+	}
+	if requestedBy != "" && kind != "risk_detection" {
+		if approach := s.repo.ApproachFor(ctx, requestedBy); approach != "" {
+			values["approach"] = approach
+		}
+	}
+
 	if err := s.rdb.XAdd(ctx, &redis.XAddArgs{
 		Stream: aiStream,
 		ID:     "*",
-		Values: map[string]any{
-			"kind":          kind,
-			"suggestion_id": id,
-			"patient_id":    patientID,
-			"org_id":        orgID,
-		},
+		Values: values,
 	}).Err(); err != nil {
 		return "", fmt.Errorf("enqueue ai job: %w", err)
 	}

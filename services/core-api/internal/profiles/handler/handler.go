@@ -252,6 +252,10 @@ func (h *Handler) putAIPrefs(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusUnprocessableEntity, "ai_prefs must be a JSON object")
 		return
 	}
+	if err := validateAIPrefs(probe); err != nil {
+		httputil.WriteError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
 
 	tag, err := h.db.Exec(r.Context(), `
 		UPDATE professional_profiles pp

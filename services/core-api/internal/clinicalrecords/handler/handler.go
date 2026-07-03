@@ -19,7 +19,7 @@ import (
 // riskEnqueuer enqueues an AI suggestion job (satisfied by aisuggestions.Service).
 // Optional — when nil, approving a record simply skips the risk refresh.
 type riskEnqueuer interface {
-	Request(ctx context.Context, orgID, patientID, kind string) (string, error)
+	Request(ctx context.Context, orgID, patientID, kind, requestedBy string) (string, error)
 }
 
 type Handler struct {
