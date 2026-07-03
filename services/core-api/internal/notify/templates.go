@@ -301,7 +301,7 @@ const tmplReceivedAdminSrc = `<!DOCTYPE html>
   <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f5f4f0;padding:40px 16px;">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="background:#fff;border-radius:10px;overflow:hidden;max-width:560px;width:100%;">
-        <tr><td style="background:#5e8265;padding:28px 36px;">
+        <tr><td style="background:#363285;padding:28px 36px;">
           <p style="margin:0;color:#fff;font-size:16px;font-weight:600;letter-spacing:.02em;">Nueva solicitud de cita</p>
         </td></tr>
         <tr><td style="padding:36px;">
@@ -310,7 +310,7 @@ const tmplReceivedAdminSrc = `<!DOCTYPE html>
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f4f0;border-radius:8px;margin-bottom:24px;">
             <tr><td style="padding:20px 24px;">
               <p style="margin:0 0 10px;font-size:11px;color:#999;text-transform:uppercase;letter-spacing:.08em;font-weight:600;">Datos del paciente</p>
-              <p style="margin:0 0 6px;font-size:14px;color:#333;"><strong>Email:</strong> <a href="mailto:{{.PatientEmail}}" style="color:#5e8265;text-decoration:none;">{{.PatientEmail}}</a></p>
+              <p style="margin:0 0 6px;font-size:14px;color:#333;"><strong>Email:</strong> <a href="mailto:{{.PatientEmail}}" style="color:#363285;text-decoration:none;">{{.PatientEmail}}</a></p>
               <p style="margin:0 0 6px;font-size:14px;color:#333;"><strong>Modalidad:</strong> {{.Modality}}</p>
               {{if .PreferredDate}}<p style="margin:0 0 6px;font-size:14px;color:#333;"><strong>Fecha preferida:</strong> {{.PreferredDate}}</p>{{end}}
               {{if .PreferredTime}}<p style="margin:0 0 6px;font-size:14px;color:#333;"><strong>Hora preferida:</strong> {{.PreferredTime}}</p>{{end}}
@@ -322,7 +322,7 @@ const tmplReceivedAdminSrc = `<!DOCTYPE html>
           </p>
         </td></tr>
         <tr><td style="padding:16px 36px 24px;border-top:1px solid #ece9e3;">
-          <p style="margin:0;font-size:12px;color:#aaa;">Sistema de Gestión Clínica · SGHCP</p>
+          <p style="margin:0;font-size:12px;color:#aaa;">Chapni · Historia clínica cifrada</p>
         </td></tr>
       </table>
     </td></tr>
@@ -337,16 +337,16 @@ const tmplPaidAdminSrc = `<!DOCTYPE html>
   <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f5f4f0;padding:40px 16px;">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="background:#fff;border-radius:10px;overflow:hidden;max-width:560px;width:100%;">
-        <tr><td style="background:#3e6b4e;padding:28px 36px;">
+        <tr><td style="background:#363285;padding:28px 36px;">
           <p style="margin:0;color:#fff;font-size:16px;font-weight:600;letter-spacing:.02em;">Cita pagada y confirmada</p>
         </td></tr>
         <tr><td style="padding:36px;">
           <h1 style="margin:0 0 8px;font-size:20px;color:#1a1a1a;font-weight:600;">{{.FirstName}} {{.LastName}}</h1>
-          <p style="margin:0 0 24px;font-size:14px;color:#3e6b4e;font-weight:600;">Pago confirmado · ya está en tu agenda</p>
+          <p style="margin:0 0 24px;font-size:14px;color:#363285;font-weight:600;">Pago confirmado · ya está en tu agenda</p>
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f4f0;border-radius:8px;margin-bottom:24px;">
             <tr><td style="padding:20px 24px;">
               <p style="margin:0 0 10px;font-size:11px;color:#999;text-transform:uppercase;letter-spacing:.08em;font-weight:600;">Datos del paciente</p>
-              {{if .PatientEmail}}<p style="margin:0 0 6px;font-size:14px;color:#333;"><strong>Email:</strong> <a href="mailto:{{.PatientEmail}}" style="color:#3e6b4e;text-decoration:none;">{{.PatientEmail}}</a></p>{{end}}
+              {{if .PatientEmail}}<p style="margin:0 0 6px;font-size:14px;color:#333;"><strong>Email:</strong> <a href="mailto:{{.PatientEmail}}" style="color:#363285;text-decoration:none;">{{.PatientEmail}}</a></p>{{end}}
               <p style="margin:0 0 6px;font-size:14px;color:#333;"><strong>Modalidad:</strong> {{.Modality}}</p>
               {{if .PreferredDate}}<p style="margin:0 0 6px;font-size:14px;color:#333;"><strong>Fecha:</strong> {{.PreferredDate}}</p>{{end}}
               {{if .PreferredTime}}<p style="margin:0;font-size:14px;color:#333;"><strong>Hora:</strong> {{.PreferredTime}}</p>{{end}}
@@ -357,7 +357,7 @@ const tmplPaidAdminSrc = `<!DOCTYPE html>
           </p>
         </td></tr>
         <tr><td style="padding:16px 36px 24px;border-top:1px solid #ece9e3;">
-          <p style="margin:0;font-size:12px;color:#aaa;">Sistema de Gestión Clínica · SGHCP</p>
+          <p style="margin:0;font-size:12px;color:#aaa;">Chapni · Historia clínica cifrada</p>
         </td></tr>
       </table>
     </td></tr>
@@ -372,8 +372,8 @@ const tmplPasswordResetSrc = `<!DOCTYPE html>
   <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f5f4f0;padding:40px 16px;">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="background:#fff;border-radius:10px;overflow:hidden;max-width:560px;width:100%;">
-        <tr><td style="background:#0f766e;padding:28px 36px;">
-          <p style="margin:0;color:#fff;font-size:16px;font-weight:600;letter-spacing:.02em;">SGHCP · Sistema de Gestión Clínica</p>
+        <tr><td style="background:#363285;padding:28px 36px;">
+          <p style="margin:0;color:#fff;font-size:16px;font-weight:600;letter-spacing:.02em;">Chapni · Historia clínica cifrada</p>
         </td></tr>
         <tr><td style="padding:36px;">
           <h1 style="margin:0 0 16px;font-size:20px;color:#1a1a1a;font-weight:600;">Restablece tu contraseña</h1>
@@ -382,8 +382,8 @@ const tmplPasswordResetSrc = `<!DOCTYPE html>
             recibimos una solicitud para restablecer la contraseña de tu cuenta. Haz clic en el botón para elegir una nueva.
           </p>
           <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 0 24px;">
-            <tr><td style="border-radius:8px;background:#0f766e;">
-              <a href="{{.Link}}" style="display:inline-block;padding:13px 28px;color:#fff;font-size:15px;font-weight:600;text-decoration:none;">Crear nueva contraseña</a>
+            <tr><td style="border-radius:8px;background:#d9a038;">
+              <a href="{{.Link}}" style="display:inline-block;padding:13px 28px;color:#3a2a06;font-size:15px;font-weight:600;text-decoration:none;">Crear nueva contraseña</a>
             </td></tr>
           </table>
           <p style="margin:0;font-size:13px;color:#999;line-height:1.6;">
@@ -409,18 +409,18 @@ const tmplVerificationSrc = `<!DOCTYPE html>
   <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f5f4f0;padding:40px 16px;">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="background:#fff;border-radius:10px;overflow:hidden;max-width:560px;width:100%;">
-        <tr><td style="background:#0f766e;padding:28px 36px;">
-          <p style="margin:0;color:#fff;font-size:16px;font-weight:600;letter-spacing:.02em;">SGHCP · Sistema de Gestión Clínica</p>
+        <tr><td style="background:#363285;padding:28px 36px;">
+          <p style="margin:0;color:#fff;font-size:16px;font-weight:600;letter-spacing:.02em;">Chapni · Historia clínica cifrada</p>
         </td></tr>
         <tr><td style="padding:36px;">
           <h1 style="margin:0 0 16px;font-size:20px;color:#1a1a1a;font-weight:600;">Confirma tu correo</h1>
           <p style="margin:0 0 24px;font-size:15px;color:#555;line-height:1.7;">
             Hola <strong>{{.Name}}</strong>,<br>
-            ¡bienvenida! Creaste tu cuenta en SGHCP. Confirma esta dirección para activarla y empezar a usar el sistema.
+            ¡bienvenida! Creaste tu cuenta en Chapni. Confirma esta dirección para activarla y empezar a usar el sistema.
           </p>
           <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 0 24px;">
-            <tr><td style="border-radius:8px;background:#0f766e;">
-              <a href="{{.Link}}" style="display:inline-block;padding:13px 28px;color:#fff;font-size:15px;font-weight:600;text-decoration:none;">Confirmar mi correo</a>
+            <tr><td style="border-radius:8px;background:#d9a038;">
+              <a href="{{.Link}}" style="display:inline-block;padding:13px 28px;color:#3a2a06;font-size:15px;font-weight:600;text-decoration:none;">Confirmar mi correo</a>
             </td></tr>
           </table>
           <p style="margin:0;font-size:13px;color:#999;line-height:1.6;">

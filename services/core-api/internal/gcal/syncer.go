@@ -260,7 +260,7 @@ func (s *Syncer) PushCreate(ctx context.Context, apptID, staffID, modality strin
 		}
 		event := &gcalapi.Event{
 			Summary:     "Cita psicológica · " + label,
-			Description: "Gestionada desde SGHCP",
+			Description: "Gestionada desde Chapni",
 			Start:       &gcalapi.EventDateTime{DateTime: at.In(bogota).Format(time.RFC3339), TimeZone: "America/Bogota"},
 			End:         &gcalapi.EventDateTime{DateTime: endAt.In(bogota).Format(time.RFC3339), TimeZone: "America/Bogota"},
 		}

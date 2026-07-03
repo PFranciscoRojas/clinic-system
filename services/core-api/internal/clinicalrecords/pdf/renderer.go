@@ -565,7 +565,7 @@ func Render(w io.Writer, in RenderInput) error {
 	}
 	doc.SetFont("Helvetica", "", 9.5)
 	sig := fmt.Sprintf(
-		"Este registro fue aprobado y firmado electrónicamente en el sistema de información SGHCP por %s, tarjeta profesional No. %s, el %s. La firma electrónica y este documento tienen plena validez jurídica conforme a la Ley 527/1999 sobre mensajes de datos y firmas electrónicas.",
+		"Este registro fue aprobado y firmado electrónicamente en el sistema de información Chapni por %s, tarjeta profesional No. %s, el %s. La firma electrónica y este documento tienen plena validez jurídica conforme a la Ley 527/1999 sobre mensajes de datos y firmas electrónicas.",
 		in.Professional.FullName, in.Professional.License, approvedAt)
 	doc.MultiCell(0, 5, tr(sig), "", "L", false)
 

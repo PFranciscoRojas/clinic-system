@@ -114,7 +114,7 @@ func Load() Config {
 		MPWebhookSecret:  mpWebhookSecret,
 		MPWebhookEnforce: getEnvBool("MP_WEBHOOK_ENFORCE", true),
 		MPPlanAmount:    getEnvInt("MP_PLAN_AMOUNT", 79000),
-		MPPlanReason:    getEnv("MP_PLAN_REASON", "SGHCP · Plan mensual"),
+		MPPlanReason:    getEnv("MP_PLAN_REASON", "Chapni · Plan mensual"),
 
 		BookingSessionPrice: getEnvInt("BOOKING_SESSION_PRICE", 180000),
 

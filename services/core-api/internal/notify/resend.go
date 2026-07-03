@@ -216,7 +216,7 @@ func (n *ResendNotifier) PasswordReset(ctx context.Context, toEmail string, d Pa
 	if err != nil {
 		return
 	}
-	if err := n.send(ctx, toEmail, "Restablece tu contraseña · SGHCP", html); err != nil {
+	if err := n.send(ctx, toEmail, "Restablece tu contraseña · Chapni", html); err != nil {
 		slog.Default().Warn("notify: password-reset email failed", "err", err)
 	}
 }
@@ -226,7 +226,7 @@ func (n *ResendNotifier) AccountVerification(ctx context.Context, toEmail string
 	if err != nil {
 		return
 	}
-	if err := n.send(ctx, toEmail, "Confirma tu correo · SGHCP", html); err != nil {
+	if err := n.send(ctx, toEmail, "Confirma tu correo · Chapni", html); err != nil {
 		slog.Default().Warn("notify: account-verification email failed", "err", err)
 	}
 }
