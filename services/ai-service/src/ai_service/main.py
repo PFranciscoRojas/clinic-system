@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(
-    title="SGHCP AI Service",
+    title="Chapni AI Service",
     version="0.1.0",
     docs_url=None if settings.environment == "production" else "/docs",
     redoc_url=None,

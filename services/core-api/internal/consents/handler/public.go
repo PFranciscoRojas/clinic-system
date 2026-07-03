@@ -54,12 +54,19 @@ func (h *Handler) publicGetSign(w http.ResponseWriter, r *http.Request) {
 			httputil.WriteError(w, http.StatusInternalServerError, "internal error")
 			return nil
 		}
+		// Tenant identity for the public sign page header; best-effort — the
+		// page renders without it (organizations is the tenant root, no RLS).
+		var orgName string
+		_ = h.pool.QueryRow(r.Context(),
+			`SELECT name FROM organizations WHERE id = $1`, tok.OrganizationID,
+		).Scan(&orgName)
 		httputil.WriteJSON(w, http.StatusOK, map[string]any{
 			"patient_first_name": firstName,
 			"consent_type":       tok.ConsentType,
 			"title":              tpl.Title,
 			"body":               tpl.Body,
 			"expires_at":         tok.ExpiresAt.Format(time.RFC3339),
+			"org_name":           orgName,
 		})
 		return nil
 	})

@@ -13,11 +13,11 @@ type Branding struct {
 	ReplyTo     string // optional contact email; the contact line is omitted if empty
 	Website     string // optional public site; the line is omitted if empty
 	Location    string // optional, e.g. "Bogotá, Colombia"
-	BrandColor  string // hex accent, validated; defaults to the product green
+	BrandColor  string // hex accent, validated; defaults to the product indigo
 }
 
 // DefaultBrandColor is the product's fallback accent when a tenant sets none.
-const DefaultBrandColor = "#5e8265"
+const DefaultBrandColor = "#363285"
 
 // DefaultBranding is the neutral fallback used when an organization cannot be
 // resolved (missing row, nil resolver). Real tenants always override at least
