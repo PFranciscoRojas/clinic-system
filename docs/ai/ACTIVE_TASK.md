@@ -1,15 +1,13 @@
 ## Sin tarea pendiente
 
-Sesión 2026-07-02: resolvimos los 7 puntos de `tareas_clinica.md` (feedback de uso del sistema IA clínica). Todos ✅ desplegados en producción (PRs #113–#116).
+Sesión 2026-07-03: rebrand Chapni ✅ (PRs #117-#118), dominio app.chapni.com ✅ (PR #119), booking styles ✅ (PR #120). Todo desplegado en producción.
 
 ## Sugerencia de siguiente paso
 
 Basándome en STATUS.md (bloqueantes + roadmap) y BACKLOG.md, lo más valioso a atacar ahora es:
 
-1. **Beta de diseño con 2-3 psicólogas externas (validación de demanda)** — Los 7 puntos cubrieron estabilidad y UX del sistema existente, pero no hay feedback externo sobre willingness-to-pay. Dos colegas de Marcela identificadas, 2 semanas gratis, acompañamiento 1ª sesión. Riesgo: seguir building sin demanda externa. Ganancia: separar hobby de negocio antes de escalar feature-building.
+1. **Validación de demanda con beta de diseño (2-3 psicólogas externas, 2 semanas, acceso gratis)** — Sin señal externa sobre willingness-to-pay, seguir buildiendo features es ruido. Fases 1-2 de la auditoría (logout/borrador) ya se cerraron. 2 contactos disponibles (colegas). Alto riesgo si no validamos antes de go-live 1.0.0.
 
-2. **Fase 3 de auditoría — Guardrails de IA** — High value, deploy aislado (ai-service): `temperature=0.2`, anonimización reforzada (regex + nombres), anti-injection en prompts, validar ICD-10, reclaim de jobs huérfanos. Cierra riesgos de IA antes de exponer a las beta testers.
+2. **Fase 3 de auditoría — IA guardrails** (aislado, 1-2 sesiones): temperature=0.2, anonimización reforzada (regex + nombres), anti-injection, validación ICD-10, jobs huérfanos. High-value defensivo antes de exponer a users externos.
 
-3. **Arreglar el secret `SMOKE_PASSWORD` de CI** — 5 min, high-value (smoke test hoy falla `login` con `USER-NOT-FOUND`). Crear cuenta de smoke dedicada en prod.
-
-**Orden recomendado:** Beta de diseño (validar demanda) + Fase 3 en paralelo (blindar riesgos antes de exponer el producto) → Go-live 1.0.0.
+3. **Smoke test fix + WhatsApp confirm** (5 min cada uno) — Actualizar el secret `SMOKE_PASSWORD` en GitHub, verificar desbloqueo de cargo Meta, configurar IDs de plantillas en Ajustes → Integraciones.

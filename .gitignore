@@ -25,3 +25,5 @@ services/frontend/dist/
 .DS_Store
 *.swp
 /services/core-api/api
+.claude/
+skills-lock.json

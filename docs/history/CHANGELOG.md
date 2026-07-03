@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-07-03 (sesión 26 — dominio + rebrand finales)
+
+**Migración a app.chapni.com (PR #119):**
+- Caddyfile multi-dominio: `app.chapni.com` (principal, SPA+API), `api.marcelachapues.com` (legacy, /api vivo para webhooks MP, 308 redirect el resto).
+- DNS A (DNS-only en Cloudflare) → VPS; cert Let's Encrypt emitido. `APP_BASE_URL=https://app.chapni.com`.
+- Google OAuth redirect URI actualizado en Cloud Console; nuevos enlaces de email (reset, verificación) ya nacen con dominio nuevo.
+- Suscripciones viejas MP: verificadas cero preapprovals en API → nada que migrar. El `/api` legacy es fallback indefinido.
+
+**Booking — paleta tenant restaurada (PR #120):**
+- Página pública `/book/:slug` volvió a estilos de marcelachapues.com (papel cálido, tinta café, acento terracota), no Chapni indigo. Identidad de la profesional sobre la del producto.
+
+---
+
 ## 2026-06-23
 
 - feat(booking): eliminado flujo "Solicitudes web" completo — tabla `booking_requests` (migración 000036), paquete Go `bookingrequests`, rutas `POST /api/v1/public/booking` y `/api/v1/booking-requests`, `BookingRequestsPage`, `BookingPage` (formulario viejo), widget inbox del dashboard y nav item. El flujo `/book/:slug` + MercadoPago (`BookingWizardPage`) queda intacto (`99ba8a0`).

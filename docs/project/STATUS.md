@@ -1,4 +1,4 @@
-# STATUS — Estado del proyecto SGHCP
+# STATUS — Estado del proyecto Chapni
 
 > Fuente canónica del estado vivo. Se **SOBRESCRIBE** en cada actualización (`/actualizar-contexto`).
 > El historial diario está en `docs/history/CHANGELOG.md`.
@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-07-02)
+## Estado actual (2026-07-03)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -57,11 +57,11 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 
 ### Últimos PRs a `main`
 
-- `#116` enhancement(clinical): collapsible recap + topbar indicator para borradores en proceso (Puntos 3-4) — 2026-07-02
-- `#115` feat(clinical): therapeutic approach en ai_prefs + prompts parametrizados (Puntos 6-7) — 2026-07-02
-- `#114` fix(clinical): template_id persistido, schema integrado unificado, fallbacks (Punto 2) — 2026-07-02
-- `#113` fix(clinical): AI draft approve idempotent + date-only timezone shift (Puntos 1-5) — 2026-07-02
-- `#108` fix(auth): single-flight refresh, claims frescos desde BD, limpieza selectiva de sesión — 2026-07-02
+- `#120` fix(booking): restore tenant editorial palette on public wizard (marcelachapues.com colors) — 2026-07-03
+- `#119` feat(infra): serve app.chapni.com as primary domain; legacy api.marcelachapues.com keeps /api + 308 redirect — 2026-07-03
+- `#118` feat(core): rebrand product surfaces to Chapni (emails, PDF, config) — 2026-07-02
+- `#117` feat(frontend): rebrand to Chapni — Indigo & Oro identity (tokens, symbol, legal) — 2026-07-02
+- `#116` enhancement(clinical): collapsible recap + topbar indicator para borradores en proceso — 2026-07-02
 
 > Flujo actual: rama `fix/*` → PR → squash-merge → CI deploy. Branch protection sigue pendiente (BACKLOG → Infraestructura).
 > **CI/CD:** `test → build → smoke`. `go test ./...` bloquea el build; `tsc --noEmit` corre en cada PR de frontend; smoke test de 8 pasos HTTP corre tras cada deploy al VPS.
@@ -108,9 +108,9 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción — CI deploy (PR #115 `5b7c410`). Migración 000050 (template_id en ai_drafts) ejecutada en DB. |
-| `ai-service` | ✅ producción — `ghcr.io/pfranciscorojas/clinic-system-ai-service:latest` (PR #115: approaches.py, prompts parametrizados) |
-| `frontend` (Caddy :80/:443) | ✅ producción — rebuild manual desde `6d7fd3c` (PR #116, 2026-07-02) — RecapCard colapsable + AIDraftIndicator |
+| `core-api:8080` | ✅ producción — CI deploy (PR #118 `751a803`, rebrand). Migración 000050 ejecutada. |
+| `ai-service` | ✅ producción — CI deploy (PR #118, título "Chapni AI Service") |
+| `frontend` (Caddy :80/:443) | ✅ producción — rebuild manual desde `3950048` (PR #120, 2026-07-03) — booking restaura estilos de marcelachapues.com. **Dominio:** `https://app.chapni.com` (principal, `CADDY_APP_DOMAIN`); `api.marcelachapues.com` legacy (mantiene `/api` para webhooks, redirige 308 el resto). `APP_BASE_URL` = `https://app.chapni.com`. Cert Let's Encrypt emitido. Google OAuth redirect URI actualizado en Cloud Console. |
 | Backups | `pg_dump` cifrado GPG → Backblaze B2 |
 | **Disco** | ~40% (15/38 GB) — cron semanal en el **host** (ya no en el admin UI): `0 4 * * 0 docker system prune -af` → `/var/log/docker-prune.log`. Alerta email si >80% |
 
