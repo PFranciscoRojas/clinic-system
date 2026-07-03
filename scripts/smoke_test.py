@@ -4,7 +4,7 @@ SGHCP smoke test — happy-path sequence against the live API.
 Runs after every deploy to catch regressions before they affect real users.
 
 Environment variables:
-  SMOKE_URL       Base URL of the API  (default: https://api.marcelachapues.com)
+  SMOKE_URL       Base URL of the API  (default: https://app.chapni.com)
   SMOKE_EMAIL     Test user email      (default: admin@demo.clinica.co)
   SMOKE_PASSWORD  Test user password   (required — set as GitHub secret)
 """
@@ -18,7 +18,7 @@ except ImportError:
     print("httpx not found — run: pip install httpx")
     sys.exit(2)
 
-BASE     = os.environ.get("SMOKE_URL", "https://api.marcelachapues.com")
+BASE     = os.environ.get("SMOKE_URL", "https://app.chapni.com")
 EMAIL    = os.environ.get("SMOKE_EMAIL", "admin@demo.clinica.co")
 PASSWORD = os.environ.get("SMOKE_PASSWORD", "")
 
@@ -45,7 +45,10 @@ def step(label: str, resp: httpx.Response, expect: int) -> dict:
         sys.exit(1)
     steps_passed += 1
     print(f"✅ {label}")
-    return resp.json()
+    try:
+        return resp.json()
+    except ValueError:  # e.g. /healthz returns plain text
+        return {}
 
 # ── 1. Login ──────────────────────────────────────────────────────────────────
 data = step("login", client.post("/api/v1/auth/login", json={
@@ -55,8 +58,10 @@ data = step("login", client.post("/api/v1/auth/login", json={
 token = data["access_token"]
 auth  = {"Authorization": f"Bearer {token}"}
 
-# ── 2. Healthcheck ────────────────────────────────────────────────────────────
+# ── 2. Healthcheck + identity ─────────────────────────────────────────────────
 step("healthz", client.get("/healthz"), 200)
+data = step("auth/me", client.get("/api/v1/auth/me", headers=auth), 200)
+staff_id = data["user_id"]
 
 # ── 3. Create patient ─────────────────────────────────────────────────────────
 data = step("create patient", client.post("/api/v1/patients", headers=auth, json={
@@ -73,6 +78,7 @@ patient_id = data["id"]
 # ── 4. Create appointment ─────────────────────────────────────────────────────
 data = step("create appointment", client.post("/api/v1/appointments", headers=auth, json={
     "patient_id":   patient_id,
+    "staff_id":     staff_id,
     "scheduled_at": SCHEDULED_AT,
     "duration_min": 50,
     "modality":     "IN_PERSON",
@@ -90,6 +96,7 @@ data = step("create clinical record", client.post(
         "sections": {
             "consultation_reason": "Smoke test — verificación automatizada post-deploy",
             "current_problem":     "Smoke test — no es un paciente real",
+            "mental_exam":         {"appearance": {"status": "NORMAL", "note": None}},
         },
         "risk_level": "NONE",
     },
@@ -101,7 +108,7 @@ step("approve clinical record", client.post(
     f"/api/v1/clinical-records/{record_id}/approve",
     headers=auth,
     json={},
-), 200)
+), 204)
 
 # ── 7. Verify status = APPROVED ───────────────────────────────────────────────
 data = step("get clinical record", client.get(
