@@ -8,8 +8,9 @@ type Modality = 'VIRTUAL' | 'IN_PERSON';
 type Step = 'modality' | 'slot' | 'data' | 'summary';
 type Checkout = { init_point: string; booking_id: string; summary: { date: string; time: string; modality: string; amount: number; currency: string } };
 
-// Chapni-neutral editorial base (cream + ink); the tenant's brand_color stays the accent.
-const PAPER = '#faf6ec', INK = '#22214a', INK_SOFT = '#5f5a6e', INK_FAINT = '#9b96ac', LINE = '#e8e2d4';
+// Editorial palette mirroring marcelachapues.com — this page carries the
+// tenant's identity (site-like base + brand_color accent), not Chapni's.
+const PAPER = '#faf6f1', INK = '#2a2420', INK_SOFT = '#6b5f55', INK_FAINT = '#a89c90', LINE = '#e6ddd2';
 const DISPLAY = "'Fraunces', Georgia, serif";
 
 const DOW = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
@@ -39,7 +40,7 @@ export function BookingWizardPage() {
   const [policyAccepted, setPolicyAccepted] = useState(false);
   const [checkout, setCheckout] = useState<Checkout | null>(null);
 
-  const accent = info?.brand_color && /^#[0-9a-fA-F]{3,8}$/.test(info.brand_color) ? info.brand_color : '#363285';
+  const accent = info?.brand_color && /^#[0-9a-fA-F]{3,8}$/.test(info.brand_color) ? info.brand_color : '#8a5a5a';
   const clinicName = info?.public_name || 'el consultorio';
 
   const from = new Date().toISOString().slice(0, 10);
@@ -134,9 +135,9 @@ export function BookingWizardPage() {
         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: '.22em', textTransform: 'uppercase', color: INK_FAINT }}>Reserva en línea</div>
         <div>
           <div className="booking-hero-title" style={{ fontFamily: DISPLAY, fontSize: 38, lineHeight: 1.08, fontWeight: 500, marginBottom: 18 }}>
-            El primer paso es <span style={{ fontStyle: 'italic', color: accent === '#363285' ? '#d9a038' : accent }}>agendar</span> una conversación.
+            El primer paso es <span style={{ fontStyle: 'italic', color: accent === '#8a5a5a' ? '#d9a7a7' : accent }}>agendar</span> una conversación.
           </div>
-          <p className="booking-hero-sub" style={{ fontSize: 14.5, lineHeight: 1.7, color: '#cdc9e0', maxWidth: 320 }}>
+          <p className="booking-hero-sub" style={{ fontSize: 14.5, lineHeight: 1.7, color: '#d8cdc0', maxWidth: 320 }}>
             Una sesión de reconocimiento para vernos, contarme qué te trae y saber si podemos
             caminar juntos en este proceso.
           </p>
