@@ -16,8 +16,8 @@ import { Spinner } from '@/components/ui/Spinner';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const AVATAR_COLORS = [
-  '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b',
-  '#10b981', '#14b8a6', '#0ea5e9', '#ef4444',
+  '#5b52ad', '#7d75c7', '#ec4899', '#f59e0b',
+  '#10b981', '#363285', '#0ea5e9', '#ef4444',
 ];
 function avatarColor(name = ''): string {
   let h = 0;
@@ -109,7 +109,7 @@ function PatientCard({ patient, onClick, onOpenProfile }: { patient: Patient; on
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
           <StatusBadge active={patient.is_active} />
           {patient.document_type_code && (
-            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--teal)', background: 'rgba(20,184,166,.10)', border: '1px solid rgba(20,184,166,.20)', borderRadius: 4, padding: '1px 6px', textTransform: 'uppercase' as const }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--teal)', background: 'rgba(54,50,133,.10)', border: '1px solid rgba(54,50,133,.20)', borderRadius: 4, padding: '1px 6px', textTransform: 'uppercase' as const }}>
               {patient.document_type_code}
             </span>
           )}
@@ -201,7 +201,7 @@ function PatientTableRow({ patient, isLast, onQuickView, onOpenProfile }: { pati
       {/* Document */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
         {patient.document_type_code && (
-          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--teal)', background: 'rgba(20,184,166,.10)', border: '1px solid rgba(20,184,166,.20)', borderRadius: 4, padding: '1px 5px', textTransform: 'uppercase' as const, flexShrink: 0 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--teal)', background: 'rgba(54,50,133,.10)', border: '1px solid rgba(54,50,133,.20)', borderRadius: 4, padding: '1px 5px', textTransform: 'uppercase' as const, flexShrink: 0 }}>
             {patient.document_type_code}
           </span>
         )}
@@ -336,7 +336,7 @@ function QuickViewPanel({ patient, onClose }: { patient: Patient; onClose: () =>
             </button>
             <button
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: 10, borderRadius: 10, border: '1.5px solid var(--s200)', background: '#fff', color: 'var(--s600)', fontSize: 13, fontWeight: 500, transition: 'all .12s', cursor: 'pointer' }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.color = '#8b5cf6'; }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#7d75c7'; e.currentTarget.style.color = '#7d75c7'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--s200)'; e.currentTarget.style.color = 'var(--s600)'; }}
             >
               <ClipboardList size={14} />Evaluación
@@ -372,7 +372,7 @@ function EmptyState({ query, filter, onNew }: { query: string; filter: StatusFil
       {filter === 'all' && (
         <button
           onClick={onNew}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 22px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 600, boxShadow: '0 2px 10px rgba(20,184,166,.3)' }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 22px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 600, boxShadow: '0 2px 10px rgba(54,50,133,.3)' }}
         >
           <Plus size={15} />Registrar primer paciente
         </button>
@@ -509,7 +509,7 @@ export function PatientsPage() {
         {/* New patient */}
         <button
           onClick={() => navigate('/patients/new')}
-          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 10, border: 'none', background: 'var(--teal)', color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(20,184,166,.35)', whiteSpace: 'nowrap', transition: 'all .15s' }}
+          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 10, border: 'none', background: 'var(--teal)', color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(54,50,133,.35)', whiteSpace: 'nowrap', transition: 'all .15s' }}
           onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.08)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
           onMouseLeave={e => { e.currentTarget.style.filter = ''; e.currentTarget.style.transform = ''; }}
         >

@@ -33,9 +33,9 @@ interface SessionType {
 }
 
 const SESSION_TYPES: SessionType[] = [
-  { id: 'initial',   label: 'Sesión inicial', icon: UserPlus,  duration: 60, color: '#0d9488' },
-  { id: 'followup',  label: 'Seguimiento',    icon: RefreshCw, duration: 50, color: '#0d9488' },
-  { id: 'discharge', label: 'Sesión de alta', icon: Award,     duration: 50, color: '#0d9488' },
+  { id: 'initial',   label: 'Sesión inicial', icon: UserPlus,  duration: 60, color: '#2a2769' },
+  { id: 'followup',  label: 'Seguimiento',    icon: RefreshCw, duration: 50, color: '#2a2769' },
+  { id: 'discharge', label: 'Sesión de alta', icon: Award,     duration: 50, color: '#2a2769' },
 ];
 
 const SLOT_STEP = 30;
@@ -439,7 +439,7 @@ function SummaryPanel({ patient, guestName, date, time, sessionType, duration, m
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ borderRadius: 14, overflow: 'hidden', border: '1.5px solid #99f6e4', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+      <div style={{ borderRadius: 14, overflow: 'hidden', border: '1.5px solid #cbc7ee', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
         <div style={{
           background: 'var(--teal-d)',
           padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 8,
@@ -450,7 +450,7 @@ function SummaryPanel({ patient, guestName, date, time, sessionType, duration, m
 
         <div style={{ background: 'var(--teal-l)', padding: 14 }}>
           {patient ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid rgba(13,148,136,0.15)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid rgba(42,39,105,0.15)' }}>
               <div style={{ ...avatarStyle, width: 38, height: 38, fontSize: 13 }}>{initials(patient)}</div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--s800)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -460,7 +460,7 @@ function SummaryPanel({ patient, guestName, date, time, sessionType, duration, m
               </div>
             </div>
           ) : hasGuest ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid rgba(13,148,136,0.15)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid rgba(42,39,105,0.15)' }}>
               <div style={{ ...avatarStyle, width: 38, height: 38, fontSize: 13, background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>{initialsFromName(guestName)}</div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--s800)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -470,7 +470,7 @@ function SummaryPanel({ patient, guestName, date, time, sessionType, duration, m
               </div>
             </div>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid rgba(13,148,136,0.15)', color: 'var(--s400)', fontSize: 13 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid rgba(42,39,105,0.15)', color: 'var(--s400)', fontSize: 13 }}>
               <User size={15} />
               Sin paciente seleccionado
             </div>
@@ -488,7 +488,7 @@ function SummaryPanel({ patient, guestName, date, time, sessionType, duration, m
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{
                   width: 28, height: 28, borderRadius: 7,
-                  background: ok ? 'rgba(13,148,136,0.12)' : 'var(--s100)',
+                  background: ok ? 'rgba(42,39,105,0.12)' : 'var(--s100)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                 }}>
                   <Icon size={13} color={ok ? 'var(--teal-d)' : 'var(--s400)'} />
@@ -622,7 +622,7 @@ const primaryBtn: React.CSSProperties = {
   padding: '11px 20px', borderRadius: 10, border: 'none', cursor: 'pointer',
   background: 'linear-gradient(135deg, var(--teal), var(--teal-d))',
   color: '#fff', fontWeight: 700, fontSize: 14,
-  boxShadow: '0 4px 14px rgba(13,148,136,0.35)',
+  boxShadow: '0 4px 14px rgba(42,39,105,0.35)',
   transition: 'opacity 0.2s, transform 0.1s',
 };
 
@@ -1049,8 +1049,8 @@ export function NewAppointmentPage() {
         <Section icon={MapPin} title="Modalidad">
           <div style={{ display: 'flex', gap: 10 }}>
             {([
-              ['presencial', MapPin,  '#0d9488', 'Presencial'],
-              ['virtual',    Video,   '#6366f1', 'Virtual'],
+              ['presencial', MapPin,  '#2a2769', 'Presencial'],
+              ['virtual',    Video,   '#5b52ad', 'Virtual'],
             ] as const).map(([val, Icon, color, label]) => {
               const isSel = modality === val;
               return (
@@ -1106,7 +1106,7 @@ export function NewAppointmentPage() {
           {recurrence !== 'none' && (
             <div style={{
               display: 'flex', alignItems: 'flex-start', gap: 8,
-              background: 'rgba(13,148,136,0.08)', borderRadius: 8, padding: '10px 12px',
+              background: 'rgba(42,39,105,0.08)', borderRadius: 8, padding: '10px 12px',
               fontSize: 12, color: 'var(--teal-d)',
             }}>
               <AlertCircle size={13} style={{ marginTop: 1, flexShrink: 0 }} />

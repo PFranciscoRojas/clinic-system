@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Brain, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import { BrandMark } from '@/components/ui/BrandMark';
 import { legalApi } from '@/api/legal';
 import { Markdown } from '@/components/common/Markdown';
 import { Spinner } from '@/components/ui/Spinner';
@@ -14,16 +15,16 @@ export function PrivacyPage() {
   });
 
   return (
-    <div style={{ minHeight: '100dvh', background: 'var(--s50, #f8fafc)', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
-      <header style={{ background: '#fff', borderBottom: '1px solid var(--s200, #e2e8f0)', padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 14, position: 'sticky', top: 0, zIndex: 10 }}>
+    <div style={{ minHeight: '100dvh', background: 'var(--s50, #faf6ec)', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+      <header style={{ background: '#fff', borderBottom: '1px solid var(--s200, #e7dcc0)', padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 14, position: 'sticky', top: 0, zIndex: 10 }}>
         <button onClick={() => navigate(-1)} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--s500)', fontWeight: 500, padding: '6px 10px', borderRadius: 8 }}>
           <ArrowLeft size={15} /> Volver
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <div style={{ width: 30, height: 30, borderRadius: 8, background: 'linear-gradient(135deg, #0f766e, #134e4a)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Brain size={16} color="#fff" />
+          <div style={{ width: 30, height: 30, borderRadius: 8, background: 'linear-gradient(135deg, #2a2769, #171533)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ color: '#fff', display: 'flex' }}><BrandMark size={18} /></span>
           </div>
-          <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)' }}>SGHCP</span>
+          <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)' }}>Chapni</span>
         </div>
       </header>
       <div style={{ maxWidth: 780, margin: '0 auto', padding: '40px 24px 80px' }}>
@@ -39,7 +40,7 @@ export function PrivacyPage() {
           </>
         ) : null}
         <div style={{ marginTop: 60, paddingTop: 24, borderTop: '1px solid var(--s200)', fontSize: 12, color: 'var(--s400)', textAlign: 'center', lineHeight: 1.7 }}>
-          SGHCP · Sistema de Gestión de Historias Clínicas Psicológicas<br />Colombia · franciscorojas92@gmail.com
+          Chapni · Historia clínica cifrada<br />Colombia · franciscorojas92@gmail.com
         </div>
       </div>
     </div>

@@ -100,7 +100,7 @@ function Field({ label, value, onChange, placeholder, type = 'text', required, e
         display: 'flex', alignItems: 'center', gap: 8,
         border: `1.5px solid ${hasError ? 'var(--red)' : focused ? 'var(--teal)' : 'var(--s200)'}`,
         borderRadius: 10, padding: '10px 14px', background: '#fff',
-        boxShadow: focused ? `0 0 0 3px ${hasError ? 'rgba(239,68,68,0.12)' : 'rgba(13,148,136,0.12)'}` : 'none',
+        boxShadow: focused ? `0 0 0 3px ${hasError ? 'rgba(239,68,68,0.12)' : 'rgba(42,39,105,0.12)'}` : 'none',
         transition: 'all 0.15s',
       }}>
         {Icon && <Icon size={14} color={hasError ? 'var(--red)' : focused ? 'var(--teal)' : 'var(--s400)'} />}
@@ -260,7 +260,7 @@ export function NewPatientPage() {
           width: 72, height: 72, borderRadius: '50%',
           background: 'linear-gradient(135deg, var(--teal), var(--teal-d))',
           display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20,
-          boxShadow: '0 8px 24px rgba(13,148,136,0.35)',
+          boxShadow: '0 8px 24px rgba(42,39,105,0.35)',
         }}>
           <CheckCircle2 size={36} color="#fff" />
         </div>
@@ -514,7 +514,7 @@ export function NewPatientPage() {
               cursor: isPending ? 'not-allowed' : 'pointer',
               fontSize: 14, fontWeight: 700,
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              boxShadow: isPending ? 'none' : '0 4px 14px rgba(13,148,136,0.35)',
+              boxShadow: isPending ? 'none' : '0 4px 14px rgba(42,39,105,0.35)',
               transition: 'all 0.2s',
             }}
           >

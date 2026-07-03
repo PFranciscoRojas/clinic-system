@@ -24,7 +24,7 @@ export function SignatureCanvas({ onChange }: { onChange: (dataUrl: string | nul
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#1e293b';
+    ctx.strokeStyle = '#22214a';
     const { x, y } = pos(e);
     ctx.beginPath();
     ctx.moveTo(x, y);

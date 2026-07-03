@@ -42,16 +42,18 @@ export function ConsentSignPage() {
   const canSign = accepted && !!signature;
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#f5f4f0', padding: '20px 12px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+    <div style={{ minHeight: '100dvh', background: '#faf6ec', padding: '20px 12px', fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <div style={{ maxWidth: 560, margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#5e8265' }}>Marcela Chapués · Psicóloga Clínica</p>
-        </div>
+        {info?.org_name && (
+          <div style={{ textAlign: 'center', marginBottom: 24 }}>
+            <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#363285' }}>{info.org_name}</p>
+          </div>
+        )}
 
         <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 2px 12px rgba(0,0,0,0.07)', padding: '28px 24px' }}>
           {state === 'loading' && (
             <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-              <Spinner size={28} color="#5e8265" />
+              <Spinner size={28} color="#363285" />
             </div>
           )}
 
@@ -73,19 +75,19 @@ export function ConsentSignPage() {
           {(state === 'ready' || state === 'signing') && info && (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-                <FileCheck size={20} color="#5e8265" />
+                <FileCheck size={20} color="#363285" />
                 <h1 style={{ margin: 0, fontSize: 17, color: '#1a1a1a', fontWeight: 700 }}>{info.title}</h1>
               </div>
               <p style={{ margin: '0 0 16px', fontSize: 14, color: '#555' }}>
                 Hola <strong>{info.patient_first_name || ''}</strong>, lee el documento completo y fírmalo al final.
               </p>
 
-              <div style={{ maxHeight: 320, overflowY: 'auto', padding: '16px 18px', background: '#f5f4f0', borderRadius: 10, marginBottom: 16, WebkitOverflowScrolling: 'touch' }}>
+              <div style={{ maxHeight: 320, overflowY: 'auto', padding: '16px 18px', background: '#faf6ec', borderRadius: 10, marginBottom: 16, WebkitOverflowScrolling: 'touch' }}>
                 <p style={{ margin: 0, fontSize: 14, color: '#333', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{info.body}</p>
               </div>
 
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 16, cursor: 'pointer' }}>
-                <input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} style={{ marginTop: 3, accentColor: '#5e8265', width: 16, height: 16 }} />
+                <input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} style={{ marginTop: 3, accentColor: '#363285', width: 16, height: 16 }} />
                 <span style={{ fontSize: 14, color: '#444', lineHeight: 1.5 }}>Leí y acepto el contenido de este documento</span>
               </label>
 
@@ -96,7 +98,7 @@ export function ConsentSignPage() {
                 disabled={!canSign || state === 'signing'}
                 style={{
                   width: '100%', marginTop: 20, padding: '14px 0', borderRadius: 10, border: 'none',
-                  background: canSign ? '#5e8265' : '#d1d5db', color: '#fff',
+                  background: canSign ? '#363285' : '#d1d5db', color: '#fff',
                   fontSize: 15, fontWeight: 700, cursor: canSign ? 'pointer' : 'not-allowed',
                 }}
               >
@@ -108,6 +110,10 @@ export function ConsentSignPage() {
             </>
           )}
         </div>
+
+        <p style={{ fontSize: 11.5, color: '#9b96ac', textAlign: 'center', marginTop: 20 }}>
+          Con la tecnología de <span style={{ fontWeight: 600 }}>Chapni</span>
+        </p>
       </div>
     </div>
   );

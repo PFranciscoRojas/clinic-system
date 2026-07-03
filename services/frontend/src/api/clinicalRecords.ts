@@ -192,6 +192,8 @@ export interface PublicConsentInfo {
   title: string;
   body: string;
   expires_at: string;
+  /** Tenant display name — optional until core-api ships it. */
+  org_name?: string;
 }
 
 async function publicRequest<T>(path: string, init?: RequestInit): Promise<T> {

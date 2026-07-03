@@ -29,8 +29,8 @@ export function ClinicalGate({ isPure, reason, onReason, children }: Props) {
         />
       )}
       <div style={{
-        background: '#f8fafc',
-        border: '1.5px dashed #cbd5e1',
+        background: '#faf6ec',
+        border: '1.5px dashed #d5cbae',
         borderRadius: 12,
         padding: '32px 24px',
         display: 'flex',
@@ -43,12 +43,12 @@ export function ClinicalGate({ isPure, reason, onReason, children }: Props) {
           width: 44,
           height: 44,
           borderRadius: '50%',
-          background: '#f1f5f9',
+          background: '#f4eedd',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
         }}>
-          <Lock size={20} color="#94a3b8" />
+          <Lock size={20} color="#8f8a9e" />
         </div>
         <div>
           <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151' }}>
@@ -63,7 +63,7 @@ export function ClinicalGate({ isPure, reason, onReason, children }: Props) {
           style={{
             padding: '8px 18px',
             background: '#fff',
-            border: '1.5px solid #e2e8f0',
+            border: '1.5px solid #e7dcc0',
             borderRadius: 8,
             fontSize: 13,
             fontWeight: 600,

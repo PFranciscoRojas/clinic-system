@@ -78,7 +78,7 @@ export function UnifiedConsentSignModal({ patientId, alreadySigned = [], onClose
       <div className="card anim-fade-in" style={{ width: 680, maxWidth: '100%', maxHeight: '94vh', overflowY: 'auto', padding: 26 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#f3f2fb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <FileCheck size={18} color="var(--teal)" />
             </div>
             <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--s800)' }}>Firmar consentimientos</span>
@@ -116,7 +116,7 @@ export function UnifiedConsentSignModal({ patientId, alreadySigned = [], onClose
                     <div style={{ flex: 1, minWidth: 0, cursor: done || !tpl ? 'default' : 'pointer' }} onClick={() => { if (!done && tpl) toggle(m.type); }}>
                       <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--s800)' }}>
                         {tpl?.title ?? m.label}
-                        {m.required && !done && <span style={{ fontSize: 10.5, fontWeight: 700, color: '#0f766e', background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 5, padding: '1px 6px', marginLeft: 8 }}>Requerido</span>}
+                        {m.required && !done && <span style={{ fontSize: 10.5, fontWeight: 700, color: '#2a2769', background: '#f3f2fb', border: '1px solid #cbc7ee', borderRadius: 5, padding: '1px 6px', marginLeft: 8 }}>Requerido</span>}
                       </div>
                       <div style={{ fontSize: 11.5, color: done ? '#047857' : 'var(--s400)', marginTop: 1 }}>
                         {done ? 'Ya firmado y vigente' : tpl ? m.hint : 'Sin plantilla activa — créala en Configuración'}

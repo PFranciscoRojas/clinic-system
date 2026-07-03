@@ -8,7 +8,7 @@ import { fmtDateOnly, todayLocalISO } from '@/lib/dates';
 const STATUS_CFG: Record<DiagnosisStatus, { label: string; color: string; bg: string }> = {
   ACTIVE:    { label: 'Activo',     color: '#1e40af', bg: '#dbeafe' },
   RESOLVED:  { label: 'Resuelto',   color: '#065f46', bg: '#d1fae5' },
-  RULED_OUT: { label: 'Descartado', color: '#374151', bg: '#f1f5f9' },
+  RULED_OUT: { label: 'Descartado', color: '#374151', bg: '#f4eedd' },
 };
 
 const NEXT_STATUS: Record<DiagnosisStatus, DiagnosisStatus[]> = {
@@ -98,7 +98,7 @@ export function DiagnosesPanel({ patientId, reason }: { patientId: string; reaso
               onClick={() => handleAdd(code)}
               style={{ width: '100%', display: 'flex', gap: 10, alignItems: 'baseline', padding: '9px 12px', background: '#fff', border: '1px solid var(--s100)', borderRadius: 8, cursor: 'pointer', textAlign: 'left', marginBottom: 4 }}
             >
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--teal)', fontFamily: 'monospace' }}>{code.code}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--teal)', fontFamily: "'DM Mono', monospace" }}>{code.code}</span>
               <span style={{ fontSize: 13, color: 'var(--s700)' }}>{code.description}</span>
             </button>
           ))}
@@ -124,7 +124,7 @@ export function DiagnosesPanel({ patientId, reason }: { patientId: string; reaso
           const cfg = STATUS_CFG[dx.status];
           return (
             <div key={dx.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderBottom: idx < diagnoses.length - 1 ? '1px solid var(--s100)' : 'none', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--teal)', fontFamily: 'monospace', width: 56 }}>{dx.icd10_code}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--teal)', fontFamily: "'DM Mono', monospace", width: 56 }}>{dx.icd10_code}</span>
               <div style={{ flex: 1, minWidth: 180 }}>
                 <p style={{ margin: 0, fontSize: 13, color: 'var(--s700)', fontWeight: 500 }}>{dx.description}</p>
                 <p style={{ margin: 0, fontSize: 11, color: 'var(--s400)' }}>

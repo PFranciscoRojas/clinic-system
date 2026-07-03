@@ -39,7 +39,7 @@ export function ConsentViewModal({ consentId, onClose }: { consentId: string; on
       <div className="card anim-fade-in" style={{ width: 680, maxWidth: '100%', maxHeight: '92vh', overflowY: 'auto', padding: 26 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#f3f2fb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <FileCheck size={18} color="var(--teal)" />
             </div>
             <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--s800)' }}>Documento de consentimiento</span>

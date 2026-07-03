@@ -36,18 +36,18 @@ const SECTIONS: { id: SectionId; icon: React.ElementType; label: string; color?:
   { id: 'security',      icon: ShieldCheck, label: 'Seguridad',            group: 'Personal',    color: '#ef4444' },
   { id: 'ai',            icon: Sparkles,    label: 'Asistente IA',         group: 'Herramientas',color: '#f59e0b' },
   { id: 'notifications', icon: Bell,        label: 'Notificaciones',       group: 'Herramientas' },
-  { id: 'templates',        icon: FileText,  label: 'Plantillas clínicas',  group: 'Herramientas',color: '#8b5cf6' },
-  { id: 'record_templates', icon: FileText,  label: 'Formatos de registro',  group: 'Herramientas',color: '#7c3aed' },
+  { id: 'templates',        icon: FileText,  label: 'Plantillas clínicas',  group: 'Herramientas',color: '#7d75c7' },
+  { id: 'record_templates', icon: FileText,  label: 'Formatos de registro',  group: 'Herramientas',color: '#5b52ad' },
   { id: 'billing',       icon: Receipt,     label: 'Tarifas',              group: 'Equipo',      color: '#10b981' },
   { id: 'users',         icon: Users,       label: 'Usuarios',             group: 'Equipo',      color: '#0ea5e9' },
-  { id: 'integrations',  icon: Plug,        label: 'Integraciones',        group: 'Equipo',      color: '#7c3aed' },
+  { id: 'integrations',  icon: Plug,        label: 'Integraciones',        group: 'Equipo',      color: '#5b52ad' },
 ];
 
 const ROLE_COLORS: Record<string, { color: string; bg: string }> = {
   CLINIC_ADMIN:  { color: '#065f46', bg: '#d1fae5' },
   PROFESSIONAL:  { color: '#0369a1', bg: '#e0f2fe' },
   INTERN:        { color: '#92400e', bg: '#fef3c7' },
-  RECEPTIONIST:  { color: '#4c1d95', bg: '#ede9fe' },
+  RECEPTIONIST:  { color: '#2a2769', bg: '#e4e2f6' },
   SYSTEM_ADMIN:  { color: '#991b1b', bg: '#fee2e2' },
 };
 
@@ -103,7 +103,7 @@ function FInput({ value, onChange, placeholder, type = 'text', mono, disabled }:
         width: '100%', padding: '8px 12px',
         border: `1.5px solid ${f ? 'var(--teal)' : 'var(--s200)'}`,
         borderRadius: 9, fontSize: 13.5, color: 'var(--s800)', background: disabled ? 'var(--s50)' : '#fff',
-        boxShadow: f ? '0 0 0 3px rgba(20,184,166,0.12)' : 'none',
+        boxShadow: f ? '0 0 0 3px rgba(54,50,133,0.12)' : 'none',
         transition: 'all .15s',
         fontFamily: mono ? "'DM Mono', monospace" : "'DM Sans', sans-serif",
       }}
@@ -161,7 +161,7 @@ function SaveBar({ dirty, saving, saved, onSave }: {
         )}
         <button
           onClick={() => onSave(true)}
-          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 20px', borderRadius: 9, border: 'none', background: 'var(--teal)', color: '#fff', fontSize: 13, fontWeight: 700, boxShadow: '0 2px 8px rgba(20,184,166,.35)', transition: 'filter .15s', cursor: 'pointer' }}
+          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 20px', borderRadius: 9, border: 'none', background: 'var(--teal)', color: '#fff', fontSize: 13, fontWeight: 700, boxShadow: '0 2px 8px rgba(54,50,133,.35)', transition: 'filter .15s', cursor: 'pointer' }}
           onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(1.07)')}
           onMouseLeave={e => (e.currentTarget.style.filter = '')}
         >
@@ -208,7 +208,7 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
   // display_name from the JWT is the source of truth for the app UI.
   const [name,      setName]      = useState(user?.display_name || savedProfile.name || '');
   const [email,     setEmail]     = useState(user?.email ?? '');
-  const savedAccent = localStorage.getItem(`sghcp_accent_${user?.user_id}`) ?? '#14b8a6';
+  const savedAccent = localStorage.getItem(`sghcp_accent_${user?.user_id}`) ?? '#363285';
   const [color,     setColor]     = useState(savedAccent);
   const [saving,    setSaving]    = useState(false);
   const [saved,     setSaved]     = useState(false);
@@ -454,8 +454,8 @@ function ProfileSection({ setDirty }: { setDirty: (v: boolean) => void }) {
                 style={{ width: 30, height: 30, borderRadius: 99, background: c, border: `2.5px solid ${color === c ? 'var(--s800)' : 'transparent'}`, boxShadow: color === c ? `0 0 0 2px #fff, 0 0 0 4px ${c}` : 'none', transition: 'all .15s', cursor: 'pointer', flexShrink: 0 }}
               />
             ))}
-            {color !== '#14b8a6' && (
-              <button onClick={() => { setColor('#14b8a6'); saveAccentColor('#14b8a6', user?.user_id); }} style={{ fontSize: 11.5, color: 'var(--s400)', border: 'none', background: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
+            {color !== '#363285' && (
+              <button onClick={() => { setColor('#363285'); saveAccentColor('#363285', user?.user_id); }} style={{ fontSize: 11.5, color: 'var(--s400)', border: 'none', background: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
                 Restablecer
               </button>
             )}
@@ -895,7 +895,7 @@ function NotificationsSection({ setDirty }: { setDirty: (v: boolean) => void }) 
         <Toggle value disabled onChange={() => {}} label="Correo electrónico" sub="Confirmaciones de cita y recordatorios — activo" />
         <SoonRow label="SMS" sub="Respaldo cuando WhatsApp no está disponible" />
         <div style={{ padding: '12px 0 4px', fontSize: 12.5, color: 'var(--s400)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Plug size={12} color="#7c3aed" />
+          <Plug size={12} color="#5b52ad" />
           <span>La configuración de WhatsApp (Meta) se gestiona en <b>Integraciones</b>.</span>
         </div>
       </SectionCard>
@@ -981,7 +981,7 @@ function AISection({ setDirty, saveRef }: { setDirty: (v: boolean) => void; save
             <Sparkles size={20} color="#f59e0b" />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#78350f' }}>SGHCP-IA v2.1 · Activo</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#78350f' }}>Chapni IA v2.1 · Activo</div>
             <div style={{ fontSize: 12, color: '#92400e', marginTop: 2 }}>Genera borradores de nota clínica desde el audio de sesión. El profesional aprueba explícitamente antes de incorporar al registro.</div>
           </div>
         </div>
@@ -1362,7 +1362,7 @@ function ConsentTemplatesSection() {
   };
 
   return (
-    <SectionCard title="Plantillas de consentimiento" icon={ShieldCheck} color="#0d9488">
+    <SectionCard title="Plantillas de consentimiento" icon={ShieldCheck} color="#2a2769">
       <p style={{ margin: '12px 0 4px', fontSize: 12.5, color: 'var(--s400)', lineHeight: 1.6 }}>
         Editar crea una versión nueva. Los consentimientos ya firmados conservan el texto exacto que el paciente aceptó.
       </p>
@@ -1446,7 +1446,7 @@ const ROLE_BADGE: Record<string, { label: string; color: string; bg: string }> =
   CLINIC_ADMIN:  { label: 'Admin',          color: '#0369a1', bg: '#e0f2fe' },
   PROFESSIONAL:  { label: 'Profesional',    color: '#065f46', bg: '#d1fae5' },
   INTERN:        { label: 'Practicante',    color: '#92400e', bg: '#fef3c7' },
-  RECEPTIONIST:  { label: 'Recepcionista',  color: '#475569', bg: '#f1f5f9' },
+  RECEPTIONIST:  { label: 'Recepcionista',  color: '#4a4560', bg: '#f4eedd' },
 };
 
 function TeamCard({ selfId }: { selfId: string }) {
@@ -1519,7 +1519,7 @@ function TeamCard({ selfId }: { selfId: string }) {
           {users.map(u => {
             const isSelf = u.id === selfId;
             const isActive = u.is_active;
-            const badge = ROLE_BADGE[u.role_name] ?? { label: u.role_name, color: '#475569', bg: '#f1f5f9' };
+            const badge = ROLE_BADGE[u.role_name] ?? { label: u.role_name, color: '#4a4560', bg: '#f4eedd' };
             return (
               <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--s100)', opacity: isActive ? 1 : 0.65 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -1665,7 +1665,7 @@ function UsersSection() {
             <div style={{ padding: '14px 16px', background: '#f0f9ff', border: '1.5px solid #7dd3fc', borderRadius: 11 }}>
               <div style={{ fontSize: 11.5, color: '#0369a1', fontWeight: 600, marginBottom: 6 }}>Código generado — expira el {inviteExp}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ fontFamily: 'monospace', fontSize: 22, fontWeight: 900, letterSpacing: 6, color: '#0c4a6e', flex: 1 }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 22, fontWeight: 900, letterSpacing: 6, color: '#0c4a6e', flex: 1 }}>
                   {inviteCode}
                 </div>
                 <button onClick={copyCode} style={{
@@ -1753,7 +1753,7 @@ function formatMoney(amount: string, currency: string): string {
 const EMPTY_RATE = { name: '', description: '', amount: '', currency: 'COP', modality: '' as '' | RateModality };
 
 const STATUS_DISPLAY: Record<string, { label: string; color: string; bg: string }> = {
-  trialing:  { label: 'Prueba gratuita', color: '#0f766e', bg: '#f0fdfa' },
+  trialing:  { label: 'Prueba gratuita', color: '#2a2769', bg: '#f3f2fb' },
   active:    { label: 'Plan activo',     color: '#059669', bg: '#ecfdf5' },
   past_due:  { label: 'Pago pendiente',  color: '#d97706', bg: '#fffbeb' },
   canceled:  { label: 'Cancelado',       color: '#dc2626', bg: '#fef2f2' },
@@ -1779,7 +1779,7 @@ function PlanStatusCard() {
       <div style={{ flex: 1 }}>
         <div style={{ fontWeight: 700, fontSize: 14, color: display.color }}>{display.label}</div>
         {until && (
-          <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>
+          <div style={{ fontSize: 13, color: '#5f5a6e', marginTop: 2 }}>
             {status === 'active' ? 'Próxima renovación' : 'Período de prueba hasta'}: <strong>{until}</strong>
           </div>
         )}
@@ -1787,7 +1787,7 @@ function PlanStatusCard() {
       {(status !== 'active') && (
         <button
           onClick={() => startCheckout().catch(() => {})}
-          style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#0f766e', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+          style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#2a2769', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
         >
           Activar plan
         </button>
@@ -2068,8 +2068,8 @@ function IntegrationsSection() {
   if (!unlocked) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '48px 24px', maxWidth: 420 }}>
-        <div style={{ width: 56, height: 56, borderRadius: 16, background: '#f5f3ff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-          <Lock size={26} color="#7c3aed" />
+        <div style={{ width: 56, height: 56, borderRadius: 16, background: '#f3f2fb', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+          <Lock size={26} color="#5b52ad" />
         </div>
         <h2 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 800, color: 'var(--s800)', textAlign: 'center' }}>
           Área protegida
@@ -2104,7 +2104,7 @@ function IntegrationsSection() {
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               padding: '10px 20px', borderRadius: 10, border: 'none',
-              background: verifying || !pwd.trim() ? 'var(--s200)' : '#7c3aed',
+              background: verifying || !pwd.trim() ? 'var(--s200)' : '#5b52ad',
               color: verifying || !pwd.trim() ? 'var(--s400)' : '#fff',
               fontSize: 14, fontWeight: 700, cursor: verifying || !pwd.trim() ? 'not-allowed' : 'pointer',
             }}
@@ -2120,12 +2120,12 @@ function IntegrationsSection() {
 
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '10px 14px', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 10, fontSize: 12.5, color: '#5b21b6' }}>
-        <CheckCircle size={13} color="#7c3aed" />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '10px 14px', background: '#f3f2fb', border: '1px solid #cbc7ee', borderRadius: 10, fontSize: 12.5, color: '#363285' }}>
+        <CheckCircle size={13} color="#5b52ad" />
         <span>Sesión desbloqueada — puedes editar las credenciales de integración.</span>
         <button
           onClick={() => setUnlocked(false)}
-          style={{ marginLeft: 'auto', border: 'none', background: 'none', color: '#7c3aed', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+          style={{ marginLeft: 'auto', border: 'none', background: 'none', color: '#5b52ad', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
         >
           Bloquear
         </button>
@@ -2240,7 +2240,7 @@ export function SettingsPage() {
           })()}
         </nav>
         <div style={{ padding: '12px 16px', borderTop: '1px solid var(--s100)' }}>
-          <div style={{ fontSize: 11.5, color: 'var(--s400)' }}>SGHCP v0.5.0 · 2026</div>
+          <div style={{ fontSize: 11.5, color: 'var(--s400)' }}>Chapni v0.5.0 · 2026</div>
           <div style={{ fontSize: 11, color: 'var(--s300)', marginTop: 2 }}>Ley 1581/2012 · Res. 1995/1999</div>
         </div>
       </div>

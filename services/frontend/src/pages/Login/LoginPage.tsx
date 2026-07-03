@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Brain, Mail, Lock, Eye, EyeOff, ShieldCheck, AlertCircle, User, Award, Stethoscope, Phone } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ShieldCheck, AlertCircle, User, Award, Stethoscope, Phone } from 'lucide-react';
+import { BrandMark } from '@/components/ui/BrandMark';
 import { useAuth } from '@/context/AuthContext';
 import { authApi } from '@/api/auth';
 import { ApiError } from '@/api/client';
@@ -46,7 +47,7 @@ function PwField({ value, onChange, error }: { value: string; onChange: (v: stri
         background: focused ? '#fff' : 'var(--s50)',
         border: `1.5px solid ${error ? 'var(--red)' : focused ? 'var(--teal)' : 'var(--s200)'}`,
         borderRadius: 11, padding: '11px 14px', transition: 'all .15s',
-        boxShadow: focused ? `0 0 0 3px rgba(20,184,166,0.12)` : 'none',
+        boxShadow: focused ? `0 0 0 3px rgba(54,50,133,0.12)` : 'none',
       }}>
         <Lock size={16} color={focused ? 'var(--teal)' : 'var(--s400)'} />
         <input
@@ -85,7 +86,7 @@ function TField({ label, value, onChange, placeholder, icon: Icon, type = 'text'
         background: focused ? '#fff' : 'var(--s50)',
         border: `1.5px solid ${error ? 'var(--red)' : focused ? 'var(--teal)' : 'var(--s200)'}`,
         borderRadius: 11, padding: '11px 14px', transition: 'all .15s',
-        boxShadow: focused ? '0 0 0 3px rgba(20,184,166,0.12)' : 'none',
+        boxShadow: focused ? '0 0 0 3px rgba(54,50,133,0.12)' : 'none',
       }}>
         <Icon size={16} color={focused ? 'var(--teal)' : 'var(--s400)'} />
         <input
@@ -119,7 +120,7 @@ function Steps({ step, total }: { step: number; total: number }) {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 11, fontWeight: 800,
               color: done || active ? '#fff' : 'var(--s400)',
-              boxShadow: active ? '0 0 0 4px rgba(20,184,166,0.20)' : 'none',
+              boxShadow: active ? '0 0 0 4px rgba(54,50,133,0.20)' : 'none',
               transition: 'all .2s', flexShrink: 0,
             }}>
               {done ? '✓' : i + 1}
@@ -408,10 +409,11 @@ export function LoginPage() {
                 backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 margin: '0 auto 18px',
               }}>
-                <Brain size={32} color="white" />
+                <span style={{ color: '#fff', display: 'flex' }}><BrandMark size={40} /></span>
               </div>
-              <div style={{ fontWeight: 900, fontSize: 26, color: '#fff', letterSpacing: '-0.6px', marginBottom: 4 }}>SGHCP</div>
-              <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.65)' }}>Sistema de Gestión de Historias Clínicas Psicológicas</div>
+              <div className="font-display" style={{ fontSize: 32, color: '#fff', marginBottom: 6 }}>Chapni</div>
+              <div className="font-display-italic" style={{ fontSize: 15, color: 'rgba(255,255,255,0.70)' }}>Recupera tus tardes.</div>
+              <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>Historia clínica cifrada · Colombia</div>
             </div>
 
             {/* Card */}
@@ -452,15 +454,15 @@ export function LoginPage() {
 
                 <button type="submit" disabled={loading} style={{
                   width: '100%', padding: 14, borderRadius: 12, border: 'none',
-                  background: loading ? 'var(--s200)' : 'linear-gradient(135deg, var(--teal) 0%, var(--teal-d) 100%)',
-                  color: loading ? 'var(--s400)' : '#fff',
+                  background: loading ? 'var(--s200)' : 'var(--cta)',
+                  color: loading ? 'var(--s400)' : 'var(--cta-text)',
                   fontSize: 15, fontWeight: 800, letterSpacing: '-0.2px',
-                  boxShadow: loading ? 'none' : '0 4px 18px rgba(14,118,110,0.40)',
+                  boxShadow: loading ? 'none' : '0 4px 18px rgba(217,160,56,0.45)',
                   transition: 'all .18s', marginBottom: 16, cursor: loading ? 'not-allowed' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
                 }}>
                   {loading ? (
-                    <><span style={{ width: 18, height: 18, border: '2.5px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: 99, animation: 'spin .7s linear infinite', display: 'inline-block' }} />Verificando…</>
+                    <><span style={{ width: 18, height: 18, border: '2.5px solid rgba(58,42,6,.25)', borderTopColor: 'var(--cta-text)', borderRadius: 99, animation: 'spin .7s linear infinite', display: 'inline-block' }} />Verificando…</>
                   ) : (
                     <>Ingresar al sistema</>
                   )}
@@ -489,7 +491,7 @@ export function LoginPage() {
                   background: '#fff', color: 'var(--s600)', fontSize: 13, fontWeight: 600,
                   transition: 'all .12s', cursor: 'pointer',
                 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#7c3aed'; (e.currentTarget as HTMLElement).style.color = '#7c3aed'; }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#5b52ad'; (e.currentTarget as HTMLElement).style.color = '#5b52ad'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--s200)'; (e.currentTarget as HTMLElement).style.color = 'var(--s600)'; }}>
                   Código de invitación
                 </button>
@@ -503,7 +505,7 @@ export function LoginPage() {
               </div>
 
               <div style={{ textAlign: 'center', marginTop: 18, fontSize: 13.5, color: 'var(--s500)' }}>
-                ¿Tu consultorio aún no está en SGHCP?{' '}
+                ¿Tu consultorio aún no está en Chapni?{' '}
                 <button type="button" onClick={() => navigate('/signup')} style={{ border: 'none', background: 'none', padding: 0, fontSize: 13.5, color: 'var(--teal)', fontWeight: 700, cursor: 'pointer' }}>
                   Registra tu consultorio
                 </button>
@@ -511,7 +513,7 @@ export function LoginPage() {
             </div>
 
             <div style={{ textAlign: 'center', marginTop: 20, fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>
-              SGHCP v0.4 · © 2026 · Política de privacidad
+              Chapni v0.4 · © 2026 · Hecho en Colombia
             </div>
           </div>
         )}
@@ -595,7 +597,7 @@ export function LoginPage() {
                   background: regLoading ? 'var(--s200)' : 'linear-gradient(135deg, var(--teal) 0%, var(--teal-d) 100%)',
                   color: regLoading ? 'var(--s400)' : '#fff',
                   fontSize: 15, fontWeight: 800, marginBottom: 12,
-                  boxShadow: regLoading ? 'none' : '0 4px 18px rgba(14,118,110,0.40)',
+                  boxShadow: regLoading ? 'none' : '0 4px 18px rgba(42,39,105,0.40)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, cursor: regLoading ? 'not-allowed' : 'pointer',
                 }}>
                   {regLoading
@@ -616,9 +618,9 @@ export function LoginPage() {
             {/* Logo small */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24, justifyContent: 'center' }}>
               <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid rgba(255,255,255,0.25)' }}>
-                <Brain size={20} color="white" />
+                <span style={{ color: '#fff', display: 'flex' }}><BrandMark size={24} /></span>
               </div>
-              <span style={{ fontWeight: 800, fontSize: 18, color: '#fff', letterSpacing: '-0.3px' }}>SGHCP</span>
+              <span className="font-display" style={{ fontSize: 20, color: '#fff' }}>Chapni</span>
             </div>
 
             <div className="glass" style={{ borderRadius: 20, padding: isMobile ? '20px 16px' : '28px 32px', boxShadow: '0 24px 64px rgba(0,0,0,0.28)' }}>
@@ -627,7 +629,7 @@ export function LoginPage() {
                   <div style={{ fontSize: 48, marginBottom: 16 }}>🎉</div>
                   <div style={{ fontWeight: 800, fontSize: 22, color: 'var(--s800)', marginBottom: 8 }}>¡Todo listo!</div>
                   <div style={{ fontSize: 14, color: 'var(--s500)', lineHeight: 1.7, marginBottom: 24 }}>Tu perfil ha sido configurado.<br />Accediendo al sistema…</div>
-                  <span style={{ width: 20, height: 20, border: '2.5px solid rgba(20,184,166,.3)', borderTopColor: 'var(--teal)', borderRadius: 99, animation: 'spin .7s linear infinite', display: 'inline-block' }} />
+                  <span style={{ width: 20, height: 20, border: '2.5px solid rgba(54,50,133,.3)', borderTopColor: 'var(--teal)', borderRadius: 99, animation: 'spin .7s linear infinite', display: 'inline-block' }} />
                 </div>
               ) : (
                 <>
@@ -869,7 +871,7 @@ export function LoginPage() {
                         flex: 1, padding: 12, borderRadius: 11, border: 'none',
                         background: 'linear-gradient(135deg,var(--teal),var(--teal-d))',
                         color: '#fff', fontSize: 14.5, fontWeight: 800,
-                        boxShadow: '0 4px 14px rgba(14,118,110,0.35)', cursor: 'pointer',
+                        boxShadow: '0 4px 14px rgba(42,39,105,0.35)', cursor: 'pointer',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                       }}>
                         Continuar →

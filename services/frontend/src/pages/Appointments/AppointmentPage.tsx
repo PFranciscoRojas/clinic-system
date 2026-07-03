@@ -38,7 +38,7 @@ import { SlotPicker } from '@/components/appointments/SlotPicker';
 const STATUS_CFG: Record<AppointmentStatus, { label: string; color: string; bg: string }> = {
   SCHEDULED:   { label: 'Confirmada',  color: CLR_INFO.text,    bg: CLR_INFO.bg },
   IN_PROGRESS: { label: 'En curso',    color: CLR_SUCCESS.text, bg: CLR_SUCCESS.bg },
-  COMPLETED:   { label: 'Completada',  color: CLR_NEUTRAL.text, bg: '#f1f5f9' },
+  COMPLETED:   { label: 'Completada',  color: CLR_NEUTRAL.text, bg: '#f4eedd' },
   CANCELLED:   { label: 'Cancelada',   color: CLR_DANGER.text,  bg: CLR_DANGER.bg },
   NO_SHOW:     { label: 'No asistió',  color: CLR_WARN.text,    bg: CLR_WARN.bg },
 };
@@ -196,7 +196,7 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
           </>
         ) : (
           <>
-            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#f3f2fb', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
               <Mic size={22} color="var(--teal)" />
             </div>
             <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 600, color: 'var(--s700)' }}>Subir grabación de la sesión</p>
@@ -240,9 +240,9 @@ function SessionTimer({ startedAt, durationMin }: { startedAt: string; durationM
   const over      = remainMin <= 0;
   const warn      = !over && remainMin <= WARN_MINUTES;
 
-  const bg     = over ? '#fee2e2' : warn ? '#fef3c7' : '#f0fdfa';
-  const border = over ? '#fca5a5' : warn ? '#fcd34d' : '#5eead4';
-  const color  = over ? '#991b1b' : warn ? '#92400e' : '#0f766e';
+  const bg     = over ? '#fee2e2' : warn ? '#fef3c7' : '#f3f2fb';
+  const border = over ? '#fca5a5' : warn ? '#fcd34d' : '#a9a3e0';
+  const color  = over ? '#991b1b' : warn ? '#92400e' : '#2a2769';
 
   const mmss = (() => {
     const totalSec = Math.max(0, Math.floor((end - now) / 1000));
@@ -968,7 +968,7 @@ export function AppointmentPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '.06em' }}>I. Datos de identificación</span>
                 {patient?.patient_code != null && (
-                  <span title="Número de historia clínica" style={{ fontFamily: "'DM Mono',monospace", fontSize: 11.5, fontWeight: 700, color: 'var(--teal-d)', background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 6, padding: '3px 8px' }}>
+                  <span title="Número de historia clínica" style={{ fontFamily: "'DM Mono',monospace", fontSize: 11.5, fontWeight: 700, color: 'var(--teal-d)', background: '#f3f2fb', border: '1px solid #cbc7ee', borderRadius: 6, padding: '3px 8px' }}>
                     HC-{String(patient.patient_code).padStart(6, '0')}
                   </span>
                 )}
@@ -1016,7 +1016,7 @@ export function AppointmentPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 9, background: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 9, background: '#f3f2fb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <FileText size={18} color="var(--teal)" />
                   </div>
                   <div>
@@ -1037,7 +1037,7 @@ export function AppointmentPage() {
                       setShowRecordForm(false);
                       setSetupOpen(true);
                     }}
-                    style={{ fontSize: 12, fontWeight: 600, color: 'var(--teal)', background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 7, padding: '6px 12px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    style={{ fontSize: 12, fontWeight: 600, color: 'var(--teal)', background: '#f3f2fb', border: '1px solid #cbc7ee', borderRadius: 7, padding: '6px 12px', cursor: 'pointer', whiteSpace: 'nowrap' }}
                   >
                     Cambiar formato
                   </button>
@@ -1066,14 +1066,14 @@ export function AppointmentPage() {
                       <button key={f.type} type="button"
                         onClick={() => { setSetupType(f.type); setSetupTemplateId(''); confirmSetup(); }}
                         style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s, background 0.15s' }}
-                        onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLButtonElement).style.background = '#f0fdfa'; }}
+                        onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLButtonElement).style.background = '#f3f2fb'; }}
                         onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--s200)'; (e.currentTarget as HTMLButtonElement).style.background = '#fff'; }}
                       >
                         <div>
                           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>{f.label}</div>
                           <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>{f.desc}</div>
                         </div>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal-d, var(--teal))', background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 5, padding: '2px 8px', flexShrink: 0 }}>integrado</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal-d, var(--teal))', background: '#f3f2fb', border: '1px solid #cbc7ee', borderRadius: 5, padding: '2px 8px', flexShrink: 0 }}>integrado</span>
                       </button>
                     ))}
                   </div>
@@ -1178,7 +1178,7 @@ export function AppointmentPage() {
             <InfoChip
               icon={isVirtual ? <Video size={13} /> : <MapPin size={13} />}
               text={MODALITY_LABEL[appt.modality] ?? appt.modality}
-              color={isVirtual ? '#6366f1' : undefined}
+              color={isVirtual ? '#5b52ad' : undefined}
             />
             {(staffName || user) && <InfoChip icon={<User size={13} />} text={staffName ?? user?.display_name ?? user?.email ?? 'Terapeuta'} />}
             {appt.paid && (
@@ -1370,7 +1370,7 @@ export function AppointmentPage() {
                 </button>
                 <button
                   onClick={() => { setReagendarOpen(v => !v); setCancelOpen(false); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', background: '#fff', color: '#6366f1', border: '1.5px solid #c7d2fe', borderRadius: 9, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', background: '#fff', color: '#5b52ad', border: '1.5px solid #cbc7ee', borderRadius: 9, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
                 >
                   <CalendarClock size={14} /> Reagendar
                 </button>
@@ -1482,7 +1482,7 @@ export function AppointmentPage() {
       <div className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 9, background: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 34, height: 34, borderRadius: 9, background: '#f3f2fb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <FileText size={17} color="var(--teal)" />
             </div>
             <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--s800)' }}>Historia clínica</span>
@@ -1490,7 +1490,7 @@ export function AppointmentPage() {
           {finalizedRecords.length > 0 && !showRecordForm && !setupOpen && canWriteNote && !hasApprovedDraft && (
             <button
               onClick={openSetup}
-              style={{ fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, border: '1px solid var(--teal)', background: '#f0fdfa', color: 'var(--teal)', cursor: 'pointer' }}
+              style={{ fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, border: '1px solid var(--teal)', background: '#f3f2fb', color: 'var(--teal)', cursor: 'pointer' }}
             >
               + Nuevo
             </button>
@@ -1508,7 +1508,7 @@ export function AppointmentPage() {
                       {RECORD_TYPE_LABEL[rec.record_type] ?? rec.record_type}
                     </p>
                     {rec.session_number != null && (
-                      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10.5, fontWeight: 700, color: 'var(--teal-d)', background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 5, padding: '1px 6px' }}>
+                      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10.5, fontWeight: 700, color: 'var(--teal-d)', background: '#f3f2fb', border: '1px solid #cbc7ee', borderRadius: 5, padding: '1px 6px' }}>
                         #{rec.session_number}
                       </span>
                     )}
@@ -1552,14 +1552,14 @@ export function AppointmentPage() {
                 <button key={f.type} type="button"
                   onClick={() => { setSetupType(f.type); setSetupTemplateId(''); confirmSetup(); }}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s, background 0.15s' }}
-                  onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLButtonElement).style.background = '#f0fdfa'; }}
+                  onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLButtonElement).style.background = '#f3f2fb'; }}
                   onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--s200)'; (e.currentTarget as HTMLButtonElement).style.background = '#fff'; }}
                 >
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--s800)' }}>{f.label}</div>
                     <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 1 }}>{f.desc}</div>
                   </div>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal-d)', background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 5, padding: '2px 7px', flexShrink: 0 }}>integrado</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal-d)', background: '#f3f2fb', border: '1px solid #cbc7ee', borderRadius: 5, padding: '2px 7px', flexShrink: 0 }}>integrado</span>
                 </button>
               ))}
             </div>
@@ -1584,7 +1584,7 @@ export function AppointmentPage() {
                     setShowRecordForm(false);
                     setSetupOpen(true);
                   }}
-                  style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal-d, var(--teal))', background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 6, padding: '3px 9px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                  style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal-d, var(--teal))', background: '#f3f2fb', border: '1px solid #cbc7ee', borderRadius: 6, padding: '3px 9px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
                 >
                   Cambiar formato
                 </button>

@@ -1,12 +1,12 @@
-export const ACCENT_COLORS = ['#14b8a6','#6366f1','#f59e0b','#10b981','#ef4444','#8b5cf6','#f97316','#0ea5e9'] as const;
+export const ACCENT_COLORS = ['#363285','#5b52ad','#f59e0b','#10b981','#ef4444','#7d75c7','#f97316','#0ea5e9'] as const;
 
 const THEMES: Record<string, { base: string; dark: string; light: string }> = {
-  '#14b8a6': { base: '#14b8a6', dark: '#0f766e', light: '#ccfbf1' },
-  '#6366f1': { base: '#6366f1', dark: '#4f46e5', light: '#e0e7ff' },
+  '#363285': { base: '#363285', dark: '#2a2769', light: '#e4e2f6' },
+  '#5b52ad': { base: '#5b52ad', dark: '#464093', light: '#e4e2f6' },
   '#f59e0b': { base: '#f59e0b', dark: '#d97706', light: '#fef3c7' },
   '#10b981': { base: '#10b981', dark: '#059669', light: '#d1fae5' },
   '#ef4444': { base: '#ef4444', dark: '#dc2626', light: '#fee2e2' },
-  '#8b5cf6': { base: '#8b5cf6', dark: '#7c3aed', light: '#ede9fe' },
+  '#7d75c7': { base: '#7d75c7', dark: '#5b52ad', light: '#e4e2f6' },
   '#f97316': { base: '#f97316', dark: '#ea580c', light: '#ffedd5' },
   '#0ea5e9': { base: '#0ea5e9', dark: '#0284c7', light: '#e0f2fe' },
 };

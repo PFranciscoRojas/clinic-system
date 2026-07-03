@@ -55,12 +55,12 @@ const RECORD_STATUS_CONFIG: Record<string, { label: string; color: string; bg: s
   borrador:   { label: 'Borrador',   color: '#92400e', bg: '#fef3c7' },
   firmada:    { label: 'Firmada',    color: '#065f46', bg: '#d1fae5' },
   confirmada: { label: 'Confirmada', color: '#1e40af', bg: '#dbeafe' },
-  pendiente:  { label: 'Pendiente',  color: '#374151', bg: '#f1f5f9' },
+  pendiente:  { label: 'Pendiente',  color: '#374151', bg: '#f4eedd' },
   SCHEDULED:  { label: 'Confirmada', color: '#1e40af', bg: '#dbeafe' },
   IN_PROGRESS:{ label: 'En curso',   color: '#065f46', bg: '#d1fae5' },
   COMPLETED:  { label: 'Firmada',    color: '#065f46', bg: '#d1fae5' },
   CANCELLED:  { label: 'Cancelada',  color: '#991b1b', bg: '#fee2e2' },
-  NO_SHOW:    { label: 'Pendiente',  color: '#374151', bg: '#f1f5f9' },
+  NO_SHOW:    { label: 'Pendiente',  color: '#374151', bg: '#f4eedd' },
 };
 
 const RECORD_TYPE_LABEL: Record<string, string> = {
@@ -144,9 +144,9 @@ function AgendaTab({
             <span style={{ fontSize: 13, color: 'var(--s600)' }}>Seguimiento</span>
             <span style={{
               fontSize: 11, fontWeight: 600, borderRadius: 6, padding: '3px 9px',
-              background: isVirtual ? '#eef2ff' : '#f0fdfa',
-              color: isVirtual ? '#6366f1' : 'var(--teal)',
-              border: `1px solid ${isVirtual ? '#c7d2fe' : '#99f6e4'}`,
+              background: isVirtual ? '#f3f2fb' : '#f3f2fb',
+              color: isVirtual ? '#5b52ad' : 'var(--teal)',
+              border: `1px solid ${isVirtual ? '#cbc7ee' : '#cbc7ee'}`,
               display: 'inline-flex', alignItems: 'center', gap: 4,
               width: 'fit-content',
             }}>
@@ -635,7 +635,7 @@ export function PatientProfilePage() {
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, flex: 1, minWidth: 0 }}>
               <div style={{
                 width: 64, height: 64, borderRadius: '50%', flexShrink: 0,
-                background: 'linear-gradient(135deg, #14b8a6, #6366f1)',
+                background: 'linear-gradient(135deg, #363285, #5b52ad)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 22, fontWeight: 800, color: '#fff', letterSpacing: 1,
               }}>

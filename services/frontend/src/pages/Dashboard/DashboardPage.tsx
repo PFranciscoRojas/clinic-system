@@ -96,7 +96,7 @@ function statusMeta(appt: Appointment): { label: string; color: string; bg: stri
   if (appt.status === 'NO_SHOW')    return { label: 'No asistió', color: '#92400e', bg: '#fef3c7', border: '#fcd34d' };
   if (isInProgress(appt))           return { label: 'En curso',   color: '#065f46', bg: '#d1fae5', border: '#6ee7b7' };
   if (isPast(appt))                 return { label: 'Pendiente',  color: '#92400e', bg: '#fff7ed', border: '#fdba74' };
-  return { label: 'Confirmada', color: '#0f766e', bg: '#f0fdfa', border: '#99f6e4' };
+  return { label: 'Confirmada', color: '#2a2769', bg: '#f3f2fb', border: '#cbc7ee' };
 }
 
 function filterAppts(appts: Appointment[], tab: FilterTab): Appointment[] {
@@ -175,7 +175,7 @@ function AppointmentRow({
           borderRadius: 10, overflow: 'hidden',
           border: '1px solid var(--s200)',
           marginTop: isFirst && !showNowLine ? 0 : 6,
-          background: inProg ? '#f0fdfa' : '#fff',
+          background: inProg ? '#f3f2fb' : '#fff',
           transition: 'box-shadow 0.15s',
         }}
         onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.07)')}
@@ -208,11 +208,11 @@ function AppointmentRow({
                 {name}
               </span>
               {appt.modality === 'VIRTUAL' ? (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: '#6366f1', background: '#eef2ff', padding: '2px 8px', borderRadius: 20, border: '1px solid #c7d2fe', whiteSpace: 'nowrap' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: '#5b52ad', background: '#f3f2fb', padding: '2px 8px', borderRadius: 20, border: '1px solid #cbc7ee', whiteSpace: 'nowrap' }}>
                   <Video size={10} />Virtual
                 </span>
               ) : (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: '#0f766e', background: '#f0fdfa', padding: '2px 8px', borderRadius: 20, border: '1px solid #99f6e4', whiteSpace: 'nowrap' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: '#2a2769', background: '#f3f2fb', padding: '2px 8px', borderRadius: 20, border: '1px solid #cbc7ee', whiteSpace: 'nowrap' }}>
                   <MapPin size={10} />Presencial
                 </span>
               )}

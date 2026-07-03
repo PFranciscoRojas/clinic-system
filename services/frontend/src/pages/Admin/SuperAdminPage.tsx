@@ -4,10 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   HardDrive, Database,
   Cpu, Users, Bot, RefreshCw, AlertTriangle, Info,
-  AlertCircle, Wrench, MemoryStick,
+  AlertCircle, MemoryStick,
   CreditCard, Lock, Unlock, CheckCircle, XCircle, Eye, EyeOff, KeyRound,
 } from 'lucide-react';
-import { adminApi, type AdminOrg, type AdminOrgUser, type SystemHealth, type ActionResult, type PlatformMPConfig } from '@/api/admin';
+import { adminApi, type AdminOrg, type AdminOrgUser, type SystemHealth, type PlatformMPConfig } from '@/api/admin';
 import { authApi } from '@/api/auth';
 import { legalApi, type LegalDoc } from '@/api/legal';
 import { ConfirmByTextModal } from '@/components/ui/ConfirmByTextModal';
@@ -51,7 +51,7 @@ function Tip({ text }: { text: string }) {
       {show && (
         <span style={{
           position: 'absolute', bottom: '120%', left: '50%', transform: 'translateX(-50%)',
-          background: '#1e293b', color: '#fff', fontSize: 11.5, lineHeight: 1.5,
+          background: '#22214a', color: '#fff', fontSize: 11.5, lineHeight: 1.5,
           padding: '7px 10px', borderRadius: 8, whiteSpace: 'pre-wrap', minWidth: 200, maxWidth: 280,
           zIndex: 99, boxShadow: '0 4px 16px rgba(0,0,0,.25)',
         }}>
@@ -70,7 +70,7 @@ function AlertBanner({ level, message, tip }: { level: string; message: string; 
     critical: { bg: '#fef2f2', border: '#fca5a5', color: '#991b1b', Icon: AlertCircle },
     warning:  { bg: '#fffbeb', border: '#fcd34d', color: '#92400e', Icon: AlertTriangle },
     info:     { bg: '#eff6ff', border: '#93c5fd', color: '#1e40af', Icon: Info },
-  }[level] ?? { bg: '#f8fafc', border: '#e2e8f0', color: '#475569', Icon: Info };
+  }[level] ?? { bg: '#faf6ec', border: '#e7dcc0', color: '#4a4560', Icon: Info };
 
   return (
     <div style={{ background: cfg.bg, border: `1px solid ${cfg.border}`, borderRadius: 10, padding: '10px 14px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
@@ -140,93 +140,6 @@ function TenantBadge({ label, count, color }: { label: string; count: number; co
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'var(--s50)', borderRadius: 10, padding: '10px 14px', minWidth: 64 }}>
       <span style={{ fontSize: 22, fontWeight: 800, color }}>{count}</span>
       <span style={{ fontSize: 11, color: 'var(--s500)', marginTop: 2 }}>{label}</span>
-    </div>
-  );
-}
-
-// ── Maintenance panel ─────────────────────────────────────────────────────────
-
-const ACTIONS = [
-  {
-    id: 'builder_prune',
-    label: 'Limpiar cache de builds',
-    description: 'Elimina el cache de compilación de Docker (principal causante del problema de disco). No afecta ningún servicio en ejecución.',
-    danger: false,
-  },
-  {
-    id: 'image_prune',
-    label: 'Eliminar imágenes huérfanas',
-    description: 'Borra imágenes Docker sin tag que ya no usa ningún contenedor. No toca postgres, redis, core-api ni ai-service.',
-    danger: false,
-  },
-  {
-    id: 'system_prune',
-    label: 'Limpieza general Docker',
-    description: 'Elimina contenedores detenidos, redes sin uso e imágenes sin tag. No toca volúmenes (datos de BD y audio están seguros).',
-    danger: false,
-  },
-];
-
-function MaintenancePanel() {
-  const [output, setOutput] = useState<ActionResult | null>(null);
-  const [running, setRunning] = useState<string | null>(null);
-
-  const run = useMutation({
-    mutationFn: (action: string) => adminApi.systemAction(action),
-    onMutate: (action) => { setRunning(action); setOutput(null); },
-    onSettled: (data) => { setRunning(null); if (data) setOutput(data); },
-  });
-
-  const confirm = (action: typeof ACTIONS[number]) => {
-    if (!window.confirm(`¿Ejecutar "${action.label}"?\n\n${action.description}`)) return;
-    run.mutate(action.id);
-  };
-
-  return (
-    <div style={{ background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, padding: '18px 20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-        <Wrench size={16} color="var(--teal)" />
-        <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--s800)' }}>Mantenimiento</span>
-      </div>
-      <div style={{ fontSize: 11.5, color: 'var(--s400)', marginBottom: 16, marginLeft: 24 }}>
-        Comandos seguros — nunca tocan datos productivos ni contenedores activos
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {ACTIONS.map(action => (
-          <div key={action.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px', background: 'var(--s50)', borderRadius: 10, border: '1px solid var(--s100)' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--s800)' }}>{action.label}</div>
-              <div style={{ fontSize: 12, color: 'var(--s500)', marginTop: 3 }}>{action.description}</div>
-            </div>
-            <button
-              onClick={() => confirm(action)}
-              disabled={running !== null}
-              style={{
-                flexShrink: 0, border: 'none', borderRadius: 8, padding: '7px 14px',
-                fontSize: 12.5, fontWeight: 700, cursor: running ? 'wait' : 'pointer',
-                background: running === action.id ? 'var(--s300)' : 'var(--teal)', color: '#fff',
-              }}
-            >
-              {running === action.id ? 'Ejecutando…' : 'Ejecutar'}
-            </button>
-          </div>
-        ))}
-      </div>
-
-      {output && (
-        <div style={{ marginTop: 16, borderRadius: 10, border: `1px solid ${output.ok ? '#bbf7d0' : '#fca5a5'}`, overflow: 'hidden' }}>
-          <div style={{ padding: '8px 14px', background: output.ok ? '#f0fdf4' : '#fef2f2', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 700, fontSize: 12.5, color: output.ok ? '#16a34a' : '#dc2626' }}>
-              {output.ok ? '✓ Completado' : '✗ Error'} — {output.action} ({output.duration_ms}ms)
-            </span>
-            <button onClick={() => setOutput(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)', fontSize: 16 }}>×</button>
-          </div>
-          <pre style={{ margin: 0, padding: '12px 14px', fontSize: 11.5, color: 'var(--s700)', background: '#f8fafc', overflowX: 'auto', maxHeight: 240, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-            {output.output || '(sin output)'}
-          </pre>
-        </div>
-      )}
     </div>
   );
 }
@@ -402,7 +315,7 @@ function SistemaTab() {
         <MetricCard icon={<Users size={16} />} title="Tenants" subtitle="Organizaciones registradas en el sistema">
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
             <TenantBadge label="activos" count={h.tenants.active} color="#16a34a" />
-            <TenantBadge label="trial" count={h.tenants.trialing} color="#0f766e" />
+            <TenantBadge label="trial" count={h.tenants.trialing} color="#2a2769" />
             <TenantBadge label="vencidos" count={h.tenants.past_due} color="#d97706" />
             <TenantBadge label="cancelados" count={h.tenants.canceled} color="#9ca3af" />
           </div>
@@ -423,7 +336,7 @@ function SistemaTab() {
               accent={h.ai_queue.processing > 8 ? '#d97706' : undefined}
               tip="Transcribiendo audio o generando borrador con Claude ahora mismo." />
             <StatRow label="Listos para revisar" value={h.ai_queue.draft_ready}
-              accent={h.ai_queue.draft_ready > 0 ? '#0f766e' : undefined}
+              accent={h.ai_queue.draft_ready > 0 ? '#2a2769' : undefined}
               tip="Borradores generados que el profesional aún no ha revisado ni aprobado." />
             <StatRow label="Con error" value={h.ai_queue.error}
               accent={h.ai_queue.error > 0 ? '#dc2626' : undefined}
@@ -473,9 +386,6 @@ function SistemaTab() {
         })()}
 
       </div>
-
-      {/* Maintenance */}
-      <MaintenancePanel />
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
@@ -551,7 +461,7 @@ function OrgUsersPanel({ orgId }: { orgId: string }) {
                   </span>
                   {u.display_name && <span style={{ color: 'var(--s400)', marginLeft: 6 }}>{u.email}</span>}
                 </div>
-                <span style={{ fontSize: 11, background: '#f1f5f9', borderRadius: 10, padding: '2px 8px', color: 'var(--s500)', whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 11, background: '#f4eedd', borderRadius: 10, padding: '2px 8px', color: 'var(--s500)', whiteSpace: 'nowrap' }}>
                   {u.role_name}
                 </span>
                 <span style={{ fontSize: 11, color: 'var(--s400)', whiteSpace: 'nowrap' }}>
@@ -596,7 +506,7 @@ function OrgUsersPanel({ orgId }: { orgId: string }) {
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   active:    { label: 'Activo',    color: '#16a34a' },
-  trialing:  { label: 'Trial',     color: '#0f766e' },
+  trialing:  { label: 'Trial',     color: '#2a2769' },
   past_due:  { label: 'Vencido',   color: '#b45309' },
   suspended: { label: 'Suspendido',color: '#d97706' },
   canceled:  { label: 'Cancelado', color: '#dc2626' },
@@ -690,7 +600,7 @@ function TenantsTab() {
                     </button>
 
                     {o.subscription_status !== 'active' && (
-                      <button style={btnStyle('#0f766e')} disabled={busy} onClick={() => handleExtendTrial(o)}>
+                      <button style={btnStyle('#2a2769')} disabled={busy} onClick={() => handleExtendTrial(o)}>
                         ⏱ Extender trial
                       </button>
                     )}
@@ -702,7 +612,7 @@ function TenantsTab() {
                     )}
 
                     {o.subscription_status === 'suspended' && (
-                      <button style={btnStyle('#0f766e')} disabled={busy} onClick={() => handleExtendTrial(o)}>
+                      <button style={btnStyle('#2a2769')} disabled={busy} onClick={() => handleExtendTrial(o)}>
                         ▶ Reactivar (extender trial)
                       </button>
                     )}
@@ -798,7 +708,7 @@ function LegalEditor({ docType }: { docType: LegalDocType }) {
           onChange={e => setBody(e.target.value)}
           rows={22}
           placeholder="Escribe el contenido en Markdown…"
-          style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1.5px solid var(--s200)', fontSize: 13, fontFamily: 'monospace', resize: 'vertical', outline: 'none' }}
+          style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1.5px solid var(--s200)', fontSize: 13, fontFamily: "'DM Mono', monospace", resize: 'vertical', outline: 'none' }}
         />
       )}
 
@@ -825,7 +735,7 @@ function LegalTab() {
           <button key={t} onClick={() => setDocType(t)}
             style={{ padding: '6px 14px', borderRadius: 99, border: '1.5px solid', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
               borderColor: docType === t ? 'var(--teal)' : 'var(--s200)',
-              background: docType === t ? '#f0fdfa' : '#fff',
+              background: docType === t ? '#f3f2fb' : '#fff',
               color: docType === t ? 'var(--teal)' : 'var(--s500)' }}>
             {LEGAL_LABELS[t]}
           </button>
@@ -1058,7 +968,7 @@ function PlataformaTab() {
           {/* Credentials */}
           <div style={{ background: '#fff', border: '1px solid var(--s100)', borderRadius: 12, padding: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-              <KeyRound size={17} color="#7c3aed" />
+              <KeyRound size={17} color="#5b52ad" />
               <span style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--s800)' }}>Credenciales MercadoPago</span>
             </div>
 

@@ -48,13 +48,13 @@ export function SlotPicker({ modality, onConfirm, onClose, confirming, error }: 
   };
 
   return (
-    <div style={{ marginTop: 14, background: '#eef2ff', border: '1.5px solid #c7d2fe', borderRadius: 12, overflow: 'hidden' }}>
+    <div style={{ marginTop: 14, background: '#f3f2fb', border: '1.5px solid #cbc7ee', borderRadius: 12, overflow: 'hidden' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: '#e0e7ff', borderBottom: '1px solid #c7d2fe' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 700, color: '#312e81' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: '#e4e2f6', borderBottom: '1px solid #cbc7ee' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 700, color: '#2a2769' }}>
           <CalendarDays size={14} /> Elige una franja disponible
         </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6366f1', display: 'flex' }}>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#5b52ad', display: 'flex' }}>
           <X size={15} />
         </button>
       </div>
@@ -62,17 +62,17 @@ export function SlotPicker({ modality, onConfirm, onClose, confirming, error }: 
       <div style={{ padding: '14px 16px' }}>
         {isLoading ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '16px 0', justifyContent: 'center' }}>
-            <Spinner size={18} color="#6366f1" />
-            <span style={{ fontSize: 13, color: '#4338ca' }}>Cargando horarios disponibles…</span>
+            <Spinner size={18} color="#5b52ad" />
+            <span style={{ fontSize: 13, color: '#363285' }}>Cargando horarios disponibles…</span>
           </div>
         ) : days.length === 0 ? (
-          <p style={{ margin: 0, fontSize: 13, color: '#6366f1', textAlign: 'center', padding: '10px 0' }}>
+          <p style={{ margin: 0, fontSize: 13, color: '#5b52ad', textAlign: 'center', padding: '10px 0' }}>
             No hay franjas disponibles en los próximos 30 días.
           </p>
         ) : (
           <>
             {/* Day selector */}
-            <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: '#4338ca', textTransform: 'uppercase', letterSpacing: '.06em' }}>Fecha</p>
+            <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: '#363285', textTransform: 'uppercase', letterSpacing: '.06em' }}>Fecha</p>
             <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 6, marginBottom: 14 }}>
               {days.map(d => {
                 const dt = new Date(d.date + 'T12:00:00');
@@ -84,16 +84,16 @@ export function SlotPicker({ modality, onConfirm, onClose, confirming, error }: 
                     style={{
                       flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center',
                       padding: '7px 12px', minHeight: 44, borderRadius: 9,
-                      border: `1.5px solid ${isSel ? '#6366f1' : '#c7d2fe'}`,
-                      background: isSel ? '#6366f1' : '#fff',
-                      color: isSel ? '#fff' : '#4338ca',
+                      border: `1.5px solid ${isSel ? '#5b52ad' : '#cbc7ee'}`,
+                      background: isSel ? '#5b52ad' : '#fff',
+                      color: isSel ? '#fff' : '#363285',
                       cursor: 'pointer', transition: 'all .12s',
                     }}
                   >
                     <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.85 }}>{DAY_SHORT[dt.getDay()]}</span>
                     <span style={{ fontSize: 14, fontWeight: 800, lineHeight: 1.3 }}>{dt.getDate()}</span>
                     <span style={{ fontSize: 9, opacity: 0.75 }}>{MONTH_SHORT[dt.getMonth()]}</span>
-                    <span style={{ fontSize: 9, fontWeight: 600, marginTop: 2, background: isSel ? 'rgba(255,255,255,.25)' : '#eef2ff', borderRadius: 4, padding: '1px 4px' }}>
+                    <span style={{ fontSize: 9, fontWeight: 600, marginTop: 2, background: isSel ? 'rgba(255,255,255,.25)' : '#f3f2fb', borderRadius: 4, padding: '1px 4px' }}>
                       {d.slots.length} sl
                     </span>
                   </button>
@@ -104,7 +104,7 @@ export function SlotPicker({ modality, onConfirm, onClose, confirming, error }: 
             {/* Slot grid */}
             {selectedDate && (
               <>
-                <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: '#4338ca', textTransform: 'uppercase', letterSpacing: '.06em', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: '#363285', textTransform: 'uppercase', letterSpacing: '.06em', display: 'flex', alignItems: 'center', gap: 4 }}>
                   <Clock size={11} /> Hora
                 </p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
@@ -116,9 +116,9 @@ export function SlotPicker({ modality, onConfirm, onClose, confirming, error }: 
                         onClick={() => setSelectedTime(time)}
                         style={{
                           padding: '7px 14px', borderRadius: 7,
-                          border: `1.5px solid ${isSel ? '#6366f1' : '#c7d2fe'}`,
-                          background: isSel ? '#6366f1' : '#fff',
-                          color: isSel ? '#fff' : '#4338ca',
+                          border: `1.5px solid ${isSel ? '#5b52ad' : '#cbc7ee'}`,
+                          background: isSel ? '#5b52ad' : '#fff',
+                          color: isSel ? '#fff' : '#363285',
                           fontSize: 13, fontWeight: 600, cursor: 'pointer',
                           fontFamily: "'DM Mono', monospace",
                           transition: 'all .1s',
@@ -138,7 +138,7 @@ export function SlotPicker({ modality, onConfirm, onClose, confirming, error }: 
                 onClick={() => onConfirm(selectedDate, selectedTime)}
                 disabled={!!confirming}
                 style={{
-                  width: '100%', padding: '10px 0', background: '#6366f1', color: '#fff',
+                  width: '100%', padding: '10px 0', background: '#5b52ad', color: '#fff',
                   border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 700,
                   cursor: confirming ? 'wait' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,

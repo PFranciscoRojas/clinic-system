@@ -3,10 +3,11 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   CalendarDays, Users, Settings, Stethoscope,
-  Brain, Search, Plus, ChevronDown, Lock, LogOut, Menu,
+  Search, Plus, ChevronDown, Lock, LogOut, Menu,
   UserCircle, Calendar, X, Clock, Building2, Receipt,
   PanelLeftClose, PanelLeftOpen, Activity, FileText, CreditCard,
 } from 'lucide-react';
+import { BrandMark } from '@/components/ui/BrandMark';
 import { useAuth } from '@/context/AuthContext';
 import { useIsMobile } from '@/lib/useMediaQuery';
 import { patientsApi, type Patient } from '@/api/patients';
@@ -17,8 +18,8 @@ import { authApi } from '@/api/auth';
 import { legalApi } from '@/api/legal';
 import { Markdown } from '@/components/common/Markdown';
 import { hasPendingUpdate, onSwUpdate, reloadNow } from '@/lib/swUpdate';
-
 import { AIDraftIndicator } from '@/components/clinical/AIDraftIndicator';
+
 // Facturación is shown to CLINIC_ADMIN (billing:reports) — see the conditional
 // nav entry below.
 const NAV = [
@@ -243,20 +244,20 @@ export function AppShell({ children }: Props) {
                 <button onClick={toggleSidebar} title="Abrir menú"
                   onMouseEnter={() => setBrainHover(true)} onMouseLeave={() => setBrainHover(false)}
                   style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: 'none', cursor: 'pointer' }}>
-                  {brainHover ? <PanelLeftOpen size={18} color="white" /> : <Brain size={18} color="white" />}
+                  {brainHover ? <PanelLeftOpen size={18} color="white" /> : <span style={{ color: '#fff', display: 'flex' }}><BrandMark size={22} /></span>}
                 </button>
               ) : (
                 <Link to="/" title="Ir al inicio" onClick={() => setMobileNavOpen(false)}
                   style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer' }}>
-                  <Brain size={18} color="white" />
+                  <span style={{ color: '#fff', display: 'flex' }}><BrandMark size={22} /></span>
                 </Link>
               )}
               {!showCollapsed && (
                 <Link to="/" onClick={() => setMobileNavOpen(false)} style={{ flex: 1, minWidth: 0, textDecoration: 'none' }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: '#fff', letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={user?.org_name || 'SGHCP'}>
-                    {user?.org_name || 'SGHCP'}
+                  <div style={{ fontWeight: 700, fontSize: 14, color: '#fff', letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={user?.org_name || 'Chapni'}>
+                    {user?.org_name || 'Chapni'}
                   </div>
-                  <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.55)', marginTop: 1 }}>SGHCP · Salud Mental Pro</div>
+                  <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.55)', marginTop: 1 }}>Chapni · Historia clínica cifrada</div>
                 </Link>
               )}
               {!showCollapsed && !isMobile && (
@@ -427,7 +428,7 @@ export function AppShell({ children }: Props) {
                 border: `1.5px solid ${searchFocus ? 'var(--teal)' : 'var(--s200)'}`,
                 borderRadius: 10, padding: '8px 14px',
                 transition: 'all .15s',
-                boxShadow: searchFocus ? '0 0 0 3px rgba(20,184,166,.12)' : 'none',
+                boxShadow: searchFocus ? '0 0 0 3px rgba(54,50,133,.12)' : 'none',
               }}>
                 <Search size={15} color={searchFocus ? 'var(--teal)' : 'var(--s400)'} />
                 <input value={search}
@@ -479,15 +480,15 @@ export function AppShell({ children }: Props) {
 
             <div style={{ flex: 1 }} />
 
-            {/* Nueva Cita — not shown to SYSTEM_ADMIN who has no appointments */}
             {/* Way back to an AI draft still generating (or failed) — Punto 3 */}
             <AIDraftIndicator />
 
+            {/* Nueva Cita — not shown to SYSTEM_ADMIN who has no appointments */}
             {!user?.roles?.includes('SYSTEM_ADMIN') && <Link to="/appointments/new" style={{
               display: 'flex', alignItems: 'center', gap: 7,
               background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 10,
               padding: '9px 16px', fontSize: 13.5, fontWeight: 600,
-              boxShadow: '0 2px 8px rgba(20,184,166,.40)',
+              boxShadow: '0 2px 8px rgba(54,50,133,.40)',
               transition: 'all .15s', whiteSpace: 'nowrap',
             }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.filter = 'brightness(1.08)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'; }}
@@ -570,9 +571,9 @@ function TrialBanner({ status, daysLeft }: { status?: string; daysLeft?: number 
   if (status !== 'trialing' || daysLeft == null || hidden) return null;
 
   const urgent = daysLeft <= 3;
-  const bg = urgent ? '#fffbeb' : '#f0fdfa';
-  const border = urgent ? '#fcd34d' : '#99f6e4';
-  const fg = urgent ? '#92400e' : '#0f766e';
+  const bg = urgent ? '#fffbeb' : '#f3f2fb';
+  const border = urgent ? '#fcd34d' : '#cbc7ee';
+  const fg = urgent ? '#92400e' : '#2a2769';
   const label =
     daysLeft <= 0 ? 'Tu prueba termina hoy'
     : daysLeft === 1 ? 'Te queda 1 día de prueba'
@@ -610,7 +611,7 @@ function SubscriptionExpired({ onLogout }: { onLogout: () => void }) {
     catch { setErr('El pago en línea no está disponible. Escríbenos para activar tu cuenta.'); setBusy(false); }
   };
   return (
-    <div style={{ minHeight: '100dvh', background: 'linear-gradient(135deg, #0f766e, #134e4a)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+    <div style={{ minHeight: '100dvh', background: 'linear-gradient(135deg, #2a2769, #171533)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <div style={{ background: '#fff', borderRadius: 18, padding: '36px 34px', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', width: '100%', maxWidth: 460, textAlign: 'center' }}>
         <div style={{ width: 60, height: 60, borderRadius: 16, background: '#fffbeb', border: '1.5px solid #fcd34d', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
           <Clock size={28} color="#92400e" />
@@ -678,7 +679,7 @@ function DpaModal({ onAccept }: { onAccept: () => Promise<void> }) {
             Acuerdo de Tratamiento de Datos
           </div>
           <div style={{ fontSize: 12.5, color: 'var(--s500)', lineHeight: 1.5 }}>
-            Como profesional o administrador de una organización en SGHCP, debes aceptar este
+            Como profesional o administrador de una organización en Chapni, debes aceptar este
             acuerdo para continuar. Solo se muestra una vez.
           </div>
         </div>
@@ -706,7 +707,7 @@ function DpaModal({ onAccept }: { onAccept: () => Promise<void> }) {
               style={{ marginTop: 2, accentColor: 'var(--teal)', width: 15, height: 15, flexShrink: 0 }}
             />
             <span style={{ fontSize: 12.5, color: 'var(--s700)', lineHeight: 1.6 }}>
-              Entiendo y acepto que SGHCP actúa como Encargado del tratamiento de los datos personales de
+              Entiendo y acepto que Chapni actúa como Encargado del tratamiento de los datos personales de
               mis pacientes, conforme a la Ley 1581 de 2012. Mi organización es el Responsable del tratamiento.
             </span>
           </label>

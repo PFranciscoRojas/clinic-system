@@ -91,7 +91,7 @@ function DraftRow({ d, onClick }: { d: DraftMeta; onClick: () => void }) {
       onMouseEnter={e => actionable && ((e.currentTarget as HTMLElement).style.background = 'var(--s100)')}
       onMouseLeave={e => actionable && ((e.currentTarget as HTMLElement).style.background = 'var(--s50)')}
     >
-      <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--teal)', fontFamily: 'monospace' }}>
+      <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--teal)', fontFamily: "'DM Mono', monospace" }}>
         {fmtCode(d.patient_code)}
       </span>
       <DraftBadge status={d.status} />
@@ -123,7 +123,7 @@ function RecordRow({ m, onClick }: { m: RecordMeta; onClick: () => void }) {
       onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = 'var(--s50)')}
       onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = '#fff')}
     >
-      <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--teal)', fontFamily: 'monospace' }}>
+      <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--teal)', fontFamily: "'DM Mono', monospace" }}>
         {fmtCode(m.patient_code)}
       </span>
       <span style={{ fontSize: 13, color: 'var(--s600)' }}>
