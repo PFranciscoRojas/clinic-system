@@ -13,13 +13,14 @@ export default tseslint.config(
     rules: {
       ...reactHooks.configs.recommended.rules,
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
-      // Pre-existing findings kept as warnings until the WIP redesign lands;
-      // ratchet to 'error' afterwards (see BACKLOG).
-      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-explicit-any': 'error',
+      'react-hooks/purity': 'error',
+      'react-hooks/static-components': 'error',
+      'react-hooks/refs': 'error',
+      // Remaining pre-existing findings (24 + 8) kept as warnings; ratchet to
+      // 'error' once those effects are refactored (see BACKLOG).
       'react-hooks/set-state-in-effect': 'warn',
-      'react-hooks/purity': 'warn',
-      'react-hooks/static-components': 'warn',
-      'react-hooks/refs': 'warn',
+      'react-hooks/exhaustive-deps': 'warn',
     },
   },
   { ignores: ['dist/', 'node_modules/', 'dev-dist/'] },

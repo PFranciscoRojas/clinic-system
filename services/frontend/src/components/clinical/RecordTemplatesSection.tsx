@@ -409,33 +409,24 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
 // ── TemplateCard ─────────────────────────────────────────────────────────────
 type CardMode = 'collapsed' | 'view' | 'edit';
 
-function TemplateCard({ tpl }: { tpl: RecordTemplate }) {
-  const qc = useQueryClient();
-  const [mode, setMode] = useState<CardMode>('collapsed');
-
-  const archiveMutation = useMutation({
-    mutationFn: () => recordTemplatesApi.archive(tpl.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['record-templates'] }),
-  });
-  const toggle = (next: CardMode) => setMode(m => m === next ? 'collapsed' : next);
-
-  const IconButton = ({
-    onClick,
-    disabled,
-    label,
-    children,
-    hoverBg,
-    hoverColor,
-    color,
-  }: {
-    onClick: () => void;
-    disabled?: boolean;
-    label: string;
-    children: React.ReactNode;
-    hoverBg: string;
-    hoverColor: string;
-    color: string;
-  }) => (
+function IconButton({
+  onClick,
+  disabled,
+  label,
+  children,
+  hoverBg,
+  hoverColor,
+  color,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  label: string;
+  children: React.ReactNode;
+  hoverBg: string;
+  hoverColor: string;
+  color: string;
+}) {
+  return (
     <button
       onClick={onClick}
       disabled={disabled}
@@ -456,6 +447,17 @@ function TemplateCard({ tpl }: { tpl: RecordTemplate }) {
       {children}
     </button>
   );
+}
+
+function TemplateCard({ tpl }: { tpl: RecordTemplate }) {
+  const qc = useQueryClient();
+  const [mode, setMode] = useState<CardMode>('collapsed');
+
+  const archiveMutation = useMutation({
+    mutationFn: () => recordTemplatesApi.archive(tpl.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['record-templates'] }),
+  });
+  const toggle = (next: CardMode) => setMode(m => m === next ? 'collapsed' : next);
 
   return (
     <div

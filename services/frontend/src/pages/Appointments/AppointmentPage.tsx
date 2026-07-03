@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, type NavigateOptions } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Calendar, Clock, MapPin, Video, User,
@@ -58,6 +58,10 @@ const CONSENT_SHORT: Record<string, string> = {
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// Timestamped name for a recovered-recording upload. Module-level so the
+// clock read stays outside component render scope.
+const recoveryFileName = (appointmentId: string) => `session-${appointmentId}-${Date.now()}.webm`;
 
 function fmtDateTime(iso: string) {
   const d = new Date(iso);
@@ -476,11 +480,11 @@ export function AppointmentPage() {
     rec.stop();
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const navigate = (to: string | number, opts?: any) => {
+  const navigate = (to: string | number, opts?: NavigateOptions) => {
     const path = typeof to === 'string' ? to : '';
     if (recording && !path.startsWith('/clinical-records/')) { setBlockTarget(to); return; }
-    rawNavigate(to as any, opts);
+    if (typeof to === 'number') rawNavigate(to);
+    else rawNavigate(to, opts);
   };
 
   // Intercept browser back/forward and <Link>/<a> clicks while recording
@@ -710,7 +714,7 @@ export function AppointmentPage() {
     setUploadingRecovery(true);
     try {
       const blob = new Blob(recoveredChunks, { type: 'audio/webm' });
-      const file = new File([blob], `session-${id}-${Date.now()}.webm`, { type: 'audio/webm' });
+      const file = new File([blob], recoveryFileName(id!), { type: 'audio/webm' });
       const res = await appointmentsApi.uploadAudio(id!, appt.patient_id, file, aiRecordType, aiTemplateId);
       handleDraftCreated(res.draft_id);
       recordingStore.clear(id!).catch(() => {});
@@ -1683,7 +1687,12 @@ export function AppointmentPage() {
                 Continuar grabando
               </button>
               <button
-                onClick={() => { setBlockTarget(null); rawNavigate(blockTarget as any); }}
+                onClick={() => {
+                  const target = blockTarget;
+                  setBlockTarget(null);
+                  if (typeof target === 'number') rawNavigate(target);
+                  else if (target !== null) rawNavigate(target);
+                }}
                 style={{ flex: 1, padding: '10px 0', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
               >
                 Salir de todos modos

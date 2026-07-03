@@ -20,7 +20,7 @@ export function AIDraftIndicator() {
   // endpoint would reject them.
   const skip = !user || isPureAdmin(user.roles) || !!user.roles?.includes('SYSTEM_ADMIN');
 
-  const { data: drafts = [] } = useQuery({
+  const { data: drafts = [], dataUpdatedAt } = useQuery({
     queryKey: ['ai-drafts-indicator'],
     queryFn: () => aiDraftsApi.list(),
     enabled: !skip,
@@ -36,9 +36,11 @@ export function AIDraftIndicator() {
 
   const inFlight = drafts.filter(d => d.status === 'PENDING' || d.status === 'PROCESSING');
   // Unresolved errors from the last 24h — old failures shouldn't nag forever.
+  // Age is measured against the fetch timestamp (pure per render); the query
+  // re-polls at most every 2 min, so the drift is negligible for a 24h window.
   const failed = drafts.filter(d =>
     d.status === 'ERROR' && !d.clinical_record_id &&
-    Date.now() - new Date(d.created_at).getTime() < DAY_MS);
+    dataUpdatedAt - new Date(d.created_at).getTime() < DAY_MS);
 
   if (inFlight.length === 0 && failed.length === 0) return null;
 

@@ -37,6 +37,25 @@ type AppointmentStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+// Small consent-row action button. A real component (not a render helper) so
+// its onClick closures are recognized as event handlers, where ref access is
+// legitimate.
+function ActionBtn({ label, onClick, primary = false }: { label: string; onClick: () => void; primary?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, cursor: 'pointer',
+        border: primary ? 'none' : '1px solid var(--s200)',
+        background: primary ? 'var(--teal)' : '#fff',
+        color: primary ? '#fff' : 'var(--s700)',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
 }
@@ -380,20 +399,6 @@ function ConsentimientosTab({ patientId }: { patientId: string }) {
     }
   };
 
-  const actionBtn = (label: string, onClick: () => void, primary = false) => (
-    <button
-      onClick={onClick}
-      style={{
-        fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, cursor: 'pointer',
-        border: primary ? 'none' : '1px solid var(--s200)',
-        background: primary ? 'var(--teal)' : '#fff',
-        color: primary ? '#fff' : 'var(--s700)',
-      }}
-    >
-      {label}
-    </button>
-  );
-
   return (
     <div className="anim-fade-in" style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflowX: 'auto' }}>
       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--s100)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -448,15 +453,15 @@ function ConsentimientosTab({ patientId }: { patientId: string }) {
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   {active ? (
                     <>
-                      {actionBtn('Ver', () => setViewId(c.id))}
-                      {actionBtn('Revocar', () => { setRevokeId(c.id); setRevokeReason(''); })}
+                      <ActionBtn label="Ver" onClick={() => setViewId(c.id)} />
+                      <ActionBtn label="Revocar" onClick={() => { setRevokeId(c.id); setRevokeReason(''); }} />
                     </>
                   ) : (
                     <>
-                      {actionBtn('Firmar ahora', () => setSignType(type), true)}
-                      {actionBtn('Enviar link', () => handleSendLink(type))}
-                      {actionBtn('Subir firmado', () => { fileInputType.current = type; fileRef.current?.click(); })}
-                      {revoked && actionBtn('Ver anterior', () => setViewId(c.id))}
+                      <ActionBtn label="Firmar ahora" onClick={() => setSignType(type)} primary />
+                      <ActionBtn label="Enviar link" onClick={() => handleSendLink(type)} />
+                      <ActionBtn label="Subir firmado" onClick={() => { fileInputType.current = type; fileRef.current?.click(); }} />
+                      {revoked && <ActionBtn label="Ver anterior" onClick={() => setViewId(c.id)} />}
                     </>
                   )}
                 </div>
@@ -474,7 +479,7 @@ function ConsentimientosTab({ patientId }: { patientId: string }) {
                     style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1px solid #fecaca', fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }}
                   />
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'flex-end' }}>
-                    {actionBtn('Cancelar', () => setRevokeId(null))}
+                    <ActionBtn label="Cancelar" onClick={() => setRevokeId(null)} />
                     <button
                       onClick={handleRevoke}
                       disabled={!revokeReason.trim()}

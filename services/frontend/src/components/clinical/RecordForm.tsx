@@ -90,12 +90,12 @@ type AutosaveState = 'idle' | 'saving' | 'saved' | 'error' | 'offline';
 // serverState reflects the periodic server-side autosave (Fase 2); "at" is
 // always the localStorage save, which is the immediate, always-on net.
 function SavedIndicator({ at, serverState }: { at: number; serverState: AutosaveState }) {
-  const [, forceTick] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const t = setInterval(() => forceTick(n => n + 1), 5_000);
+    const t = setInterval(() => setNow(Date.now()), 5_000);
     return () => clearInterval(t);
   }, []);
-  const secs = Math.max(0, Math.round((Date.now() - at) / 1000));
+  const secs = Math.max(0, Math.round((now - at) / 1000));
   const localLabel = secs < 5 ? 'Guardado' : secs < 60 ? `Guardado hace ${secs}s` : `Guardado hace ${Math.round(secs / 60)} min`;
   const serverNote = serverState === 'saved' ? ' · en el servidor'
     : serverState === 'saving' ? ' · guardando en el servidor…'

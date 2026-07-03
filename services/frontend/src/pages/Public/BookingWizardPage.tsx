@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Video, MapPin, User, Mail, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { publicBookingApi, type OrgInfo } from '@/api/publicBooking';
+import { ApiError } from '@/api/client';
 import { COUNTRIES, validatePhone } from '@/lib/phone';
 
 type Modality = 'VIRTUAL' | 'IN_PERSON';
@@ -43,8 +44,12 @@ export function BookingWizardPage() {
   const accent = info?.brand_color && /^#[0-9a-fA-F]{3,8}$/.test(info.brand_color) ? info.brand_color : '#8a5a5a';
   const clinicName = info?.public_name || 'el consultorio';
 
-  const from = new Date().toISOString().slice(0, 10);
-  const to = new Date(Date.now() + 45 * 86400000).toISOString().slice(0, 10);
+  // Booking window captured at mount: today → +45 days. A lazy initializer
+  // keeps the clock read out of render (and the window stable for the visit).
+  const [{ from, to }] = useState(() => ({
+    from: new Date().toISOString().slice(0, 10),
+    to: new Date(Date.now() + 45 * 86400000).toISOString().slice(0, 10),
+  }));
 
   useEffect(() => { publicBookingApi.orgInfo(slug).then(setInfo).catch(() => {}); }, [slug]);
 
@@ -84,9 +89,10 @@ export function BookingWizardPage() {
       });
       setCheckout(res);
       setStep('summary');
-    } catch (e: any) {
-      setErr(e?.status === 409 ? 'Ese horario ya no está disponible. Elige otro.' : 'No se pudo iniciar la reserva. Inténtalo de nuevo.');
-      if (e?.status === 409) setStep('slot');
+    } catch (e) {
+      const conflict = e instanceof ApiError && e.status === 409;
+      setErr(conflict ? 'Ese horario ya no está disponible. Elige otro.' : 'No se pudo iniciar la reserva. Inténtalo de nuevo.');
+      if (conflict) setStep('slot');
     } finally { setSaving(false); }
   };
 
