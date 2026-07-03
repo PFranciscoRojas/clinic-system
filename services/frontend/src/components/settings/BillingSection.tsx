@@ -1,0 +1,320 @@
+import { useState, useEffect } from 'react';
+import { AlertCircle, CheckCircle, Save, Plus, Receipt, Pencil, X, CreditCard } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { Badge } from '@/components/ui/Badge';
+import { Spinner } from '@/components/ui/Spinner';
+import { orgApi, type PaymentSettings } from '@/api/org';
+import { serviceRatesApi, type ServiceRate, type RateModality } from '@/api/serviceRates';
+import { startCheckout } from '@/api/billing';
+import { Toggle, FieldRow, FInput, FSelect, SectionCard } from './primitives';
+
+const MODALITY_LABELS: Record<string, string> = {
+  IN_PERSON: 'Presencial',
+  VIRTUAL:   'Virtual',
+  HYBRID:    'Híbrida',
+};
+
+// formatMoney renders a decimal string ("80000.00") as a grouped amount without
+// the trailing ",00" when there are no cents — never parsing money as a float.
+function formatMoney(amount: string, currency: string): string {
+  const [intPart, fracRaw = ''] = amount.split('.');
+  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const frac = fracRaw.replace(/0+$/, '');
+  const sym = currency === 'COP' ? '$' : '';
+  return `${sym}${grouped}${frac ? ',' + frac : ''} ${currency}`;
+}
+
+const EMPTY_RATE = { name: '', description: '', amount: '', currency: 'COP', modality: '' as '' | RateModality };
+
+const STATUS_DISPLAY: Record<string, { label: string; color: string; bg: string }> = {
+  trialing:  { label: 'Prueba gratuita', color: '#2a2769', bg: '#f3f2fb' },
+  active:    { label: 'Plan activo',     color: '#059669', bg: '#ecfdf5' },
+  past_due:  { label: 'Pago pendiente',  color: '#d97706', bg: '#fffbeb' },
+  canceled:  { label: 'Cancelado',       color: '#dc2626', bg: '#fef2f2' },
+  suspended: { label: 'Suspendido',      color: '#6b7280', bg: '#f9fafb' },
+};
+
+export function PlanStatusCard() {
+  const { user } = useAuth();
+  if (!user) return null;
+
+  const status = user.subscription_status ?? 'trialing';
+  const display = STATUS_DISPLAY[status] ?? { label: status, color: '#6b7280', bg: '#f9fafb' };
+
+  let until: string | null = null;
+  if (status === 'active' && user.current_period_end) {
+    until = new Date(user.current_period_end).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+  } else if (status === 'trialing' && user.trial_ends_at) {
+    until = new Date(user.trial_ends_at).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+
+  return (
+    <div style={{ background: display.bg, border: `1.5px solid ${display.color}33`, borderRadius: 12, padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 14 }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 700, fontSize: 14, color: display.color }}>{display.label}</div>
+        {until && (
+          <div style={{ fontSize: 13, color: '#5f5a6e', marginTop: 2 }}>
+            {status === 'active' ? 'Próxima renovación' : 'Período de prueba hasta'}: <strong>{until}</strong>
+          </div>
+        )}
+      </div>
+      {(status !== 'active') && (
+        <button
+          onClick={() => startCheckout().catch(() => {})}
+          style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#2a2769', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
+          Activar plan
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function OnlinePaymentCard() {
+  const blank: PaymentSettings = { enabled: false, session_price: 180000, token_set: false, token_mode: '', webhook_secret_set: false };
+  const [s, setS] = useState<PaymentSettings>(blank);
+  const [token, setToken] = useState('');
+  const [webhookSecret, setWebhookSecret] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    orgApi.getPayment()
+      .then(setS)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const out = await orgApi.savePayment({
+        enabled: s.enabled,
+        session_price: s.session_price,
+        access_token: token,
+        webhook_secret: webhookSecret,
+      });
+      setS(out);
+      setToken('');
+      setWebhookSecret('');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch { /* keep form */ }
+    finally { setSaving(false); }
+  };
+
+  const modeBadge = s.token_set
+    ? s.token_mode === 'test'
+      ? <span style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 6, background: '#fef3c7', color: '#92400e', fontSize: 11, fontWeight: 700 }}>PRUEBA</span>
+      : s.token_mode === 'live'
+        ? <span style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 6, background: '#d1fae5', color: '#065f46', fontSize: 11, fontWeight: 700 }}>PRODUCCIÓN</span>
+        : null
+    : null;
+
+  return (
+    <SectionCard title="Pagos en línea (MercadoPago)" icon={CreditCard}>
+      <p style={{ fontSize: 13, color: 'var(--s500)', lineHeight: 1.6, marginBottom: 12 }}>
+        El dinero de las reservas en línea va directamente a la cuenta de MercadoPago de la clínica,
+        separado del pago de suscripción a la plataforma.
+      </p>
+      <Toggle value={s.enabled} onChange={v => setS(p => ({ ...p, enabled: v }))}
+        disabled={loading} label="Activar pagos en línea" sub="Habilita el botón de pago en el formulario de reserva público" />
+      <FieldRow
+        label={<span style={{ display: 'flex', alignItems: 'center' }}>Access Token (MP){modeBadge}</span>}
+        sub={s.token_set ? 'Pega un token TEST-... para pruebas o APP_USR-... para producción' : 'Token de tu cuenta MercadoPago — APP_USR-... (producción) o TEST-... (pruebas)'}
+      >
+        <FInput value={token} onChange={setToken} mono disabled={loading}
+          placeholder={s.token_set ? '••••••••••••••••' : 'APP_USR-... o TEST-...'} />
+      </FieldRow>
+      <FieldRow label="Clave secreta de webhook (MP)" sub={s.webhook_secret_set ? 'Clave guardada — pega una nueva para reemplazarla' : 'Clave secreta de notificaciones en el portal de MP'}>
+        <FInput value={webhookSecret} onChange={setWebhookSecret} mono disabled={loading}
+          placeholder={s.webhook_secret_set ? '••••••••••••••••' : 'b2faf936...'} />
+      </FieldRow>
+      <FieldRow label="Precio de sesión (COP)" sub="Monto que paga el paciente al reservar en línea">
+        <FInput value={String(s.session_price)} onChange={v => setS(p => ({ ...p, session_price: Number(v) || 0 }))}
+          mono disabled={loading} placeholder="180000" />
+      </FieldRow>
+      <button onClick={save} disabled={saving || loading} style={{
+        marginTop: 8, padding: '9px 18px', borderRadius: 9, border: 'none',
+        background: saving || loading ? 'var(--s200)' : 'var(--teal)',
+        color: saving || loading ? 'var(--s400)' : '#fff',
+        fontWeight: 600, fontSize: 13.5, cursor: saving || loading ? 'default' : 'pointer',
+      }}>
+        {saving ? 'Guardando…' : saved ? '✓ Guardado' : 'Guardar pagos'}
+      </button>
+    </SectionCard>
+  );
+}
+
+export function RatesSection() {
+  const [rates,   setRates]   = useState<ServiceRate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadErr, setLoadErr] = useState('');
+
+  const [editing, setEditing] = useState<string | null>(null); // rate id, 'new', or null
+  const [form,    setForm]    = useState(EMPTY_RATE);
+  const [saving,  setSaving]  = useState(false);
+  const [formErr, setFormErr] = useState('');
+
+  const load = () => {
+    setLoading(true);
+    serviceRatesApi.list(true)
+      .then(setRates)
+      .catch(() => setLoadErr('No se pudieron cargar las tarifas.'))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+
+  const openNew = () => { setForm(EMPTY_RATE); setFormErr(''); setEditing('new'); };
+  const openEdit = (r: ServiceRate) => {
+    setForm({ name: r.name, description: r.description ?? '', amount: r.amount, currency: r.currency, modality: (r.modality ?? '') as '' | RateModality });
+    setFormErr(''); setEditing(r.id);
+  };
+  const cancel = () => { setEditing(null); setFormErr(''); };
+
+  const save = async () => {
+    setSaving(true); setFormErr('');
+    const payload = {
+      name: form.name.trim(),
+      description: form.description.trim(),
+      amount: form.amount.trim().replace(/\s/g, ''), // dot = decimal separator (see field hint)
+      currency: form.currency || 'COP',
+      modality: form.modality === '' ? null : form.modality,
+    };
+    try {
+      if (editing === 'new') await serviceRatesApi.create(payload);
+      else if (editing)      await serviceRatesApi.update(editing, payload);
+      setEditing(null);
+      load();
+    } catch (e) {
+      setFormErr(e instanceof Error && e.message ? e.message : 'No se pudo guardar la tarifa.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleActive = async (r: ServiceRate) => {
+    setRates(prev => prev.map(x => x.id === r.id ? { ...x, is_active: !x.is_active } : x));
+    try { await serviceRatesApi.setActive(r.id, !r.is_active); }
+    catch { load(); }
+  };
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14, padding: '12px 14px', background: '#ecfdf5', border: '1px solid #6ee7b7', borderRadius: 11, fontSize: 12.5, color: '#065f46', lineHeight: 1.55 }}>
+        <Receipt size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+        <span>Define los precios de tus servicios. Estas tarifas se usarán al generar facturas y comprobantes de pago. No constituyen facturación electrónica DIAN.</span>
+      </div>
+
+      <SectionCard title="Tarifario de servicios" icon={Receipt} color="#10b981">
+        {loading ? (
+          <div style={{ padding: '22px 0', display: 'flex', justifyContent: 'center' }}><Spinner /></div>
+        ) : loadErr ? (
+          <div style={{ padding: '16px 0', fontSize: 13, color: 'var(--red)' }}>{loadErr}</div>
+        ) : (
+          <div style={{ padding: '8px 0' }}>
+            {rates.length === 0 && editing !== 'new' && (
+              <div style={{ padding: '18px 0', fontSize: 13.5, color: 'var(--s500)', lineHeight: 1.6 }}>
+                Aún no tienes tarifas. Crea la primera para empezar a facturar tus sesiones.
+              </div>
+            )}
+
+            {rates.map(r => editing === r.id ? (
+              <RateForm key={r.id} form={form} setForm={setForm} onSave={save} onCancel={cancel} saving={saving} err={formErr} />
+            ) : (
+              <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--s100)', opacity: r.is_active ? 1 : 0.55 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--s800)' }}>{r.name}</span>
+                    {r.modality && <Badge label={MODALITY_LABELS[r.modality] ?? r.modality} color="#0369a1" bg="#e0f2fe" />}
+                    {!r.is_active && <Badge label="Inactiva" color="var(--s500)" bg="var(--s100)" />}
+                  </div>
+                  {r.description && <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>{r.description}</div>}
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--s800)', fontFamily: "'DM Mono', monospace", whiteSpace: 'nowrap' }}>
+                  {formatMoney(r.amount, r.currency)}
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <button onClick={() => openEdit(r)} title="Editar"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, border: '1.5px solid var(--s200)', background: '#fff', color: 'var(--s500)', cursor: 'pointer' }}>
+                    <Pencil size={14} />
+                  </button>
+                  <button onClick={() => toggleActive(r)} title={r.is_active ? 'Desactivar' : 'Activar'}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, border: '1.5px solid var(--s200)', background: '#fff', color: r.is_active ? 'var(--s500)' : '#10b981', cursor: 'pointer' }}>
+                    {r.is_active ? <X size={14} /> : <CheckCircle size={14} />}
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {editing === 'new' && (
+              <RateForm form={form} setForm={setForm} onSave={save} onCancel={cancel} saving={saving} err={formErr} />
+            )}
+
+            {editing !== 'new' && (
+              <button onClick={openNew} style={{
+                display: 'flex', alignItems: 'center', gap: 7, marginTop: 14, padding: '9px 18px', borderRadius: 9, border: 'none',
+                background: '#10b981', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              }}>
+                <Plus size={14} />Nueva tarifa
+              </button>
+            )}
+          </div>
+        )}
+      </SectionCard>
+    </>
+  );
+}
+
+function RateForm({ form, setForm, onSave, onCancel, saving, err }: {
+  form: typeof EMPTY_RATE; setForm: (f: typeof EMPTY_RATE) => void;
+  onSave: () => void; onCancel: () => void; saving: boolean; err: string;
+}) {
+  const upd = (patch: Partial<typeof EMPTY_RATE>) => setForm({ ...form, ...patch });
+  return (
+    <div style={{ padding: '14px 16px', margin: '8px 0', background: 'var(--s50)', borderRadius: 11, border: '1.5px solid var(--s200)' }}>
+      <FieldRow label="Nombre" sub="Ej: Sesión individual, Primera consulta">
+        <FInput value={form.name} onChange={v => upd({ name: v })} placeholder="Sesión individual" />
+      </FieldRow>
+      <FieldRow label="Descripción" sub="Opcional">
+        <FInput value={form.description} onChange={v => upd({ description: v })} placeholder="Detalle visible en la factura" />
+      </FieldRow>
+      <FieldRow label="Monto" sub="Sin puntos de mil; usa punto para decimales (ej: 80000)">
+        <FInput value={form.amount} onChange={v => upd({ amount: v })} placeholder="80000" mono />
+      </FieldRow>
+      <FieldRow label="Moneda">
+        <FSelect value={form.currency} onChange={v => upd({ currency: v })}>
+          <option value="COP">COP — Peso colombiano</option>
+          <option value="USD">USD — Dólar</option>
+          <option value="EUR">EUR — Euro</option>
+        </FSelect>
+      </FieldRow>
+      <FieldRow label="Modalidad" sub="Opcional — aplica a todas si se deja vacío">
+        <FSelect value={form.modality} onChange={v => upd({ modality: v as '' | RateModality })}>
+          <option value="">Todas las modalidades</option>
+          <option value="IN_PERSON">Presencial</option>
+          <option value="VIRTUAL">Virtual</option>
+          <option value="HYBRID">Híbrida</option>
+        </FSelect>
+      </FieldRow>
+      {err && <div style={{ fontSize: 12.5, color: 'var(--red)', padding: '8px 0 0', display: 'flex', alignItems: 'center', gap: 6 }}><AlertCircle size={13} />{err}</div>}
+      <div style={{ display: 'flex', gap: 8, paddingTop: 14 }}>
+        <button onClick={onSave} disabled={saving} style={{
+          display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none',
+          background: saving ? 'var(--s200)' : '#10b981', color: saving ? 'var(--s400)' : '#fff',
+          fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer',
+        }}>
+          {saving ? 'Guardando…' : <><Save size={14} />Guardar tarifa</>}
+        </button>
+        <button onClick={onCancel} disabled={saving} style={{
+          padding: '9px 18px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff',
+          color: 'var(--s600)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+        }}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Integrations section (CLINIC_ADMIN only, password-gated) ─────────────────
+
