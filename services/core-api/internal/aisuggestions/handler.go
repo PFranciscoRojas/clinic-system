@@ -45,7 +45,7 @@ func (h *Handler) request(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusNotFound, "tipo de sugerencia desconocido")
 		return
 	}
-	id, err := h.svc.Request(r.Context(), claims.OrganizationID, patientID, kind)
+	id, err := h.svc.Request(r.Context(), claims.OrganizationID, patientID, kind, claims.UserID)
 	if err != nil {
 		if errors.Is(err, ErrInvalidInput) {
 			httputil.WriteError(w, http.StatusBadRequest, err.Error())

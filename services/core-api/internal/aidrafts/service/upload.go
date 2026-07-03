@@ -74,7 +74,7 @@ func (s *Service) UploadAudio(ctx context.Context, in UploadAudioInput) (string,
 		return "", err
 	}
 
-	if err := s.enqueue(ctx, draftID, audioPath, in.RecordType, in.TemplateID, in.NoteStyle, in.Tone); err != nil {
+	if err := s.enqueue(ctx, draftID, audioPath, in.RecordType, in.TemplateID, in.NoteStyle, in.Tone, in.Approach); err != nil {
 		// Non-fatal: the outbox publisher will not pick this up, but the draft
 		// can be re-enqueued manually. Log-worthy but don't fail the upload.
 		_ = err
@@ -102,7 +102,7 @@ func (s *Service) saveAudio(in UploadAudioInput) (string, error) {
 	return dest, nil
 }
 
-func (s *Service) enqueue(ctx context.Context, draftID, audioPath, recordType, templateID, noteStyle, tone string) error {
+func (s *Service) enqueue(ctx context.Context, draftID, audioPath, recordType, templateID, noteStyle, tone, approach string) error {
 	if noteStyle == "" {
 		noteStyle = "structured"
 	}
@@ -115,6 +115,9 @@ func (s *Service) enqueue(ctx context.Context, draftID, audioPath, recordType, t
 		"record_type": recordType,
 		"note_style":  noteStyle,
 		"tone":        tone,
+	}
+	if approach != "" {
+		values["approach"] = approach
 	}
 	if templateID != "" {
 		values["template_id"] = templateID

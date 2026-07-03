@@ -77,7 +77,7 @@ func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 	templateID := r.FormValue("template_id")
 
 	// Load professional's AI preferences; fall back to defaults if no profile yet
-	noteStyle, tone := "structured", "formal"
+	noteStyle, tone, approach := "structured", "formal", ""
 	var prefsRaw []byte
 	if err := h.db.QueryRow(r.Context(), `
 		SELECT COALESCE(ai_prefs, '{"note_style":"structured","tone":"formal"}'::jsonb)
@@ -91,6 +91,7 @@ func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 			if v := prefs["tone"]; v != "" {
 				tone = v
 			}
+			approach = prefs["approach"]
 		}
 	}
 
@@ -105,6 +106,7 @@ func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 		TemplateID:     templateID,
 		NoteStyle:      noteStyle,
 		Tone:           tone,
+		Approach:       approach,
 		Filename:       filename,
 		Audio:          file,
 		AudioSize:      header.Size,

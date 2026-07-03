@@ -249,7 +249,7 @@ func (h *Handler) approve(w http.ResponseWriter, r *http.Request) {
 	// effort: a failed enqueue must never block the approval. Runs on the
 	// request's tenant-scoped connection, so it stays before the response.
 	if h.risk != nil && patientID != "" {
-		if _, err := h.risk.Request(r.Context(), claims.OrganizationID, patientID, "risk_detection"); err != nil {
+		if _, err := h.risk.Request(r.Context(), claims.OrganizationID, patientID, "risk_detection", claims.UserID); err != nil {
 			slog.WarnContext(r.Context(), "risk-detection enqueue failed", "patient_id", patientID, "err", err)
 		}
 	}

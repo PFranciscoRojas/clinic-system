@@ -17,7 +17,7 @@ import { adminApi } from '@/api/admin';
 import { consentTemplatesApi, type ConsentType } from '@/api/clinicalRecords';
 import { orgApi, type WhatsAppSettings, type PaymentSettings } from '@/api/org';
 import { gcalApi } from '@/api/gcal';
-import { profilesApi, splitName, type Specialty } from '@/api/profiles';
+import { profilesApi, splitName, type Specialty, type TherapeuticApproach } from '@/api/profiles';
 import { serviceRatesApi, type ServiceRate, type RateModality } from '@/api/serviceRates';
 import { startCheckout } from '@/api/billing';
 import { ACCENT_COLORS, saveAccentColor } from '@/lib/theme';
@@ -933,11 +933,26 @@ const NOTE_STYLES = [
   { id: 'narrative',  label: 'Narrativo',    desc: 'Redacción fluida'         },
 ];
 
+// Mirrors the backend catalog (ai_prefs.approach) — orients the AI's
+// treatment-plan proposals, recaps and draft wording.
+const APPROACHES: { id: TherapeuticApproach; label: string }[] = [
+  { id: '',              label: 'Sin definir (neutro)' },
+  { id: 'cbt',           label: 'Terapia cognitivo-conductual (TCC)' },
+  { id: 'humanistic',    label: 'Humanista (centrada en la persona)' },
+  { id: 'psychodynamic', label: 'Psicodinámico' },
+  { id: 'systemic',      label: 'Sistémico' },
+  { id: 'gestalt',       label: 'Gestalt' },
+  { id: 'act',           label: 'Aceptación y compromiso (ACT)' },
+  { id: 'dbt',           label: 'Dialéctico-conductual (DBT)' },
+  { id: 'integrative',   label: 'Integrador' },
+];
+
 function AISection({ setDirty, saveRef }: { setDirty: (v: boolean) => void; saveRef: React.MutableRefObject<(() => Promise<void>) | null> }) {
   const mrk = <T,>(fn: (v: T) => void) => (v: T) => { fn(v); setDirty(true); };
 
   const [style,      setStyle]      = useState('structured');
   const [tone,       setTone]       = useState('formal');
+  const [approach,   setApproach]   = useState<TherapeuticApproach>('');
   const [dataRetain, setDataRetain] = useState('180');
 
   useEffect(() => {
@@ -945,17 +960,18 @@ function AISection({ setDirty, saveRef }: { setDirty: (v: boolean) => void; save
       .then(r => {
         if (r.ai_prefs.note_style)   setStyle(r.ai_prefs.note_style);
         if (r.ai_prefs.tone)         setTone(r.ai_prefs.tone);
-        if ((r.ai_prefs as any).data_retain) setDataRetain((r.ai_prefs as any).data_retain);
+        if (r.ai_prefs.approach)     setApproach(r.ai_prefs.approach);
+        if (r.ai_prefs.data_retain)  setDataRetain(r.ai_prefs.data_retain);
       })
       .catch(() => {});
   }, []);
 
   useEffect(() => {
     saveRef.current = async () => {
-      await profilesApi.saveAIPrefs({ note_style: style, tone, data_retain: dataRetain } as any);
+      await profilesApi.saveAIPrefs({ note_style: style, tone, approach, data_retain: dataRetain });
     };
     return () => { saveRef.current = null; };
-  }, [style, tone, dataRetain, saveRef]);
+  }, [style, tone, approach, dataRetain, saveRef]);
 
   return (
     <>
@@ -999,6 +1015,14 @@ function AISection({ setDirty, saveRef }: { setDirty: (v: boolean) => void; save
             <option value="formal">Formal y técnico</option>
             <option value="neutral">Neutro</option>
             <option value="plain">Simple y directo</option>
+          </FSelect>
+        </FieldRow>
+        <FieldRow
+          label="Enfoque terapéutico"
+          sub="Orienta el plan terapéutico sugerido, los recaps y la redacción de borradores al enfoque con el que trabajas. La detección de riesgo no se adapta: siempre es conservadora."
+        >
+          <FSelect value={approach} onChange={mrk(setApproach as (v: string) => void)}>
+            {APPROACHES.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
           </FSelect>
         </FieldRow>
       </SectionCard>

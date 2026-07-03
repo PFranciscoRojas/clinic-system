@@ -57,6 +57,21 @@ func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
 func (r *Repository) q(ctx context.Context) dbctx.Querier { return dbctx.From(ctx, r.db) }
 
+// ApproachFor returns the requesting professional's therapeutic approach
+// (ai_prefs.approach). Best-effort: a missing profile or unset key returns ""
+// — the worker then uses its approach-neutral prompts.
+func (r *Repository) ApproachFor(ctx context.Context, userID string) string {
+	var approach *string
+	err := r.q(ctx).QueryRow(ctx,
+		`SELECT ai_prefs->>'approach' FROM professional_profiles WHERE user_id = $1`,
+		userID,
+	).Scan(&approach)
+	if err != nil || approach == nil {
+		return ""
+	}
+	return *approach
+}
+
 func (r *Repository) CreateEncKey(ctx context.Context, encryptedDEK []byte, keySource string) (string, error) {
 	var id string
 	err := r.q(ctx).QueryRow(ctx, `
