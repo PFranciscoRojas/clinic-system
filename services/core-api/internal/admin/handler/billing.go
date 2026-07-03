@@ -31,8 +31,10 @@ type orgRow struct {
 	TotalPatients      int        `json:"total_patients"`
 }
 
-// GET /api/v1/admin/orgs — SYSTEM_ADMIN: every tenant with its billing state,
-// so the operator can see who to activate.
+// GET /api/v1/admin/orgs — SYSTEM_ADMIN: every real tenant with its billing
+// state, so the operator can see who to activate. Internal fixtures (the
+// operator's own org, the CI smoke-test demo org) are excluded — they are
+// never paying clinics and would just clutter the screen.
 func (h *Handler) listOrgs(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.pool.Query(r.Context(), `
 		SELECT o.id, o.name, o.slug, o.subscription_status, o.trial_ends_at,
@@ -42,6 +44,7 @@ func (h *Handler) listOrgs(w http.ResponseWriter, r *http.Request) {
 		FROM organizations o
 		LEFT JOIN users u ON u.organization_id = o.id
 		LEFT JOIN patients p ON p.organization_id = o.id
+		WHERE NOT o.is_internal
 		GROUP BY o.id
 		ORDER BY o.created_at DESC
 	`)
