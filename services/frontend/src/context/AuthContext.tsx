@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { authApi, type Me } from '@/api/auth';
+import { flushClinicalDrafts, clearClinicalDrafts } from '@/lib/clinicalDrafts';
 
 interface AuthState {
   user: Me | null;
@@ -50,10 +51,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    // Clinical drafts in localStorage are PHI: push any in-progress content
+    // to the server while the access token is still valid, then remove the
+    // local copies so nothing clinical stays behind on the device.
+    await flushClinicalDrafts();
     const refresh = localStorage.getItem('refresh_token') ?? '';
     try { await authApi.logout(refresh); } catch { /* ignore */ }
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
+    clearClinicalDrafts();
     setUser(null);
   };
 
