@@ -742,6 +742,8 @@ export function AppointmentPage() {
   const handleDraftCreated = (newDraftId: string) => {
     localStorage.setItem(draftKey, newDraftId);
     setDraftId(newDraftId);
+    // Wake the topbar indicator right away — its own poll is slow when idle.
+    queryClient.invalidateQueries({ queryKey: ['ai-drafts-indicator'] });
   };
 
   const tzOffset = () => {

@@ -18,6 +18,7 @@ import { legalApi } from '@/api/legal';
 import { Markdown } from '@/components/common/Markdown';
 import { hasPendingUpdate, onSwUpdate, reloadNow } from '@/lib/swUpdate';
 
+import { AIDraftIndicator } from '@/components/clinical/AIDraftIndicator';
 // Facturación is shown to CLINIC_ADMIN (billing:reports) — see the conditional
 // nav entry below.
 const NAV = [
@@ -479,6 +480,9 @@ export function AppShell({ children }: Props) {
             <div style={{ flex: 1 }} />
 
             {/* Nueva Cita — not shown to SYSTEM_ADMIN who has no appointments */}
+            {/* Way back to an AI draft still generating (or failed) — Punto 3 */}
+            <AIDraftIndicator />
+
             {!user?.roles?.includes('SYSTEM_ADMIN') && <Link to="/appointments/new" style={{
               display: 'flex', alignItems: 'center', gap: 7,
               background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 10,

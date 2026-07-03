@@ -1,15 +1,27 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Sparkles, AlertTriangle, RefreshCw, Clock, ListChecks, ShieldAlert } from 'lucide-react';
+import { Sparkles, AlertTriangle, RefreshCw, Clock, ListChecks, ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react';
 import { aiSuggestionsApi, type RecapContent } from '@/api/aiSuggestions';
 import { Spinner } from '@/components/ui/Spinner';
 
 // Pre-session recap: a read-only AI summary of the patient's encrypted history
 // so the professional walks in oriented. The model only summarizes — the human
 // decides. Generated on demand, then polled until READY.
+// Collapsible: once read, the professional can fold it to a one-line header.
+// The choice is remembered per patient for the rest of the browser session.
 export function RecapCard({ patientId }: { patientId: string }) {
   const [requesting, setRequesting] = useState(false);
   const [reqErr, setReqErr] = useState('');
+  const collapseKey = `sghcp_recap_collapsed_${patientId}`;
+  const [collapsed, setCollapsed] = useState(() => sessionStorage.getItem(collapseKey) === '1');
+
+  const toggleCollapsed = () => {
+    setCollapsed(v => {
+      const next = !v;
+      try { sessionStorage.setItem(collapseKey, next ? '1' : '0'); } catch { /* storage full */ }
+      return next;
+    });
+  };
 
   const { data, refetch, isLoading } = useQuery({
     queryKey: ['ai-recap', patientId],
@@ -37,30 +49,48 @@ export function RecapCard({ patientId }: { patientId: string }) {
   const busy = requesting || status === 'PENDING' || status === 'PROCESSING';
 
   return (
-    <div className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+    <div className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: collapsed ? 0 : 14 }}>
+      <div
+        onClick={toggleCollapsed}
+        role="button"
+        aria-expanded={!collapsed}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, cursor: 'pointer' }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ width: 34, height: 34, borderRadius: 9, background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Sparkles size={17} color="#7c3aed" />
           </div>
           <div>
             <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--s800)', display: 'block' }}>Recap pre-sesión</span>
-            <span style={{ fontSize: 11, color: 'var(--s400)' }}>Resumen IA de la historia · el profesional decide</span>
+            <span style={{ fontSize: 11, color: 'var(--s400)' }}>
+              {collapsed ? 'Oculto — haz clic para verlo' : 'Resumen IA de la historia · el profesional decide'}
+            </span>
           </div>
         </div>
-        {(status === 'READY' || status === 'FAILED') && !busy && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {!collapsed && (status === 'READY' || status === 'FAILED') && !busy && (
+            <button
+              onClick={e => { e.stopPropagation(); handleGenerate(); }}
+              title="Regenerar"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, border: '1px solid #cbc7ee', background: '#f3f2fb', color: '#5b52ad', cursor: 'pointer' }}
+            >
+              <RefreshCw size={12} /> Regenerar
+            </button>
+          )}
           <button
-            onClick={handleGenerate}
-            title="Regenerar"
-            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, border: '1px solid #ddd6fe', background: '#f5f3ff', color: '#7c3aed', cursor: 'pointer' }}
+            onClick={e => { e.stopPropagation(); toggleCollapsed(); }}
+            aria-label={collapsed ? 'Mostrar recap' : 'Ocultar recap'}
+            title={collapsed ? 'Mostrar' : 'Ocultar'}
+            style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, padding: '6px 10px', borderRadius: 7, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s500)', cursor: 'pointer' }}
           >
-            <RefreshCw size={12} /> Regenerar
+            {collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+            {collapsed ? 'Ver' : 'Ocultar'}
           </button>
-        )}
+        </div>
       </div>
 
-      {isLoading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}><Spinner size={20} color="#7c3aed" /></div>
+      {collapsed ? null : isLoading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}><Spinner size={20} color="#5b52ad" /></div>
       ) : busy ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: '#f5f3ff', borderRadius: 10, border: '1px solid #ede9fe' }}>
           <Spinner size={18} color="#7c3aed" />
@@ -90,7 +120,7 @@ export function RecapCard({ patientId }: { patientId: string }) {
         </div>
       )}
 
-      {reqErr && (
+      {!collapsed && reqErr && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#fee2e2', borderRadius: 8 }}>
           <AlertTriangle size={14} color="#dc2626" />
           <span style={{ fontSize: 13, color: '#991b1b' }}>{reqErr}</span>

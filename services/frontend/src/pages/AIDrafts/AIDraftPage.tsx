@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowLeft, Brain, Clock, CheckCircle2, AlertTriangle, RefreshCw,
+  ArrowLeft, Brain, Clock, CheckCircle2, AlertTriangle, RefreshCw, CalendarClock,
   Edit3, Save, ChevronDown, ChevronUp, Sparkles, FileText, Stethoscope, Search, X,
 } from 'lucide-react';
 import { aiDraftsApi, type DraftStatus } from '@/api/aiDrafts';
@@ -216,13 +216,25 @@ export function AIDraftPage() {
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', padding: isMobile ? '0 12px 32px' : 0 }}>
-      {/* Back */}
-      <button
-        onClick={() => navigate(-1)}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s500)', fontSize: 14, marginBottom: 24, padding: 0 }}
-      >
-        <ArrowLeft size={16} /> Volver
-      </button>
+      {/* Back — plus a direct way to the session this draft belongs to, so
+          arriving from the topbar indicator or the drafts list never leaves
+          the professional stranded */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <button
+          onClick={() => navigate(-1)}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s500)', fontSize: 14, padding: 0 }}
+        >
+          <ArrowLeft size={16} /> Volver
+        </button>
+        {(qsAppointmentId || draft?.appointment_id) && (
+          <button
+            onClick={() => navigate(`/appointments/${qsAppointmentId || draft?.appointment_id}`)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid var(--s200)', borderRadius: 8, cursor: 'pointer', color: 'var(--s600)', fontSize: 13, fontWeight: 600, padding: '7px 13px' }}
+          >
+            <CalendarClock size={14} /> Ir a la cita
+          </button>
+        )}
+      </div>
 
       {/* Header */}
       <div className="card" style={{ padding: 24, marginBottom: 20 }}>
