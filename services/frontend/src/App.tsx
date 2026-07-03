@@ -90,7 +90,7 @@ export function App() {
                 <Route path="ai-drafts/:id" element={<AIDraftPage />} />
                 <Route path="clinical-records/:id" element={<ClinicalRecordPage />} />
                 <Route path="billing" element={<BillingPage />} />
-                <Route path="settings" element={<SettingsPage />} />
+                <Route path="settings/:section?" element={<SettingsPage />} />
                 <Route path="admin" element={<SuperAdminPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
