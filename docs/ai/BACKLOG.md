@@ -16,14 +16,12 @@
 - **Congelar features hasta tener señal de willingness-to-pay externa (2026-06-27)** — pausar nuevas olas (WhatsApp templates, RIPS, videollamada, verificación Google, SuperAdmin extras) hasta que al menos una psicóloga externa confirme que pagaría. Cada feature nueva antes de eso es ruido.
 - **Mensaje de reclutamiento para beta (2026-06-27)** — plantilla aprobada: "Hola [nombre]. Construí un sistema de historia clínica para psicólogos — cifrado, cumple la norma colombiana, y graba la sesión y te arma el borrador de la nota en segundos. Lo uso con [esposa] y funciona muy bien. Quiero que 2 colegas en quien confío lo prueben gratis 2 semanas y me digan sin filtro qué sirve y qué se rompe. ¿Te animas? Te lo dejo listo y te acompaño yo mismo."
 
-## Marca / Landing Page SaaS (2026-06-27 — prioridad post-beta)
+## Marca Chapni — follow-ups del rebrand (2026-07-02)
 
-- **Cuando atacar esto** — solo después de tener al menos 1 psicóloga externa confirmando willingness-to-pay. La marca y la landing son el paso de distribución; sin señal de demanda, es ruido. Herramienta disponible: skill `/ui-styling` (shadcn/ui + Tailwind) y `/ui-ux-pro-max` para las decisiones de diseño.
-- **Repo separado para landing page de marketing** — el sistema actual no tiene página de venta del SaaS. Crear repositorio independiente (Next.js estático o Astro). Dominio propio (ej. sinapsis.co).
-- **Sistema de diseño de marca completo** — antes de tocar código de la landing: definir nombre final, paleta de color (HEX), tipografías (display + body), concepto de logo, lenguaje visual (formas, patrones, fotografía/ilustración). Tres direcciones propuestas: A "El Aliado" (verde bosque + crema, serif+humanista), B "El Experto" (índigo + teal, sans geométrica), C "El Espacio" (pizarra + salvia, minimalismo radical).
-- **Nombre del SaaS — candidatos evaluados**: Sinapsis (favorito — neurología, memorable, .co disponible), PsiCore, Therapio, Clinova, Vínculo, Flujo. Pendiente: reservar dominio una vez decidido.
-- **Pricing definido (pendiente validar)**: Esencial $19/mes (1 prof., 80 pac.), Pro $35/mes (todo incluido), Clínica $28/mes/prof. (mín. 3). Trial 14 días sin tarjeta.
-- **Copy de la landing** — hero propuesto: "Tu historia clínica, protegida y al día / Software para psicólogos colombianos con IA que transcribe tus sesiones, cumplimiento legal automático y cifrado de datos — desde $19/mes". Secciones: Hero → Dolor → Solución (3 features) → Demo/video → Precios → Testimonios → CTA final.
+- **RESUELTO 2026-07-02**: marca definida (**Chapni** — Índigo & Oro, brand book en `~/Downloads/Chapni Brand - Indigo Oro.html`), landing en repo `../chapni` (Astro → chapni.com vía Cloudflare), sistema rebrandeado (PRs #117 frontend, #118 backend). Pendientes del rebrand:
+- **Dominio app.chapni.com** (pre-1.0) — DNS A → VPS, Caddyfile multi-dominio, redirect desde el dominio viejo; la landing ya enlaza a `app.chapni.com/signup|login` (con TODO en `../chapni/src/consts.ts`). También actualizar `APP_BASE_URL`/CORS si aplica.
+- **Remitente de emails `@chapni.com`** — `RESEND_FROM` hoy es `citas@marcelachapues.com`; verificar dominio chapni.com en Resend y cambiar el env (ops, sin código).
+- **Favicon modo oscuro** — usar `Chapni-favicon-oscuro.svg` del brand kit (`~/Downloads/brandchapni/exports/svg/`) vía `<link rel="icon" media="(prefers-color-scheme: dark)">`.
 - **Pauta digital** — Facebook/Instagram segmentada a psicólogos Colombia una vez live la landing. Argumento central: "Menos de lo que cobras en una sesión."
 
 ## Evaluaciones psicológicas / Measurement-Based Care
