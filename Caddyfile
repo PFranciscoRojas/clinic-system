@@ -2,10 +2,7 @@
     email {$CADDY_EMAIL}
 }
 
-{$CADDY_DOMAIN} {
-    encode gzip zstd
-
-    # Security headers
+(security_headers) {
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
         X-Content-Type-Options nosniff
@@ -20,6 +17,12 @@
         Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
         -Server
     }
+}
+
+# ── Primary domain (Chapni) ───────────────────────────────────────────────────
+{$CADDY_APP_DOMAIN:app.chapni.com} {
+    encode gzip zstd
+    import security_headers
 
     # API routes → core-api (never cached)
     handle /api/* {
@@ -39,6 +42,29 @@
         root * /srv/frontend
         try_files {path} /index.html
         file_server
+    }
+
+    log {
+        output stdout
+        format json
+    }
+}
+
+# ── Legacy domain ─────────────────────────────────────────────────────────────
+# /api stays alive here: MercadoPago webhooks of pre-migration preapprovals and
+# the Google OAuth redirect registered before the move still call this host.
+# Everything else (SPA routes, emailed /sign and /reset links) moves over.
+{$CADDY_DOMAIN} {
+    encode gzip zstd
+    import security_headers
+
+    handle /api/* {
+        header Cache-Control "no-store"
+        reverse_proxy core-api:8080
+    }
+
+    handle {
+        redir https://{$CADDY_APP_DOMAIN:app.chapni.com}{uri} 308
     }
 
     log {
