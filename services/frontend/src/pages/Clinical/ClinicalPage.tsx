@@ -67,7 +67,15 @@ const RISK_COLOR: Record<string, string> = {
 // ── Row components ────────────────────────────────────────────────────────────
 
 function DraftRow({ d, onClick }: { d: DraftMeta; onClick: () => void }) {
-  const actionable = d.status === 'DRAFT_READY';
+  // Every state has a destination now: the draft page live-polls the
+  // generating states and explains errors — this is how the professional
+  // gets back to a session they navigated away from (Punto 3).
+  const action: { label: string; solid: boolean } | null =
+    d.status === 'DRAFT_READY' ? { label: 'Revisar', solid: true }
+    : d.status === 'PENDING' || d.status === 'PROCESSING' ? { label: 'Ver estado', solid: false }
+    : d.status === 'ERROR' ? { label: 'Ver error', solid: false }
+    : null;
+  const actionable = action !== null;
   return (
     <div
       onClick={actionable ? onClick : undefined}
@@ -88,11 +96,11 @@ function DraftRow({ d, onClick }: { d: DraftMeta; onClick: () => void }) {
       </span>
       <DraftBadge status={d.status} />
       <span style={{ fontSize: 12, color: 'var(--s400)' }}>{fmtDate(d.created_at)}</span>
-      {actionable && (
-        <span style={{
-          fontSize: 12, fontWeight: 600, color: '#fff',
-          background: 'var(--teal)', borderRadius: 6, padding: '3px 10px',
-        }}>Revisar</span>
+      {action && (
+        <span style={action.solid
+          ? { fontSize: 12, fontWeight: 600, color: '#fff', background: 'var(--teal)', borderRadius: 6, padding: '3px 10px' }
+          : { fontSize: 12, fontWeight: 600, color: 'var(--s600)', background: '#fff', border: '1px solid var(--s200)', borderRadius: 6, padding: '3px 10px' }}
+        >{action.label}</span>
       )}
     </div>
   );
@@ -288,7 +296,7 @@ export function ClinicalPage() {
             : drafts.length === 0
               ? <Empty msg={draftFilter === 'DRAFT_READY' ? 'No hay borradores pendientes de revisión.' : 'No hay borradores.'} />
               : drafts.map(d => (
-                  <DraftRow key={d.id} d={d} onClick={() => navigate(`/ai-drafts/${d.id}`)} />
+                  <DraftRow key={d.id} d={d} onClick={() => navigate(`/ai-drafts/${d.id}${d.appointment_id ? `?appointment_id=${d.appointment_id}` : ''}`)} />
                 ))
         )}
 
