@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { clinicalRecordsApi, type RecordType, type RiskLevel } from '@/api/clinicalRecords';
 import { ApiError } from '@/api/client';
 import { recordTemplatesApi } from '@/api/recordTemplates';
+import { registerDraftFlush } from '@/lib/clinicalDrafts';
 import { Spinner } from '@/components/ui/Spinner';
 import { RecordSectionsForm, emptyDraft, draftToPayload, recordToDraft, validateDraft, toUIRecordType, type ClinicalDraft, type UIRecordType } from './RecordSectionsForm';
 import { RECORD_TYPE_LABELS } from './constants';
@@ -422,7 +423,15 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
     const onHide = () => { void tick(); };
     window.addEventListener('pagehide', onHide);
     document.addEventListener('visibilitychange', onHide);
+    // Explicit logout awaits this flush before wiping the local drafts, so
+    // in-progress content lands on the server rather than being lost.
+    const unregisterFlush = registerDraftFlush(tick);
     return () => {
+      unregisterFlush();
+      // Flush on unmount too: SPA navigation fires neither pagehide nor
+      // visibilitychange, and the local copy may be up to 25s ahead of the
+      // server. tick() checks `stopped` synchronously, so order matters.
+      void tick();
       stopped = true;
       clearInterval(interval);
       window.removeEventListener('pagehide', onHide);
