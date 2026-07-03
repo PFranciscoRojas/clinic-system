@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import {
@@ -449,8 +449,13 @@ export function DashboardPage() {
 
   const inboxCount = unfinishedToday.length + pendingNotes.length;
 
-  // EN CURSO marker index
-  const nowMs = Date.now();
+  // EN CURSO marker index — the clock lives in state (updated each minute)
+  // so render stays pure and the marker still advances on an idle dashboard.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
   const nowLineAfterIndex = useMemo(() => {
     if (!isToday) return -1;
     for (let i = filtered.length - 1; i >= 0; i--) {
