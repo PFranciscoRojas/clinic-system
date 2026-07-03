@@ -1,15 +1,15 @@
 ## Sin tarea pendiente
 
-Fases 1 y 2 de la auditoría 360° cerradas, mergeadas y desplegadas (PR #107, #108). El plan vive en `docs/ai/PLAN_AUDIT_FIXES.md` con las casillas de Fase 1-2 marcadas.
+Sesión 2026-07-02: resolvimos los 7 puntos de `tareas_clinica.md` (feedback de uso del sistema IA clínica). Todos ✅ desplegados en producción (PRs #113–#116).
 
 ## Sugerencia de siguiente paso
 
-Según el plan de auditoría, STATUS (bloqueantes) y BACKLOG, lo más valioso a atacar ahora:
+Basándome en STATUS.md (bloqueantes + roadmap) y BACKLOG.md, lo más valioso a atacar ahora es:
 
-1. **Fase 3 — Guardrails de IA** (`enhancement/ai-guardrails`). Alto valor, deploy aislado (solo ai-service + compose): `temperature=0.2` en las 4 llamadas, anonimización reforzada (regex de email + reemplazo literal de nombres del paciente que el worker ya descifra), guardrail anti prompt-injection en los 4 system prompts, validar el ICD-10 sugerido contra el catálogo, cap de historia para risk/plan, y reclaim de jobs huérfanos del worker (`XAUTOCLAIM` + dead-letter). Es la fase con mejor relación impacto/riesgo antes de la beta.
+1. **Beta de diseño con 2-3 psicólogas externas (validación de demanda)** — Los 7 puntos cubrieron estabilidad y UX del sistema existente, pero no hay feedback externo sobre willingness-to-pay. Dos colegas de Marcela identificadas, 2 semanas gratis, acompañamiento 1ª sesión. Riesgo: seguir building sin demanda externa. Ganancia: separar hobby de negocio antes de escalar feature-building.
 
-2. **Adelantar Fase 5.1 — test de aislamiento RLS** (testcontainers). Blinda justo el cambio de hashes de la Fase 1 y es el test más importante del sistema (org A no lee filas de org B). Buen momento porque el modelo de datos está fresco en contexto.
+2. **Fase 3 de auditoría — Guardrails de IA** — High value, deploy aislado (ai-service): `temperature=0.2`, anonimización reforzada (regex + nombres), anti-injection en prompts, validar ICD-10, reclaim de jobs huérfanos. Cierra riesgos de IA antes de exponer a las beta testers.
 
-3. **Arreglar el secret `SMOKE_PASSWORD`** (rápido, en BACKLOG → DevOps): el gate de smoke está inútil hasta que el email del test exista en prod.
+3. **Arreglar el secret `SMOKE_PASSWORD` de CI** — 5 min, high-value (smoke test hoy falla `login` con `USER-NOT-FOUND`). Crear cuenta de smoke dedicada en prod.
 
-Recomendación: Fase 3 primero (cierra los riesgos de IA antes de exponer el producto a las psicólogas beta), con la Fase 5.1 pegada después para asegurar el trabajo de seguridad ya hecho.
+**Orden recomendado:** Beta de diseño (validar demanda) + Fase 3 en paralelo (blindar riesgos antes de exponer el producto) → Go-live 1.0.0.

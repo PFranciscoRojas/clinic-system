@@ -26,6 +26,22 @@
 | Ola Need-to-know (sesión 8) | ✅ producción | `patient_staff_rel` enforced: profesionales solo ven HC de sus propios pacientes (403 NO_PATIENT_ACCESS). Migración 000041 backfilla desde appointments + clinical_records; appointment creation auto-registra en patient_staff_rel. Adendas ocultas para CLINIC_ADMIN puro. "Iniciar/Finalizar sesión" y controles de grabación ocultos para admin puro. Bug fix: tras fallo de upload de audio, recovery banner aparece sin F5. |
 | Auditoría 360° + endurecimiento (sesión 25) | ✅ Fases 1–2 en producción | Auditoría completa (código, BD, IA, seguridad, UX) → plan en `docs/ai/PLAN_AUDIT_FIXES.md`. **Fase 1** (PR #107): docker.sock eliminado de core-api (era root en host vía RCE), hashes PII → HMAC-SHA256 con `SEARCH_PEPPER` + `cmd/rehash` ejecutado en prod (7 users, 4 patients), upload de audio con `MaxBytesReader` + UUID validado. **Fase 2** (PR #108): single-flight en refresh de token (f
 
+### Tareas clínica feedback (2026-07-02) — `tareas_clinica.md`
+
+Feedback de uso del sistema de IA clínica. **Todos los 7 puntos resueltos y desplegados en producción** (sesión del 2026-07-02):
+
+| Punto | Categoría | Descripción | PR |
+|---|---|---|---|
+| 1 | 🐛 bug | Borrador re-aprobable → registros duplicados (RLS fail-closed sin GUC tenant) | #113 |
+| 5 | 🐛 bug | Desfase de fecha (UTC vs local Bogotá) en registros clínicos | #113 |
+| 2 | 🤖 IA | Resumen borrador no se adapta al formato configurado (schema desincronizados) | #114 |
+| 6 | 🤖 IA | Falta campo "enfoque terapéutico" en perfil profesional | #115 |
+| 7 | 🤖 IA | Salidas IA no orientadas al enfoque del profesional | #115 |
+| 3 | 🎨 UX | Sin ruta para volver a sesión con borrador IA en proceso | #116 |
+| 4 | 🎨 UX | Recap pre-sesión no colapsable | #116 |
+
+Plan técnico en `docs/ai/PLAN_IA_puntos_2_6_7.md` (Puntos 2, 6, 7).
+
 ### Auditoría 360° (2026-07-01) — plan de corrección en `docs/ai/PLAN_AUDIT_FIXES.md`
 
 Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; features de producto → BACKLOG. **Fases 1 y 2 completadas y desplegadas** (2026-07-02):
@@ -41,9 +57,11 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 
 ### Últimos PRs a `main`
 
+- `#116` enhancement(clinical): collapsible recap + topbar indicator para borradores en proceso (Puntos 3-4) — 2026-07-02
+- `#115` feat(clinical): therapeutic approach en ai_prefs + prompts parametrizados (Puntos 6-7) — 2026-07-02
+- `#114` fix(clinical): template_id persistido, schema integrado unificado, fallbacks (Punto 2) — 2026-07-02
+- `#113` fix(clinical): AI draft approve idempotent + date-only timezone shift (Puntos 1-5) — 2026-07-02
 - `#108` fix(auth): single-flight refresh, claims frescos desde BD, limpieza selectiva de sesión — 2026-07-02
-- `#107` fix(security): quita docker.sock, pepper en hashes PII, cap de upload de audio — 2026-07-02
-- `2a04904` fix(clinical): customSections nunca se guardaba ni restauraba — 2026-06-30
 
 > Flujo actual: rama `fix/*` → PR → squash-merge → CI deploy. Branch protection sigue pendiente (BACKLOG → Infraestructura).
 > **CI/CD:** `test → build → smoke`. `go test ./...` bloquea el build; `tsc --noEmit` corre en cada PR de frontend; smoke test de 8 pasos HTTP corre tras cada deploy al VPS.
@@ -90,9 +108,9 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción — CI deploy `6948ef1` (PR #108). **docker.sock ya NO montado** (verificado en el contenedor) |
-| `ai-service` | ✅ producción — `ghcr.io/pfranciscorojas/clinic-system-ai-service:latest` (whisper.tiny + spaCy sm) |
-| `frontend` (Caddy :80/:443) | ✅ producción — rebuild manual desde `6948ef1` (2026-07-02) |
+| `core-api:8080` | ✅ producción — CI deploy (PR #115 `5b7c410`). Migración 000050 (template_id en ai_drafts) ejecutada en DB. |
+| `ai-service` | ✅ producción — `ghcr.io/pfranciscorojas/clinic-system-ai-service:latest` (PR #115: approaches.py, prompts parametrizados) |
+| `frontend` (Caddy :80/:443) | ✅ producción — rebuild manual desde `6d7fd3c` (PR #116, 2026-07-02) — RecapCard colapsable + AIDraftIndicator |
 | Backups | `pg_dump` cifrado GPG → Backblaze B2 |
 | **Disco** | ~40% (15/38 GB) — cron semanal en el **host** (ya no en el admin UI): `0 4 * * 0 docker system prune -af` → `/var/log/docker-prune.log`. Alerta email si >80% |
 
@@ -117,7 +135,7 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 | `core-api` | `services/core-api/` | ✅ Go 1.25, prod |
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
-| Migrations | `services/core-api/migrations/` | Última: `000048_clinical_record_autosave` (`finalized_at` en `clinical_records`) |
+| Migrations | `services/core-api/migrations/` | Última: `000050_ai_draft_template` (template_id en ai_drafts — PR #114, ejecutada en prod 2026-07-02) |
 | CI/CD | `.github/workflows/build-ai-service.yml` + `build-core-api.yml` | Build+push ghcr.io + deploy SSH al VPS (secrets: `VPS_HOST`, `VPS_SSH_KEY`, `GHCR_TOKEN`) |
 | Claude skills | `~/.claude/commands/` + `~/.claude/skills/` | `ui-ux-pro-max` instalada; `ui-styling` (Tailwind/shadcn) desinstalada 2026-06-28 — proyecto usa inline styles |
 

@@ -13,12 +13,19 @@
 
 ---
 
-## 2026-07-02 (sesión 25 — auditoría 360° + Fases 1-2)
+## 2026-07-02 (sesión 25 — auditoría + tareas clínica feedback)
 
-- **Auditoría técnica completa** (código, BD, IA, seguridad, UX, producto). Plan de 6 fases en `docs/ai/PLAN_AUDIT_FIXES.md`; features de producto → BACKLOG (`5f152e4`).
-- **Fase 1 seguridad (PR #107, `2375d8b`)**: (1) eliminado el montaje de `/var/run/docker.sock` en core-api — era RCE→root en el host; los 3 pruning del admin UI reemplazados por cron semanal en el host. (2) `hash.Normalize` pasa de SHA-256 sin sal a HMAC-SHA256 bajo nuevo env obligatorio `SEARCH_PEPPER` (fail-closed) — las cédulas de 6-10 dígitos eran reversibles desde un dump; `cmd/rehash` (en la imagen) migró los hashes existentes en una transacción RLS-aware (7 usuarios, 4 pacientes). (3) upload de audio con `MaxBytesReader` (cap real) + `appointment_id` validado como UUID.
-- **Fase 2 sesión/auth (PR #108, `6948ef1`)**: single-flight en el refresh (dos 401 concurrentes ya no se sacan mutuamente por el token rotado → no más logout en plena sesión); `localStorage` selectivo al expirar (los borradores clínicos sobreviven — antes `clear()` borraba la propia red de seguridad); `Refresh` relee el usuario desde BD vía `FindUserByID` (roles revocados e inactivos ya no sobreviven el TTL, y el token renovado conserva email/display_name); errores de refresh ahora 401/403 (antes 500); 3 fetch ad-hoc (PDF/comprobante/CSV) → `api.getBlob` con el pipeline compartido.
-- Ambas fases desplegadas y verificadas en prod (backend CI, frontend rebuild manual). Smoke `login` sigue fallando por secret `SMOKE_PASSWORD` desactualizado (pre-existente, ahora en QUEUE/BACKLOG).
+**Auditoría 360° (Fases 1-2):**
+- PR #107: eliminado RCE via docker.sock, HMAC-SHA256 en hashes PII + `SEARCH_PEPPER`, cap de upload de audio.
+- PR #108: single-flight refresh (no más logout en sesión), localStorage selectivo, claims frescos desde BD.
+- Ambas en prod con CI/manual build. Smoke test roto por secret desactualizado (pre-existente).
+
+**Tareas clínica feedback (7 puntos resueltos, `tareas_clinica.md`):**
+- PR #113: Punto 1 (borrador duplicable) — RLS fail-closed sin GUC tenant en `Resolve`; Punto 5 (desfase de fecha) — `fmtDateOnly` para render + envío de local desde frontend.
+- PR #114: Punto 2 (resumen no se adapta al formato) — `template_id` persistido en BD + devuelto por GET; schema integrado unificado en el job; fallbacks en approve/upload.
+- PR #115: Puntos 6-7 (enfoque terapéutico + IA orientada) — `ai_prefs.approach` con catálogo cerrado, validación fail-closed, selector en Settings; prompts parametrizados (plan TCC→enfoque specific, recap/draft con pista, riesgo agnóstico); tests de contrato Python.
+- PR #116: Punto 3 (sin ruta a borrador en proceso) — chip topbar `AIDraftIndicator` (ámbar/rojo, polling inteligente), filas clicables en Clínica, "Ir a la cita" en el borrador; Punto 4 (recap no colapsable) — acordeón con estado recordado por paciente en sessionStorage.
+- Frontend rebuild (2026-07-02 `6d7fd3c`), core-api rebuild (migración 000050 ejecutada), ai-service rebuild (approaches.py).
 
 ---
 
