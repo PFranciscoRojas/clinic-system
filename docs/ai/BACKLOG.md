@@ -19,7 +19,7 @@
 ## Marca Chapni — follow-ups del rebrand (2026-07-02)
 
 - **RESUELTO 2026-07-02**: marca definida (**Chapni** — Índigo & Oro, brand book en `~/Downloads/Chapni Brand - Indigo Oro.html`), landing en repo `../chapni` (Astro → chapni.com vía Cloudflare), sistema rebrandeado (PRs #117 frontend, #118 backend). Pendientes del rebrand:
-- **Dominio app.chapni.com** (pre-1.0) — DNS A → VPS, Caddyfile multi-dominio, redirect desde el dominio viejo; la landing ya enlaza a `app.chapni.com/signup|login` (con TODO en `../chapni/src/consts.ts`). También actualizar `APP_BASE_URL`/CORS si aplica.
+- **RESUELTO 2026-07-02 — Dominio app.chapni.com** (PR #119): DNS A (DNS-only) → VPS, Caddy multi-dominio con cert emitido, `APP_BASE_URL` actualizado, redirect URI de Google añadido en Cloud Console. El dominio viejo mantiene `/api` vivo (webhooks MP de preapprovals existentes) y redirige 308 el resto. Opcional futuro: `PatchPreapprovalNotificationURL` para migrar los webhooks de suscripciones viejas y poder retirar `api.marcelachapues.com`.
 - **Remitente de emails `@chapni.com`** — `RESEND_FROM` hoy es `citas@marcelachapues.com`; verificar dominio chapni.com en Resend y cambiar el env (ops, sin código).
 - **Favicon modo oscuro** — usar `Chapni-favicon-oscuro.svg` del brand kit (`~/Downloads/brandchapni/exports/svg/`) vía `<link rel="icon" media="(prefers-color-scheme: dark)">`.
 - **Pauta digital** — Facebook/Instagram segmentada a psicólogos Colombia una vez live la landing. Argumento central: "Menos de lo que cobras en una sesión."
