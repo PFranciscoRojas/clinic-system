@@ -9,8 +9,8 @@
 
 ## 🎨 UI/UX
 
-- [ ] **3. Sin forma de volver a una sesión con borrador IA en proceso.** Si el usuario sale de la pestaña de la sesión (`/appointments/<id>`) mientras el borrador IA está demorado o sin terminar, no hay ruta/listado para regresar y ver el estado o un posible error. Falta un acceso (ej. lista de borradores pendientes/fallidos o indicador en la agenda).
-- [ ] **4. Recap pre-sesión no colapsable.** El Recap pre-sesión permanece siempre visible. Debe funcionar como acordeón: botón ocultar/ver para colapsarlo una vez leído.
+- [x] ✅ **3. Sin forma de volver a una sesión con borrador IA en proceso.** Resuelto en tres capas (PR #116): chip global en el topbar (`AIDraftIndicator`) que aparece cuando hay borradores generándose (ámbar, polling en vivo) o con error reciente sin registro (rojo) y navega directo al borrador; filas de borradores en la página Clínica clicables en todos los estados activos (Revisar / Ver estado / Ver error); y botón "Ir a la cita" en la página del borrador (usa el `appointment_id` persistido en PR #114).
+- [x] ✅ **4. Recap pre-sesión no colapsable.** Acordeón con botón Ver/Ocultar (cabecera clicable); el estado se recuerda por paciente durante la sesión del navegador (PR #116).
 
 ## 🤖 Lógica de IA
 
@@ -29,3 +29,5 @@
 | 2026-07-02 | 2 | PR #114 | `template_id` persistido y devuelto; fuente única del schema integrado (job `sections_schema` + test contra whitelist); fallbacks en approve y upload |
 | 2026-07-02 | 6 | PR #115 | `ai_prefs.approach` con catálogo cerrado + validación fail-closed + selector en Settings |
 | 2026-07-02 | 7 | PR #115 | Prompts parametrizados por enfoque (plan ya no quemado a TCC); riesgo agnóstico; tests de contrato Python 7/7 |
+| 2026-07-02 | 3 | PR #116 | Chip topbar de borradores en proceso/error + filas clicables en Clínica + "Ir a la cita" en el borrador |
+| 2026-07-02 | 4 | PR #116 | Recap colapsable (Ver/Ocultar), estado recordado por paciente en la sesión del navegador |
