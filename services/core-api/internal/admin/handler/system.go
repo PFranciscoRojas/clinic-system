@@ -233,8 +233,10 @@ func (h *Handler) systemHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// --- Tenants ---
+	// Internal fixtures (the operator's own org, the CI smoke-test demo org)
+	// are excluded from every count here — they are never paying clinics.
 	tcRows, err := h.pool.Query(ctx, `
-		SELECT subscription_status, COUNT(*) FROM organizations GROUP BY subscription_status
+		SELECT subscription_status, COUNT(*) FROM organizations WHERE NOT is_internal GROUP BY subscription_status
 	`)
 	if err == nil {
 		for tcRows.Next() {
@@ -255,8 +257,16 @@ func (h *Handler) systemHealth(w http.ResponseWriter, r *http.Request) {
 		}
 		tcRows.Close()
 	}
-	h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&out.Tenants.TotalUsers)       //nolint:errcheck
-	h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM patients`).Scan(&out.Tenants.TotalPatients) //nolint:errcheck
+	h.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM users u
+		JOIN organizations o ON o.id = u.organization_id
+		WHERE NOT o.is_internal
+	`).Scan(&out.Tenants.TotalUsers) //nolint:errcheck
+	h.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM patients p
+		JOIN organizations o ON o.id = p.organization_id
+		WHERE NOT o.is_internal
+	`).Scan(&out.Tenants.TotalPatients) //nolint:errcheck
 
 	// --- Cola IA ---
 	qRows, err := h.pool.Query(ctx, `
