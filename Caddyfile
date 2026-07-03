@@ -30,6 +30,13 @@
         reverse_proxy core-api:8080
     }
 
+    # API liveness — without this the SPA fallback answers /healthz with
+    # index.html and the CI smoke probe passes even with core-api down.
+    handle /healthz {
+        header Cache-Control "no-store"
+        reverse_proxy core-api:8080
+    }
+
     # React SPA — static assets with long-lived cache (filenames are hashed by Vite)
     handle /assets/* {
         root * /srv/frontend
