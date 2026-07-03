@@ -365,7 +365,7 @@ export function AIDraftPage() {
                       value={finalVal}
                       onChange={e => setDraftEdit(prev => ({ ...prev, [key]: e.target.value }))}
                       rows={4}
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: 9, border: '1.5px solid var(--teal)', fontSize: 13, color: 'var(--s700)', resize: 'vertical', background: '#f0fdfa', boxSizing: 'border-box', lineHeight: 1.7 }}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 9, border: '1.5px solid var(--teal)', fontSize: 13, color: 'var(--s700)', resize: 'vertical', background: '#f3f2fb', boxSizing: 'border-box', lineHeight: 1.7 }}
                     />
                   </div>
                 </div>
@@ -592,7 +592,7 @@ export function AIDraftPage() {
                   </button>
                   <button
                     onClick={() => setEditing(false)}
-                    style={{ flex: 1, padding: 13, borderRadius: 11, background: '#6366f1', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                    style={{ flex: 1, padding: 13, borderRadius: 11, background: '#5b52ad', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
                   >
                     <Save size={16} /> Listo
                   </button>
@@ -682,17 +682,17 @@ function Icd10Suggestion({ value, editable, onChange }: {
   const results: ICD10Code[] = data?.items ?? [];
 
   return (
-    <div className="card" style={{ padding: 18, marginBottom: 16, border: '1px solid #ede9fe', background: '#faf5ff' }}>
+    <div className="card" style={{ padding: 18, marginBottom: 16, border: '1px solid #e4e2f6', background: '#faf5ff' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <Stethoscope size={16} color="#7c3aed" />
+        <Stethoscope size={16} color="#5b52ad" />
         <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--s800)' }}>Diagnóstico CIE-10 sugerido</span>
-        <span style={{ fontSize: 11, color: '#7c3aed', background: '#ede9fe', borderRadius: 6, padding: '1px 7px', fontWeight: 600 }}>sugerencia IA</span>
+        <span style={{ fontSize: 11, color: '#5b52ad', background: '#e4e2f6', borderRadius: 6, padding: '1px 7px', fontWeight: 600 }}>sugerencia IA</span>
       </div>
 
       {value ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: '1.5px solid #ddd6fe', borderRadius: 9, padding: '10px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: '1.5px solid #cbc7ee', borderRadius: 9, padding: '10px 14px' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#5b21b6' }}>{value.code}</span>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#363285' }}>{value.code}</span>
             {value.description && <span style={{ fontSize: 13, color: 'var(--s600)' }}> — {value.description}</span>}
           </div>
           {editable && (
@@ -710,7 +710,7 @@ function Icd10Suggestion({ value, editable, onChange }: {
       {editable && !searching && (
         <button
           onClick={() => setSearching(true)}
-          style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 8, border: '1px solid #ddd6fe', background: '#fff', color: '#7c3aed', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+          style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 8, border: '1px solid #cbc7ee', background: '#fff', color: '#5b52ad', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
         >
           <Search size={13} /> {value ? 'Cambiar diagnóstico' : 'Buscar diagnóstico'}
         </button>
@@ -718,8 +718,8 @@ function Icd10Suggestion({ value, editable, onChange }: {
 
       {editable && searching && (
         <div style={{ marginTop: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1.5px solid #ddd6fe', borderRadius: 9, padding: '8px 12px' }}>
-            {isFetching ? <Spinner size={13} color="#7c3aed" /> : <Search size={13} color="var(--s400)" />}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1.5px solid #cbc7ee', borderRadius: 9, padding: '8px 12px' }}>
+            {isFetching ? <Spinner size={13} color="#5b52ad" /> : <Search size={13} color="var(--s400)" />}
             <input
               autoFocus
               value={query}
@@ -737,7 +737,7 @@ function Icd10Suggestion({ value, editable, onChange }: {
                   onClick={() => { onChange(c); setSearching(false); setQuery(''); }}
                   style={{ width: '100%', textAlign: 'left', padding: '9px 13px', border: 'none', borderBottom: '1px solid var(--s50)', background: 'none', cursor: 'pointer', fontSize: 12.5 }}
                 >
-                  <span style={{ fontWeight: 700, color: '#5b21b6' }}>{c.code}</span>
+                  <span style={{ fontWeight: 700, color: '#363285' }}>{c.code}</span>
                   <span style={{ color: 'var(--s600)' }}> — {c.description}</span>
                 </button>
               ))}
@@ -753,7 +753,7 @@ const RISK_OPTIONS = [
   { value: 'NONE',     label: 'Sin riesgo',           color: '#059669', bg: '#d1fae5' },
   { value: 'IDEATION', label: 'Ideación suicida',      color: '#d97706', bg: '#fef3c7' },
   { value: 'PLAN',     label: 'Plan suicida',          color: '#dc2626', bg: '#fee2e2' },
-  { value: 'ATTEMPT',  label: 'Intento / autolesión',  color: '#7c3aed', bg: '#ede9fe' },
+  { value: 'ATTEMPT',  label: 'Intento / autolesión',  color: '#5b52ad', bg: '#e4e2f6' },
 ];
 
 function RiskLevelSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {

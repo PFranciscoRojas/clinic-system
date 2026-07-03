@@ -86,7 +86,7 @@ export function PatientSearchBox({ selected, onSelect, onNewPatient }: PatientSe
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '10px 14px', borderRadius: 10,
         border: '1.5px solid var(--s200)', background: '#fff',
-        boxShadow: open ? '0 0 0 3px rgba(13,148,136,0.15)' : 'none',
+        boxShadow: open ? '0 0 0 3px rgba(42,39,105,0.15)' : 'none',
         transition: 'box-shadow 0.15s',
       }}>
         <Search size={15} color="var(--s400)" />

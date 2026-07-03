@@ -62,14 +62,14 @@ export function SignupPage() {
   const sectionLabel: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--s500)', letterSpacing: '.06em', textTransform: 'uppercase', margin: '4px 2px 10px' };
 
   return (
-    <div style={{ minHeight: '100dvh', background: 'linear-gradient(135deg, #0f766e, #134e4a)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px 12px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+    <div style={{ minHeight: '100dvh', background: 'linear-gradient(135deg, #2a2769, #171533)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px 12px', fontFamily: "'DM Sans', sans-serif" }}>
       <div style={{ width: '100%', maxWidth: 430 }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', border: '1.5px solid rgba(255,255,255,0.20)' }}>
             <Building2 size={26} color="#fff" />
           </div>
           <div style={{ fontWeight: 800, fontSize: 22, color: '#fff' }}>Registra tu consultorio</div>
-          <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.65)', marginTop: 6 }}>Crea tu organización en SGHCP · 14 días de prueba, sin tarjeta</div>
+          <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.65)', marginTop: 6 }}>Crea tu organización en Chapni · 14 días de prueba, sin tarjeta</div>
         </div>
 
         <div style={card}>

@@ -40,9 +40,9 @@ const DAY_SHORT   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 
 // modality → color/icon
 const MC: Record<string, { color: string; bg: string; border: string }> = {
-  IN_PERSON: { color: '#14b8a6', bg: '#f0fdfa', border: '#5eead4' },
-  VIRTUAL:   { color: '#6366f1', bg: '#eef2ff', border: '#a5b4fc' },
-  HYBRID:    { color: '#8b5cf6', bg: '#f5f3ff', border: '#c4b5fd' },
+  IN_PERSON: { color: '#363285', bg: '#f3f2fb', border: '#a9a3e0' },
+  VIRTUAL:   { color: '#5b52ad', bg: '#f3f2fb', border: '#a9a3e0' },
+  HYBRID:    { color: '#7d75c7', bg: '#f3f2fb', border: '#cbc7ee' },
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -452,7 +452,7 @@ function DetailPanel({ appt, panelRef, onClose }: { appt: Appointment; panelRef:
             </button>
             <button
               onClick={() => { setMode(m => m === 'reagendar' ? 'none' : 'reagendar'); setActionErr(''); }}
-              style={{ flex: 1, padding: '7px 10px', border: '1.5px solid #c7d2fe', borderRadius: 9, background: mode === 'reagendar' ? '#eef2ff' : '#fff', cursor: 'pointer', fontSize: 12, color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontWeight: 600 }}
+              style={{ flex: 1, padding: '7px 10px', border: '1.5px solid #cbc7ee', borderRadius: 9, background: mode === 'reagendar' ? '#f3f2fb' : '#fff', cursor: 'pointer', fontSize: 12, color: '#5b52ad', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontWeight: 600 }}
             >
               <CalendarClock size={12} /> Reagendar
             </button>
@@ -555,7 +555,7 @@ function MiniCalendar({ selected, weekDays, apptDates, onSelect }: {
                 width: '100%', aspectRatio: '1', border: 'none', cursor: 'pointer',
                 borderRadius: 99, fontSize: 11.5, position: 'relative',
                 display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                background: isT ? 'var(--teal)' : inW ? 'rgba(20,184,166,.10)' : 'transparent',
+                background: isT ? 'var(--teal)' : inW ? 'rgba(54,50,133,.10)' : 'transparent',
                 color: isT ? '#fff' : isSel ? 'var(--teal)' : inW ? 'var(--teal-d)' : 'var(--s700)',
                 fontWeight: (isT || isSel) ? 700 : 400,
                 outline: isSel && !isT ? '2px solid var(--teal)' : 'none',
@@ -712,11 +712,11 @@ function MonthGrid({ days, byDay, selected, today, onDayClick, onApptClick, comp
               style={{
                 borderRight: '1px solid var(--s100)', borderBottom: '1px solid var(--s100)',
                 padding: compact ? '2px 3px' : '4px 5px', cursor: 'pointer', minHeight: compact ? 64 : 84, overflow: 'hidden',
-                background: isT ? 'rgba(20,184,166,.05)' : inMonth ? '#fff' : 'var(--s50)',
+                background: isT ? 'rgba(54,50,133,.05)' : inMonth ? '#fff' : 'var(--s50)',
                 transition: 'background .12s',
               }}
               onMouseEnter={e => { if (!isT) e.currentTarget.style.background = 'var(--teal-l)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = isT ? 'rgba(20,184,166,.05)' : inMonth ? '#fff' : 'var(--s50)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = isT ? 'rgba(54,50,133,.05)' : inMonth ? '#fff' : 'var(--s50)'; }}
             >
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 3 }}>
                 <span style={{
@@ -899,7 +899,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
 
           {/* En curso badge */}
           {hasInProgress && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f0fdfa', border: '1px solid #5eead4', borderRadius: 8, padding: '5px 10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f3f2fb', border: '1px solid #a9a3e0', borderRadius: 8, padding: '5px 10px' }}>
               <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--teal)', animation: 'pulse 2s infinite' }} />
               <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--teal-d)' }}>En curso</span>
             </div>
@@ -936,7 +936,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
           {/* Nueva cita */}
           <button
             onClick={() => navigate(`/appointments/new?date=${selected}`)}
-            style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 16px', fontSize: 13.5, fontWeight: 700, boxShadow: '0 2px 8px rgba(20,184,166,.35)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 16px', fontSize: 13.5, fontWeight: 700, boxShadow: '0 2px 8px rgba(54,50,133,.35)', cursor: 'pointer', whiteSpace: 'nowrap' }}
             onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.08)'; }}
             onMouseLeave={e => { e.currentTarget.style.filter = ''; }}
           >
@@ -1009,7 +1009,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
 
                       {/* Slot area — clicking an empty spot offers a quick booking */}
                       <div
-                        style={{ position: 'relative', height: totalH, background: isT ? 'rgba(20,184,166,.015)' : 'transparent', cursor: 'pointer' }}
+                        style={{ position: 'relative', height: totalH, background: isT ? 'rgba(54,50,133,.015)' : 'transparent', cursor: 'pointer' }}
                         onClick={e => {
                           const rect = e.currentTarget.getBoundingClientRect();
                           const clickedMin = startH * 60 + (e.clientY - rect.top) / PX_PER_MIN;

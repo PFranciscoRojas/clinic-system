@@ -57,14 +57,6 @@ export interface SystemHealth {
   alerts: { level: string; code: string; message: string; tip: string }[];
 }
 
-export interface ActionResult {
-  action: string;
-  description: string;
-  output: string;
-  ok: boolean;
-  duration_ms: number;
-}
-
 // Admin-only maintenance. resetClinicalData only exists on the server when
 // ALLOW_DATA_RESET is on (reflected by me.data_reset_enabled). The org/billing
 // endpoints are SYSTEM_ADMIN-only (the SaaS operator console).
@@ -84,9 +76,6 @@ export const adminApi = {
     ),
 
   systemHealth: () => api.get<SystemHealth>('/admin/system/health'),
-
-  systemAction: (action: string) =>
-    api.post<ActionResult>('/admin/system/actions', { action }),
 
   suspendOrg: (id: string) =>
     api.post<{ subscription_status: string }>(`/admin/orgs/${id}/suspend`, {}),

@@ -27,7 +27,7 @@ export function Field({ label, value, onChange, icon: Icon, error, hint, type = 
         border: `1.5px solid ${error ? 'var(--red)' : focused ? 'var(--teal)' : 'var(--s200)'}`,
         borderRadius: 11, padding: '11px 14px',
         transition: 'all .15s',
-        boxShadow: focused ? `0 0 0 3px ${error ? '#ef444422' : 'rgba(20,184,166,.12)'}` : 'none',
+        boxShadow: focused ? `0 0 0 3px ${error ? '#ef444422' : 'rgba(54,50,133,.12)'}` : 'none',
       }}>
         {Icon && <Icon size={16} color={focused ? 'var(--teal)' : 'var(--s400)'} />}
         <input

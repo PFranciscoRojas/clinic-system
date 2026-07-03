@@ -169,7 +169,7 @@ export function ClinicalRecordPage() {
       {/* Header */}
       <div className="card" style={{ padding: 24, marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
-          <div style={{ width: 52, height: 52, borderRadius: 14, background: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <div style={{ width: 52, height: 52, borderRadius: 14, background: '#f3f2fb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <FileText size={24} color="var(--teal)" />
           </div>
           <div style={{ flex: 1 }}>
@@ -185,7 +185,7 @@ export function ClinicalRecordPage() {
               {risk && !editing && (
                 <Badge label={`Riesgo: ${risk.label}`} color={risk.color} bg={risk.bg} />
               )}
-              {dischargeLabel && <Badge label={dischargeLabel} color="#374151" bg="#f1f5f9" />}
+              {dischargeLabel && <Badge label={dischargeLabel} color="#374151" bg="#f4eedd" />}
             </div>
             <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
               <InfoLine label="Fecha de sesión" value={record.session_date} />
@@ -200,7 +200,7 @@ export function ClinicalRecordPage() {
               </button>
             )}
             {!isDraft && (
-              <button onClick={handleExportPDF} disabled={exportingPDF} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px', background: '#f0fdfa', color: 'var(--teal)', border: '1px solid var(--teal)', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: exportingPDF ? 0.6 : 1 }}>
+              <button onClick={handleExportPDF} disabled={exportingPDF} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px', background: '#f3f2fb', color: 'var(--teal)', border: '1px solid var(--teal)', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: exportingPDF ? 0.6 : 1 }}>
                 <Download size={14} /> {exportingPDF ? 'Generando…' : 'Descargar PDF'}
               </button>
             )}
@@ -246,7 +246,7 @@ export function ClinicalRecordPage() {
               <button onClick={() => { setDraft(null); setEditing(false); }} style={{ flex: 1, padding: 13, borderRadius: 11, background: 'var(--s100)', color: 'var(--s700)', border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 600 }}>
                 Descartar
               </button>
-              <button onClick={handleSave} disabled={saving} style={{ flex: 1, padding: 13, borderRadius: 11, background: '#6366f1', color: '#fff', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: saving ? 0.7 : 1 }}>
+              <button onClick={handleSave} disabled={saving} style={{ flex: 1, padding: 13, borderRadius: 11, background: '#5b52ad', color: '#fff', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: saving ? 0.7 : 1 }}>
                 {saving ? <Spinner size={16} color="#fff" /> : <Save size={16} />}
                 {saving ? 'Guardando…' : 'Guardar cambios'}
               </button>

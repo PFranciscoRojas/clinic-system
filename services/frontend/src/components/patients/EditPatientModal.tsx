@@ -131,7 +131,7 @@ export function EditPatientModal({ patient, onClose, onSaved, requiredContext }:
           )}
 
           {/* Legal notice */}
-          <div style={{ display: 'flex', gap: 10, background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 10, padding: '11px 14px' }}>
+          <div style={{ display: 'flex', gap: 10, background: '#f3f2fb', border: '1px solid #cbc7ee', borderRadius: 10, padding: '11px 14px' }}>
             <Lock size={14} color="var(--teal)" style={{ flexShrink: 0, marginTop: 1 }} />
             <p style={{ margin: 0, fontSize: 12, color: 'var(--teal-d)', lineHeight: 1.6 }}>
               <strong>Datos administrativos editables</strong> (Ley 1581/2012).

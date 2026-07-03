@@ -36,7 +36,7 @@ export function ConfirmByTextModal({ title, description, confirmLabel = 'Desacti
 
         <div style={{ background: 'var(--s50)', borderRadius: 10, padding: '12px 14px', marginBottom: 18 }}>
           <p style={{ fontSize: 13, color: 'var(--s600)', marginBottom: 8 }}>
-            Para confirmar, escribe exactamente: <strong style={{ fontFamily: 'monospace' }}>{confirmText}</strong>
+            Para confirmar, escribe exactamente: <strong style={{ fontFamily: "'DM Mono', monospace" }}>{confirmText}</strong>
           </p>
           <input
             autoFocus

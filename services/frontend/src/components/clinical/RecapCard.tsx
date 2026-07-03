@@ -57,8 +57,8 @@ export function RecapCard({ patientId }: { patientId: string }) {
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, cursor: 'pointer' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 9, background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Sparkles size={17} color="#7c3aed" />
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: '#e4e2f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Sparkles size={17} color="#5b52ad" />
           </div>
           <div>
             <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--s800)', display: 'block' }}>Recap pre-sesión</span>
@@ -92,8 +92,8 @@ export function RecapCard({ patientId }: { patientId: string }) {
       {collapsed ? null : isLoading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}><Spinner size={20} color="#5b52ad" /></div>
       ) : busy ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: '#f5f3ff', borderRadius: 10, border: '1px solid #ede9fe' }}>
-          <Spinner size={18} color="#7c3aed" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: '#f3f2fb', borderRadius: 10, border: '1px solid #e4e2f6' }}>
+          <Spinner size={18} color="#5b52ad" />
           <div>
             <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--s800)' }}>Generando recap…</p>
             <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--s500)' }}>Leyendo la historia y resumiendo. Actualizando cada 3s…</p>
@@ -113,7 +113,7 @@ export function RecapCard({ patientId }: { patientId: string }) {
           </p>
           <button
             onClick={handleGenerate}
-            style={{ padding: '10px 20px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 7 }}
+            style={{ padding: '10px 20px', background: '#5b52ad', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 7 }}
           >
             <Sparkles size={14} /> Generar recap
           </button>
@@ -141,8 +141,8 @@ function RecapBody({ content, createdAt }: { content: RecapContent; createdAt?: 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {content.summary && <Block label="Resumen del proceso" text={content.summary} />}
-      {content.last_session && <Block icon={<Clock size={13} color="#7c3aed" />} label="Última sesión" text={content.last_session} />}
-      {content.pending_tasks && <Block icon={<ListChecks size={13} color="#7c3aed" />} label="Tareas pendientes" text={content.pending_tasks} />}
+      {content.last_session && <Block icon={<Clock size={13} color="#5b52ad" />} label="Última sesión" text={content.last_session} />}
+      {content.pending_tasks && <Block icon={<ListChecks size={13} color="#5b52ad" />} label="Tareas pendientes" text={content.pending_tasks} />}
       {content.focus_points.length > 0 && (
         <div>
           <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, color: 'var(--s700)' }}>Puntos a retomar</p>

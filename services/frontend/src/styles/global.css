@@ -1,36 +1,83 @@
-/* ── Tokens ──────────────────────────────────────────────────── */
+/* ── Tokens — Chapni · Índigo & Oro ─────────────────────────── */
 :root {
-  --teal:      #14b8a6;
-  --teal-dark: #0f766e;
-  --teal-d:    #0f766e;
-  --teal-l:    #f0fdfa;
-  --teal-10:   rgba(20,184,166,0.10);
-  --teal-100:  #ccfbf1;
+  /* Indigo — primary */
+  --indigo-50:  #f3f2fb;
+  --indigo-100: #e4e2f6;
+  --indigo-200: #cbc7ee;
+  --indigo-300: #a9a3e0;
+  --indigo-400: #7d75c7;
+  --indigo-500: #5b52ad;
+  --indigo-600: #464093;
+  --indigo-700: #363285;
+  --indigo-800: #2a2769;
+  --indigo-900: #22214a;
+  --indigo-950: #171533;
 
-  --s50:  #f8fafc;
-  --s100: #f1f5f9;
-  --s200: #e2e8f0;
-  --s300: #cbd5e1;
-  --s400: #94a3b8;
-  --s500: #64748b;
-  --s600: #475569;
-  --s700: #334155;
-  --s800: #1e293b;
+  /* Gold ochre — accent / CTA (never white text on gold) */
+  --gold-50:  #fbf6e8;
+  --gold-100: #f6ecc9;
+  --gold-200: #efdd9c;
+  --gold-300: #e6c76a;
+  --gold-400: #d9a038;
+  --gold-500: #c98a24;
+  --gold-600: #a97b1e;
+  --gold-700: #8a641b;
+  --gold-800: #6f501a;
+  --gold-900: #5c4318;
 
+  /* Warm neutrals */
+  --cream:  #faf6ec;
+  --sand:   #efe6d0;
+  --muted:  #5f5a6e;
+  --ink:    #22214a;
+
+  /* Semantic */
+  --bg:          var(--cream);
+  --surface:     #ffffff;
+  --brand:       var(--indigo-700);
+  --brand-hover: var(--indigo-800);
+  --cta:         var(--gold-400);
+  --cta-text:    #3a2a06; /* ink, never white on gold */
+  --cta-hover:   var(--gold-500);
+  --gold-text:   var(--gold-700); /* gold for text over cream (AA) */
+  --text:        var(--ink);
+  --text-muted:  var(--muted);
+  --focus-ring:  var(--indigo-500);
+
+  /* Legacy aliases (pre-rebrand token names) */
+  --teal:      var(--indigo-700);
+  --teal-dark: var(--indigo-800);
+  --teal-d:    var(--indigo-800);
+  --teal-l:    var(--indigo-50);
+  --teal-10:   rgba(54,50,133,0.10);
+  --teal-100:  var(--indigo-100);
+
+  /* Warm neutral scale (legacy slate names) */
+  --s50:  #faf6ec;
+  --s100: #f4eedd;
+  --s200: #e7dcc0;
+  --s300: #d5cbae;
+  --s400: #8f8a9e;
+  --s500: #5f5a6e;
+  --s600: #4a4560;
+  --s700: #343153;
+  --s800: #22214a;
+
+  /* State colors (semantic, unchanged) */
   --red:    #ef4444;
   --amber:  #f59e0b;
   --amber-l:#fffbeb;
   --green:  #10b981;
-  --indigo: #6366f1;
-  --violet: #8b5cf6;
+  --indigo: var(--indigo-500);
+  --violet: var(--indigo-400);
   --blue:   #3b82f6;
 
   --sidebar-w: 240px;
   --topbar-h:  60px;
   --radius:    12px;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
-  --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+  --shadow-sm: 0 1px 3px rgba(23,21,51,0.06);
+  --shadow-md: 0 4px 16px rgba(23,21,51,0.08);
+  --shadow-lg: 0 8px 32px rgba(23,21,51,0.12);
 }
 
 /* ── Reset ───────────────────────────────────────────────────── */
@@ -38,8 +85,8 @@
 html, body, #root { height: 100%; width: 100%; }
 body {
   font-family: 'DM Sans', sans-serif;
-  background: var(--s50);
-  color: var(--s800);
+  background: var(--bg);
+  color: var(--text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-tap-highlight-color: transparent;
@@ -49,6 +96,31 @@ button  { font-family: 'DM Sans', sans-serif; cursor: pointer; }
 input, textarea, select { font-family: 'DM Sans', sans-serif; }
 input:focus, textarea:focus, select:focus { outline: none; }
 a { color: inherit; text-decoration: none; }
+
+/* ── Brand typography ────────────────────────────────────────── */
+/* Fraunces for editorial moments: weights 400–500, no WONK,
+   italic reserved for emotive headlines. Page titles (h1) are
+   editorial; section headers stay DM Sans. */
+h1 {
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 500 !important;
+  letter-spacing: -0.01em;
+}
+.font-display {
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.font-display-italic {
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 400;
+  font-style: italic;
+  letter-spacing: -0.02em;
+}
+.font-mono {
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 0.02em;
+}
 
 /* ── Scrollbar ───────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -75,7 +147,7 @@ a { color: inherit; text-decoration: none; }
 
 /* ── Utilities ───────────────────────────────────────────────── */
 .card {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--s200);
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
@@ -84,11 +156,12 @@ a { color: inherit; text-decoration: none; }
   transition: box-shadow .18s ease, transform .18s ease;
 }
 .card-hover:hover {
-  box-shadow: 0 6px 24px rgba(14,118,110,.10), 0 2px 8px rgba(0,0,0,.06);
+  box-shadow: 0 16px 34px -18px rgba(54,50,133,.35), 0 2px 8px rgba(23,21,51,.06);
   transform: translateY(-1px);
 }
+/* Dusk gradient — the clinical day ending (hero direction from brand spec) */
 .bg-gradient {
-  background: linear-gradient(-45deg, #0f766e, #0d9488, #1e40af, #0f766e);
+  background: linear-gradient(-45deg, var(--indigo-800), var(--indigo-700), var(--indigo-950), var(--indigo-800));
   background-size: 400% 400%;
   animation: gradMove 14s ease infinite;
 }

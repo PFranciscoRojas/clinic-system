@@ -16,7 +16,7 @@ const GOAL_CFG: Record<GoalStatus, { label: string; color: string; bg: string }>
   PENDING:     { label: 'Pendiente',  color: '#92400e', bg: '#fef3c7' },
   IN_PROGRESS: { label: 'En curso',   color: '#1e40af', bg: '#dbeafe' },
   ACHIEVED:    { label: 'Logrado',    color: '#065f46', bg: '#d1fae5' },
-  ABANDONED:   { label: 'Abandonado', color: '#374151', bg: '#f1f5f9' },
+  ABANDONED:   { label: 'Abandonado', color: '#374151', bg: '#f4eedd' },
 };
 
 const GOAL_NEXT: Record<GoalStatus, GoalStatus[]> = {
@@ -29,7 +29,7 @@ const GOAL_NEXT: Record<GoalStatus, GoalStatus[]> = {
 const PLAN_CFG: Record<PlanStatus, { label: string; color: string; bg: string }> = {
   ACTIVE:    { label: 'Activo',     color: '#1e40af', bg: '#dbeafe' },
   COMPLETED: { label: 'Completado', color: '#065f46', bg: '#d1fae5' },
-  ABANDONED: { label: 'Abandonado', color: '#374151', bg: '#f1f5f9' },
+  ABANDONED: { label: 'Abandonado', color: '#374151', bg: '#f4eedd' },
 };
 
 const fmtDate = (d?: string | null) => (d ? new Date(d + 'T00:00:00').toLocaleDateString('es-CO') : '');
@@ -144,9 +144,9 @@ function NewPlanCard({ patientId, onCreated, onError }: { patientId: string; onC
               onClick={handleSuggest}
               disabled={suggesting}
               title="Propuesta de plan TCC generada por IA — revísala y edítala antes de crear"
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', background: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', borderRadius: 7, cursor: suggesting ? 'wait' : 'pointer', fontSize: 12, fontWeight: 600 }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', background: '#f3f2fb', color: '#5b52ad', border: '1px solid #cbc7ee', borderRadius: 7, cursor: suggesting ? 'wait' : 'pointer', fontSize: 12, fontWeight: 600 }}
             >
-              {suggesting ? <Spinner size={12} color="#7c3aed" /> : <Sparkles size={12} />}
+              {suggesting ? <Spinner size={12} color="#5b52ad" /> : <Sparkles size={12} />}
               Sugerir con IA (TCC)
             </button>
           )}
@@ -168,16 +168,16 @@ function NewPlanCard({ patientId, onCreated, onError }: { patientId: string; onC
       ) : (
         <div style={{ padding: '16px 20px', background: 'var(--s50)', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {suggesting && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#f5f3ff', border: '1px solid #ede9fe', borderRadius: 9 }}>
-              <Spinner size={16} color="#7c3aed" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#f3f2fb', border: '1px solid #e4e2f6', borderRadius: 9 }}>
+              <Spinner size={16} color="#5b52ad" />
               <span style={{ fontSize: 12.5, color: 'var(--s700)' }}>La IA está proponiendo un plan TCC a partir de la historia…</span>
             </div>
           )}
           {formulation && !suggesting && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 14px', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 9 }}>
-              <Sparkles size={14} color="#7c3aed" style={{ flexShrink: 0, marginTop: 1 }} />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 14px', background: '#f3f2fb', border: '1px solid #cbc7ee', borderRadius: 9 }}>
+              <Sparkles size={14} color="#5b52ad" style={{ flexShrink: 0, marginTop: 1 }} />
               <div>
-                <p style={{ margin: '0 0 2px', fontSize: 11.5, fontWeight: 700, color: '#6d28d9' }}>Formulación TCC sugerida (revisa y edita)</p>
+                <p style={{ margin: '0 0 2px', fontSize: 11.5, fontWeight: 700, color: '#464093' }}>Formulación TCC sugerida (revisa y edita)</p>
                 <p style={{ margin: 0, fontSize: 12.5, color: 'var(--s700)', lineHeight: 1.5 }}>{formulation}</p>
               </div>
             </div>
@@ -284,7 +284,7 @@ function ActivePlanCard({ plan, onChange, onError }: { plan: TreatmentPlan; onCh
               <CheckCircle2 size={12} /> Completado
             </button>
             <button onClick={() => handleClose('ABANDONED')} disabled={saving}
-              style={{ padding: '7px 12px', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+              style={{ padding: '7px 12px', background: '#f4eedd', color: '#374151', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
               Abandonado
             </button>
             <button onClick={() => setClosing(false)}

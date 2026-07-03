@@ -48,8 +48,8 @@ export function RiskBanner({ patientId }: { patientId: string }) {
 
   if (busy) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#f5f3ff', border: '1px solid #ede9fe', borderRadius: 10 }}>
-        <Spinner size={15} color="#7c3aed" />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#f3f2fb', border: '1px solid #e4e2f6', borderRadius: 10 }}>
+        <Spinner size={15} color="#5b52ad" />
         <span style={{ fontSize: 12.5, color: 'var(--s600)' }}>Analizando señales de riesgo en la historia…</span>
       </div>
     );
@@ -82,7 +82,7 @@ export function RiskBanner({ patientId }: { patientId: string }) {
         onClick={handleAnalyze}
         style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', background: '#faf6f1', border: '1px solid var(--s200)', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--s600)' }}
       >
-        <ShieldAlert size={14} color="#7c3aed" /> Analizar riesgo con IA
+        <ShieldAlert size={14} color="#5b52ad" /> Analizar riesgo con IA
       </button>
     );
   }
