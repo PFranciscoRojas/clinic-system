@@ -134,19 +134,19 @@ Restricción: el VPS no tiene disco para `es_core_news_lg` (por eso está `sm`).
 
 ---
 
-## Fase 6 — Frontend: refactor y endurecimiento 🟡 (1–2 sesiones)
+## Fase 6 — Frontend: refactor y endurecimiento ✅ COMPLETADA (2026-07-03, PRs #121–#122; 6.3 opcional diferida)
 
-**Rama:** `refactor/settings-split`
+**Ramas:** `fix/logout-clear-drafts` (PR #121), `refactor/settings-split` (PR #122)
 
-### 6.1 Partir SettingsPage (2.262 líneas) ⬜
-- ⬜ Sub-rutas: `/settings` (perfil), `/settings/clinica` (branding/org), `/settings/integraciones` (GCal, WhatsApp, pagos), `/settings/plantillas` (registro + consentimientos), `/settings/ia`, `/settings/legal`
-- ⬜ Extraer cada tarjeta a `components/settings/`; sin cambio de comportamiento (refactor mecánico, verificar con navegación manual)
+### 6.1 Partir SettingsPage (2.286 líneas) ✅ (PR #122)
+- ✅ Sub-rutas `/settings/:section?` (react-router 6.30, parámetro opcional): cada sección deep-linkable, atrás del navegador navega entre secciones; `/settings` a secas o id oculto por rol → primera sección visible (mismo default de antes)
+- ✅ Extraídos a `components/settings/`: `primitives.tsx` (Toggle, FieldRow, FInput, FSelect, SectionCard, SaveBar, ChipBtn) + un módulo por sección (Profile, GoogleCalendarCard, Schedule, Notifications, WhatsAppCard, AI, Security+DataResetCard, ConsentTemplates, Users+TeamCard, Billing, Integrations). Split mecánico por rango de líneas, sin cambio de comportamiento; `SettingsPage.tsx` queda en 206 líneas (shell de nav)
 
-### 6.2 Mitigar PHI en localStorage ⬜
-- ⬜ Logout explícito limpia los borradores clínicos locales (el flush a servidor ya existe — forzarlo antes)
-- ⬜ Mantener drafts en expiración de sesión (protegido por 2.2); el bloqueo de pantalla (`lib/screenLock.ts`) ya cubre el equipo compartido desatendido
+### 6.2 Mitigar PHI en localStorage ✅ (PR #121)
+- ✅ `lib/clinicalDrafts.ts`: registro de flush + `clearClinicalDrafts()` (borrado por prefijo `clinical-draft*`, incluye marcadores `-serverid`; claves de UI intactas). `AuthContext.logout()`: flush con el token aún vigente → logout API → limpiar tokens → borrar drafts. RecordForm registra su tick y además hace flush en unmount (la navegación SPA no dispara pagehide)
+- ✅ Expiración de sesión (401) mantiene los drafts (protegido por 2.2); el bloqueo de pantalla cubre el equipo compartido
 
-### 6.3 (Opcional, evaluar tras beta) Refresh token a cookie httpOnly ⬜
+### 6.3 (Opcional, evaluar tras beta) Refresh token a cookie httpOnly ⬜ DIFERIDA
 Cambio de arquitectura (backend Set-Cookie + CSRF + frontend). Diferir si la beta apremia; el CSP estricto ya mitiga XSS.
 
 ---
