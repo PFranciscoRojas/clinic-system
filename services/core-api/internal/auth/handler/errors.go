@@ -34,6 +34,8 @@ var authErrors = httputil.ErrorMapper(func(err error) (int, string) {
 		return http.StatusForbidden, "no puedes desactivar tu propia cuenta"
 	case errors.Is(err, auth.ErrLastAdmin):
 		return http.StatusConflict, "no puedes eliminar al único administrador de la organización"
+	case errors.Is(err, auth.ErrSeatLimit):
+		return http.StatusConflict, "el plan no tiene asientos disponibles para otro profesional — amplía el plan para agregar más"
 	default:
 		return 0, ""
 	}

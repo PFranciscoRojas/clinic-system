@@ -427,6 +427,28 @@ func (r *Repository) CountAdminsExcluding(ctx context.Context, orgID, excludeUse
 	return count, err
 }
 
+// SeatUsage returns how many clinical seats (active PROFESSIONAL/INTERN users)
+// the org is using, its paid seat_limit, and its subscription status.
+// excludeUserID (optional) leaves one user out of the count — used when
+// changing a user's role, so someone already holding a seat keeps it.
+func (r *Repository) SeatUsage(ctx context.Context, orgID, excludeUserID string) (used, limit int, status string, err error) {
+	err = r.db.QueryRow(ctx, `
+		SELECT o.seat_limit, o.subscription_status,
+		       (SELECT COUNT(DISTINCT u.id)
+		        FROM   users u
+		        JOIN   user_roles ur ON ur.user_id = u.id AND ur.organization_id = o.id
+		        JOIN   roles ro      ON ro.id = ur.role_id AND ro.name IN ('PROFESSIONAL', 'INTERN')
+		        WHERE  u.organization_id = o.id AND u.is_active
+		          AND  ($2 = '' OR u.id::text <> $2))
+		FROM organizations o
+		WHERE o.id = $1
+	`, orgID, excludeUserID).Scan(&limit, &status, &used)
+	if err != nil {
+		return 0, 0, "", fmt.Errorf("seat usage: %w", err)
+	}
+	return used, limit, status, nil
+}
+
 // AcceptDPA stamps dpa_accepted_at for a user. Idempotent — re-accepting is a no-op.
 func (r *Repository) AcceptDPA(ctx context.Context, userID string) error {
 	_, err := r.db.Exec(ctx,

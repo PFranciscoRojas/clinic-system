@@ -53,6 +53,7 @@ func (h *Handler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.With(middleware.RequirePermission("organization:configure")).Post("/checkout", h.checkout)
 	r.With(middleware.RequirePermission("organization:configure")).Post("/reconcile", h.reconcile)
+	r.With(middleware.RequirePermission("organization:configure")).Get("/plan", h.plan)
 	return r
 }
 
@@ -134,9 +135,26 @@ func (h *Handler) platformConfig(ctx context.Context) livePlatformCfg {
 	return live
 }
 
+// clinicalSeatsUsed counts the org's active clinical staff (PROFESSIONAL and
+// INTERN) — the floor for how many seats a checkout must pay for.
+func (h *Handler) clinicalSeatsUsed(ctx context.Context, orgID string) int {
+	var used int
+	_ = h.pool.QueryRow(ctx, `
+		SELECT COUNT(DISTINCT u.id)
+		FROM   users u
+		JOIN   user_roles ur ON ur.user_id = u.id AND ur.organization_id = $1
+		JOIN   roles ro      ON ro.id = ur.role_id AND ro.name IN ('PROFESSIONAL', 'INTERN')
+		WHERE  u.organization_id = $1 AND u.is_active
+	`, orgID).Scan(&used)
+	return used
+}
+
 // POST /api/v1/billing/checkout — create a per-org subscription plan and return
 // its hosted checkout URL. Allowed even when the trial has lapsed (the gate
 // whitelists /api/v1/billing) so a blocked tenant can still subscribe.
+// The monthly amount is per clinical seat: the org chooses how many seats to
+// pay for (never fewer than its current active clinical headcount), and the
+// chosen count is stored in pending_seats until MercadoPago confirms.
 func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 	pcfg := h.platformConfig(r.Context())
 	mp := mercadopago.New(pcfg.accessToken)
@@ -146,15 +164,34 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 	}
 	claims := middleware.ClaimsFromContext(r.Context())
 
+	var body struct {
+		Seats int `json:"seats"`
+	}
+	_ = httputil.DecodeJSON(r, &body) // body is optional; default = current headcount
+
+	seats := body.Seats
+	if used := h.clinicalSeatsUsed(r.Context(), claims.OrganizationID); seats < used {
+		seats = used
+	}
+	if seats < 1 {
+		seats = 1
+	}
+	if seats > 100 {
+		seats = 100
+	}
+
 	var orgName string
 	_ = h.pool.QueryRow(r.Context(), `SELECT name FROM organizations WHERE id = $1`, claims.OrganizationID).Scan(&orgName)
 	reason := pcfg.reason
+	if seats > 1 {
+		reason += " × " + strconv.Itoa(seats) + " profesionales"
+	}
 	if orgName != "" {
-		reason = pcfg.reason + " · " + orgName
+		reason += " · " + orgName
 	}
 
 	planID, initPoint, err := mp.CreatePlan(
-		r.Context(), claims.OrganizationID, reason, pcfg.amount,
+		r.Context(), claims.OrganizationID, reason, pcfg.amount*seats,
 		h.cfg.AppBaseURL+"/billing/return",
 		h.cfg.AppBaseURL+"/api/v1/public/billing/webhook",
 	)
@@ -164,12 +201,36 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Remember the plan we sent them to (handy for support/reconciliation).
+	// Remember the plan we sent them to (handy for support/reconciliation) and
+	// the seats it was priced for.
 	_, _ = h.pool.Exec(r.Context(),
-		`UPDATE organizations SET provider_customer_id = $2, updated_at = NOW() WHERE id = $1`,
-		claims.OrganizationID, planID)
+		`UPDATE organizations SET provider_customer_id = $2, pending_seats = $3, updated_at = NOW() WHERE id = $1`,
+		claims.OrganizationID, planID, seats)
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"init_point": initPoint})
+}
+
+// GET /api/v1/billing/plan — seats and per-seat price for the billing UI.
+func (h *Handler) plan(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	pcfg := h.platformConfig(r.Context())
+
+	var status string
+	var seatLimit int
+	if err := h.pool.QueryRow(r.Context(),
+		`SELECT subscription_status, seat_limit FROM organizations WHERE id = $1`,
+		claims.OrganizationID).Scan(&status, &seatLimit); err != nil {
+		httputil.WriteError(w, http.StatusNotFound, "organización no encontrada")
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		"subscription_status": status,
+		"seat_limit":          seatLimit,
+		"seats_used":          h.clinicalSeatsUsed(r.Context(), claims.OrganizationID),
+		"per_seat_amount":     pcfg.amount,
+		"currency":            "COP",
+	})
 }
 
 // POST /api/v1/billing/webhook — MercadoPago notifications. We never trust the
@@ -277,9 +338,12 @@ func (h *Handler) applyPreapproval(ctx context.Context, pre *mercadopago.Preappr
 		if t, err := time.Parse(time.RFC3339, pre.NextPaymentDate); err == nil {
 			until = t
 		}
+		// Promote the seats the checkout was priced for into the paid limit.
 		_, _ = h.pool.Exec(ctx, `
 			UPDATE organizations
-			SET subscription_status = 'active', current_period_end = $2, updated_at = NOW()
+			SET subscription_status = 'active', current_period_end = $2,
+			    seat_limit = GREATEST(COALESCE(pending_seats, seat_limit), 1),
+			    pending_seats = NULL, updated_at = NOW()
 			WHERE id = $1`, pre.ExternalReference, until)
 	case "cancelled":
 		_, _ = h.pool.Exec(ctx, `

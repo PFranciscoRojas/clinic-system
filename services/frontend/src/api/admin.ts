@@ -72,10 +72,10 @@ export const adminApi = {
 
   listOrgs: () => api.get<AdminOrg[]>('/admin/orgs'),
 
-  activateOrg: (id: string, months: number) =>
+  activateOrg: (id: string, months: number, seats = 0) =>
     api.post<{ subscription_status: string; current_period_end: string }>(
       `/admin/orgs/${id}/activate`,
-      { months },
+      { months, seats }, // seats 0 = keep the org's current seat_limit
     ),
 
   systemHealth: () => api.get<SystemHealth>('/admin/system/health'),

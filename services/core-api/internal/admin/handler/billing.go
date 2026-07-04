@@ -82,6 +82,7 @@ func (h *Handler) activateOrg(w http.ResponseWriter, r *http.Request) {
 
 	var body struct {
 		Months int `json:"months"`
+		Seats  int `json:"seats"` // optional: paid clinical seats; 0 keeps the current limit
 	}
 	if err := httputil.DecodeJSON(r, &body); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
@@ -91,6 +92,10 @@ func (h *Handler) activateOrg(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusBadRequest, "months must be between 1 and 36")
 		return
 	}
+	if body.Seats < 0 || body.Seats > 100 {
+		httputil.WriteError(w, http.StatusBadRequest, "seats must be between 1 and 100")
+		return
+	}
 
 	var status string
 	var periodEnd time.Time
@@ -98,10 +103,11 @@ func (h *Handler) activateOrg(w http.ResponseWriter, r *http.Request) {
 		UPDATE organizations
 		SET subscription_status = 'active',
 		    current_period_end = GREATEST(COALESCE(current_period_end, NOW()), NOW()) + make_interval(months => $2),
+		    seat_limit = CASE WHEN $3 > 0 THEN $3 ELSE seat_limit END,
 		    updated_at = NOW()
 		WHERE id = $1
 		RETURNING subscription_status, current_period_end
-	`, orgID, body.Months).Scan(&status, &periodEnd)
+	`, orgID, body.Months, body.Seats).Scan(&status, &periodEnd)
 	if err != nil {
 		slog.Error("admin.activate-org", "err", err, "org", orgID)
 		httputil.WriteError(w, http.StatusNotFound, "organization not found")

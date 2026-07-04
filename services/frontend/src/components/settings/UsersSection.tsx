@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AlertCircle, Key, CheckCircle, Users, Plus } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
 import { ConfirmByTextModal } from '@/components/ui/ConfirmByTextModal';
 import { authApi } from '@/api/auth';
+import { billingApi, type PlanInfo } from '@/api/billing';
 import { SectionCard } from './primitives';
 
 const ROLES = [
@@ -167,6 +168,15 @@ export function UsersSection() {
   const [inviteExp,    setInviteExp]    = useState('');
   const [inviteLoading,setInviteLoading]= useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
+  const [inviteErr,    setInviteErr]    = useState('');
+
+  // Seat usage (paid plans): shown so the admin knows how many professionals
+  // the plan still allows before generating invites that will be rejected.
+  const [plan, setPlan] = useState<PlanInfo | null>(null);
+  useEffect(() => {
+    if (!isAdmin) return;
+    billingApi.plan().then(setPlan).catch(() => {});
+  }, [isAdmin]);
 
   const [resetEmail,   setResetEmail]   = useState('');
   const [resetPwd,     setResetPwd]     = useState('');
@@ -175,14 +185,14 @@ export function UsersSection() {
   const [resetErr,     setResetErr]     = useState('');
 
   const handleGenerateInvite = async () => {
-    setInviteLoading(true); setInviteCode(''); setInviteCopied(false);
+    setInviteLoading(true); setInviteCode(''); setInviteCopied(false); setInviteErr('');
     try {
       const { authApi } = await import('@/api/auth');
       const res = await authApi.invite(roleName);
       setInviteCode(res.invite_code);
       setInviteExp(new Date(res.expires_at).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }));
-    } catch {
-      setInviteCode('ERROR');
+    } catch (ex) {
+      setInviteErr(ex instanceof Error && ex.message ? ex.message : 'No se pudo generar la invitación.');
     } finally {
       setInviteLoading(false);
     }
@@ -216,6 +226,9 @@ export function UsersSection() {
         <div style={{ padding: '12px 0' }}>
           <div style={{ fontSize: 13, color: 'var(--s500)', marginBottom: 14, lineHeight: 1.6 }}>
             Genera un código de invitación de un solo uso (válido 48 horas). El nuevo usuario lo ingresa en la pantalla de registro.
+            {plan && plan.subscription_status === 'active' && (
+              <> Asientos de profesional: <strong>{plan.seats_used} de {plan.seat_limit}</strong> en uso.</>
+            )}
           </div>
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 12, color: 'var(--s500)', marginBottom: 6, fontWeight: 500 }}>Rol a asignar</div>
@@ -233,12 +246,18 @@ export function UsersSection() {
           <button onClick={handleGenerateInvite} disabled={inviteLoading} style={{
             display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none',
             background: inviteLoading ? 'var(--s200)' : '#0ea5e9', color: inviteLoading ? 'var(--s400)' : '#fff',
-            fontSize: 13, fontWeight: 700, cursor: inviteLoading ? 'not-allowed' : 'pointer', marginBottom: inviteCode ? 14 : 0,
+            fontSize: 13, fontWeight: 700, cursor: inviteLoading ? 'not-allowed' : 'pointer', marginBottom: inviteCode || inviteErr ? 14 : 0,
           }}>
             {inviteLoading
               ? <><span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: 99, animation: 'spin .7s linear infinite', display: 'inline-block' }} />Generando…</>
               : <><Plus size={14} />Generar código de invitación</>}
           </button>
+
+          {inviteErr && (
+            <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: 10, fontSize: 12.5, color: '#dc2626' }}>
+              {inviteErr}
+            </div>
+          )}
 
           {inviteCode && inviteCode !== 'ERROR' && (
             <div style={{ padding: '14px 16px', background: '#f0f9ff', border: '1.5px solid #7dd3fc', borderRadius: 11 }}>

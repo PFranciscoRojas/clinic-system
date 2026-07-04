@@ -529,7 +529,7 @@ function TenantsTab() {
 
   const invalidate = () => { setBusyId(null); qc.invalidateQueries({ queryKey: ['admin-orgs'] }); };
 
-  const activate    = useMutation({ mutationFn: ({ id, months }: { id: string; months: number }) => adminApi.activateOrg(id, months), onSettled: invalidate });
+  const activate    = useMutation({ mutationFn: ({ id, months, seats }: { id: string; months: number; seats: number }) => adminApi.activateOrg(id, months, seats), onSettled: invalidate });
   const suspend     = useMutation({ mutationFn: (id: string) => adminApi.suspendOrg(id), onSettled: invalidate });
   const cancel      = useMutation({ mutationFn: (id: string) => adminApi.cancelOrg(id), onSettled: invalidate });
   const extendTrial = useMutation({ mutationFn: ({ id, days }: { id: string; days: number }) => adminApi.extendTrial(id, days), onSettled: invalidate });
@@ -539,7 +539,13 @@ function TenantsTab() {
     if (!input) return;
     const months = parseInt(input, 10);
     if (!Number.isInteger(months) || months < 1 || months > 36) { alert('Ingresa entre 1 y 36.'); return; }
-    setBusyId(o.id); activate.mutate({ id: o.id, months });
+    const seatsInput = window.prompt('¿Asientos de profesional? (vacío = sin cambio)', '');
+    let seats = 0;
+    if (seatsInput) {
+      seats = parseInt(seatsInput, 10);
+      if (!Number.isInteger(seats) || seats < 1 || seats > 100) { alert('Ingresa entre 1 y 100 (o deja vacío).'); return; }
+    }
+    setBusyId(o.id); activate.mutate({ id: o.id, months, seats });
   };
   const handleSuspend = (o: AdminOrg) => {
     if (!window.confirm(`¿Suspender "${o.name}"? Los usuarios no podrán ingresar hasta que se reactiven.`)) return;
@@ -949,7 +955,7 @@ function PlataformaTab() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--s500)', display: 'block', marginBottom: 4 }}>Precio mensual (COP)</label>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--s500)', display: 'block', marginBottom: 4 }}>Precio mensual por profesional (COP)</label>
                 <input
                   type="number"
                   value={amount}

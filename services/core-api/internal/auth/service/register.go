@@ -37,6 +37,13 @@ func (s *Service) Register(ctx context.Context, inviteCode, email, password, dis
 		return nil, auth.ErrEmailAlreadyExists
 	}
 
+	// Guard: the seat may have been filled between invite generation and
+	// redemption. Restore the invite so it's usable once a seat frees up.
+	if err := s.ensureSeatAvailable(ctx, payload.OrgID, payload.RoleName, ""); err != nil {
+		s.rdb.Set(ctx, inviteKey, raw, inviteTTL)
+		return nil, err
+	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, fmt.Errorf("hashing password: %w", err)
