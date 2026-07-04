@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"sghcp/core-api/internal/auth"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
 )
@@ -89,6 +90,23 @@ func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"items": users})
+}
+
+// GET /api/v1/users/professionals — the org's active clinical staff for
+// scheduling selectors. Gated by appointments:read (not users:read) so
+// receptionists and professionals can assign a colleague when booking.
+func (h *Handler) listProfessionals(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	items, err := h.svc.ListOrgProfessionals(r.Context(), claims.OrganizationID)
+	if err != nil {
+		slog.Error("auth.list-professionals", "err", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "could not list professionals")
+		return
+	}
+	if items == nil {
+		items = []auth.OrgProfessional{}
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
 // DELETE /api/v1/users/{user_id} — soft-deactivates a team member.

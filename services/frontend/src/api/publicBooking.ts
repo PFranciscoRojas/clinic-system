@@ -11,20 +11,33 @@ export interface OrgInfo {
   website: string;
 }
 
+export interface PublicProfessional {
+  staff_id: string;
+  name: string;
+}
+
 // Public booking API — no auth. Used by /book/:slug.
 export const publicBookingApi = {
   orgInfo: (slug: string) =>
     api.get<OrgInfo>(`/public/org?org_slug=${encodeURIComponent(slug)}`),
 
-  availability: (slug: string, modality: string, from: string, to: string) =>
+  // Active professionals of the clinic — the wizard shows a picker when
+  // there's more than one; with exactly one, the picker step is skipped.
+  professionals: (slug: string) =>
+    api.get<{ professionals: PublicProfessional[] }>(
+      `/public/org/professionals?org_slug=${encodeURIComponent(slug)}`,
+    ),
+
+  availability: (slug: string, modality: string, from: string, to: string, staffId?: string) =>
     api.get<{ days: DayAvailability[] }>(
-      `/public/availability?org_slug=${encodeURIComponent(slug)}&modality=${modality}&from=${from}&to=${to}`,
+      `/public/availability?org_slug=${encodeURIComponent(slug)}&modality=${modality}&from=${from}&to=${to}`
+      + (staffId ? `&staff_id=${encodeURIComponent(staffId)}` : ''),
     ),
 
   // Holds the slot and returns a MercadoPago checkout URL + a summary to show
   // before redirecting to pay. prev_booking_id releases a hold created earlier
   // in the same wizard session (so editing the summary and re-submitting works).
-  checkout: (body: { org_slug: string; modality: string; date: string; time: string; name: string; email: string; phone: string; policy_accepted: boolean; prev_booking_id?: string }) =>
+  checkout: (body: { org_slug: string; staff_id?: string; modality: string; date: string; time: string; name: string; email: string; phone: string; policy_accepted: boolean; prev_booking_id?: string }) =>
     api.post<{ init_point: string; booking_id: string; summary: { date: string; time: string; modality: string; amount: number; currency: string } }>(
       '/public/pay/checkout', body,
     ),

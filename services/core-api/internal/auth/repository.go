@@ -35,6 +35,7 @@ type Repository interface {
 
 	// Team management.
 	ListOrgUsers(ctx context.Context, orgID string) ([]OrgUser, error)
+	ListOrgProfessionals(ctx context.Context, orgID string) ([]OrgProfessional, error)
 	ReplaceUserRole(ctx context.Context, orgID, targetUserID, newRoleID, callerUserID string) error
 	DeactivateUser(ctx context.Context, orgID, targetUserID string) (int64, error)
 	ReactivateUser(ctx context.Context, orgID, targetUserID, roleID, callerUserID string) error

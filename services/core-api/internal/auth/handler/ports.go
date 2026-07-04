@@ -36,6 +36,7 @@ type svcPort interface {
 
 	// Team management.
 	ListOrgUsers(ctx context.Context, orgID string) ([]auth.OrgUser, error)
+	ListOrgProfessionals(ctx context.Context, orgID string) ([]auth.OrgProfessional, error)
 	ChangeUserRole(ctx context.Context, orgID, callerUserID, targetUserID, roleName string) error
 	DeactivateUser(ctx context.Context, orgID, callerUserID, targetUserID string) error
 	ReactivateUser(ctx context.Context, orgID, callerUserID, targetUserID, roleName string) error

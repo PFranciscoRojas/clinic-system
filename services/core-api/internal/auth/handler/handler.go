@@ -27,6 +27,8 @@ func (h *Handler) UserRoutes(jwtSecret []byte) chi.Router {
 	r := chi.NewRouter()
 	r.Use(middleware.RequireAuth(jwtSecret))
 	r.With(middleware.RequirePermission("users:read")).Get("/", h.listUsers)
+	// Scheduling read model — broader gate on purpose (see listProfessionals).
+	r.With(middleware.RequirePermission("appointments:read")).Get("/professionals", h.listProfessionals)
 	r.With(middleware.RequirePermission("users:update")).Patch("/{user_id}/role", h.changeUserRole)
 	r.With(middleware.RequirePermission("users:deactivate")).Delete("/{user_id}", h.deactivateUser)
 	r.With(middleware.RequirePermission("users:deactivate")).Post("/{user_id}/reactivate", h.reactivateUser)

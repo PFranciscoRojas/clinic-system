@@ -220,6 +220,7 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		OrgSlug        string `json:"org_slug"`
+		StaffID        string `json:"staff_id"` // professional picked in multi-professional orgs (empty = the org's first)
 		Modality       string `json:"modality"`
 		Date           string `json:"date"` // YYYY-MM-DD
 		Time           string `json:"time"` // HH:MM
@@ -247,7 +248,7 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 		modality = "IN_PERSON"
 	}
 
-	prof, err := h.resolver.ResolveBySlug(r.Context(), body.OrgSlug)
+	prof, err := h.resolver.ResolveBySlug(r.Context(), body.OrgSlug, body.StaffID)
 	if errors.Is(err, availability.ErrNotFound) {
 		httputil.WriteError(w, http.StatusNotFound, "consultorio no encontrado")
 		return

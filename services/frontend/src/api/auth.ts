@@ -84,6 +84,11 @@ export const authApi = {
 
   listOrgUsers: () =>
     api.get<{ items: OrgUser[] }>('/users'),
+  // Active clinical staff (PROFESSIONAL/INTERN) for scheduling selectors.
+  // Gated by appointments:read, so receptionists can use it (listOrgUsers
+  // requires users:read and is CLINIC_ADMIN-only).
+  listProfessionals: () =>
+    api.get<{ items: OrgProfessional[] }>('/users/professionals'),
   changeUserRole: (user_id: string, role_name: string) =>
     api.patch<void>(`/users/${user_id}/role`, { role_name }),
   deactivateUser: (user_id: string) =>
@@ -105,4 +110,13 @@ export interface OrgUser {
   role_name: string;
   is_active: boolean;
   last_login_at: string | null;
+}
+
+export interface OrgProfessional {
+  id: string;
+  name: string;
+  role_name: string;
+  // ScheduleConfig-shaped JSON from professional_profiles.working_hours
+  // ({} when the professional hasn't configured a schedule yet).
+  working_hours: Record<string, unknown>;
 }
