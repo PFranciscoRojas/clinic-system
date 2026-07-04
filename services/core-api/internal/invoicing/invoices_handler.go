@@ -29,6 +29,7 @@ func (h *Handler) InvoiceRoutes() chi.Router {
 	r.With(middleware.RequirePermission("billing:read")).Get("/{invoice_id}/receipt", h.receipt)
 	r.With(middleware.RequirePermission("billing:read")).Post("/{invoice_id}/send", h.sendReceipt)
 	r.With(middleware.RequirePermission("billing:create")).Post("/", h.createInvoice)
+	r.With(middleware.RequirePermission("billing:create")).Post("/from-booking", h.createFromBooking)
 	r.With(middleware.RequirePermission("billing:create")).Post("/{invoice_id}/issue", h.issueInvoice)
 	r.With(middleware.RequirePermission("billing:create")).Post("/{invoice_id}/cancel", h.cancelInvoice)
 	r.With(middleware.RequirePermission("billing:create")).Post("/send-reminders", h.sendReminders)
@@ -54,6 +55,8 @@ type BookingPayment struct {
 	HoldExpiresAt  *time.Time `json:"hold_expires_at"`
 	PaidAt         *time.Time `json:"paid_at"`
 	AppointmentID  *string    `json:"appointment_id"`
+	InvoiceID      *string    `json:"invoice_id"`
+	InvoiceNumber  *int       `json:"invoice_number"`
 }
 
 // GET /invoices/bookings — list booking payments (PAID and active PENDING_PAYMENT holds).
@@ -191,6 +194,27 @@ func (h *Handler) createInvoice(w http.ResponseWriter, r *http.Request) {
 		Currency: body.Currency, Subtotal: body.Subtotal, Discount: body.Discount,
 		InsuranceCovered: body.InsuranceCovered, Notes: body.Notes, DueAt: dueAt,
 	})
+	if err != nil {
+		h.writeErr(w, err)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusCreated, inv)
+}
+
+// POST /invoices/from-booking — turn a paid public booking into a PAID invoice
+// for the given patient, so the clinic can hand out its own receipt even though
+// MercadoPago collected the money.
+func (h *Handler) createFromBooking(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	var body struct {
+		BookingID string `json:"booking_id"`
+		PatientID string `json:"patient_id"`
+	}
+	if err := httputil.DecodeJSON(r, &body); err != nil || body.BookingID == "" || body.PatientID == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "booking_id y patient_id son obligatorios")
+		return
+	}
+	inv, err := h.svc.CreateFromBooking(r.Context(), claims.OrganizationID, claims.UserID, body.BookingID, body.PatientID)
 	if err != nil {
 		h.writeErr(w, err)
 		return

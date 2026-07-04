@@ -269,6 +269,81 @@ func (s *Service) RecordPayment(ctx context.Context, orgID, userID, invoiceID st
 	return toInvoiceSummary(inv), nil
 }
 
+// CreateFromBooking turns a paid public booking into an already-PAID invoice
+// for the given patient: create → claim the booking (one invoice per booking)
+// → issue (consecutive number) → auto-record the MercadoPago payment with the
+// real method and the MP payment id as reference. From there the existing
+// receipt PDF / email flow works unchanged.
+func (s *Service) CreateFromBooking(ctx context.Context, orgID, userID, bookingID, patientID string) (Invoice, error) {
+	b, err := s.repo.GetBookingForInvoice(ctx, orgID, bookingID)
+	if err != nil {
+		return Invoice{}, err
+	}
+	if b.Status != "PAID" {
+		return Invoice{}, fmt.Errorf("%w: la reserva no está pagada", ErrInvalidInput)
+	}
+	if b.InvoiceID != nil {
+		return Invoice{}, fmt.Errorf("%w: la reserva ya tiene factura", ErrInvalidInput)
+	}
+
+	inv, err := s.CreateInvoice(ctx, orgID, userID, InvoiceInput{
+		PatientID:     patientID,
+		AppointmentID: b.AppointmentID,
+		Currency:      b.Currency,
+		Subtotal:      strconv.Itoa(b.Amount),
+		Notes:         fmt.Sprintf("Reserva en línea R-%06d pagada por MercadoPago", b.BookingNumber),
+	})
+	if err != nil {
+		return Invoice{}, err
+	}
+
+	claimed, err := s.repo.ClaimBookingInvoice(ctx, orgID, bookingID, inv.ID)
+	if err != nil {
+		return Invoice{}, err
+	}
+	if !claimed {
+		// Lost a race (or the booking changed underneath): drop the fresh draft —
+		// it never consumed a consecutive number — and report the conflict.
+		_, _ = s.CancelInvoice(ctx, orgID, inv.ID)
+		return Invoice{}, fmt.Errorf("%w: la reserva ya tiene factura", ErrInvalidInput)
+	}
+
+	if inv, err = s.IssueInvoice(ctx, orgID, inv.ID, nil); err != nil {
+		return Invoice{}, err
+	}
+
+	reference := ""
+	if b.MpPaymentID != "" {
+		reference = "MercadoPago " + b.MpPaymentID
+	}
+	return s.RecordPayment(ctx, orgID, userID, inv.ID, PaymentInput{
+		Amount:        strconv.Itoa(b.Amount),
+		PaymentMethod: mapMPMethod(b.PaymentType, b.PaymentMethod),
+		Reference:     reference,
+		PaidAt:        b.PaidAt,
+	})
+}
+
+// mapMPMethod folds MercadoPago's payment type/brand pair onto our enum.
+// pType is the family (credit_card | debit_card | bank_transfer | ticket |
+// account_money); pMethod the brand (visa | pse | efecty | nequi | …).
+func mapMPMethod(pType, pMethod string) string {
+	switch {
+	case strings.Contains(pMethod, "nequi"):
+		return "NEQUI"
+	case pMethod == "pse" || pType == "bank_transfer":
+		return "PSE"
+	case pType == "credit_card":
+		return "CREDIT_CARD"
+	case pType == "debit_card":
+		return "DEBIT_CARD"
+	case pType == "ticket": // Efecty and other cash vouchers
+		return "CASH"
+	default:
+		return "OTHER"
+	}
+}
+
 // ── helpers ─────────────────────────────────────────────────────────────────
 
 func (s *Service) newDEK(ctx context.Context) (dek []byte, dekID string, err error) {

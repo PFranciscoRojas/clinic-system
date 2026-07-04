@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/lib/useMediaQuery';
-import { useQuery } from '@tanstack/react-query';
-import { Receipt, Wallet, Clock, SearchX, ArrowUp, ArrowDown, Globe, HandCoins, FileText, BarChart3, AlertTriangle, Download, Send, CheckCircle, AlertCircle, Users } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Receipt, Wallet, Clock, SearchX, ArrowUp, ArrowDown, Globe, HandCoins, FileText, BarChart3, AlertTriangle, Download, Send, CheckCircle, AlertCircle, Users, Plus } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
 import { InvoiceDetailModal } from '@/components/billing/InvoiceDetailModal';
+import { NewInvoiceModal, BookingInvoiceModal } from '@/components/billing/NewInvoiceModal';
 import {
   invoicesApi, formatMoney, invoiceLabel,
   INVOICE_STATUS_META, type Invoice, type InvoiceStatus,
@@ -116,7 +118,9 @@ const fmtDateTime = (s?: string | null) => s
   ? new Date(s).toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   : '—';
 
-function BookingDetailModal({ booking, onClose }: { booking: BookingPayment; onClose: () => void }) {
+function BookingDetailModal({ booking, onClose, onGenerateInvoice }: {
+  booking: BookingPayment; onClose: () => void; onGenerateInvoice?: () => void;
+}) {
   const paid = booking.status === 'PAID';
   const row = (label: string, value: React.ReactNode) => value ? (
     <div style={{ display: 'flex', gap: 8, padding: '9px 0', borderBottom: '1px solid var(--s100)' }}>
@@ -150,6 +154,19 @@ function BookingDetailModal({ booking, onClose }: { booking: BookingPayment; onC
           <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12.5, userSelect: 'all' }}>{booking.mp_payment_id}</span>
         )}
         {booking.voucher_url && row('Comprobante', <a href={booking.voucher_url} target="_blank" rel="noreferrer" style={{ color: '#0ea5e9', fontWeight: 600 }}>Ver comprobante →</a>)}
+        {booking.invoice_number != null && row('Factura Chapni',
+          <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, color: '#065f46' }}>F-{String(booking.invoice_number).padStart(6, '0')}</span>)}
+        {onGenerateInvoice && (
+          <div style={{ marginTop: 16 }}>
+            <button onClick={onGenerateInvoice} style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none',
+              background: '#10b981', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+            }}><FileText size={14} /> Generar factura Chapni</button>
+            <div style={{ fontSize: 11.5, color: 'var(--s400)', marginTop: 6, lineHeight: 1.5 }}>
+              Crea una factura pagada con consecutivo para entregar el comprobante del consultorio (reembolsos, soporte formal).
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -157,11 +174,23 @@ function BookingDetailModal({ booking, onClose }: { booking: BookingPayment; onC
 
 // ── Facturas tab ──────────────────────────────────────────────────────────────
 function FacturasTab({ period }: { period: BillingPeriod }) {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const canCreate = (user?.permissions ?? []).includes('billing:create');
+
   const [filter, setFilter]               = useState('');
   const [selected, setSelected]           = useState<Invoice | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<BookingPayment | null>(null);
+  const [showNew, setShowNew]             = useState(false);
+  const [invoicing, setInvoicing]         = useState<BookingPayment | null>(null);
   const [sortField, setSortField]         = useState<SortField>('date');
   const [sortDir, setSortDir]             = useState<SortDir>('desc');
+
+  const reloadAll = () => {
+    qc.invalidateQueries({ queryKey: ['invoices-all'] });
+    qc.invalidateQueries({ queryKey: ['bookings-revenue'] });
+    qc.invalidateQueries({ queryKey: ['billing-overview'] });
+  };
 
   const isPendingFilter = filter === 'PENDING_PAYMENT';
 
@@ -267,6 +296,12 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
           border: '1.5px solid var(--s200)', background: '#fff', color: !empty ? 'var(--s600)' : 'var(--s300)',
           fontSize: 12.5, fontWeight: 600, cursor: !empty ? 'pointer' : 'not-allowed',
         }}><Download size={13} /> Exportar CSV</button>
+        {canCreate && (
+          <button onClick={() => setShowNew(true)} style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8,
+            border: 'none', background: '#10b981', color: '#fff', fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+          }}><Plus size={14} /> Nueva factura</button>
+        )}
       </div>
 
       <div style={{ background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, overflow: 'hidden' }}>
@@ -334,6 +369,11 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
                       <span style={{ marginLeft: 6, padding: '1px 5px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#e0f2fe', color: '#0369a1' }}>
                         Online
                       </span>
+                      {b.invoice_number != null && (
+                        <span title="Factura generada" style={{ marginLeft: 6, padding: '1px 5px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#d1fae5', color: '#065f46', fontFamily: "'DM Mono', monospace" }}>
+                          F-{String(b.invoice_number).padStart(6, '0')}
+                        </span>
+                      )}
                     </td>
                     <td style={{ padding: '12px 16px' }}>
                       <span style={{ fontWeight: 600, color: 'var(--s800)' }}>{b.guest_name || '—'}</span>
@@ -374,7 +414,20 @@ function FacturasTab({ period }: { period: BillingPeriod }) {
       </div>
 
       {selected && <InvoiceDetailModal summary={selected} onClose={() => setSelected(null)} onChange={() => refetch()} />}
-      {selectedBooking && <BookingDetailModal booking={selectedBooking} onClose={() => setSelectedBooking(null)} />}
+      {selectedBooking && (
+        <BookingDetailModal booking={selectedBooking} onClose={() => setSelectedBooking(null)}
+          onGenerateInvoice={canCreate && selectedBooking.status === 'PAID' && !selectedBooking.invoice_id
+            ? () => { setInvoicing(selectedBooking); setSelectedBooking(null); }
+            : undefined} />
+      )}
+      {showNew && (
+        <NewInvoiceModal onClose={() => setShowNew(false)}
+          onCreated={() => { setShowNew(false); reloadAll(); }} />
+      )}
+      {invoicing && (
+        <BookingInvoiceModal booking={invoicing} onClose={() => setInvoicing(null)}
+          onCreated={inv => { setInvoicing(null); reloadAll(); setSelected(inv); }} />
+      )}
     </div>
   );
 }
