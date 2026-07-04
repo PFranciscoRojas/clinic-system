@@ -1123,7 +1123,10 @@ export function AppointmentPage() {
                       templateId={aiTemplateId}
                       sessionDate={apptDate}
                       processing={processingAudio}
-                      linkedRecordId={finalizedRecords[0]?.id}
+                      // The comparison view finalizes THIS record, so it must be
+                      // the in-progress autosave draft (status DRAFT) — finalizing
+                      // an already-finalized note is rejected by the backend.
+                      linkedRecordId={autosaveDraft?.id}
                       onDraftCreated={handleDraftCreated}
                     />
                   )}
