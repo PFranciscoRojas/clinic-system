@@ -23,6 +23,7 @@ import (
 	diagnoseshandler "sghcp/core-api/internal/diagnoses/handler"
 	invoicinghandler "sghcp/core-api/internal/invoicing"
 	legalhandler "sghcp/core-api/internal/legal"
+	"sghcp/core-api/internal/notifications"
 	"sghcp/core-api/internal/notify"
 	"sghcp/core-api/internal/orgs"
 	patientshandler "sghcp/core-api/internal/patients/handler"
@@ -81,8 +82,12 @@ func (a *app) buildRouter() http.Handler {
 		r.Mount("/api/v1/public/org", availabilityH.InfoRoutes())
 	})
 
+	// In-app notification inbox (the topbar bell). Shared: background emitters
+	// (booking, patients, AI drafts) write to it; the mounted routes read it.
+	notif := notifications.New(a.pool)
+
 	// Paid booking: checkout (rate-limited) + MercadoPago webhook.
-	bookingPayH := bookinghandler.New(a.pool, a.km, notifier, a.wa, a.cfg)
+	bookingPayH := bookinghandler.New(a.pool, a.km, notifier, a.wa, a.cfg, notif)
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RateLimit(15, time.Minute))
 		r.Mount("/api/v1/public/pay", bookingPayH.PublicRoutes())
@@ -116,7 +121,8 @@ func (a *app) buildRouter() http.Handler {
 		// the operator console stay open; SYSTEM_ADMIN is never gated).
 		r.Use(middleware.SubscriptionGate(a.pool))
 
-		r.Mount("/api/v1/patients", patientshandler.New(a.pool, a.km).Routes())
+		r.Mount("/api/v1/patients", patientshandler.New(a.pool, a.km, notif).Routes())
+		r.Mount("/api/v1/notifications", notif.Routes())
 		r.Mount("/api/v1/appointments", apptshandler.New(a.pool, a.gcal).Routes())
 
 		// Shared so approving a clinical record can refresh the patient's AI

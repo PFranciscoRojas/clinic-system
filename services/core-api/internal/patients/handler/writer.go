@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"sghcp/core-api/internal/notifications"
 	patientssvc "sghcp/core-api/internal/patients/service"
 	"sghcp/core-api/internal/shared/hash"
 	"sghcp/core-api/internal/shared/httputil"
@@ -70,6 +71,20 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+
+	// Tell the clinic's admins a record was created. No PII in the copy — the
+	// name lives (encrypted) behind the patient page the link opens.
+	if h.notif != nil {
+		h.notif.EmitOrgAdmins(
+			claims.OrganizationID,
+			notifications.KindNewPatient,
+			"Nuevo paciente registrado",
+			"Se creó un nuevo expediente en tu clínica.",
+			"/patients/"+id,
+			claims.UserID, // the creator doesn't need to be told about their own action
+		)
+	}
+
 	httputil.WriteJSON(w, http.StatusCreated, map[string]string{"id": id})
 }
 

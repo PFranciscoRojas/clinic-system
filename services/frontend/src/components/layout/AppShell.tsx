@@ -19,6 +19,7 @@ import { legalApi } from '@/api/legal';
 import { Markdown } from '@/components/common/Markdown';
 import { hasPendingUpdate, onSwUpdate, reloadNow } from '@/lib/swUpdate';
 import { AIDraftIndicator } from '@/components/clinical/AIDraftIndicator';
+import { NotificationBell } from '@/components/layout/NotificationBell';
 
 // Facturación is shown to CLINIC_ADMIN (billing:reports) — see the conditional
 // nav entry below.
@@ -482,6 +483,10 @@ export function AppShell({ children }: Props) {
 
             {/* Way back to an AI draft still generating (or failed) — Punto 3 */}
             <AIDraftIndicator />
+
+            {/* In-app notification inbox — not for SYSTEM_ADMIN (operator org
+                has no clinical/booking activity of its own). */}
+            {!user?.roles?.includes('SYSTEM_ADMIN') && <NotificationBell />}
 
             {/* Nueva Cita — not shown to SYSTEM_ADMIN who has no appointments */}
             {!user?.roles?.includes('SYSTEM_ADMIN') && <Link to="/appointments/new" style={{

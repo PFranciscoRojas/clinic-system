@@ -194,7 +194,8 @@ class AIWorker:
         assert self._db is not None
         row = await self._db.fetchrow(
             """
-            SELECT d.patient_id, d.dek_id, k.encrypted_dek, k.key_source
+            SELECT d.patient_id, d.dek_id, d.organization_id, d.requested_by,
+                   k.encrypted_dek, k.key_source
             FROM ai_drafts d
             JOIN encryption_keys k ON k.id = d.dek_id
             WHERE d.id = $1
@@ -250,6 +251,19 @@ class AIWorker:
             draft_content_enc,
         )
 
+        # Notify the professional who requested the draft that it's ready to
+        # review (the topbar bell). The notifications table is not encrypted, so
+        # the copy stays generic — the clinical detail loads under RLS via the
+        # link. Wrapped so a notification failure never fails the draft job.
+        try:
+            await self._notify_draft_ready(
+                str(row["organization_id"]),
+                str(row["requested_by"]),
+                draft_id,
+            )
+        except Exception as exc:  # noqa: BLE001 — best-effort, never break the job
+            logger.warning("draft-ready notification failed", extra={"draft_id": draft_id, "err": str(exc)})
+
         # Delete audio file — it has been transcribed and the text is now
         # stored encrypted. Keeping the raw audio indefinitely is both a
         # privacy risk (PHI) and a disk space problem.
@@ -258,6 +272,32 @@ class AIWorker:
             logger.info("audio deleted after transcription", extra={"audio_path": audio_path})
         except OSError as exc:
             logger.warning("could not delete audio file", extra={"audio_path": audio_path, "err": str(exc)})
+
+    async def _notify_draft_ready(self, org_id: str, recipient_user_id: str, draft_id: str) -> None:
+        """Insert an in-app notification (topbar bell) telling the requesting
+        professional their AI draft is ready to review. Runs in a transaction
+        that pins the org's RLS scope, so the INSERT satisfies the
+        notifications tenant_isolation policy regardless of the DB role."""
+        assert self._db is not None
+        async with self._db.acquire() as conn:
+            async with conn.transaction():
+                # `true` = local: the GUC is scoped to this transaction only.
+                await conn.execute(
+                    "SELECT set_config('app.current_org', $1, true)", org_id
+                )
+                await conn.execute(
+                    """
+                    INSERT INTO notifications
+                        (organization_id, recipient_user_id, kind, title, body, link)
+                    VALUES ($1, $2, 'AI_DRAFT_READY',
+                            'Borrador de IA listo',
+                            'El sistema generó un borrador clínico. Revísalo y apruébalo.',
+                            $3)
+                    """,
+                    org_id,
+                    recipient_user_id,
+                    f"/ai-drafts/{draft_id}",
+                )
 
     async def _process_suggestion(self, suggestion_id: str, org_id: str, patient_id: str, kind: str, approach: str = "") -> None:
         assert self._db is not None
