@@ -8,12 +8,13 @@ import {
 } from 'lucide-react';
 import { appointmentsApi, type Appointment } from '@/api/appointments';
 import { ApiError } from '@/api/client';
+import { authApi, type OrgProfessional } from '@/api/auth';
 import { patientsApi, type Patient } from '@/api/patients';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
 import { useIsCompact, useIsMobile } from '@/lib/useMediaQuery';
 import { SlotPicker } from '@/components/appointments/SlotPicker';
-import { loadSchedule, timeSlotsFor, SLOT_STEP_MIN } from '@/lib/schedule';
+import { loadSchedule, timeSlotsFor, DEFAULT_SCHEDULE, SLOT_STEP_MIN, type ScheduleConfig } from '@/lib/schedule';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -213,7 +214,7 @@ function NowIndicator({ startH, endH }: { startH: number; endH: number }) {
 
 // ── AppBlock ──────────────────────────────────────────────────────────────────
 
-function AppBlock({ appt, onClick, startH, totalH }: { appt: Appointment; onClick: (a: Appointment) => void; startH: number; totalH: number }) {
+function AppBlock({ appt, staffName, onClick, startH, totalH }: { appt: Appointment; staffName?: string; onClick: (a: Appointment) => void; startH: number; totalH: number }) {
   const { data: patient } = usePatient(appt.patient_id);
   const mc      = MC[appt.modality] ?? MC.IN_PERSON;
   const inProg  = isInProgress(appt);
@@ -297,8 +298,8 @@ function AppBlock({ appt, onClick, startH, totalH }: { appt: Appointment; onClic
             <span style={{ fontSize: 12.5, fontWeight: 700, color: nmClr, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: done ? 'line-through' : 'none' }}>{name}</span>
           </div>
           {clampedH >= 54 && (
-            <div style={{ fontSize: 11, color: done ? 'var(--s400)' : 'var(--s500)', marginTop: 3 }}>
-              {appt.modality === 'IN_PERSON' ? 'Presencial' : appt.modality === 'VIRTUAL' ? 'Virtual' : 'Híbrida'} · {appt.duration_min} min
+            <div style={{ fontSize: 11, color: done ? 'var(--s400)' : 'var(--s500)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {appt.modality === 'IN_PERSON' ? 'Presencial' : appt.modality === 'VIRTUAL' ? 'Virtual' : 'Híbrida'} · {appt.duration_min} min{staffName ? ` · ${staffName}` : ''}
             </div>
           )}
         </div>
@@ -309,10 +310,9 @@ function AppBlock({ appt, onClick, startH, totalH }: { appt: Appointment; onClic
 
 // ── DetailPanel ───────────────────────────────────────────────────────────────
 
-function DetailPanel({ appt, panelRef, onClose }: { appt: Appointment; panelRef: React.RefObject<HTMLDivElement>; onClose: () => void }) {
+function DetailPanel({ appt, staffName, panelRef, onClose }: { appt: Appointment; staffName?: string; panelRef: React.RefObject<HTMLDivElement>; onClose: () => void }) {
   const navigate = useNavigate();
   const qc       = useQueryClient();
-  const { user } = useAuth();
   const { data: patient } = usePatient(appt.patient_id);
   const mc          = MC[appt.modality] ?? MC.IN_PERSON;
   const inProg      = isInProgress(appt);
@@ -363,7 +363,9 @@ function DetailPanel({ appt, panelRef, onClose }: { appt: Appointment; panelRef:
       await appointmentsApi.create({
         patient_id:   appt.patient_id || undefined,
         guest_name:   !appt.patient_id ? (appt.guest_name ?? undefined) : undefined,
-        staff_id:     user!.user_id,
+        // Keep the original professional — an admin/receptionist rescheduling
+        // a colleague's appointment must not reassign it to themselves.
+        staff_id:     appt.staff_id,
         scheduled_at: `${date}T${time}:00${tzOff()}`,
         duration_min: appt.duration_min,
         modality:     appt.modality,
@@ -419,6 +421,12 @@ function DetailPanel({ appt, panelRef, onClose }: { appt: Appointment; panelRef:
           <Clock size={13} color="var(--s400)" />
           <span style={{ fontSize: 13, color: 'var(--s600)' }}>{t0} – {t1} ({appt.duration_min} min)</span>
         </div>
+        {staffName && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+            <User size={13} color="var(--s400)" />
+            <span style={{ fontSize: 13, color: 'var(--s600)' }}>{staffName}</span>
+          </div>
+        )}
       </div>
 
       {/* Actions */}
@@ -641,7 +649,7 @@ function DaySummary({ appts, selected }: { appts: Appointment[]; selected: strin
 
 // ── Month view ────────────────────────────────────────────────────────────────
 
-function MonthApptChip({ appt, onClick }: { appt: Appointment; onClick: (a: Appointment) => void }) {
+function MonthApptChip({ appt, staffName, onClick }: { appt: Appointment; staffName?: string; onClick: (a: Appointment) => void }) {
   const { data: patient } = usePatient(appt.patient_id);
   const mc   = MC[appt.modality] ?? MC.IN_PERSON;
   const done = appt.status === 'COMPLETED';
@@ -651,7 +659,7 @@ function MonthApptChip({ appt, onClick }: { appt: Appointment; onClick: (a: Appo
   return (
     <button
       onClick={e => { e.stopPropagation(); onClick(appt); }}
-      title={`${fmtHHMM(appt.scheduled_at)} · ${name}`}
+      title={`${fmtHHMM(appt.scheduled_at)} · ${name}${staffName ? ` · ${staffName}` : ''}`}
       style={{
         display: 'flex', alignItems: 'center', gap: 4, width: '100%',
         border: 'none', borderRadius: 5, padding: '2px 6px', marginBottom: 2,
@@ -672,7 +680,7 @@ function MonthApptChip({ appt, onClick }: { appt: Appointment; onClick: (a: Appo
 
 const MONTH_DOW = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
-function MonthGrid({ days, byDay, selected, today, onDayClick, onApptClick, compact }: {
+function MonthGrid({ days, byDay, selected, today, onDayClick, onApptClick, compact, profNames }: {
   days: string[];
   byDay: Record<string, Appointment[]>;
   selected: string;
@@ -680,6 +688,7 @@ function MonthGrid({ days, byDay, selected, today, onDayClick, onApptClick, comp
   onDayClick: (d: string) => void;
   onApptClick: (a: Appointment) => void;
   compact?: boolean;
+  profNames?: Record<string, string>;
 }) {
   const currentMonth = new Date(selected + 'T12:00:00').getMonth();
   const MAX_CHIPS = compact ? 2 : 3;
@@ -730,7 +739,7 @@ function MonthGrid({ days, byDay, selected, today, onDayClick, onApptClick, comp
                 </span>
               </div>
               {dayAppts.slice(0, MAX_CHIPS).map(a => (
-                <MonthApptChip key={a.id} appt={a} onClick={onApptClick} />
+                <MonthApptChip key={a.id} appt={a} staffName={profNames?.[a.staff_id]} onClick={onApptClick} />
               ))}
               {extra > 0 && (
                 <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--teal-d)', paddingLeft: 6 }}>
@@ -777,15 +786,48 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
   const monthDays = useMemo(() => monthGridDays(selected), [selected]);
   const rangeDays = calView === 'month' ? monthDays : weekDays;
 
+  // ── Clinic staff (multi-professional orgs get a filter) ──────────────────
+  const { data: professionals = [], isSuccess: profsLoaded, isError: profsFailed } = useQuery<OrgProfessional[]>({
+    queryKey: ['org-professionals'],
+    queryFn:  () => authApi.listProfessionals().then(r => r.items),
+    enabled:  !!user,
+    staleTime: 5 * 60_000,
+  });
+  const multiProf = professionals.length > 1;
+  const profNames = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const p of professionals) m[p.id] = p.name;
+    return m;
+  }, [professionals]);
+
+  // staffFilter: '' = whole clinic, an id = one professional's agenda,
+  // null = professionals not loaded yet (query waits, avoiding a double
+  // fetch with the wrong scope). Clinical staff default to their own agenda;
+  // pure admins/receptionists default to the whole clinic.
+  const [staffFilter, setStaffFilterRaw] = useState<string | null>(() => sessionStorage.getItem('sghcp_cal_staff'));
+  const setStaffFilter = (v: string) => { sessionStorage.setItem('sghcp_cal_staff', v); setStaffFilterRaw(v); };
+  useEffect(() => {
+    if (!user) return;
+    if (profsFailed) { setStaffFilterRaw(''); return; } // never block the agenda
+    if (!profsLoaded) return;
+    if (staffFilter === null) {
+      setStaffFilterRaw(multiProf && professionals.some(p => p.id === user.user_id) ? user.user_id : '');
+      return;
+    }
+    // A stored filter may point to a professional deactivated since.
+    if (staffFilter !== '' && !professionals.some(p => p.id === staffFilter)) setStaffFilter('');
+  }, [profsLoaded, profsFailed, professionals, multiProf, user, staffFilter]);
+
   // ── Query: visible range (week or month grid) ────────────────────────────
   const { data: appts = [], isLoading } = useQuery({
-    queryKey: ['cal-range', rangeDays[0], rangeDays[rangeDays.length - 1], user?.user_id],
+    queryKey: ['cal-range', rangeDays[0], rangeDays[rangeDays.length - 1], user?.user_id, staffFilter],
     queryFn:  () => appointmentsApi.list({
+      staff_id:  staffFilter || undefined,
       date_from: localISO(rangeDays[0], '00:00'),
       date_to:   localISO(rangeDays[rangeDays.length - 1], '23:59'),
       limit:     100,
     }),
-    enabled:        !!user,
+    enabled:        !!user && staffFilter !== null,
     refetchInterval: 60_000,
   });
 
@@ -805,7 +847,15 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
   const viewDays  = calView === 'week' ? weekDays : [selected];
 
   // ── Visible day range: configured schedule, expanded to fit any appointment ──
-  const schedule = useMemo(() => loadSchedule(), []);
+  // When the filter points at a colleague, use that professional's configured
+  // hours (quick-booking must offer THEIR slots, not the viewer's).
+  const schedule = useMemo<ScheduleConfig>(() => {
+    if (staffFilter && staffFilter !== user?.user_id) {
+      const target = professionals.find(p => p.id === staffFilter);
+      if (target) return { ...DEFAULT_SCHEDULE, ...(target.working_hours as Partial<ScheduleConfig>) };
+    }
+    return loadSchedule();
+  }, [staffFilter, professionals, user?.user_id]);
   const { startH, endH } = useMemo(() => {
     let s = hhmmToHour(schedule.startHour, DEFAULT_START_H);
     let e = hhmmToHour(schedule.endHour, DEFAULT_END_H);
@@ -846,6 +896,9 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
 
   const step = calView === 'week' ? 7 : 1; // month handled separately
   const hasInProgress = appts.some(a => isInProgress(a));
+  // Viewing a colleague's agenda → new appointments preselect that professional.
+  const viewingOther = !!staffFilter && staffFilter !== user?.user_id;
+  const staffParam   = viewingOther ? `&staff_id=${staffFilter}` : '';
 
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden', background: '#fff' }}>
@@ -897,6 +950,27 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
             onMouseLeave={e => { e.currentTarget.style.color = 'var(--s600)'; e.currentTarget.style.borderColor = 'var(--s200)'; }}
           >Hoy</button>
 
+          {/* Professional filter — clinics with more than one professional */}
+          {multiProf && (
+            <select
+              value={staffFilter ?? ''}
+              onChange={e => setStaffFilter(e.target.value)}
+              aria-label="Filtrar por profesional"
+              style={{
+                padding: '6px 10px', border: '1.5px solid var(--s200)', borderRadius: 8,
+                fontSize: 12.5, fontWeight: 600, color: 'var(--s700)', background: '#fff',
+                cursor: 'pointer', maxWidth: isMobile ? 140 : 210,
+              }}
+            >
+              <option value="">Toda la clínica</option>
+              {professionals.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.id === user?.user_id ? 'Mi agenda' : p.name}
+                </option>
+              ))}
+            </select>
+          )}
+
           {/* En curso badge */}
           {hasInProgress && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f3f2fb', border: '1px solid #a9a3e0', borderRadius: 8, padding: '5px 10px' }}>
@@ -935,7 +1009,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
 
           {/* Nueva cita */}
           <button
-            onClick={() => navigate(`/appointments/new?date=${selected}`)}
+            onClick={() => navigate(`/appointments/new?date=${selected}${staffParam}`)}
             style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 16px', fontSize: 13.5, fontWeight: 700, boxShadow: '0 2px 8px rgba(54,50,133,.35)', cursor: 'pointer', whiteSpace: 'nowrap' }}
             onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.08)'; }}
             onMouseLeave={e => { e.currentTarget.style.filter = ''; }}
@@ -961,6 +1035,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
               selected={selected}
               today={today}
               compact={isMobile}
+              profNames={multiProf && staffFilter === '' ? profNames : undefined}
               onDayClick={d => { setSelected(d); changeView('day'); }}
               onApptClick={setSelAppt}
             />
@@ -1011,6 +1086,10 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
                       <div
                         style={{ position: 'relative', height: totalH, background: isT ? 'rgba(54,50,133,.015)' : 'transparent', cursor: 'pointer' }}
                         onClick={e => {
+                          // Whole-clinic view: a free-looking slot may be busy
+                          // for one professional and free for another, so the
+                          // quick popover would lie. Use "Nueva cita" instead.
+                          if (multiProf && staffFilter === '') return;
                           const rect = e.currentTarget.getBoundingClientRect();
                           const clickedMin = startH * 60 + (e.clientY - rect.top) / PX_PER_MIN;
                           // Only offer a slot the schedule actually makes available:
@@ -1034,7 +1113,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
                           <div key={`hh${h}`} style={{ position: 'absolute', left: 0, right: 0, top: (h - startH) * HOUR_H + HOUR_H / 2, borderTop: '1px dashed var(--s100)' }} />
                         ))}
                         {isT && <NowIndicator startH={startH} endH={endH} />}
-                        {dayAppts.map(a => <AppBlock key={a.id} appt={a} onClick={x => { setSelAppt(x); setQuickSlot(null); }} startH={startH} totalH={totalH} />)}
+                        {dayAppts.map(a => <AppBlock key={a.id} appt={a} staffName={multiProf && staffFilter === '' ? profNames[a.staff_id] : undefined} onClick={x => { setSelAppt(x); setQuickSlot(null); }} startH={startH} totalH={totalH} />)}
                         {quickSlot?.day === day && (
                           <div
                             onClick={e => e.stopPropagation()}
@@ -1049,7 +1128,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
                               <>
                                 <AlertTriangle size={14} color="#dc2626" style={{ flexShrink: 0 }} />
                                 <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--s600)' }}>
-                                  Ya tienes una cita a las <b>{quickSlot.time}</b>. Elige otra hora.
+                                  Ya {viewingOther ? 'hay' : 'tienes'} una cita a las <b>{quickSlot.time}</b>. Elige otra hora.
                                 </div>
                               </>
                             ) : quickSlot.time ? (
@@ -1060,7 +1139,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
                                   <div style={{ fontSize: 11, color: 'var(--s400)' }}>{new Date(day + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
                                 </div>
                                 <button
-                                  onClick={() => navigate(`/appointments/new?date=${day}&time=${quickSlot.time}`)}
+                                  onClick={() => navigate(`/appointments/new?date=${day}&time=${quickSlot.time}${staffParam}`)}
                                   style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
                                 ><Plus size={13} color="white" /> Agendar</button>
                               </>
@@ -1068,7 +1147,9 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
                               <>
                                 <AlertTriangle size={14} color="var(--s400)" style={{ flexShrink: 0 }} />
                                 <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--s500)' }}>
-                                  Fuera de tu horario disponible. Ajústalo en <b>Configuración → Horario</b>.
+                                  {viewingOther
+                                    ? 'Fuera del horario disponible del profesional.'
+                                    : <>Fuera de tu horario disponible. Ajústalo en <b>Configuración → Horario</b>.</>}
                                 </div>
                               </>
                             )}
@@ -1092,6 +1173,7 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
           {selAppt && (
             <DetailPanel
               appt={selAppt}
+              staffName={multiProf ? profNames[selAppt.staff_id] : undefined}
               panelRef={detailRef}
               onClose={() => setSelAppt(null)}
             />

@@ -74,6 +74,14 @@ func (s *Service) ListOrgUsers(ctx context.Context, orgID string) ([]auth.OrgUse
 	return s.repo.ListOrgUsers(ctx, orgID)
 }
 
+// ListOrgProfessionals returns the org's active clinical staff for scheduling
+// (assign-a-professional selectors). Unlike ListOrgUsers it is safe to expose
+// beyond CLINIC_ADMIN: no emails as identifiers, no login data, no inactive
+// accounts.
+func (s *Service) ListOrgProfessionals(ctx context.Context, orgID string) ([]auth.OrgProfessional, error) {
+	return s.repo.ListOrgProfessionals(ctx, orgID)
+}
+
 // DeactivateUser soft-deletes a user from the org. Guards: can't deactivate
 // yourself, can't remove the last CLINIC_ADMIN.
 func (s *Service) DeactivateUser(ctx context.Context, orgID, callerUserID, targetUserID string) error {

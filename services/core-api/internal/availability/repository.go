@@ -22,7 +22,7 @@ type Repository struct {
 
 func New(pool *pgxpool.Pool) *Repository { return &Repository{pool: pool} }
 
-// Professional is the single practitioner a public booking is scheduled with,
+// Professional is the practitioner a public booking is scheduled with,
 // plus their working-hours config (raw JSON, parsed by the service).
 type Professional struct {
 	OrgID        string
@@ -30,10 +30,14 @@ type Professional struct {
 	WorkingHours json.RawMessage
 }
 
-// ResolveBySlug finds the active org by slug and its PROFESSIONAL user with a
-// profile. organizations/professional_profiles carry no RLS, so a plain read is
-// fine. Returns ErrNotFound when there's no such org or professional.
-func (r *Repository) ResolveBySlug(ctx context.Context, slug string) (*Professional, error) {
+// ResolveBySlug finds the active org by slug and one of its PROFESSIONAL users
+// with a profile. When staffID is non-empty the lookup is pinned to that
+// specific professional (validating it belongs to the org and holds the role);
+// when empty, the org's earliest professional is used so single-practitioner
+// orgs keep working without a picker. organizations/professional_profiles
+// carry no RLS, so a plain read is fine. Returns ErrNotFound when there's no
+// such org or professional.
+func (r *Repository) ResolveBySlug(ctx context.Context, slug, staffID string) (*Professional, error) {
 	var p Professional
 	var wh []byte
 	// Resolve the org's PROFESSIONAL user by role; the profile (and its working
@@ -47,9 +51,10 @@ func (r *Repository) ResolveBySlug(ctx context.Context, slug string) (*Professio
 		JOIN users u ON u.id = ur.user_id AND u.is_active
 		LEFT JOIN professional_profiles pp ON pp.user_id = u.id
 		WHERE o.slug = $1 AND o.is_active
+		  AND ($2 = '' OR u.id::text = $2)
 		ORDER BY u.created_at ASC
 		LIMIT 1
-	`, slug).Scan(&p.OrgID, &p.StaffID, &wh)
+	`, slug, staffID).Scan(&p.OrgID, &p.StaffID, &wh)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -58,6 +63,46 @@ func (r *Repository) ResolveBySlug(ctx context.Context, slug string) (*Professio
 	}
 	p.WorkingHours = wh
 	return &p, nil
+}
+
+// PublicProfessional is the public-facing identity of one professional on the
+// booking page: id plus display name only — never email or license data.
+type PublicProfessional struct {
+	StaffID string `json:"staff_id"`
+	Name    string `json:"name"`
+}
+
+// ListProfessionalsBySlug returns the org's active PROFESSIONAL users so the
+// public booking page can offer a picker when the clinic has more than one.
+// The name comes from the professional profile, falling back to the account's
+// display name (a fresh signup has no profile yet).
+func (r *Repository) ListProfessionalsBySlug(ctx context.Context, slug string) ([]PublicProfessional, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT u.id,
+		       COALESCE(NULLIF(TRIM(CONCAT_WS(' ', pp.first_name, pp.paternal_last_name)), ''),
+		                NULLIF(u.display_name, ''),
+		                'Profesional')
+		FROM organizations o
+		JOIN user_roles ur ON ur.organization_id = o.id
+		JOIN roles r ON r.id = ur.role_id AND r.name = 'PROFESSIONAL'
+		JOIN users u ON u.id = ur.user_id AND u.is_active
+		LEFT JOIN professional_profiles pp ON pp.user_id = u.id
+		WHERE o.slug = $1 AND o.is_active
+		ORDER BY u.created_at ASC
+	`, slug)
+	if err != nil {
+		return nil, fmt.Errorf("list professionals: %w", err)
+	}
+	defer rows.Close()
+	var out []PublicProfessional
+	for rows.Next() {
+		var p PublicProfessional
+		if err := rows.Scan(&p.StaffID, &p.Name); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
 }
 
 // ResolveByOrgAndStaff loads the professional's working-hours config from the

@@ -16,7 +16,7 @@ import { ApiError } from '../../api/client';
 import { Spinner } from '../../components/ui/Spinner';
 import { PatientSearchBox } from '../../components/patients/PatientSearchBox';
 import { useAuth } from '../../context/AuthContext';
-import { loadSchedule, fetchScheduleFromServer, isWorkingDay, dayLabelOf, type ScheduleConfig } from '../../lib/schedule';
+import { loadSchedule, fetchScheduleFromServer, isWorkingDay, dayLabelOf, DEFAULT_SCHEDULE, type ScheduleConfig } from '../../lib/schedule';
 import { useIsCompact } from '../../lib/useMediaQuery';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -650,9 +650,8 @@ export function NewAppointmentPage() {
     queryFn: fetchScheduleFromServer,
     staleTime: 5 * 60_000,
   });
-  const cached   = useMemo(() => loadSchedule(), []);
-  const schedule = serverSchedule ?? cached;
-  const slots    = useMemo(() => generateSlots(schedule), [schedule]);
+  const cached      = useMemo(() => loadSchedule(), []);
+  const ownSchedule = serverSchedule ?? cached;
 
   // Date preselected in the calendar view (?date=YYYY-MM-DD), if valid and not past
   const initialDate = (() => {
@@ -665,7 +664,10 @@ export function NewAppointmentPage() {
     return t && /^\d{2}:\d{2}$/.test(t) ? t : '';
   })();
 
-  const isAdmin = user?.roles?.includes('CLINIC_ADMIN') ?? false;
+  const isAdmin        = user?.roles?.includes('CLINIC_ADMIN') ?? false;
+  const isReceptionist = user?.roles?.includes('RECEPTIONIST') ?? false;
+  // Who can assign a colleague. Professionals/interns book for themselves.
+  const canAssignStaff = isAdmin || isReceptionist;
 
   const [patient,          setPatient]         = useState<Patient | null>(null);
   const [guestName,        setGuestName]       = useState<string>('');
@@ -679,31 +681,32 @@ export function NewAppointmentPage() {
   const [reminder,         setReminder]        = useState<boolean>(true);
   const [showModal,        setShowModal]       = useState<boolean>(false);
   const [confirmed,        setConfirmed]       = useState<boolean>(false);
-  // Admin's own id is never a valid default — they're CLINIC_ADMIN, not staff,
-  // so it would never match an <option> in the professional <select> below and
-  // would silently submit as staff_id while the UI shows a different name.
-  const [selectedStaffId,  setSelectedStaffId] = useState<string>(isAdmin ? '' : (user?.user_id ?? ''));
+  // An admin/receptionist's own id is never a valid default — they may not be
+  // clinical staff, so it could never match an <option> in the professional
+  // <select> below and would silently submit as staff_id while the UI shows a
+  // different name. ?staff_id= (from the clinic agenda) preselects.
+  const [selectedStaffId,  setSelectedStaffId] = useState<string>(() => {
+    const fromURL = searchParams.get('staff_id');
+    if (fromURL && canAssignStaff) return fromURL;
+    return canAssignStaff ? '' : (user?.user_id ?? '');
+  });
 
-  // Org members (for admin staff selector). Shares the ['org-users'] cache key
-  // with AppointmentPage/SettingsPage — must return the same raw shape (full
-  // array, unfiltered) or a stale cache hit from those pages would silently
-  // swap in the wrong data shape here. Filtering happens locally below.
-  const { data: allOrgUsers = [] } = useQuery({
-    queryKey: ['org-users'],
-    queryFn: () => authApi.listOrgUsers().then(r => r.items),
-    enabled: isAdmin,
+  // Active clinical staff for the assign-a-professional selector. Available to
+  // every role with appointments:read (receptionists included).
+  const { data: orgUsers = [] } = useQuery({
+    queryKey: ['org-professionals'],
+    queryFn: () => authApi.listProfessionals().then(r => r.items),
+    enabled: canAssignStaff,
     staleTime: 60_000,
   });
-  const orgUsers = useMemo(
-    () => allOrgUsers.filter(u => u.is_active && (u.role_name === 'PROFESSIONAL' || u.role_name === 'INTERN')),
-    [allOrgUsers],
-  );
 
-  // Set default selectedStaffId to first professional when list loads (if admin has no PROFESSIONAL role)
+  // Default when the list loads: the caller themselves if they're also
+  // clinical staff (dual-role admin), otherwise the first professional.
   useEffect(() => {
-    if (!isAdmin || !orgUsers.length || selectedStaffId) return;
-    setSelectedStaffId(orgUsers[0].id);
-  }, [isAdmin, orgUsers]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!canAssignStaff || !orgUsers.length || selectedStaffId) return;
+    const self = orgUsers.find(u => u.id === user?.user_id);
+    setSelectedStaffId(self?.id ?? orgUsers[0].id);
+  }, [canAssignStaff, orgUsers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pre-load patient from URL param (e.g. coming from patient profile)
   useEffect(() => {
@@ -713,8 +716,20 @@ export function NewAppointmentPage() {
 
   // Mirrors the auto-select effect above so a fast submit can't race ahead of
   // it: while orgUsers is still loading, fall back to the first professional
-  // instead of the admin's own (non-staff) id.
-  const effectiveStaffId = selectedStaffId || (isAdmin ? (orgUsers[0]?.id ?? '') : (user?.user_id ?? ''));
+  // instead of the caller's own (possibly non-staff) id.
+  const effectiveStaffId = selectedStaffId || (canAssignStaff ? (orgUsers[0]?.id ?? '') : (user?.user_id ?? ''));
+
+  // Slots must follow the schedule of whoever the appointment is FOR: the
+  // assigned professional's configured hours when assigning a colleague, the
+  // caller's own otherwise.
+  const schedule = useMemo<ScheduleConfig>(() => {
+    if (effectiveStaffId && effectiveStaffId !== user?.user_id) {
+      const target = orgUsers.find(u => u.id === effectiveStaffId);
+      if (target) return { ...DEFAULT_SCHEDULE, ...(target.working_hours as Partial<ScheduleConfig>) };
+    }
+    return ownSchedule;
+  }, [effectiveStaffId, orgUsers, ownSchedule, user?.user_id]);
+  const slots = useMemo(() => generateSlots(schedule), [schedule]);
 
   // ── Staff appointments for the selected day (slot blocking + workload) ────────
   const { data: dayAppointments = [] } = useQuery<Appointment[]>({
@@ -929,7 +944,7 @@ export function NewAppointmentPage() {
         {workloadWarning && !workloadBlock && (
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 9, padding: '10px 14px', marginBottom: 20, fontSize: 12, color: '#92400e' }}>
             <TriangleAlert size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-            <span>Tienes <b>{activeApptCount} citas</b> agendadas para este día. Considera tu capacidad de atención.</span>
+            <span>{effectiveStaffId === user?.user_id ? 'Tienes' : 'El profesional tiene'} <b>{activeApptCount} citas</b> agendadas para este día. Considera la capacidad de atención.</span>
           </div>
         )}
         {workloadBlock && (
@@ -949,8 +964,8 @@ export function NewAppointmentPage() {
           </div>
         )}
 
-        {/* Staff selector — only for CLINIC_ADMIN */}
-        {isAdmin && orgUsers.length > 0 && (
+        {/* Staff selector — CLINIC_ADMIN and RECEPTIONIST assign a professional */}
+        {canAssignStaff && orgUsers.length > 0 && (
           <Section icon={User} title="Profesional asignado">
             <select
               value={selectedStaffId}
@@ -963,7 +978,7 @@ export function NewAppointmentPage() {
             >
               {orgUsers.map(u => (
                 <option key={u.id} value={u.id}>
-                  {u.display_name || u.email}
+                  {u.name}
                 </option>
               ))}
             </select>
@@ -979,7 +994,7 @@ export function NewAppointmentPage() {
           {nonWorkingDay && (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginBottom: 8, background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#92400e' }}>
               <TriangleAlert size={13} style={{ flexShrink: 0, marginTop: 1 }} />
-              El {dayLabelOf(date)} no está entre tus días de atención configurados. Puedes agendar igual como excepción.
+              El {dayLabelOf(date)} no está entre los días de atención configurados{effectiveStaffId === user?.user_id ? '' : ' del profesional'}. Puedes agendar igual como excepción.
             </div>
           )}
           {date && pastSlots.size === slots.length && (

@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Video, MapPin, User, Mail, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
-import { publicBookingApi, type OrgInfo } from '@/api/publicBooking';
+import { publicBookingApi, type OrgInfo, type PublicProfessional } from '@/api/publicBooking';
 import { ApiError } from '@/api/client';
 import { COUNTRIES, validatePhone } from '@/lib/phone';
 
 type Modality = 'VIRTUAL' | 'IN_PERSON';
-type Step = 'modality' | 'slot' | 'data' | 'summary';
+type Step = 'modality' | 'professional' | 'slot' | 'data' | 'summary';
 type Checkout = { init_point: string; booking_id: string; summary: { date: string; time: string; modality: string; amount: number; currency: string } };
 
 // Editorial palette mirroring marcelachapues.com — this page carries the
@@ -25,6 +25,10 @@ export function BookingWizardPage() {
   const [info, setInfo] = useState<OrgInfo | null>(null);
   const [step, setStep] = useState<Step>('modality');
   const [modality, setModality] = useState<Modality>('VIRTUAL');
+  // Multi-professional clinics get a picker step; solo practices skip it and
+  // the backend falls back to the org's only professional (staff_id omitted).
+  const [professionals, setProfessionals] = useState<PublicProfessional[]>([]);
+  const [selProf, setSelProf] = useState<PublicProfessional | null>(null);
   const [byDate, setByDate] = useState<Record<string, string[]>>({});
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [notFound, setNotFound] = useState(false);
@@ -52,12 +56,19 @@ export function BookingWizardPage() {
   }));
 
   useEffect(() => { publicBookingApi.orgInfo(slug).then(setInfo).catch(() => {}); }, [slug]);
+  useEffect(() => {
+    publicBookingApi.professionals(slug)
+      .then(r => setProfessionals(r.professionals ?? []))
+      .catch(() => {});
+  }, [slug]);
 
-  // Load availability when entering the slot step or changing modality.
+  const hasPicker = professionals.length > 1;
+
+  // Load availability when entering the slot step or changing modality/professional.
   useEffect(() => {
     if (step !== 'slot') return;
     setLoadingSlots(true); setNotFound(false); setSelDate('');
-    publicBookingApi.availability(slug, modality, from, to)
+    publicBookingApi.availability(slug, modality, from, to, selProf?.staff_id)
       .then(r => {
         const map: Record<string, string[]> = {};
         (r.days ?? []).forEach(d => { map[d.date] = d.slots; });
@@ -67,7 +78,7 @@ export function BookingWizardPage() {
       })
       .catch((e) => { if (e?.status === 404) setNotFound(true); setByDate({}); })
       .finally(() => setLoadingSlots(false));
-  }, [step, modality, slug]);
+  }, [step, modality, slug, selProf]);
 
   const submit = async () => {
     setErr('');
@@ -80,7 +91,7 @@ export function BookingWizardPage() {
     setSaving(true);
     try {
       const res = await publicBookingApi.checkout({
-        org_slug: slug, modality, date: picked.date, time: picked.time,
+        org_slug: slug, staff_id: selProf?.staff_id, modality, date: picked.date, time: picked.time,
         name: name.trim(), email: email.trim(), phone: `${code} ${phone.trim()}`,
         policy_accepted: policyAccepted,
         // Release any prior hold from this same wizard session so editing the
@@ -160,7 +171,7 @@ export function BookingWizardPage() {
               <h1 style={{ fontFamily: DISPLAY, fontWeight: 500, fontSize: 27, marginBottom: 6 }}>Agenda tu cita</h1>
               <p style={{ color: INK_SOFT, fontSize: 14.5, marginBottom: 26 }}>¿Cómo prefieres tu sesión?</p>
               {([['VIRTUAL', 'Online', 'Por videollamada · mañana o tarde', Video], ['IN_PERSON', 'Presencial', 'En el consultorio · tardes', MapPin]] as const).map(([val, title, sub, Icon]) => (
-                <button key={val} onClick={() => { setModality(val); setStep('slot'); }} style={{
+                <button key={val} onClick={() => { setModality(val); setStep(hasPicker ? 'professional' : 'slot'); }} style={{
                   display: 'flex', alignItems: 'center', gap: 16, width: '100%', textAlign: 'left',
                   border: `1.5px solid ${LINE}`, borderRadius: 13, padding: '18px 20px', marginBottom: 13, background: '#fff', cursor: 'pointer', transition: 'border-color .15s',
                 }}
@@ -176,10 +187,33 @@ export function BookingWizardPage() {
             </div>
           )}
 
-          {step === 'slot' && (
+          {step === 'professional' && (
             <div>
               <button onClick={() => setStep('modality')} style={{ display: 'flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', color: accent, fontWeight: 600, fontSize: 13, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
                 <ChevronLeft size={15} /> {modality === 'VIRTUAL' ? 'Online' : 'Presencial'} · cambiar
+              </button>
+              <h1 style={{ fontFamily: DISPLAY, fontWeight: 500, fontSize: 24, marginBottom: 6 }}>¿Con quién te gustaría tu sesión?</h1>
+              <p style={{ color: INK_SOFT, fontSize: 14.5, marginBottom: 24 }}>Elige a la persona profesional para ver sus horarios.</p>
+              {professionals.map(p => (
+                <button key={p.staff_id} onClick={() => { setSelProf(p); setStep('slot'); }} style={{
+                  display: 'flex', alignItems: 'center', gap: 14, width: '100%', textAlign: 'left',
+                  border: `1.5px solid ${LINE}`, borderRadius: 13, padding: '16px 18px', marginBottom: 12, background: '#fff', cursor: 'pointer', transition: 'border-color .15s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = accent)}
+                onMouseLeave={e => (e.currentTarget.style.borderColor = LINE)}>
+                  <div style={{ width: 38, height: 38, borderRadius: '50%', background: `${accent}22`, color: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>
+                    {p.name.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()}
+                  </div>
+                  <div style={{ fontWeight: 600, fontSize: 15.5, fontFamily: DISPLAY }}>{p.name}</div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {step === 'slot' && (
+            <div>
+              <button onClick={() => setStep(hasPicker ? 'professional' : 'modality')} style={{ display: 'flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', color: accent, fontWeight: 600, fontSize: 13, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
+                <ChevronLeft size={15} /> {hasPicker && selProf ? `${selProf.name} · cambiar` : `${modality === 'VIRTUAL' ? 'Online' : 'Presencial'} · cambiar`}
               </button>
               {loadingSlots ? (
                 <div style={{ color: INK_FAINT, padding: '24px 0' }}>Cargando horarios…</div>
@@ -235,6 +269,7 @@ export function BookingWizardPage() {
               <h1 style={{ fontFamily: DISPLAY, fontWeight: 500, fontSize: 24, marginBottom: 14 }}>Tus datos</h1>
               <div style={{ background: '#fff', border: `1.5px solid ${LINE}`, borderRadius: 11, padding: '12px 15px', marginBottom: 18, fontSize: 14, color: INK }}>
                 <strong style={{ textTransform: 'capitalize', fontFamily: DISPLAY }}>{fmtLongDay(picked.date)}</strong> · {fmt12h(picked.time)} · {modality === 'VIRTUAL' ? 'Online' : 'Presencial'}
+                {hasPicker && selProf ? <> · con <strong style={{ fontFamily: DISPLAY }}>{selProf.name}</strong></> : null}
               </div>
               <div style={inputWrap}><User size={16} color={INK_FAINT} /><input value={name} onChange={e => setName(e.target.value)} placeholder="Tu nombre" style={input} /></div>
               <div style={inputWrap}><Mail size={16} color={INK_FAINT} /><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Correo electrónico" style={input} /></div>
@@ -273,7 +308,10 @@ export function BookingWizardPage() {
               <h1 style={{ fontFamily: DISPLAY, fontWeight: 500, fontSize: 25, marginBottom: 4 }}>Resumen de tu cita</h1>
               <p style={{ color: INK_SOFT, fontSize: 13.5, marginBottom: 20 }}>Revisa y continúa al pago seguro.</p>
               <div style={{ background: '#fff', border: `1.5px solid ${LINE}`, borderRadius: 13, overflow: 'hidden', marginBottom: 18 }}>
-                {[['Fecha', fmtLongDay(picked.date)], ['Hora', fmt12h(picked.time)], ['Modalidad', modality === 'VIRTUAL' ? 'Online' : 'Presencial'], ['Paciente', name.trim()], ['Correo', email.trim()], ['Teléfono', `${code} ${phone.trim()}`]].map(([k, v], i) => (
+                {[
+                  ...(hasPicker && selProf ? [['Profesional', selProf.name]] : []),
+                  ['Fecha', fmtLongDay(picked.date)], ['Hora', fmt12h(picked.time)], ['Modalidad', modality === 'VIRTUAL' ? 'Online' : 'Presencial'], ['Paciente', name.trim()], ['Correo', email.trim()], ['Teléfono', `${code} ${phone.trim()}`],
+                ].map(([k, v], i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', borderTop: i ? `1px solid ${LINE}` : 'none', fontSize: 14 }}>
                     <span style={{ color: INK_SOFT, flexShrink: 0, marginRight: 14 }}>{k}</span>
                     <span style={{ color: INK, fontWeight: 500, textTransform: k === 'Fecha' ? 'capitalize' : 'none', textAlign: 'right', wordBreak: 'break-word' }}>{v}</span>

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 
@@ -25,10 +26,15 @@ func (r *Repository) Create(ctx context.Context, p appointments.CreateParams) (s
 			  AND scheduled_at + (duration_min * interval '1 minute') > $5::timestamptz
 			LIMIT 1
 		),
+		staff_ok AS (
+			SELECT 1 FROM users
+			WHERE id = $4 AND organization_id = $1 AND is_active
+		),
 		ins AS (
 			INSERT INTO appointments (organization_id, patient_id, guest_name, staff_id, scheduled_at, duration_min, modality)
 			SELECT $1, $2, $3, $4, $5::timestamptz, $6::integer, $7::appointment_modality
 			WHERE NOT EXISTS (SELECT 1 FROM hold_conflict)
+			  AND EXISTS (SELECT 1 FROM staff_ok)
 			RETURNING id
 		),
 		_psr AS (
@@ -60,6 +66,15 @@ func (r *Repository) Create(ctx context.Context, p appointments.CreateParams) (s
 		p.Modality,
 	).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
+		// No row can mean a hold conflict or a staff_id outside the org —
+		// distinguish so a forged staff_id doesn't read as "slot taken".
+		var staffOK bool
+		if e := r.q(ctx).QueryRow(ctx,
+			`SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND organization_id = $2 AND is_active)`,
+			p.StaffID, p.OrganizationID,
+		).Scan(&staffOK); e == nil && !staffOK {
+			return "", fmt.Errorf("%w: staff_id is not an active member of the organization", appointments.ErrInvalidInput)
+		}
 		return "", appointments.ErrConflict
 	}
 	return id, err

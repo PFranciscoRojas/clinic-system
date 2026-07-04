@@ -310,6 +310,40 @@ func (r *Repository) ListOrgUsers(ctx context.Context, orgID string) ([]auth.Org
 	return out, rows.Err()
 }
 
+// ListOrgProfessionals returns the org's active clinical staff (PROFESSIONAL
+// and INTERN roles) with their working-hours config, for scheduling UIs. The
+// name prefers the professional profile over the account display name.
+func (r *Repository) ListOrgProfessionals(ctx context.Context, orgID string) ([]auth.OrgProfessional, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT u.id,
+		       COALESCE(NULLIF(TRIM(CONCAT_WS(' ', pp.first_name, pp.paternal_last_name)), ''),
+		                NULLIF(u.display_name, ''), u.email),
+		       ro.name,
+		       COALESCE(pp.working_hours, '{}'::jsonb)
+		FROM   users u
+		JOIN   user_roles ur ON ur.user_id = u.id AND ur.organization_id = $1
+		JOIN   roles ro      ON ro.id = ur.role_id AND ro.name IN ('PROFESSIONAL', 'INTERN')
+		LEFT JOIN professional_profiles pp ON pp.user_id = u.id
+		WHERE  u.organization_id = $1 AND u.is_active
+		ORDER  BY u.created_at
+	`, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("list org professionals: %w", err)
+	}
+	defer rows.Close()
+	var out []auth.OrgProfessional
+	for rows.Next() {
+		var p auth.OrgProfessional
+		var wh []byte
+		if err := rows.Scan(&p.ID, &p.Name, &p.RoleName, &wh); err != nil {
+			return nil, fmt.Errorf("scan org professional: %w", err)
+		}
+		p.WorkingHours = wh
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
 // ReactivateUser restores is_active=true and assigns a new role.
 func (r *Repository) ReactivateUser(ctx context.Context, orgID, targetUserID, roleID, callerUserID string) error {
 	tx, err := r.db.Begin(ctx)

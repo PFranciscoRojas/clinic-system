@@ -28,11 +28,32 @@ func (h *Handler) PublicRoutes() chi.Router {
 }
 
 // InfoRoutes is mounted at /api/v1/public/org — public clinic info (name,
-// brand color) so the booking page can theme itself per tenant.
+// brand color, professional list) so the booking page can theme itself per
+// tenant and offer a professional picker in multi-professional clinics.
 func (h *Handler) InfoRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", h.info)
+	r.Get("/professionals", h.professionals)
 	return r
+}
+
+// GET /professionals?org_slug= — the org's active professionals (id + name
+// only). The booking wizard shows a picker when there's more than one.
+func (h *Handler) professionals(w http.ResponseWriter, r *http.Request) {
+	slug := r.URL.Query().Get("org_slug")
+	if slug == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "org_slug is required")
+		return
+	}
+	items, err := h.svc.Professionals(r.Context(), slug)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "error")
+		return
+	}
+	if items == nil {
+		items = []PublicProfessional{}
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"professionals": items})
 }
 
 func (h *Handler) info(w http.ResponseWriter, r *http.Request) {
@@ -53,8 +74,9 @@ func (h *Handler) info(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, info)
 }
 
-// GET /availability?org_slug=&from=&to=  (modality is accepted but not yet
-// differentiated — same hours apply to both for now).
+// GET /availability?org_slug=&staff_id=&from=&to=  (modality is accepted but
+// not yet differentiated — same hours apply to both for now). staff_id picks a
+// professional in multi-professional orgs; empty falls back to the first one.
 func (h *Handler) availability(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	slug := q.Get("org_slug")
@@ -73,7 +95,7 @@ func (h *Handler) availability(w http.ResponseWriter, r *http.Request) {
 	}
 
 	modality := q.Get("modality")
-	days, err := h.svc.Availability(r.Context(), slug, modality, from, to)
+	days, err := h.svc.Availability(r.Context(), slug, q.Get("staff_id"), modality, from, to)
 	if errors.Is(err, ErrNotFound) {
 		httputil.WriteError(w, http.StatusNotFound, "organización no encontrada")
 		return

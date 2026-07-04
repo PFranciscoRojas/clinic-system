@@ -65,11 +65,19 @@ func (s *Service) Info(ctx context.Context, slug string) (*OrgPublicInfo, error)
 	return s.repo.PublicInfo(ctx, slug)
 }
 
+// Professionals returns the org's public professional list for the booking
+// page picker (empty staffID on the other endpoints means "the only one").
+func (s *Service) Professionals(ctx context.Context, slug string) ([]PublicProfessional, error) {
+	return s.repo.ListProfessionalsBySlug(ctx, slug)
+}
+
 // Availability returns the free slots between two dates (inclusive) for the
-// org's professional, for the given modality. fromDate/toDate are YYYY-MM-DD in
-// the clinic's timezone. modality is "IN_PERSON" or "VIRTUAL" (default VIRTUAL).
-func (s *Service) Availability(ctx context.Context, slug, modality, fromDate, toDate string) ([]DayAvailability, error) {
-	prof, err := s.repo.ResolveBySlug(ctx, slug)
+// org's professional, for the given modality. staffID selects a specific
+// professional in multi-professional orgs (empty = the org's first one).
+// fromDate/toDate are YYYY-MM-DD in the clinic's timezone. modality is
+// "IN_PERSON" or "VIRTUAL" (default VIRTUAL).
+func (s *Service) Availability(ctx context.Context, slug, staffID, modality, fromDate, toDate string) ([]DayAvailability, error) {
+	prof, err := s.repo.ResolveBySlug(ctx, slug, staffID)
 	if err != nil {
 		return nil, err
 	}

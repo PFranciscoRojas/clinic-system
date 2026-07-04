@@ -1,5 +1,14 @@
 # Ideas y Tareas Futuras (No procesar aún)
 
+## Ola B2B Clínicas (2026-07-03)
+
+> Análisis completo en conversación 2026-07-03. Base multi-usuario ya existe (roles, invitaciones, need-to-know, RLS); lo que falta son los flujos de producto que quedaron uni-profesional.
+
+- **B2B-1 — Mínimo vendible (2026-07-03, EN CURSO)** — Booking público multi-profesional (hoy `ResolveBySlug` toma `LIMIT 1` sobre rol PROFESSIONAL; falta selector de profesional en `/book/:slug` + slots por `staff_id`) y agenda de clínica (hoy `AgendaCalendar` solo muestra/crea citas del usuario logueado; falta vista multi-profesional y asignar profesional al crear cita, para CLINIC_ADMIN y RECEPTIONIST — el backend ya acepta filtro `staff_id` en `GET /appointments`).
+- **B2B-2 — Plan Clínica cobrable (2026-07-03)** — Plan con precio por profesional activo o tiers (1 / 2-5 / 6+); enforcement de límite de asientos al generar invitación. Hoy la suscripción es monto plano global (`mp_plan_amount` en `platform_settings`, un solo preapproval MP).
+- **B2B-3 — Dashboard del dueño (2026-07-03)** — Métricas por profesional: sesiones, ocupación, ingresos. Datos ya disponibles en `appointments` + `invoices`. Conecta con "Agenda — Métricas operativas" (abajo).
+- **B2B menores (2026-07-03)** — Tarifas por profesional (hoy `service_rates` es por org); opción "soy clínica" en signup (o provisioning asistido para las primeras); RIPS/ADRES para IPS (ya en roadmap post-1.0); multi-sede fuera de alcance v1.
+
 ## Producto — Auditoría 360° (2026-07-01, "lo que falta para completo")
 
 > Los hallazgos técnicos de la auditoría tienen plan de ejecución en `PLAN_AUDIT_FIXES.md`; aquí van solo los features de producto, diferidos post-validación.
