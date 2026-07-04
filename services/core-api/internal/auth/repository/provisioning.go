@@ -33,10 +33,10 @@ func (r *Repository) CreateOrgWithOwner(ctx context.Context, p auth.CreateOrgPar
 	for attempt := 1; ; attempt++ {
 		err = tx.QueryRow(ctx, `
 			INSERT INTO organizations
-				(name, slug, plan, subscription_status, trial_ends_at)
-			VALUES ($1, $2, 'STARTER', 'trialing', $3)
+				(name, slug, plan, subscription_status, trial_ends_at, signup_phone, signup_source)
+			VALUES ($1, $2, 'STARTER', 'trialing', $3, NULLIF($4, ''), NULLIF($5, ''))
 			RETURNING id
-		`, p.OrgName, slug, trialEnds).Scan(&orgID)
+		`, p.OrgName, slug, trialEnds, p.Phone, p.ReferralSource).Scan(&orgID)
 		if err == nil {
 			break
 		}

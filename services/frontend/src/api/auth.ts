@@ -33,8 +33,9 @@ export const authApi = {
   // full_name is the admin's own name. Emails a verification link; the account
   // can't log in until the email is confirmed. accepted_terms/terms_version are
   // stored in users for Ley 1581/2012 audit trail.
-  signup: (org_name: string, full_name: string, email: string, password: string, is_professional: boolean, accepted_terms: boolean) =>
-    api.post<void>('/auth/signup', { org_name, full_name, email, password, is_professional, accepted_terms, terms_version: '2026-06-24' }),
+  // phone (WhatsApp) and referral_source are optional lead-tracking fields.
+  signup: (org_name: string, full_name: string, email: string, password: string, is_professional: boolean, accepted_terms: boolean, phone = '', referral_source = '') =>
+    api.post<void>('/auth/signup', { org_name, full_name, email, password, is_professional, accepted_terms, terms_version: '2026-06-24', phone, referral_source }),
 
   // Confirms the address from the one-time token in the verification email link.
   verifyEmail: (token: string) =>

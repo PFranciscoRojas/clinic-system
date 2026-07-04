@@ -512,6 +512,14 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   canceled:  { label: 'Cancelado', color: '#dc2626' },
 };
 
+// Values match the "¿Cómo nos conociste?" select on the public signup form.
+const REFERRAL_LABELS: Record<string, string> = {
+  recommendation: 'Recomendación de un colega',
+  google:         'Búsqueda en Google',
+  social:         'Redes sociales',
+  other:          'Otro',
+};
+
 function TenantsTab() {
   const qc = useQueryClient();
   const { data: orgs, isLoading } = useQuery({ queryKey: ['admin-orgs'], queryFn: adminApi.listOrgs });
@@ -588,6 +596,21 @@ function TenantsTab() {
                 {/* Panel expandible de acciones */}
                 {expanded && (
                   <div style={{ borderTop: '1px solid var(--s100)', padding: '12px 16px', background: 'var(--s50)' }}>
+                    {/* Contacto y origen del lead (formulario de signup) */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 12.5, color: 'var(--s600)', marginBottom: 12 }}>
+                      {o.owner_email && (
+                        <span>✉️ <a href={`mailto:${o.owner_email}`} style={{ color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>{o.owner_email}</a></span>
+                      )}
+                      {o.signup_phone && (
+                        <span>💬 <a href={`https://wa.me/${o.signup_phone}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>WhatsApp {o.signup_phone}</a></span>
+                      )}
+                      {o.signup_source && (
+                        <span>📣 Nos conoció: <strong>{REFERRAL_LABELS[o.signup_source] ?? o.signup_source}</strong></span>
+                      )}
+                      {!o.owner_email && !o.signup_phone && !o.signup_source && (
+                        <span style={{ color: 'var(--s400)' }}>Sin datos de contacto del registro.</span>
+                      )}
+                    </div>
                     {/* Usuarios de la org */}
                     <OrgUsersPanel orgId={o.id} />
                     <div style={{ height: 12 }} />

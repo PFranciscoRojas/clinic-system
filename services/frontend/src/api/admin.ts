@@ -19,6 +19,9 @@ export interface AdminOrg {
   created_at: string;
   total_users: number;
   total_patients: number;
+  signup_phone: string | null;
+  signup_source: string | null;
+  owner_email: string | null;
 }
 
 export interface SystemHealth {

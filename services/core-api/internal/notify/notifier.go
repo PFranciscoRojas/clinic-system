@@ -37,6 +37,27 @@ type VerificationDetails struct {
 	Link string // one-time verification URL, expires within 24h
 }
 
+// TenantSignupDetails carries the operator-alert data for a self-serve signup.
+// Verified distinguishes the two lifecycle moments: false = the tenant was just
+// provisioned (email pending); true = the owner confirmed their address.
+type TenantSignupDetails struct {
+	OrgName   string
+	Slug      string
+	AdminName string
+	Email     string
+	Phone     string // optional WhatsApp contact from the signup form
+	Source    string // optional "how did you hear about us" answer
+	Verified  bool
+}
+
+// TenantWelcomeDetails carries the data for the post-verification welcome email
+// sent to the new tenant's owner.
+type TenantWelcomeDetails struct {
+	Name            string // display name — just a greeting
+	LoginURL        string
+	SupportWhatsApp string // intl number for the wa.me link; empty hides the CTA
+}
+
 // InvoiceEmailDetails carries the data for emailing a patient their payment
 // receipt (the PDF travels separately as an attachment).
 type InvoiceEmailDetails struct {
@@ -82,6 +103,10 @@ type Notifier interface {
 	ConsentSignLink(ctx context.Context, toEmail string, d ConsentLinkDetails)
 	PasswordReset(ctx context.Context, toEmail string, d PasswordResetDetails)
 	AccountVerification(ctx context.Context, toEmail string, d VerificationDetails)
+	// TenantSignupAlert tells the platform operator a tenant signed up / verified.
+	TenantSignupAlert(ctx context.Context, toEmail string, d TenantSignupDetails)
+	// TenantWelcome greets the new tenant's owner once their email is confirmed.
+	TenantWelcome(ctx context.Context, toEmail string, d TenantWelcomeDetails)
 	// InvoiceReceipt emails the patient their payment receipt with the PDF attached.
 	InvoiceReceipt(ctx context.Context, toEmail string, d InvoiceEmailDetails, pdf []byte) error
 	// PaymentReminder nudges a patient about a pending balance.
@@ -103,6 +128,8 @@ func (NoopNotifier) AppointmentReminder(_ context.Context, _ BookingDetails, _ i
 func (NoopNotifier) ConsentSignLink(_ context.Context, _ string, _ ConsentLinkDetails)      {}
 func (NoopNotifier) PasswordReset(_ context.Context, _ string, _ PasswordResetDetails)      {}
 func (NoopNotifier) AccountVerification(_ context.Context, _ string, _ VerificationDetails) {}
+func (NoopNotifier) TenantSignupAlert(_ context.Context, _ string, _ TenantSignupDetails)   {}
+func (NoopNotifier) TenantWelcome(_ context.Context, _ string, _ TenantWelcomeDetails)      {}
 func (NoopNotifier) InvoiceReceipt(_ context.Context, _ string, _ InvoiceEmailDetails, _ []byte) error {
 	return nil
 }
