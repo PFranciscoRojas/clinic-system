@@ -49,4 +49,8 @@ export const aiDraftsApi = {
   get:     (id: string) => api.get<AIDraft>(`/ai-drafts/${id}`),
   approve: (id: string, body: ApproveDraftInput) =>
     api.post<{ clinical_record_id: string }>(`/ai-drafts/${id}/approve`, body),
+  // Marks the draft approved and links it to an already-finalized clinical
+  // record (the comparison view finalizes the manual record separately).
+  link: (id: string, clinical_record_id: string) =>
+    api.post<void>(`/ai-drafts/${id}/link`, { clinical_record_id }),
 };
