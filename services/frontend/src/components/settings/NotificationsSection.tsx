@@ -3,6 +3,22 @@ import { Bell, Send, AlertCircle, Plug } from 'lucide-react';
 import { orgApi } from '@/api/org';
 import { Toggle, SectionCard } from './primitives';
 
+// An internal alert that is live — it fires into the topbar bell today.
+function ActiveRow({ label, sub }: { label: string; sub: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 0' }}>
+      <div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--s700)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          {label}
+          <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: '#10b981', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 6, padding: '2px 7px' }}>Activa</span>
+        </div>
+        <div style={{ fontSize: 12.5, color: 'var(--s400)', marginTop: 2 }}>{sub}</div>
+      </div>
+      <Bell size={16} color="var(--teal)" style={{ flexShrink: 0 }} />
+    </div>
+  );
+}
+
 function SoonRow({ label, sub }: { label: string; sub: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 0', opacity: 0.6 }}>
@@ -75,10 +91,14 @@ export function NotificationsSection({ setDirty }: { setDirty: (v: boolean) => v
       </SectionCard>
 
       <SectionCard title="Alertas internas" icon={AlertCircle}>
-        <SoonRow label="Nuevo paciente registrado" sub="Notificación cuando se crea un expediente" />
-        <SoonRow label="Cancelación de cita" sub="Alerta inmediata cuando un paciente cancela" />
+        <div style={{ fontSize: 13, color: 'var(--s500)', padding: '4px 0 8px', lineHeight: 1.6 }}>
+          Aparecen en la campana <Bell size={12} style={{ verticalAlign: '-1px' }} /> de la barra superior. No incluyen datos del paciente; abre la notificación para ver el detalle.
+        </div>
+        <ActiveRow label="Borrador IA listo para revisar" sub="Cuando el sistema termina de generar un borrador clínico" />
+        <ActiveRow label="Nueva reserva pagada" sub="Cuando un paciente reserva y paga desde tu página pública" />
+        <ActiveRow label="Conflicto de reserva" sub="Cuando una reserva pagada choca con otra cita en la agenda" />
+        <ActiveRow label="Nuevo paciente registrado" sub="Cuando se crea un expediente en tu clínica (para administradores)" />
         <SoonRow label="Resumen semanal" sub="Reporte cada lunes con métricas de la semana anterior" />
-        <SoonRow label="Borrador IA listo para revisar" sub="Notificación cuando el sistema genera un nuevo borrador clínico" />
       </SectionCard>
     </>
   );

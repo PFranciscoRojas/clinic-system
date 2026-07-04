@@ -20,6 +20,7 @@ import (
 
 	"sghcp/core-api/internal/availability"
 	"sghcp/core-api/internal/billing/mercadopago"
+	"sghcp/core-api/internal/notifications"
 	notify "sghcp/core-api/internal/notify"
 	"sghcp/core-api/internal/shared/config"
 	"sghcp/core-api/internal/shared/crypto"
@@ -63,9 +64,10 @@ type Handler struct {
 	notifier notify.Notifier
 	wa       *whatsapp.Sender
 	cfg      config.Config
+	notif    *notifications.Service
 }
 
-func New(pool *pgxpool.Pool, km *crypto.KeyManager, notifier notify.Notifier, wa *whatsapp.Sender, cfg config.Config) *Handler {
+func New(pool *pgxpool.Pool, km *crypto.KeyManager, notifier notify.Notifier, wa *whatsapp.Sender, cfg config.Config, notif *notifications.Service) *Handler {
 	return &Handler{
 		pool:     pool,
 		km:       km,
@@ -73,6 +75,7 @@ func New(pool *pgxpool.Pool, km *crypto.KeyManager, notifier notify.Notifier, wa
 		notifier: notifier,
 		wa:       wa,
 		cfg:      cfg,
+		notif:    notif,
 	}
 }
 
@@ -454,6 +457,7 @@ func (h *Handler) confirm(ctx context.Context, bookingID, paymentID, paymentType
 	}
 
 	var conflictData *notify.BookingVoucherDetails
+	var assignedStaffID string // hoisted for the in-app notification below
 	scopeErr := dbctx.WithOrgScope(ctx, h.pool, orgID, func(ctx context.Context) error {
 		q := dbctx.From(ctx, h.pool)
 		var staffID, guest, email, modality string
@@ -469,6 +473,7 @@ func (h *Handler) confirm(ctx context.Context, bookingID, paymentID, paymentType
 		if err != nil {
 			return err
 		}
+		assignedStaffID = staffID
 
 		// Re-verify the slot is still free before inserting — a deferred payment
 		// can be credited days after the booking was held, giving another patient
@@ -530,7 +535,27 @@ func (h *Handler) confirm(ctx context.Context, bookingID, paymentID, paymentType
 			admins, _ := h.orgAdminEmails(context.Background(), orgID)
 			h.notifier.BookingConflictAdmin(context.Background(), *conflictData, admins)
 		}()
+		if h.notif != nil {
+			h.notif.EmitOrgAdmins(orgID, notifications.KindBookingConflict,
+				"Conflicto de reserva pagada",
+				"Una reserva pagada choca con otra cita. Revísala en la agenda.",
+				"/")
+		}
 		return
+	}
+
+	// A new paid appointment arrived from the public booking page — surface it in
+	// the assigned professional's inbox and to the clinic's admins. No PII in the
+	// copy; the encrypted detail loads from the agenda the link opens.
+	if h.notif != nil {
+		h.notif.Emit(orgID, assignedStaffID, notifications.KindBookingNew,
+			"Nueva cita reservada",
+			"Un paciente reservó y pagó una cita desde tu página pública.",
+			"/")
+		h.notif.EmitOrgAdmins(orgID, notifications.KindBookingNew,
+			"Nueva cita reservada",
+			"Un paciente reservó y pagó una cita desde la página pública.",
+			"/", assignedStaffID)
 	}
 
 	// Fire-and-forget on its own context so a slow Resend call never delays the
