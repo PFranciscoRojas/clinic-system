@@ -4,7 +4,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Badge } from '@/components/ui/Badge';
 import {
   invoicesApi, formatMoney, balanceOf, invoiceLabel,
-  INVOICE_STATUS_META, PAYMENT_METHOD_LABELS,
+  INVOICE_STATUS_META, PAYMENT_METHOD_LABELS, PAYMENT_REFERENCE_HINTS,
   type Invoice, type InvoiceStatus, type PaymentMethod,
 } from '@/api/invoices';
 
@@ -216,8 +216,9 @@ function PaymentForm({ invoice, balance, onDone, onCancel }: {
           </select>
         </div>
         <div style={{ gridColumn: '1 / -1' }}>
-          <div style={labelStyle}>Referencia (opcional)</div>
-          <input value={reference} onChange={e => setReference(e.target.value)} placeholder="N° de transacción…" style={inputStyle} />
+          <div style={labelStyle}>Referencia (opcional, recomendada)</div>
+          <input value={reference} onChange={e => setReference(e.target.value)}
+            placeholder={PAYMENT_REFERENCE_HINTS[method] ?? 'N° de transacción o comprobante…'} style={inputStyle} />
         </div>
       </div>
       {err && <div style={{ fontSize: 12.5, color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 6, marginTop: 12 }}><AlertCircle size={13} />{err}</div>}

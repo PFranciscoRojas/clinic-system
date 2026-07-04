@@ -148,7 +148,8 @@ func (r *Repository) ListBookingPayments(ctx context.Context, orgID, status stri
 		       COALESCE(mp_payment_id::text,''),
 		       COALESCE(payment_voucher_url,''), hold_expires_at,
 		       CASE WHEN status = 'PAID' THEN updated_at ELSE NULL END,
-		       appointment_id
+		       appointment_id, invoice_id,
+		       (SELECT i.invoice_number FROM invoices i WHERE i.id = bookings.invoice_id)
 		FROM bookings
 		WHERE organization_id = $1
 		  AND (
@@ -182,11 +183,69 @@ func (r *Repository) ListBookingPayments(ctx context.Context, orgID, status stri
 			&bp.Amount, &bp.Status,
 			&bp.PaymentType, &bp.PaymentMethod, &bp.MpPaymentID,
 			&bp.VoucherURL, &bp.HoldExpiresAt, &bp.PaidAt,
-			&bp.AppointmentID,
+			&bp.AppointmentID, &bp.InvoiceID, &bp.InvoiceNumber,
 		); err != nil {
 			return nil, fmt.Errorf("scan booking payment: %w", err)
 		}
 		out = append(out, bp)
 	}
 	return out, rows.Err()
+}
+
+// bookingForInvoice carries the booking fields needed to derive an invoice
+// from a paid public booking.
+type bookingForInvoice struct {
+	ID            string
+	BookingNumber int64
+	Amount        int
+	Currency      string
+	Status        string
+	PaymentType   string
+	PaymentMethod string
+	MpPaymentID   string
+	AppointmentID *string
+	InvoiceID     *string
+	PaidAt        *time.Time
+}
+
+func (r *Repository) GetBookingForInvoice(ctx context.Context, orgID, id string) (bookingForInvoice, error) {
+	var b bookingForInvoice
+	err := r.q(ctx).QueryRow(ctx, `
+		SELECT b.id,
+		       (SELECT COUNT(*) FROM bookings b2
+		        WHERE b2.organization_id = b.organization_id AND b2.created_at <= b.created_at),
+		       b.amount, b.currency, b.status,
+		       COALESCE(b.mp_payment_type,''), COALESCE(b.mp_payment_method,''),
+		       COALESCE(b.mp_payment_id::text,''),
+		       b.appointment_id, b.invoice_id,
+		       CASE WHEN b.status = 'PAID' THEN b.updated_at ELSE NULL END
+		FROM bookings b
+		WHERE b.organization_id = $1 AND b.id = $2
+	`, orgID, id).Scan(
+		&b.ID, &b.BookingNumber, &b.Amount, &b.Currency, &b.Status,
+		&b.PaymentType, &b.PaymentMethod, &b.MpPaymentID,
+		&b.AppointmentID, &b.InvoiceID, &b.PaidAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return bookingForInvoice{}, ErrNotFound
+	}
+	if err != nil {
+		return bookingForInvoice{}, fmt.Errorf("get booking for invoice: %w", err)
+	}
+	return b, nil
+}
+
+// ClaimBookingInvoice links a booking to its invoice, but only if it is PAID
+// and not already invoiced — the partial unique index plus this guard make the
+// booking→invoice relation effectively one-shot even under concurrent clicks.
+// updated_at is left untouched: it doubles as the payment timestamp.
+func (r *Repository) ClaimBookingInvoice(ctx context.Context, orgID, bookingID, invoiceID string) (bool, error) {
+	tag, err := r.q(ctx).Exec(ctx, `
+		UPDATE bookings SET invoice_id = $3
+		WHERE organization_id = $1 AND id = $2 AND status = 'PAID' AND invoice_id IS NULL
+	`, orgID, bookingID, invoiceID)
+	if err != nil {
+		return false, fmt.Errorf("claim booking invoice: %w", err)
+	}
+	return tag.RowsAffected() == 1, nil
 }

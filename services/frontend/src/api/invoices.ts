@@ -126,6 +126,8 @@ export interface BookingPayment {
   hold_expires_at: string | null;
   paid_at: string | null;
   appointment_id: string | null;
+  invoice_id: string | null;
+  invoice_number: number | null;
 }
 
 export const invoicesApi = {
@@ -140,6 +142,10 @@ export const invoicesApi = {
   sendReminders: () => api.post<{ sent: number; skipped: number; pending: number }>('/invoices/send-reminders', {}),
   get: (id: string) => api.get<Invoice>(`/invoices/${id}`),
   create: (input: CreateInvoiceInput) => api.post<Invoice>('/invoices', input),
+  // Turns a paid online booking into an already-PAID invoice for the patient,
+  // so the clinic can hand out its own receipt (insurance reimbursement etc.).
+  createFromBooking: (booking_id: string, patient_id: string) =>
+    api.post<Invoice>('/invoices/from-booking', { booking_id, patient_id }),
   issue: (id: string, dueAt?: string) =>
     api.post<Invoice>(`/invoices/${id}/issue`, dueAt ? { due_at: dueAt } : {}),
   cancel: (id: string) => api.post<Invoice>(`/invoices/${id}/cancel`, {}),
@@ -162,6 +168,18 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   INSURANCE_EPS: 'EPS',
   INSURANCE_PRIVATE: 'Seguro privado',
   OTHER: 'Otro',
+};
+
+// Placeholder for the payment-reference input, per method — nudges the user to
+// capture the identifier that ties the payment to the real transaction.
+export const PAYMENT_REFERENCE_HINTS: Partial<Record<PaymentMethod, string>> = {
+  NEQUI:         'N° de transacción Nequi',
+  BREB:          'Referencia Bre-B (o llave usada)',
+  DAVIPLATA:     'N° de transacción Daviplata',
+  BANK_TRANSFER: 'N° de comprobante de la transferencia',
+  PSE:           'CUS de la transacción PSE',
+  CREDIT_CARD:   'N° de aprobación del datáfono',
+  DEBIT_CARD:    'N° de aprobación del datáfono',
 };
 
 export const INVOICE_STATUS_META: Record<InvoiceStatus, { label: string; color: string; bg: string }> = {
