@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, User, Mail, Lock, Eye, EyeOff, AlertTriangle, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { Building2, User, Mail, Lock, Eye, EyeOff, AlertTriangle, CheckCircle2, ShieldCheck, Phone } from 'lucide-react';
 import { authApi } from '@/api/auth';
 import { ApiError } from '@/api/client';
 
@@ -18,6 +18,8 @@ export function SignupPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [pwd, setPwd] = useState('');
+  const [phone, setPhone] = useState('');
+  const [source, setSource] = useState('');
   const [isProfessional, setIsProfessional] = useState(true);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [show, setShow] = useState(false);
@@ -41,7 +43,7 @@ export function SignupPage() {
     if (!acceptedTerms)                  { setErr('Debes aceptar los Términos y la Política de Privacidad para continuar.'); return; }
     setState('saving');
     try {
-      await authApi.signup(orgName.trim(), name.trim(), email.trim(), pwd, isProfessional, acceptedTerms);
+      await authApi.signup(orgName.trim(), name.trim(), email.trim(), pwd, isProfessional, acceptedTerms, phone.trim(), source);
       setState('done');
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
@@ -123,6 +125,24 @@ export function SignupPage() {
                 <button type="button" onClick={() => setShow(s => !s)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--s400)', display: 'flex' }}>
                   {show ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
+              </div>
+              <div style={inputWrap}>
+                <Phone size={16} color="var(--s400)" />
+                <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
+                  placeholder="WhatsApp (opcional) — ej. 300 123 4567" autoComplete="tel" style={input} />
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--s400)', margin: '-6px 2px 16px', lineHeight: 1.5 }}>
+                Solo para ayudarte a arrancar si lo necesitas. Nunca spam.
+              </div>
+              <div style={inputWrap}>
+                <select value={source} onChange={e => setSource(e.target.value)}
+                  style={{ ...input, cursor: 'pointer', color: source ? 'var(--s800)' : 'var(--s400)', appearance: 'none' as const }}>
+                  <option value="">¿Cómo nos conociste? (opcional)</option>
+                  <option value="recommendation">Me lo recomendó un colega</option>
+                  <option value="google">Buscando en Google</option>
+                  <option value="social">Redes sociales</option>
+                  <option value="other">Otro</option>
+                </select>
               </div>
 
               <div style={{ ...sectionLabel, marginTop: 16 }}>¿Atiendes pacientes directamente?</div>

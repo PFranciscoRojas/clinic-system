@@ -16,6 +16,9 @@ type SignupRequest struct {
 	Email          string `json:"email"`
 	Password       string `json:"password"`
 	IsProfessional bool   `json:"is_professional"` // true = owner also practices (bookable agenda)
+	// Phone (WhatsApp) and ReferralSource are optional lead-tracking fields.
+	Phone          string `json:"phone"`
+	ReferralSource string `json:"referral_source"`
 	// AcceptedTerms must be true; if false the handler rejects the request.
 	// TermsVersion is the legal document version accepted (e.g. "2026-06-24"),
 	// stored in users.terms_version for Ley 1581/2012 audit trail purposes.

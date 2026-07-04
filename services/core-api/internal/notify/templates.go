@@ -15,6 +15,8 @@ var (
 	tmplConsentLink   = template.Must(template.New("consent-link").Parse(tmplConsentLinkSrc))
 	tmplPasswordReset = template.Must(template.New("password-reset").Parse(tmplPasswordResetSrc))
 	tmplVerification  = template.Must(template.New("verification").Parse(tmplVerificationSrc))
+	tmplSignupAlert   = template.Must(template.New("signup-alert").Parse(tmplSignupAlertSrc))
+	tmplTenantWelcome = template.Must(template.New("tenant-welcome").Parse(tmplTenantWelcomeSrc))
 )
 
 // bookingView and consentView pair tenant branding with the email payload so
@@ -78,6 +80,14 @@ func renderPasswordReset(d PasswordResetDetails) (string, error) {
 
 func renderVerification(d VerificationDetails) (string, error) {
 	return execTemplate(tmplVerification, d)
+}
+
+func renderTenantSignupAlert(d TenantSignupDetails) (string, error) {
+	return execTemplate(tmplSignupAlert, d)
+}
+
+func renderTenantWelcome(d TenantWelcomeDetails) (string, error) {
+	return execTemplate(tmplTenantWelcome, d)
 }
 
 func execTemplate(t *template.Template, data any) (string, error) {
@@ -394,6 +404,82 @@ const tmplPasswordResetSrc = `<!DOCTYPE html>
         <tr><td style="padding:16px 36px 24px;border-top:1px solid #ece9e3;">
           <p style="margin:0;font-size:12px;color:#aaa;line-height:1.6;">
             Este es un mensaje automático del sistema de gestión clínica. No respondas a este correo.
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+
+const tmplSignupAlertSrc = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f5f4f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f5f4f0;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="background:#fff;border-radius:10px;overflow:hidden;max-width:560px;width:100%;">
+        <tr><td style="background:#363285;padding:28px 36px;">
+          <p style="margin:0;color:#fff;font-size:16px;font-weight:600;letter-spacing:.02em;">{{if .Verified}}Correo verificado — lead activo{{else}}Nuevo registro en Chapni{{end}}</p>
+        </td></tr>
+        <tr><td style="padding:36px;">
+          <h1 style="margin:0 0 8px;font-size:20px;color:#1a1a1a;font-weight:600;">{{.OrgName}}</h1>
+          <p style="margin:0 0 24px;font-size:14px;color:#888;">{{if .Verified}}El propietario confirmó su correo y ya puede ingresar.{{else}}Cuenta creada · verificación de correo pendiente.{{end}}</p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f4f0;border-radius:8px;margin-bottom:24px;">
+            <tr><td style="padding:20px 24px;">
+              <p style="margin:0 0 10px;font-size:11px;color:#999;text-transform:uppercase;letter-spacing:.08em;font-weight:600;">Datos del lead</p>
+              <p style="margin:0 0 6px;font-size:14px;color:#333;"><strong>Nombre:</strong> {{.AdminName}}</p>
+              <p style="margin:0 0 6px;font-size:14px;color:#333;"><strong>Email:</strong> <a href="mailto:{{.Email}}" style="color:#363285;text-decoration:none;">{{.Email}}</a></p>
+              {{if .Phone}}<p style="margin:0 0 6px;font-size:14px;color:#333;"><strong>WhatsApp:</strong> <a href="https://wa.me/{{.Phone}}" style="color:#363285;text-decoration:none;">{{.Phone}}</a></p>{{end}}
+              {{if .Source}}<p style="margin:0 0 6px;font-size:14px;color:#333;"><strong>Cómo nos conoció:</strong> {{.Source}}</p>{{end}}
+              <p style="margin:0;font-size:14px;color:#333;"><strong>Slug:</strong> {{.Slug}}</p>
+            </td></tr>
+          </table>
+          <p style="margin:0;font-size:14px;color:#777;">
+            {{if .Verified}}Buen momento para escribirle y ofrecerle un tour del sistema.{{else}}Recibirás otro aviso cuando confirme su correo.{{end}}
+          </p>
+        </td></tr>
+        <tr><td style="padding:16px 36px 24px;border-top:1px solid #ece9e3;">
+          <p style="margin:0;font-size:12px;color:#aaa;">Chapni · Alerta interna de registro</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+
+const tmplTenantWelcomeSrc = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f5f4f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f5f4f0;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="background:#fff;border-radius:10px;overflow:hidden;max-width:560px;width:100%;">
+        <tr><td style="background:#363285;padding:28px 36px;">
+          <p style="margin:0;color:#fff;font-size:16px;font-weight:600;letter-spacing:.02em;">Chapni · Historia clínica cifrada</p>
+        </td></tr>
+        <tr><td style="padding:36px;">
+          <h1 style="margin:0 0 16px;font-size:20px;color:#1a1a1a;font-weight:600;">¡Tu consultorio está listo!</h1>
+          <p style="margin:0 0 24px;font-size:15px;color:#555;line-height:1.7;">
+            Hola <strong>{{.Name}}</strong>,<br>
+            tu cuenta quedó activa y tienes 14 días para probar Chapni con calma: agenda, historias clínicas cifradas, consentimientos y cobros.
+          </p>
+          <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 0 24px;">
+            <tr><td style="border-radius:8px;background:#d9a038;">
+              <a href="{{.LoginURL}}" style="display:inline-block;padding:13px 28px;color:#3a2a06;font-size:15px;font-weight:600;text-decoration:none;">Entrar a mi consultorio</a>
+            </td></tr>
+          </table>
+          <p style="margin:0 0 24px;font-size:15px;color:#555;line-height:1.7;">
+            Soy Francisco, el creador de Chapni. Si quieres, te acompaño personalmente en tus primeros pasos
+            {{if .SupportWhatsApp}} — escríbeme por <a href="https://wa.me/{{.SupportWhatsApp}}?text=Hola%20Francisco%2C%20acabo%20de%20crear%20mi%20cuenta%20en%20Chapni" style="color:#363285;font-weight:600;text-decoration:none;">WhatsApp</a> y agendamos un tour de 15 minutos{{else}} — responde a este correo y agendamos un tour de 15 minutos{{end}}. Sin compromiso: la idea es que en tu prueba veas el sistema funcionando con tu forma de trabajar.
+          </p>
+          <p style="margin:0;font-size:13px;color:#999;line-height:1.6;">
+            Tus datos clínicos se cifran con una llave por paciente y cumplimos la Ley 1581 de 2012.
+          </p>
+        </td></tr>
+        <tr><td style="padding:16px 36px 24px;border-top:1px solid #ece9e3;">
+          <p style="margin:0;font-size:12px;color:#aaa;line-height:1.6;">
+            Chapni · Historia clínica cifrada
           </p>
         </td></tr>
       </table>

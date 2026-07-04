@@ -40,6 +40,13 @@ type Config struct {
 	// patients (e.g. remote consent signature).
 	AppBaseURL string
 
+	// SignupNotifyEmail receives an internal alert on every self-serve signup
+	// and email verification (lead tracking). Empty disables the alerts.
+	SignupNotifyEmail string
+	// SupportWhatsApp is the intl support number (digits only, e.g. 573001234567)
+	// used to build wa.me links in the welcome email. Empty hides the CTA.
+	SupportWhatsApp string
+
 	// AllowDataReset enables the admin-only "wipe clinical test data" endpoint.
 	// Off by default; turn on only while the clinic is in a testing phase.
 	AllowDataReset bool
@@ -107,6 +114,9 @@ func Load() Config {
 		ResendFrom:   getEnv("RESEND_FROM", ""),
 
 		AppBaseURL: getEnv("APP_BASE_URL", "http://localhost:5173"),
+
+		SignupNotifyEmail: getEnv("SIGNUP_NOTIFY_EMAIL", ""),
+		SupportWhatsApp:   getEnv("SUPPORT_WHATSAPP", ""),
 
 		AllowDataReset: getEnvBool("ALLOW_DATA_RESET", false),
 

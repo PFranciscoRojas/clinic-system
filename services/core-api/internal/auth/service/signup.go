@@ -22,35 +22,39 @@ const (
 )
 
 // Signup provisions a new tenant from a public form and emails a one-time
-// verification link. orgName is the clinic/practice (becomes the organization
-// and its slug); adminName is the owner's own name (becomes their display name
+// verification link. p.OrgName is the clinic/practice (becomes the organization
+// and its slug); p.AdminName is the owner's own name (becomes their display name
 // and, after onboarding, their professional profile). The account exists
 // immediately but cannot log in until the address is confirmed.
-func (s *Service) Signup(ctx context.Context, orgName, adminName, email, password, termsVersion string, isProfessional bool) error {
-	orgName = strings.TrimSpace(orgName)
-	adminName = strings.TrimSpace(adminName)
-	email = strings.TrimSpace(email)
+func (s *Service) Signup(ctx context.Context, p auth.SignupParams) error {
+	orgName := strings.TrimSpace(p.OrgName)
+	adminName := strings.TrimSpace(p.AdminName)
+	email := strings.TrimSpace(p.Email)
 	if orgName == "" || adminName == "" || !looksLikeEmail(email) {
 		return auth.ErrInvalidCredentials
 	}
-	if len(password) < 8 {
+	if len(p.Password) < 8 {
 		return auth.ErrWeakPassword
 	}
 
-	pwHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	pwHash, err := bcrypt.GenerateFromPassword([]byte(p.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("hashing password: %w", err)
 	}
 
-	_, _, userID, err := s.repo.CreateOrgWithOwner(ctx, auth.CreateOrgParams{
+	phone := sanitizePhone(p.Phone)
+	source := clampField(p.ReferralSource, 64)
+	_, slug, userID, err := s.repo.CreateOrgWithOwner(ctx, auth.CreateOrgParams{
 		OrgName:        orgName,
 		BaseSlug:       slugify(orgName),
 		Email:          email,
 		PasswordHash:   string(pwHash),
 		DisplayName:    adminName,
 		TrialDays:      trialDays,
-		IsProfessional: isProfessional,
-		TermsVersion:   termsVersion,
+		IsProfessional: p.IsProfessional,
+		TermsVersion:   p.TermsVersion,
+		Phone:          phone,
+		ReferralSource: source,
 	})
 	if errors.Is(err, auth.ErrEmailAlreadyExists) {
 		return err
@@ -73,6 +77,16 @@ func (s *Service) Signup(ctx context.Context, orgName, adminName, email, passwor
 		Name: adminName,
 		Link: link,
 	})
+	if s.signupAlertEmail != "" {
+		go s.notifier.TenantSignupAlert(context.Background(), s.signupAlertEmail, notify.TenantSignupDetails{
+			OrgName:   orgName,
+			Slug:      slug,
+			AdminName: adminName,
+			Email:     email,
+			Phone:     phone,
+			Source:    source,
+		})
+	}
 	return nil
 }
 
@@ -114,18 +128,77 @@ func (s *Service) ResendVerification(ctx context.Context, email string) error {
 }
 
 // VerifyEmail consumes a one-time verification token and marks the account
-// confirmed. The token is single-use (GetDel) and expires within 24h.
+// confirmed. The token is single-use (GetDel) and expires within 24h. On
+// success it greets the owner (welcome + founder tour offer) and alerts the
+// operator that the lead is now active; both emails are best-effort.
 func (s *Service) VerifyEmail(ctx context.Context, token string) error {
 	userID, err := s.rdb.GetDel(ctx, emailVerifyPrefix+hash.Token(token)).Result()
 	if err != nil || userID == "" {
 		return auth.ErrInviteInvalid // reused/expired/unknown token
 	}
-	return s.repo.MarkEmailVerified(ctx, userID)
+	if err := s.repo.MarkEmailVerified(ctx, userID); err != nil {
+		return err
+	}
+
+	u, err := s.repo.FindUserByID(ctx, userID)
+	if err != nil {
+		return nil // verified fine; the courtesy emails just can't be built
+	}
+	name := u.Email
+	if u.DisplayName != nil && *u.DisplayName != "" {
+		name = *u.DisplayName
+	}
+	go s.notifier.TenantWelcome(context.Background(), u.Email, notify.TenantWelcomeDetails{
+		Name:            name,
+		LoginURL:        s.appBaseURL + "/login",
+		SupportWhatsApp: s.supportWhatsApp,
+	})
+	if s.signupAlertEmail != "" {
+		orgName, _, _, _, err := s.repo.OrgInfo(ctx, u.OrganizationID)
+		if err != nil {
+			orgName = u.OrganizationID
+		}
+		go s.notifier.TenantSignupAlert(context.Background(), s.signupAlertEmail, notify.TenantSignupDetails{
+			OrgName:   orgName,
+			AdminName: name,
+			Email:     u.Email,
+			Verified:  true,
+		})
+	}
+	return nil
 }
 
 var emailRe = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 
 func looksLikeEmail(s string) bool { return emailRe.MatchString(s) }
+
+var nonPhoneChars = regexp.MustCompile(`[^0-9+]`)
+
+// sanitizePhone keeps only digits (dropping spaces, dashes and a leading +) so
+// the stored value works directly in a wa.me link. Empty or absurd input
+// (fewer than 7 digits) is discarded — the field is optional lead data.
+func sanitizePhone(s string) string {
+	s = nonPhoneChars.ReplaceAllString(s, "")
+	s = strings.TrimPrefix(s, "+")
+	if len(s) < 7 || len(s) > 15 {
+		return ""
+	}
+	// Colombia-first: a bare 10-digit mobile (3xx…) gets the country code so
+	// the wa.me link works as-is.
+	if len(s) == 10 && s[0] == '3' {
+		s = "57" + s
+	}
+	return s
+}
+
+// clampField trims an optional free-form field to a sane stored length.
+func clampField(s string, max int) string {
+	s = strings.TrimSpace(s)
+	if len(s) > max {
+		return s[:max]
+	}
+	return s
+}
 
 var (
 	nonSlugChars = regexp.MustCompile(`[^a-z0-9]+`)

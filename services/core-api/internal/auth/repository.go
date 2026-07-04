@@ -60,6 +60,23 @@ type CreateOrgParams struct {
 	// TermsVersion is the accepted legal-document version (e.g. "2026-06-24").
 	// Stored alongside terms_accepted_at = now() as a Ley 1581/2012 audit trail.
 	TermsVersion string
+	// Phone and ReferralSource are optional lead-tracking fields from the signup
+	// form: the owner's WhatsApp contact and how they heard about the product.
+	Phone          string
+	ReferralSource string
+}
+
+// SignupParams carries the public signup form into the service layer.
+type SignupParams struct {
+	OrgName      string // clinic/practice name → organization + slug
+	AdminName    string // the owner's own name → display name
+	Email        string
+	Password     string
+	TermsVersion string
+	// Phone and ReferralSource are optional lead-tracking fields.
+	Phone          string
+	ReferralSource string
+	IsProfessional bool
 }
 
 // InvitePayload is serialised to/from Redis for the 48-hour invite window.

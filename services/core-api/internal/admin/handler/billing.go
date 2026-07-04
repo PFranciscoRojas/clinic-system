@@ -29,6 +29,9 @@ type orgRow struct {
 	CreatedAt          time.Time  `json:"created_at"`
 	TotalUsers         int        `json:"total_users"`
 	TotalPatients      int        `json:"total_patients"`
+	SignupPhone        *string    `json:"signup_phone"`
+	SignupSource       *string    `json:"signup_source"`
+	OwnerEmail         *string    `json:"owner_email"`
 }
 
 // GET /api/v1/admin/orgs — SYSTEM_ADMIN: every real tenant with its billing
@@ -40,7 +43,11 @@ func (h *Handler) listOrgs(w http.ResponseWriter, r *http.Request) {
 		SELECT o.id, o.name, o.slug, o.subscription_status, o.trial_ends_at,
 		       o.current_period_end, o.created_at,
 		       COUNT(DISTINCT u.id)::int AS total_users,
-		       COUNT(DISTINCT p.id)::int AS total_patients
+		       COUNT(DISTINCT p.id)::int AS total_patients,
+		       o.signup_phone, o.signup_source,
+		       (SELECT u2.email FROM users u2
+		        WHERE u2.organization_id = o.id
+		        ORDER BY u2.created_at ASC LIMIT 1) AS owner_email
 		FROM organizations o
 		LEFT JOIN users u ON u.organization_id = o.id
 		LEFT JOIN patients p ON p.organization_id = o.id
@@ -58,7 +65,7 @@ func (h *Handler) listOrgs(w http.ResponseWriter, r *http.Request) {
 	orgs := []orgRow{}
 	for rows.Next() {
 		var o orgRow
-		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.SubscriptionStatus, &o.TrialEndsAt, &o.CurrentPeriodEnd, &o.CreatedAt, &o.TotalUsers, &o.TotalPatients); err != nil {
+		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.SubscriptionStatus, &o.TrialEndsAt, &o.CurrentPeriodEnd, &o.CreatedAt, &o.TotalUsers, &o.TotalPatients, &o.SignupPhone, &o.SignupSource, &o.OwnerEmail); err != nil {
 			httputil.WriteError(w, http.StatusInternalServerError, "scan error")
 			return
 		}

@@ -231,6 +231,33 @@ func (n *ResendNotifier) AccountVerification(ctx context.Context, toEmail string
 	}
 }
 
+// TenantSignupAlert tells the platform operator that a tenant signed up (or
+// confirmed their email), with the lead-tracking data from the signup form.
+func (n *ResendNotifier) TenantSignupAlert(ctx context.Context, toEmail string, d TenantSignupDetails) {
+	html, err := renderTenantSignupAlert(d)
+	if err != nil {
+		return
+	}
+	subj := fmt.Sprintf("Nuevo registro: %s (%s)", d.OrgName, d.Email)
+	if d.Verified {
+		subj = fmt.Sprintf("Correo verificado ✔ %s (%s)", d.OrgName, d.Email)
+	}
+	if err := n.send(ctx, toEmail, subj, html); err != nil {
+		slog.Default().Warn("notify: tenant-signup alert failed", "err", err)
+	}
+}
+
+// TenantWelcome greets the new tenant's owner once their email is confirmed.
+func (n *ResendNotifier) TenantWelcome(ctx context.Context, toEmail string, d TenantWelcomeDetails) {
+	html, err := renderTenantWelcome(d)
+	if err != nil {
+		return
+	}
+	if err := n.send(ctx, toEmail, "Tu consultorio está listo · Chapni", html); err != nil {
+		slog.Default().Warn("notify: tenant-welcome email failed", "err", err)
+	}
+}
+
 // InvoiceReceipt emails the patient their payment receipt with the PDF attached.
 func (n *ResendNotifier) InvoiceReceipt(ctx context.Context, to string, d InvoiceEmailDetails, pdf []byte) error {
 	brand := n.brandFor(ctx, d.OrgID)

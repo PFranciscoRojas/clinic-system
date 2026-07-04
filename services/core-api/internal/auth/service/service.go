@@ -28,6 +28,11 @@ type Service struct {
 	refreshTTL time.Duration
 	notifier   notify.Notifier // sends the self-service password-reset email
 	appBaseURL string          // public SPA origin, used to build the reset link
+
+	// signupAlertEmail receives internal lead alerts on signup/verification;
+	// empty disables them. supportWhatsApp feeds the welcome email's wa.me CTA.
+	signupAlertEmail string
+	supportWhatsApp  string
 }
 
 func New(repo auth.Repository, rdb *redis.Client, cfg config.Config) *Service {
@@ -45,6 +50,9 @@ func New(repo auth.Repository, rdb *redis.Client, cfg config.Config) *Service {
 		refreshTTL: time.Duration(cfg.JWTRefreshTTLDays) * 24 * time.Hour,
 		notifier:   notifier,
 		appBaseURL: cfg.AppBaseURL,
+
+		signupAlertEmail: cfg.SignupNotifyEmail,
+		supportWhatsApp:  cfg.SupportWhatsApp,
 	}
 }
 
