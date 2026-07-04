@@ -23,6 +23,7 @@ var rlsTables = []string{
 	"ai_drafts",
 	"invoices",
 	"payments",
+	"notifications",
 }
 
 func TestTenantIsolation(t *testing.T) {
