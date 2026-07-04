@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
 import { todayLocalISO } from '@/lib/dates';
 import TemplatedSectionsForm, { type SectionsState } from '@/components/clinical/TemplatedSectionsForm';
+import { MentalExamChecklist, defaultMentalExam, type MentalExam } from '@/components/clinical/MentalExamChecklist';
 
 const STATUS_CONFIG: Record<DraftStatus, { label: string; color: string; bg: string; Icon: React.ElementType }> = {
   PENDING:      { label: 'En cola',        color: '#6b7280', bg: '#f3f4f6', Icon: Clock        },
@@ -49,6 +50,11 @@ export function AIDraftPage() {
   const [approveErr, setApproveErr] = useState('');
   const [createdRecordId, setCreatedRecordId] = useState('');
   const [riskLevel, setRiskLevel] = useState('NONE');
+  // Mental exam (INITIAL, integrated format): a required section the AI does
+  // not generate — the professional fills the checklist here, mirroring the
+  // manual record form. Defaulted so approval is never blocked by a section
+  // the review page previously never rendered.
+  const [mentalExam, setMentalExam] = useState<MentalExam>(defaultMentalExam());
   // Lets the professional correct the record type before approving
   const [showTranscript, setShowTranscript] = useState(false);
   // ICD-10 to assign on approve — seeded from the AI suggestion, confirmable.
@@ -87,6 +93,17 @@ export function AIDraftPage() {
     setCustomEdit(sections);
   }, [customTemplate, draft]);
 
+  // Seed the mental exam from the draft if it already carries one (an edited or
+  // legacy draft); otherwise it stays the empty default the professional fills.
+  useEffect(() => {
+    if (!draft) return;
+    const raw = draft.draft_content_plain as Record<string, unknown> | null;
+    const me = (raw?.sections as Record<string, unknown> | undefined)?.mental_exam;
+    if (me && typeof me === 'object' && !Array.isArray(me)) {
+      setMentalExam({ ...defaultMentalExam(), ...(me as Partial<MentalExam>) });
+    }
+  }, [draft]);
+
   // Seed the ICD-10 selector from the AI suggestion once, when the draft loads
   useEffect(() => {
     if (icd10 !== undefined) return;
@@ -117,14 +134,19 @@ export function AIDraftPage() {
           risk_level: riskLevel,
         };
       } else {
-        // Integrated format path: text-only sections
-        const finalSections: Record<string, string> = {};
+        // Integrated format path: text sections plus, for an INITIAL record,
+        // the mental exam widget — a required section the AI never generates,
+        // so it must travel here or the backend rejects the approval.
+        const finalSections: Record<string, unknown> = {};
         for (const def of sectionDefs) {
           const v = (draftEdit[def.key] ?? baseContent[def.key] ?? '').trim();
           if (v) finalSections[def.key] = v;
         }
         for (const [k, v] of extraSections) {
           if (!(k in finalSections)) finalSections[k] = v;
+        }
+        if (recordType === 'INITIAL') {
+          finalSections.mental_exam = mentalExam;
         }
         approveBody = {
           sections: finalSections,
@@ -380,6 +402,10 @@ export function AIDraftPage() {
           {/* ICD-10 suggestion in comparison mode */}
           <Icd10Suggestion value={icd10 ?? null} editable={true} onChange={setIcd10} />
 
+          {recordType === 'INITIAL' && !useCustomTemplate && (
+            <MentalExamCard value={mentalExam} onChange={setMentalExam} />
+          )}
+
           <RiskLevelSelector value={riskLevel} onChange={setRiskLevel} />
 
           {/* Approve action */}
@@ -581,6 +607,10 @@ export function AIDraftPage() {
             />
           )}
 
+          {isReady && recordType === 'INITIAL' && !useCustomTemplate && (
+            <MentalExamCard value={mentalExam} onChange={setMentalExam} />
+          )}
+
           {isReady && <RiskLevelSelector value={riskLevel} onChange={setRiskLevel} />}
 
           {/* Action bar */}
@@ -749,6 +779,24 @@ function Icd10Suggestion({ value, editable, onChange }: {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// MentalExamCard wraps the shared MentalExamChecklist for the AI-draft review
+// page. The mental exam is a required INITIAL section the AI never generates,
+// so it must be filled here before approving (the manual record form does the
+// same). Defaulted, so a blank exam never blocks approval.
+function MentalExamCard({ value, onChange }: { value: MentalExam; onChange: (v: MentalExam) => void }) {
+  return (
+    <div className="card" style={{ padding: '18px 20px', marginBottom: 16 }}>
+      <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
+        Examen mental en consulta <span style={{ color: '#dc2626' }}>*</span>
+      </p>
+      <p style={{ margin: '0 0 14px', fontSize: 12.5, color: 'var(--s500)', lineHeight: 1.6 }}>
+        La IA no completa esta sección — regístrala antes de aprobar.
+      </p>
+      <MentalExamChecklist value={value} onChange={onChange} />
     </div>
   );
 }
