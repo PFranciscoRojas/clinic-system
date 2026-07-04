@@ -11,7 +11,7 @@ import {
 } from '@/api/invoices';
 import { serviceRatesApi } from '@/api/serviceRates';
 
-const PAY_METHODS: PaymentMethod[] = ['CASH', 'BANK_TRANSFER', 'NEQUI', 'DAVIPLATA', 'DEBIT_CARD', 'CREDIT_CARD', 'PSE', 'INSURANCE_EPS', 'INSURANCE_PRIVATE', 'OTHER'];
+const PAY_METHODS: PaymentMethod[] = ['CASH', 'BANK_TRANSFER', 'NEQUI', 'BREB', 'DAVIPLATA', 'DEBIT_CARD', 'CREDIT_CARD', 'PSE', 'INSURANCE_EPS', 'INSURANCE_PRIVATE', 'OTHER'];
 
 const fmtDate = (s?: string | null) => s ? new Date(s).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 

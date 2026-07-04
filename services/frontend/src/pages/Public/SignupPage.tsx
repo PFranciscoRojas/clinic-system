@@ -140,6 +140,7 @@ export function SignupPage() {
                   <option value="">¿Cómo nos conociste? (opcional)</option>
                   <option value="recommendation">Me lo recomendó un colega</option>
                   <option value="google">Buscando en Google</option>
+                  <option value="ai">Una IA (ChatGPT, Claude, Gemini…)</option>
                   <option value="social">Redes sociales</option>
                   <option value="other">Otro</option>
                 </select>
