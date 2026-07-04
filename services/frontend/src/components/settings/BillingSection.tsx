@@ -24,7 +24,7 @@ function formatMoney(amount: string, currency: string): string {
   return `${sym}${grouped}${frac ? ',' + frac : ''} ${currency}`;
 }
 
-const EMPTY_RATE = { name: '', description: '', amount: '', currency: 'COP', modality: '' as '' | RateModality };
+const EMPTY_RATE = { name: '', description: '', amount: '', currency: 'COP', modality: '' as '' | RateModality, staff_id: '' };
 
 const STATUS_DISPLAY: Record<string, { label: string; color: string; bg: string }> = {
   trialing:  { label: 'Prueba gratuita', color: '#2a2769', bg: '#f3f2fb' },
@@ -193,6 +193,17 @@ export function RatesSection() {
   const [loading, setLoading] = useState(true);
   const [loadErr, setLoadErr] = useState('');
 
+  // Clinical staff for per-professional rates: name resolution in the list and
+  // the target selector in the form (only shown when the org has > 1).
+  const [profs, setProfs] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    import('@/api/auth')
+      .then(({ authApi }) => authApi.listProfessionals())
+      .then(res => setProfs((res.items ?? []).map(p => ({ id: p.id, name: p.name }))))
+      .catch(() => {});
+  }, []);
+  const profName = (id?: string | null) => profs.find(p => p.id === id)?.name;
+
   const [editing, setEditing] = useState<string | null>(null); // rate id, 'new', or null
   const [form,    setForm]    = useState(EMPTY_RATE);
   const [saving,  setSaving]  = useState(false);
@@ -209,7 +220,7 @@ export function RatesSection() {
 
   const openNew = () => { setForm(EMPTY_RATE); setFormErr(''); setEditing('new'); };
   const openEdit = (r: ServiceRate) => {
-    setForm({ name: r.name, description: r.description ?? '', amount: r.amount, currency: r.currency, modality: (r.modality ?? '') as '' | RateModality });
+    setForm({ name: r.name, description: r.description ?? '', amount: r.amount, currency: r.currency, modality: (r.modality ?? '') as '' | RateModality, staff_id: r.staff_id ?? '' });
     setFormErr(''); setEditing(r.id);
   };
   const cancel = () => { setEditing(null); setFormErr(''); };
@@ -222,6 +233,7 @@ export function RatesSection() {
       amount: form.amount.trim().replace(/\s/g, ''), // dot = decimal separator (see field hint)
       currency: form.currency || 'COP',
       modality: form.modality === '' ? null : form.modality,
+      staff_id: form.staff_id || null,
     };
     try {
       if (editing === 'new') await serviceRatesApi.create(payload);
@@ -262,13 +274,14 @@ export function RatesSection() {
             )}
 
             {rates.map(r => editing === r.id ? (
-              <RateForm key={r.id} form={form} setForm={setForm} onSave={save} onCancel={cancel} saving={saving} err={formErr} />
+              <RateForm key={r.id} form={form} setForm={setForm} onSave={save} onCancel={cancel} saving={saving} err={formErr} profs={profs} />
             ) : (
               <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--s100)', opacity: r.is_active ? 1 : 0.55 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--s800)' }}>{r.name}</span>
                     {r.modality && <Badge label={MODALITY_LABELS[r.modality] ?? r.modality} color="#0369a1" bg="#e0f2fe" />}
+                    {r.staff_id && <Badge label={profName(r.staff_id) ?? 'Profesional'} color="#7c3aed" bg="#f3e8ff" />}
                     {!r.is_active && <Badge label="Inactiva" color="var(--s500)" bg="var(--s100)" />}
                   </div>
                   {r.description && <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>{r.description}</div>}
@@ -290,7 +303,7 @@ export function RatesSection() {
             ))}
 
             {editing === 'new' && (
-              <RateForm form={form} setForm={setForm} onSave={save} onCancel={cancel} saving={saving} err={formErr} />
+              <RateForm form={form} setForm={setForm} onSave={save} onCancel={cancel} saving={saving} err={formErr} profs={profs} />
             )}
 
             {editing !== 'new' && (
@@ -308,9 +321,10 @@ export function RatesSection() {
   );
 }
 
-function RateForm({ form, setForm, onSave, onCancel, saving, err }: {
+function RateForm({ form, setForm, onSave, onCancel, saving, err, profs }: {
   form: typeof EMPTY_RATE; setForm: (f: typeof EMPTY_RATE) => void;
   onSave: () => void; onCancel: () => void; saving: boolean; err: string;
+  profs: { id: string; name: string }[];
 }) {
   const upd = (patch: Partial<typeof EMPTY_RATE>) => setForm({ ...form, ...patch });
   return (
@@ -318,6 +332,14 @@ function RateForm({ form, setForm, onSave, onCancel, saving, err }: {
       <FieldRow label="Nombre" sub="Ej: Sesión individual, Primera consulta">
         <FInput value={form.name} onChange={v => upd({ name: v })} placeholder="Sesión individual" />
       </FieldRow>
+      {profs.length > 1 && (
+        <FieldRow label="Profesional" sub="Opcional — la tarifa aplica solo a este profesional">
+          <FSelect value={form.staff_id} onChange={v => upd({ staff_id: v })}>
+            <option value="">Toda la clínica</option>
+            {profs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </FSelect>
+        </FieldRow>
+      )}
       <FieldRow label="Descripción" sub="Opcional">
         <FInput value={form.description} onChange={v => upd({ description: v })} placeholder="Detalle visible en la factura" />
       </FieldRow>

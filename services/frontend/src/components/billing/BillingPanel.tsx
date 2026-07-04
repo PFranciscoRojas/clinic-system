@@ -10,6 +10,7 @@ import {
   type Invoice, type PaymentMethod,
 } from '@/api/invoices';
 import { serviceRatesApi } from '@/api/serviceRates';
+import { authApi } from '@/api/auth';
 
 const PAY_METHODS: PaymentMethod[] = ['CASH', 'BANK_TRANSFER', 'NEQUI', 'BREB', 'DAVIPLATA', 'DEBIT_CARD', 'CREDIT_CARD', 'PSE', 'INSURANCE_EPS', 'INSURANCE_PRIVATE', 'OTHER'];
 
@@ -219,6 +220,10 @@ function Field({ label, value }: { label: string; value: string }) {
 
 function NewInvoiceForm({ patientId, onDone, onCancel }: { patientId: string; onDone: () => void; onCancel: () => void }) {
   const { data: rates } = useQuery({ queryKey: ['service-rates'], queryFn: () => serviceRatesApi.list(false) });
+  // Names for per-professional rates in the selector.
+  const { data: profsRes } = useQuery({ queryKey: ['org-professionals'], queryFn: () => authApi.listProfessionals() });
+  const profName: Record<string, string> = {};
+  for (const p of profsRes?.items ?? []) profName[p.id] = p.name;
   const [rateId, setRateId] = useState('');
   const [subtotal, setSubtotal] = useState('');
   const [discount, setDiscount] = useState('');
@@ -260,7 +265,7 @@ function NewInvoiceForm({ patientId, onDone, onCancel }: { patientId: string; on
           <div style={labelStyle}>Tarifa (opcional — autocompleta el monto)</div>
           <select value={rateId} onChange={e => pickRate(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
             <option value="">— Monto manual —</option>
-            {(rates ?? []).map(r => <option key={r.id} value={r.id}>{r.name} · {formatMoney(r.amount, r.currency)}</option>)}
+            {(rates ?? []).map(r => <option key={r.id} value={r.id}>{r.name}{r.staff_id ? ` (${profName[r.staff_id] ?? 'profesional'})` : ''} · {formatMoney(r.amount, r.currency)}</option>)}
           </select>
         </div>
         <div>

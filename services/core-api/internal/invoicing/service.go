@@ -33,6 +33,9 @@ func (s *Service) Create(ctx context.Context, orgID string, in RateInput) (Rate,
 	if err != nil {
 		return Rate{}, err
 	}
+	if err := s.checkStaff(ctx, orgID, clean.StaffID); err != nil {
+		return Rate{}, err
+	}
 	return s.repo.Create(ctx, orgID, clean)
 }
 
@@ -41,7 +44,26 @@ func (s *Service) Update(ctx context.Context, orgID, id string, in RateInput) (R
 	if err != nil {
 		return Rate{}, err
 	}
+	if err := s.checkStaff(ctx, orgID, clean.StaffID); err != nil {
+		return Rate{}, err
+	}
 	return s.repo.Update(ctx, orgID, id, clean)
+}
+
+// checkStaff rejects a rate targeted at someone who isn't an active member of
+// the org (nil = org-wide rate, always fine).
+func (s *Service) checkStaff(ctx context.Context, orgID string, staffID *string) error {
+	if staffID == nil {
+		return nil
+	}
+	ok, err := s.repo.StaffInOrg(ctx, orgID, *staffID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("%w: el profesional no pertenece a la organización", ErrInvalidInput)
+	}
+	return nil
 }
 
 func (s *Service) SetActive(ctx context.Context, orgID, id string, active bool) (Rate, error) {
@@ -80,6 +102,15 @@ func (s *Service) validate(in RateInput) (RateInput, error) {
 			return RateInput{}, fmt.Errorf("%w: modalidad inválida", ErrInvalidInput)
 		} else {
 			in.Modality = &m
+		}
+	}
+
+	if in.StaffID != nil {
+		id := strings.TrimSpace(*in.StaffID)
+		if id == "" {
+			in.StaffID = nil
+		} else {
+			in.StaffID = &id
 		}
 	}
 	return in, nil

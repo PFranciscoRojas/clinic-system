@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { X, Search, AlertCircle, UserPlus, FileText } from 'lucide-react';
 import { patientsApi, type Patient } from '@/api/patients';
 import { serviceRatesApi } from '@/api/serviceRates';
+import { authApi } from '@/api/auth';
 import {
   invoicesApi, formatMoney,
   type BookingPayment, type Invoice,
@@ -102,6 +103,10 @@ function ModalShell({ title, onClose, children }: { title: string; onClose: () =
 // free amount) and create the invoice — issued right away by default.
 export function NewInvoiceModal({ onClose, onCreated }: { onClose: () => void; onCreated: (inv: Invoice) => void }) {
   const { data: rates } = useQuery({ queryKey: ['service-rates'], queryFn: () => serviceRatesApi.list(false) });
+  // Names for per-professional rates in the selector.
+  const { data: profsRes } = useQuery({ queryKey: ['org-professionals'], queryFn: () => authApi.listProfessionals() });
+  const profName: Record<string, string> = {};
+  for (const p of profsRes?.items ?? []) profName[p.id] = p.name;
   const [patient, setPatient] = useState<Patient | null>(null);
   const [rateId, setRateId] = useState('');
   const [subtotal, setSubtotal] = useState('');
@@ -148,7 +153,7 @@ export function NewInvoiceModal({ onClose, onCreated }: { onClose: () => void; o
           <div style={labelStyle}>Tarifa (opcional — autocompleta el monto)</div>
           <select value={rateId} onChange={e => pickRate(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
             <option value="">— Monto manual —</option>
-            {(rates ?? []).map(r => <option key={r.id} value={r.id}>{r.name} · {formatMoney(r.amount, r.currency)}</option>)}
+            {(rates ?? []).map(r => <option key={r.id} value={r.id}>{r.name}{r.staff_id ? ` (${profName[r.staff_id] ?? 'profesional'})` : ''} · {formatMoney(r.amount, r.currency)}</option>)}
           </select>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
