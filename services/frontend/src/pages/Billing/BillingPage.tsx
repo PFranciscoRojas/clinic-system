@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/lib/useMediaQuery';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Receipt, Wallet, Clock, SearchX, ArrowUp, ArrowDown, Globe, HandCoins, FileText, BarChart3, AlertTriangle, Download, Send, CheckCircle, AlertCircle, Users, Plus } from 'lucide-react';
+import { Receipt, Wallet, Clock, SearchX, ArrowUp, ArrowDown, Globe, HandCoins, FileText, BarChart3, AlertTriangle, Download, Send, CheckCircle, AlertCircle, Users, Plus, Stethoscope } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
@@ -12,8 +12,10 @@ import {
   invoicesApi, formatMoney, invoiceLabel,
   INVOICE_STATUS_META, type Invoice, type InvoiceStatus,
   type BillingOverview, type BillingPeriod, type SeriesPoint, type MethodStat,
-  type BookingPayment,
+  type BookingPayment, type TeamMemberStats,
 } from '@/api/invoices';
+import { authApi } from '@/api/auth';
+import { DEFAULT_SCHEDULE, isWorkingDay, type ScheduleConfig } from '@/lib/schedule';
 
 const FILTERS: { id: string; label: string }[] = [
   { id: '',                 label: 'Todas'             },
@@ -628,8 +630,164 @@ function PacientesTab({ period }: { period: BillingPeriod }) {
   );
 }
 
+// ── Equipo tab (owner dashboard: per-professional metrics) ────────────────────
+
+// periodWindow mirrors the backend's periodRange: [from, now] in local time
+// (Colombia has no DST, so local ≈ COT for our users). Null for 'all'.
+function periodWindow(period: BillingPeriod): { from: Date; to: Date } | null {
+  const now = new Date();
+  const day = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  switch (period) {
+    case 'week': {
+      const mo = (day.getDay() + 6) % 7; // Monday = 0
+      const from = new Date(day);
+      from.setDate(day.getDate() - mo);
+      return { from, to: now };
+    }
+    case 'month':   return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: now };
+    case 'quarter': return { from: new Date(now.getFullYear(), now.getMonth() - 2, 1), to: now };
+    case 'year':    return { from: new Date(now.getFullYear(), 0, 1), to: now };
+    default:        return null;
+  }
+}
+
+const toMin = (hhmm: string) => {
+  const [h, m] = hhmm.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
+
+function dailyWorkMinutes(cfg: ScheduleConfig): number {
+  let v = toMin(cfg.endHour) - toMin(cfg.startHour);
+  if (cfg.breakStart && cfg.breakEnd) v -= Math.max(0, toMin(cfg.breakEnd) - toMin(cfg.breakStart));
+  return Math.max(v, 0);
+}
+
+// availableMinutes sums the professional's configured working minutes over the
+// elapsed days of the window — the denominator of the occupancy ratio.
+function availableMinutes(cfg: ScheduleConfig, from: Date, to: Date): number {
+  const perDay = dailyWorkMinutes(cfg);
+  let total = 0;
+  const d = new Date(from);
+  let guard = 0;
+  while (d <= to && guard < 400) {
+    guard++;
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (isWorkingDay(iso, cfg)) total += perDay;
+    d.setDate(d.getDate() + 1);
+  }
+  return total;
+}
+
+const fmtHours = (min: number) => min >= 60
+  ? `${Math.floor(min / 60)}h${min % 60 ? ` ${min % 60}m` : ''}`
+  : `${min}m`;
+
+function EquipoTab({ period }: { period: BillingPeriod }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['team-stats', period],
+    queryFn: () => invoicesApi.teamStats(period),
+  });
+  // Working-hours config per professional, for the occupancy denominator.
+  const { data: profs } = useQuery({
+    queryKey: ['org-professionals'],
+    queryFn: () => authApi.listProfessionals(),
+  });
+  const list = data ?? [];
+  const win = periodWindow(period);
+
+  const schedules: Record<string, ScheduleConfig> = {};
+  for (const p of profs?.items ?? []) {
+    schedules[p.id] = { ...DEFAULT_SCHEDULE, ...(p.working_hours as Partial<ScheduleConfig>) };
+  }
+
+  const occupancy = (m: TeamMemberStats): number | null => {
+    if (!win || !m.staff_id || !schedules[m.staff_id]) return null;
+    const avail = availableMinutes(schedules[m.staff_id], win.from, win.to);
+    if (avail <= 0) return null;
+    return Math.min(100, Math.round((m.booked_minutes / avail) * 100));
+  };
+
+  const cancelRate = (m: TeamMemberStats): number | null => {
+    const base = m.scheduled + m.cancelled + m.rescheduled;
+    if (base === 0) return null;
+    return Math.round((m.cancelled / base) * 100);
+  };
+
+  return (
+    <div style={{ background: '#fff', border: '1px solid var(--s200)', borderRadius: 14, overflow: 'hidden' }}>
+      {isLoading ? (
+        <div style={{ padding: 48, display: 'flex', justifyContent: 'center' }}><Spinner /></div>
+      ) : list.length === 0 ? (
+        <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--s400)' }}>
+          <SearchX size={28} style={{ opacity: 0.5 }} />
+          <div style={{ fontSize: 13.5, marginTop: 10 }}>No hay actividad del equipo en este período.</div>
+        </div>
+      ) : (
+        <div className="table-wrap">
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr style={{ background: 'var(--s50)', textAlign: 'left', color: 'var(--s500)', fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '.03em' }}>
+              <th style={{ padding: '11px 16px', fontWeight: 700 }}>Profesional</th>
+              <th style={{ padding: '11px 16px', fontWeight: 700, textAlign: 'center' }} title="Sesiones realizadas / agendadas en el período">Sesiones</th>
+              <th style={{ padding: '11px 16px', fontWeight: 700, textAlign: 'center' }}>No asistió</th>
+              <th style={{ padding: '11px 16px', fontWeight: 700, textAlign: 'center' }} title="Cancelaciones (excluye reagendas) y su tasa sobre lo agendado">Canceladas</th>
+              <th style={{ padding: '11px 16px', fontWeight: 700, textAlign: 'center' }}>Reagendas</th>
+              <th style={{ padding: '11px 16px', fontWeight: 700, textAlign: 'right' }}>Horas</th>
+              <th style={{ padding: '11px 16px', fontWeight: 700, width: 140 }} title="Horas agendadas sobre el horario configurado del profesional en los días transcurridos del período">Ocupación</th>
+              <th style={{ padding: '11px 16px', fontWeight: 700, textAlign: 'right' }}>Ingresos</th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.map(m => {
+              const occ = occupancy(m);
+              const cr = cancelRate(m);
+              const unassigned = !m.staff_id;
+              return (
+                <tr key={m.staff_id || 'unassigned'} style={{ borderTop: '1px solid var(--s100)', opacity: unassigned ? 0.75 : 1 }}>
+                  <td style={{ padding: '12px 16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 600, color: 'var(--s800)', fontStyle: unassigned ? 'italic' : 'normal' }}>{m.name}</span>
+                      {m.role_name === 'INTERN' && <Badge label="Practicante" color="#7c3aed" bg="#f3e8ff" />}
+                    </div>
+                  </td>
+                  <td style={{ padding: '12px 16px', textAlign: 'center', color: 'var(--s700)' }}>
+                    <b>{m.completed}</b><span style={{ color: 'var(--s400)' }}> / {m.scheduled}</span>
+                  </td>
+                  <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: m.no_show > 0 ? 700 : 400, color: m.no_show > 0 ? '#b45309' : 'var(--s400)' }}>{m.no_show}</td>
+                  <td style={{ padding: '12px 16px', textAlign: 'center', color: 'var(--s600)' }}>
+                    {m.cancelled}{cr !== null && m.cancelled > 0 && <span style={{ fontSize: 11.5, color: cr >= 25 ? '#dc2626' : 'var(--s400)' }}> ({cr}%)</span>}
+                  </td>
+                  <td style={{ padding: '12px 16px', textAlign: 'center', color: 'var(--s600)' }}>{m.rescheduled}</td>
+                  <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: 'var(--s700)' }}>{fmtHours(m.booked_minutes)}</td>
+                  <td style={{ padding: '12px 16px' }}>
+                    {occ === null ? (
+                      <span style={{ color: 'var(--s300)' }}>—</span>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ flex: 1, height: 6, background: 'var(--s100)', borderRadius: 99, overflow: 'hidden' }}>
+                          <div style={{ width: `${occ}%`, height: '100%', background: occ >= 70 ? '#10b981' : occ >= 35 ? '#f59e0b' : 'var(--s300)', borderRadius: 99 }} />
+                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--s600)', minWidth: 32, textAlign: 'right' }}>{occ}%</span>
+                      </div>
+                    )}
+                  </td>
+                  <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: "'DM Mono', monospace", fontWeight: 700, color: '#065f46' }}>{formatMoney(m.collected, 'COP')}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        </div>
+      )}
+      <div style={{ padding: '10px 16px', borderTop: '1px solid var(--s100)', fontSize: 11.5, color: 'var(--s400)', lineHeight: 1.5 }}>
+        <b>Ingresos</b> = pagos de facturas atribuidos por la cita del profesional + reservas online pagadas sin factura. <b>Ocupación</b> = horas agendadas sobre el horario configurado en los días transcurridos del período.
+      </div>
+    </div>
+  );
+}
+
 // ── Page shell ────────────────────────────────────────────────────────────────
-type Tab = 'facturas' | 'resumen' | 'pacientes';
+type Tab = 'facturas' | 'resumen' | 'pacientes' | 'equipo';
 
 export function BillingPage() {
   const [tab, setTab] = useState<Tab>('facturas');
@@ -642,6 +800,7 @@ export function BillingPage() {
     { id: 'facturas',  label: 'Facturas', Icon: FileText },
     { id: 'resumen',   label: 'Resumen financiero', Icon: BarChart3 },
     { id: 'pacientes', label: 'Balance por paciente', Icon: Users },
+    { id: 'equipo',    label: 'Equipo', Icon: Stethoscope },
   ];
 
   return (
@@ -684,6 +843,7 @@ export function BillingPage() {
       {tab === 'facturas'  && <FacturasTab period={period} />}
       {tab === 'resumen'   && <ResumenTab ov={ov} />}
       {tab === 'pacientes' && <PacientesTab period={period} />}
+      {tab === 'equipo'    && <EquipoTab period={period} />}
 
       <p style={{ fontSize: 11.5, color: 'var(--s400)', marginTop: 16, lineHeight: 1.5 }}>
         Facturación interna del consultorio (comprobantes de pago). <b>Online</b> = pagos por MercadoPago; <b>Directo</b> = pagos registrados a mano. No constituye facturación electrónica DIAN.
