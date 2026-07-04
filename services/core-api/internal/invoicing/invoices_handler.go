@@ -23,6 +23,7 @@ func (h *Handler) InvoiceRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.With(middleware.RequirePermission("billing:reports")).Get("/overview", h.overview)
 	r.With(middleware.RequirePermission("billing:reports")).Get("/patients-balance", h.patientsBalance)
+	r.With(middleware.RequirePermission("billing:reports")).Get("/team-stats", h.teamStats)
 	r.With(middleware.RequirePermission("billing:read")).Get("/bookings", h.listBookingPayments)
 	r.With(middleware.RequirePermission("billing:read")).Get("/", h.listInvoices)
 	r.With(middleware.RequirePermission("billing:read")).Get("/{invoice_id}", h.getInvoice)
@@ -141,6 +142,19 @@ func (h *Handler) patientsBalance(w http.ResponseWriter, r *http.Request) {
 		if p, err := h.patients.Get(ctx, claims.OrganizationID, rows[i].PatientID); err == nil {
 			rows[i].Name = joinNonEmpty(p.FirstName, p.MiddleName, p.PaternalLastName, p.MaternalLastName)
 		}
+	}
+	httputil.WriteJSON(w, http.StatusOK, rows)
+}
+
+// GET /invoices/team-stats?period= — per-professional sessions and collected
+// income for the owner dashboard (B2B-3).
+func (h *Handler) teamStats(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	from, to := periodBounds(r.URL.Query().Get("period"))
+	rows, err := h.svc.TeamStats(r.Context(), claims.OrganizationID, from, to)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "no se pudieron calcular las métricas del equipo")
+		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, rows)
 }

@@ -109,6 +109,21 @@ export interface PatientBalance {
   paid_pct: number;
 }
 
+// One professional's operational + revenue picture for the selected period
+// (owner dashboard). An empty staff_id is the "Sin asignar" catch-all row.
+export interface TeamMemberStats {
+  staff_id: string;
+  name: string;
+  role_name: string;
+  scheduled: number;
+  completed: number;
+  no_show: number;
+  cancelled: number;
+  rescheduled: number;
+  booked_minutes: number;
+  collected: string;
+}
+
 export interface BookingPayment {
   id: string;
   booking_number: number;
@@ -134,6 +149,8 @@ export const invoicesApi = {
   listByPatient: (patientId: string) => api.get<Invoice[]>(`/invoices?patient_id=${patientId}`),
   patientsBalance: (period: BillingPeriod = 'all') =>
     api.get<PatientBalance[]>(`/invoices/patients-balance${period && period !== 'all' ? `?period=${period}` : ''}`),
+  teamStats: (period: BillingPeriod = 'month') =>
+    api.get<TeamMemberStats[]>(`/invoices/team-stats${period && period !== 'all' ? `?period=${period}` : ''}`),
   listAll: (status?: string, period?: BillingPeriod) =>
     api.get<Invoice[]>(`/invoices?with_patient=true${status ? `&status=${status}` : ''}${period && period !== 'all' ? `&period=${period}` : ''}`),
   overview: (period: BillingPeriod = 'month') => api.get<BillingOverview>(`/invoices/overview?period=${period}`),

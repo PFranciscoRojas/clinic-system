@@ -6,7 +6,7 @@
 
 - **✅ B2B-1 — Mínimo vendible (RESUELTO 2026-07-04, PR #130)** — Booking público multi-profesional (selector de profesional en `/book/:slug`, slots y checkout por `staff_id`) y agenda de clínica (filtro por profesional en `AgendaCalendar`, asignación de profesional al crear cita para CLINIC_ADMIN/RECEPTIONIST).
 - **✅ B2B-2 — Plan Clínica cobrable (RESUELTO 2026-07-04)** — `mp_plan_amount` ahora es precio por asiento de profesional; checkout MP multiplica por asientos elegidos (`pending_seats` → `seat_limit` al confirmar); enforcement de asientos en invitar/registrar/reactivar/cambiar rol (solo con plan pagado — el trial no limita porque el checkout cobra por headcount real); activación manual del operador acepta asientos. Ampliar asientos con plan activo = re-checkout asistido (WhatsApp) por ahora.
-- **B2B-3 — Dashboard del dueño (2026-07-03)** — Métricas por profesional: sesiones, ocupación, ingresos. Datos ya disponibles en `appointments` + `invoices`. Conecta con "Agenda — Métricas operativas" (abajo).
+- **✅ B2B-3 — Dashboard del dueño (RESUELTO 2026-07-04)** — Tab "Equipo" en Facturación (`GET /invoices/team-stats`, gated `billing:reports`): por profesional sesiones realizadas/agendadas, no-show, canceladas (con tasa), reagendas, horas, ocupación (horas agendadas vs horario configurado, calculada en el frontend) e ingresos (pagos de facturas vía cita + reservas online pagadas sin factura, sin doble conteo). Fila "Sin asignar" para dinero no atribuible. Cubre también "Agenda — Métricas operativas" (abajo).
 - **B2B menores (2026-07-03)** — Tarifas por profesional (hoy `service_rates` es por org); opción "soy clínica" en signup (o provisioning asistido para las primeras); RIPS/ADRES para IPS (ya en roadmap post-1.0); multi-sede fuera de alcance v1.
 
 ## Producto — Auditoría 360° (2026-07-01, "lo que falta para completo")
@@ -111,7 +111,7 @@
 - **Nº de HC en PDF de historia clínica (2026-06-22)** — ✅ Implementado (2026-06-22, `7fdaff7`): header `HC-000001` junto al documento y fila "Nº de HC + apertura" en Sección I. Legacy sin `patient_code` omite la fila.
 
 ## Agenda — Métricas operativas (2026-06-19)
-- Tasa de cancelación y reagendamiento por profesional / período: ¿sirve? Sí tiene valor — una tasa alta de cancelaciones puede indicar problemas de adherencia del paciente o de horarios mal configurados; una tasa alta de reagendas puede indicar que el profesional cambia mucho. Podría mostrarse como tarjeta en el módulo de facturación o en un futuro panel de gestión. Datos ya disponibles en BD (status CANCELLED + cancel_reason = 'Reagendado').
+- ✅ Implementado (2026-07-04, B2B-3): tasa de cancelación y reagendas por profesional/período en Facturación → Equipo.
 
 ## Agenda — Agendado rápido (2026-06-21)
 - ✅ Implementado (2026-06-22, `8b38fd1`): el popover de agendado rápido detecta solapamiento con citas del día (`byDay[day]`, helper `slotIsBusy`) y muestra estado "ocupado" en vez de proponer una hora que luego saldría bloqueada.
