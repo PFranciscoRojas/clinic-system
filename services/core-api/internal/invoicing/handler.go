@@ -56,6 +56,7 @@ type rateBody struct {
 	Amount      string  `json:"amount"`
 	Currency    string  `json:"currency"`
 	Modality    *string `json:"modality"`
+	StaffID     *string `json:"staff_id"` // null/absent = org-wide rate
 }
 
 func (b rateBody) toInput() RateInput {

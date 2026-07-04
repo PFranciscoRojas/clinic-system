@@ -32,6 +32,7 @@ type Rate struct {
 	Amount      string    `json:"amount"`
 	Currency    string    `json:"currency"`
 	Modality    *string   `json:"modality,omitempty"`
+	StaffID     *string   `json:"staff_id,omitempty"` // nil = org-wide rate
 	IsActive    bool      `json:"is_active"`
 	CreatedAt   time.Time `json:"created_at"`
 }
@@ -43,6 +44,7 @@ type RateInput struct {
 	Amount      string
 	Currency    string
 	Modality    *string
+	StaffID     *string
 }
 
 type Repository struct {
@@ -53,12 +55,26 @@ func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
 func (r *Repository) q(ctx context.Context) dbctx.Querier { return dbctx.From(ctx, r.db) }
 
-const rateColumns = `id, name, COALESCE(description, ''), amount::text, currency, modality, is_active, created_at`
+const rateColumns = `id, name, COALESCE(description, ''), amount::text, currency, modality, staff_id::text, is_active, created_at`
 
 func scanRate(row pgx.Row) (Rate, error) {
 	var rt Rate
-	err := row.Scan(&rt.ID, &rt.Name, &rt.Description, &rt.Amount, &rt.Currency, &rt.Modality, &rt.IsActive, &rt.CreatedAt)
+	err := row.Scan(&rt.ID, &rt.Name, &rt.Description, &rt.Amount, &rt.Currency, &rt.Modality, &rt.StaffID, &rt.IsActive, &rt.CreatedAt)
 	return rt, err
+}
+
+// StaffInOrg reports whether the given user is an active member of the org —
+// the guard for targeting a rate at a professional.
+func (r *Repository) StaffInOrg(ctx context.Context, orgID, staffID string) (bool, error) {
+	var ok bool
+	err := r.q(ctx).QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM users WHERE id = $2::uuid AND organization_id = $1 AND is_active)
+	`, orgID, staffID).Scan(&ok)
+	if err != nil {
+		// An unparseable UUID lands here too — treat both as "not a member".
+		return false, nil //nolint:nilerr
+	}
+	return ok, nil
 }
 
 // List returns the org's rates, newest first. Inactive rates are included only
@@ -88,10 +104,10 @@ func (r *Repository) List(ctx context.Context, orgID string, includeInactive boo
 
 func (r *Repository) Create(ctx context.Context, orgID string, in RateInput) (Rate, error) {
 	row := r.q(ctx).QueryRow(ctx, `
-		INSERT INTO service_rates (organization_id, name, description, amount, currency, modality)
-		VALUES ($1, $2, NULLIF($3, ''), $4::numeric, $5, $6)
+		INSERT INTO service_rates (organization_id, name, description, amount, currency, modality, staff_id)
+		VALUES ($1, $2, NULLIF($3, ''), $4::numeric, $5, $6, $7::uuid)
 		RETURNING `+rateColumns+`
-	`, orgID, in.Name, in.Description, in.Amount, in.Currency, in.Modality)
+	`, orgID, in.Name, in.Description, in.Amount, in.Currency, in.Modality, in.StaffID)
 	rt, err := scanRate(row)
 	if err != nil {
 		return Rate{}, fmt.Errorf("insert rate: %w", err)
@@ -103,10 +119,10 @@ func (r *Repository) Update(ctx context.Context, orgID, id string, in RateInput)
 	row := r.q(ctx).QueryRow(ctx, `
 		UPDATE service_rates
 		SET name = $3, description = NULLIF($4, ''), amount = $5::numeric,
-		    currency = $6, modality = $7, updated_at = NOW()
+		    currency = $6, modality = $7, staff_id = $8::uuid, updated_at = NOW()
 		WHERE organization_id = $1 AND id = $2
 		RETURNING `+rateColumns+`
-	`, orgID, id, in.Name, in.Description, in.Amount, in.Currency, in.Modality)
+	`, orgID, id, in.Name, in.Description, in.Amount, in.Currency, in.Modality, in.StaffID)
 	rt, err := scanRate(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Rate{}, ErrNotFound

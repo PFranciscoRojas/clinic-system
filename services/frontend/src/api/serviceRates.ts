@@ -10,6 +10,7 @@ export interface ServiceRate {
   amount: string; // decimal string — money is never a float
   currency: string;
   modality?: RateModality | null;
+  staff_id?: string | null; // null/absent = org-wide rate
   is_active: boolean;
   created_at: string;
 }
@@ -20,6 +21,7 @@ export interface ServiceRateInput {
   amount: string;
   currency?: string;
   modality?: RateModality | null;
+  staff_id?: string | null;
 }
 
 export const serviceRatesApi = {
