@@ -215,7 +215,7 @@ func (h *Handler) invite(w http.ResponseWriter, r *http.Request) {
 	code, expiresAt, err := h.svc.Invite(r.Context(), claims.OrganizationID, claims.UserID, role)
 	if err != nil {
 		slog.Error("auth.invite", "err", err)
-		httputil.WriteError(w, http.StatusInternalServerError, "could not generate invite")
+		writeErr(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusCreated, authdto.InviteResponse{

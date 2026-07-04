@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
 import { orgApi, type PaymentSettings } from '@/api/org';
 import { serviceRatesApi, type ServiceRate, type RateModality } from '@/api/serviceRates';
-import { startCheckout } from '@/api/billing';
+import { startCheckout, billingApi, type PlanInfo } from '@/api/billing';
 import { Toggle, FieldRow, FInput, FSelect, SectionCard } from './primitives';
 
 const MODALITY_LABELS: Record<string, string> = {
@@ -36,6 +36,15 @@ const STATUS_DISPLAY: Record<string, { label: string; color: string; bg: string 
 
 export function PlanStatusCard() {
   const { user } = useAuth();
+  const [plan,  setPlan]  = useState<PlanInfo | null>(null);
+  const [seats, setSeats] = useState(1);
+
+  useEffect(() => {
+    billingApi.plan()
+      .then(p => { setPlan(p); setSeats(Math.max(p.seats_used, 1)); })
+      .catch(() => {}); // non-admins (403) or older backends just see the plain card
+  }, []);
+
   if (!user) return null;
 
   const status = user.subscription_status ?? 'trialing';
@@ -48,23 +57,55 @@ export function PlanStatusCard() {
     until = new Date(user.trial_ends_at).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
   }
 
+  // Seat pricing only matters once the clinic has (or pays for) more than one
+  // professional; solo practices keep the simple card.
+  const multiSeat = plan !== null && (plan.seats_used > 1 || plan.seat_limit > 1);
+  const minSeats  = Math.max(plan?.seats_used ?? 1, 1);
+  const monthly   = plan ? plan.per_seat_amount * seats : 0;
+
+  const stepBtn = (label: string, onClick: () => void, disabled: boolean) => (
+    <button onClick={onClick} disabled={disabled} style={{
+      width: 26, height: 26, borderRadius: 7, border: '1.5px solid #c7c3e8', background: '#fff',
+      color: disabled ? '#c7c3e8' : '#2a2769', fontWeight: 700, fontSize: 14, cursor: disabled ? 'default' : 'pointer', lineHeight: 1,
+    }}>{label}</button>
+  );
+
   return (
-    <div style={{ background: display.bg, border: `1.5px solid ${display.color}33`, borderRadius: 12, padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 14 }}>
-      <div style={{ flex: 1 }}>
+    <div style={{ background: display.bg, border: `1.5px solid ${display.color}33`, borderRadius: 12, padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+      <div style={{ flex: 1, minWidth: 220 }}>
         <div style={{ fontWeight: 700, fontSize: 14, color: display.color }}>{display.label}</div>
         {until && (
           <div style={{ fontSize: 13, color: '#5f5a6e', marginTop: 2 }}>
             {status === 'active' ? 'Próxima renovación' : 'Período de prueba hasta'}: <strong>{until}</strong>
           </div>
         )}
+        {status === 'active' && multiSeat && plan && (
+          <div style={{ fontSize: 13, color: '#5f5a6e', marginTop: 2 }}>
+            Asientos de profesional: <strong>{plan.seats_used} de {plan.seat_limit}</strong> en uso
+            {plan.seats_used >= plan.seat_limit && ' — para ampliar el plan, escríbenos por WhatsApp'}
+          </div>
+        )}
       </div>
       {(status !== 'active') && (
-        <button
-          onClick={() => startCheckout().catch(() => {})}
-          style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#2a2769', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
-        >
-          Activar plan
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          {multiSeat && plan && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12.5, color: '#5f5a6e' }}>Profesionales:</span>
+              {stepBtn('−', () => setSeats(s => Math.max(minSeats, s - 1)), seats <= minSeats)}
+              <span style={{ fontWeight: 700, fontSize: 14, color: '#2a2769', minWidth: 18, textAlign: 'center' }}>{seats}</span>
+              {stepBtn('+', () => setSeats(s => Math.min(100, s + 1)), seats >= 100)}
+              <span style={{ fontSize: 12.5, color: '#5f5a6e', whiteSpace: 'nowrap' }}>
+                = <strong>${monthly.toLocaleString('es-CO')}</strong> COP/mes
+              </span>
+            </div>
+          )}
+          <button
+            onClick={() => startCheckout(multiSeat ? seats : undefined).catch(() => {})}
+            style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#2a2769', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+          >
+            Activar plan
+          </button>
+        </div>
       )}
     </div>
   );

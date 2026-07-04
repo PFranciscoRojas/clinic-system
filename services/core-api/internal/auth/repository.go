@@ -40,6 +40,7 @@ type Repository interface {
 	DeactivateUser(ctx context.Context, orgID, targetUserID string) (int64, error)
 	ReactivateUser(ctx context.Context, orgID, targetUserID, roleID, callerUserID string) error
 	CountAdminsExcluding(ctx context.Context, orgID, excludeUserID string) (int, error)
+	SeatUsage(ctx context.Context, orgID, excludeUserID string) (used, limit int, status string, err error)
 
 	// Legal / DPA.
 	AcceptDPA(ctx context.Context, userID string) error

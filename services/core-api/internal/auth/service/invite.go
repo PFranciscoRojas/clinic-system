@@ -25,6 +25,9 @@ func (s *Service) Invite(ctx context.Context, orgID, callerUserID, roleName stri
 	if roleName == "" {
 		roleName = "PROFESSIONAL"
 	}
+	if err := s.ensureSeatAvailable(ctx, orgID, roleName, ""); err != nil {
+		return "", time.Time{}, err
+	}
 
 	code, err = generateInviteCode()
 	if err != nil {

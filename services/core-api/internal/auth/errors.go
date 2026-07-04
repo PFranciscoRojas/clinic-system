@@ -16,4 +16,5 @@ var (
 	ErrSelfRoleChange     = errors.New("cannot change your own role")
 	ErrSelfDeactivate     = errors.New("cannot deactivate your own account")
 	ErrLastAdmin          = errors.New("cannot remove the last admin of the organization")
+	ErrSeatLimit          = errors.New("no clinical seats available in the plan")
 )

@@ -110,6 +110,11 @@ func (s *Service) ReactivateUser(ctx context.Context, orgID, callerUserID, targe
 	if roleName == "SYSTEM_ADMIN" {
 		return auth.ErrRoleNotFound
 	}
+	// The target is inactive, so they don't hold a seat yet — restoring them
+	// into a clinical role consumes one.
+	if err := s.ensureSeatAvailable(ctx, orgID, roleName, ""); err != nil {
+		return err
+	}
 	roleID, err := s.repo.FindRoleIDByName(ctx, roleName)
 	if err != nil {
 		return err
@@ -125,6 +130,11 @@ func (s *Service) ChangeUserRole(ctx context.Context, orgID, callerUserID, targe
 	}
 	if roleName == "SYSTEM_ADMIN" {
 		return auth.ErrRoleNotFound
+	}
+	// Excluding the target from the count lets a user who already occupies a
+	// clinical seat switch between PROFESSIONAL and INTERN freely.
+	if err := s.ensureSeatAvailable(ctx, orgID, roleName, targetUserID); err != nil {
+		return err
 	}
 	roleID, err := s.repo.FindRoleIDByName(ctx, roleName)
 	if err != nil {
