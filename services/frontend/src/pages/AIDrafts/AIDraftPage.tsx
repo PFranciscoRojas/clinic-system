@@ -17,6 +17,10 @@ import { Spinner } from '@/components/ui/Spinner';
 import { todayLocalISO } from '@/lib/dates';
 import TemplatedSectionsForm, { type SectionsState } from '@/components/clinical/TemplatedSectionsForm';
 import { MentalExamChecklist, defaultMentalExam, type MentalExam } from '@/components/clinical/MentalExamChecklist';
+import {
+  RecordSectionsForm, recordToDraft, draftToPayload, validateDraft, toUIRecordType,
+  type ClinicalDraft, type UIRecordType,
+} from '@/components/clinical/RecordSectionsForm';
 
 const STATUS_CONFIG: Record<DraftStatus, { label: string; color: string; bg: string; Icon: React.ElementType }> = {
   PENDING:      { label: 'En cola',        color: '#6b7280', bg: '#f3f4f6', Icon: Clock        },
@@ -55,6 +59,14 @@ export function AIDraftPage() {
   // manual record form. Defaulted so approval is never blocked by a section
   // the review page previously never rendered.
   const [mentalExam, setMentalExam] = useState<MentalExam>(defaultMentalExam());
+  // Comparison view: the left side is the real, editable clinical record the
+  // professional was filling (all widgets), seeded from the autosaved draft.
+  // Approving finalizes THIS record (merging any AI text accepted into it),
+  // rather than creating a second record.
+  const [leftDraft, setLeftDraft] = useState<ClinicalDraft | null>(null);
+  const [recordSaving, setRecordSaving] = useState(false);
+  const [recordErr, setRecordErr] = useState('');
+  const [recordDone, setRecordDone] = useState(false);
   // Lets the professional correct the record type before approving
   const [showTranscript, setShowTranscript] = useState(false);
   // ICD-10 to assign on approve — seeded from the AI suggestion, confirmable.
@@ -103,6 +115,17 @@ export function AIDraftPage() {
       setMentalExam({ ...defaultMentalExam(), ...(me as Partial<MentalExam>) });
     }
   }, [draft]);
+
+  // Seed the editable left-hand record from the manual autosave draft (with all
+  // its widgets and text) once it loads, for the comparison view.
+  useEffect(() => {
+    if (!manualRecord) return;
+    setLeftDraft(recordToDraft(
+      manualRecord.sections,
+      manualRecord.risk_level,
+      manualRecord.discharge_reason,
+    ));
+  }, [manualRecord]);
 
   // Seed the ICD-10 selector from the AI suggestion once, when the draft loads
   useEffect(() => {
@@ -182,6 +205,39 @@ export function AIDraftPage() {
     }
   };
 
+  // Comparison view: finalize the manual record the professional was filling
+  // (all widgets + whatever AI text they accepted into it) into the clinical
+  // history, then mark the AI draft as consumed by it. One record, no duplicate.
+  const handleApproveRecord = async () => {
+    if (!leftDraft || !qsRecordId || !id || recordSaving || recordDone) return;
+    const uiType = manualRecord ? toUIRecordType(manualRecord.record_type, manualRecord.sections) : 'EVOLUTION';
+    const miss = validateDraft(uiType, leftDraft);
+    if (miss) { setRecordErr(miss.message); return; }
+    setRecordSaving(true); setRecordErr('');
+    try {
+      await clinicalRecordsApi.finalize(qsRecordId, draftToPayload(uiType, leftDraft));
+      // Bookkeeping: mark the draft approved + linked. The record is already
+      // saved, so a link failure must not fail the approval.
+      try { await aiDraftsApi.link(id, qsRecordId); } catch { /* draft link is best-effort */ }
+      if (icd10?.code && draft?.patient_id) {
+        try {
+          await diagnosesApi.create(draft.patient_id, {
+            icd10_code: icd10.code,
+            clinical_record_id: qsRecordId,
+            diagnosis_type: 'PRINCIPAL',
+            diagnosed_at: qsSessionDate || todayLocalISO(),
+          });
+        } catch { /* record saved; diagnosis can be added later */ }
+      }
+      setRecordDone(true);
+      queryClient.invalidateQueries({ queryKey: ['ai-draft', id] });
+    } catch (e) {
+      setRecordErr(e instanceof ApiError && e.message ? e.message : 'No se pudo aprobar el registro.');
+    } finally {
+      setRecordSaving(false);
+    }
+  };
+
   const toggleSection = (key: string) => {
     setCollapsed(prev => {
       const next = new Set(prev);
@@ -237,11 +293,22 @@ export function AIDraftPage() {
 
   // Comparison mode: a manual record exists alongside the AI draft
   const compareMode = !!qsRecordId && !!manualRecord && isReady && !useCustomTemplate;
-  const manualSections: Record<string, string> =
-    (manualRecord?.sections as Record<string, string> | undefined) ?? {};
+  const compareUiType: UIRecordType = manualRecord
+    ? toUIRecordType(manualRecord.record_type, manualRecord.sections)
+    : 'EVOLUTION';
+  // AI text sections to offer on the right of the comparison (only ones the AI
+  // actually produced). The professional pulls any into the record on the left.
+  const aiTextSections: { key: string; label: string; value: string }[] = compareMode
+    ? [
+        ...sectionDefs.map(d => ({ key: d.key, label: d.label, value: (baseContent[d.key] ?? '').trim() })),
+        ...extraSections.map(([k, v]) => ({ key: k, label: k, value: v.trim() })),
+      ].filter(s => s.value !== '')
+    : [];
+  const pullAiSection = (key: string, value: string) =>
+    setLeftDraft(prev => prev ? { ...prev, sections: { ...prev.sections, [key]: value } } : prev);
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto', padding: isMobile ? '0 12px 32px' : 0 }}>
+    <div style={{ maxWidth: compareMode ? 1200 : 760, margin: '0 auto', padding: isMobile ? '0 12px 32px' : 0 }}>
       {/* Back — plus a direct way to the session this draft belongs to, so
           arriving from the topbar indicator or the drafts list never leaves
           the professional stranded */}
@@ -334,118 +401,90 @@ export function AIDraftPage() {
         </div>
       )}
 
-      {/* Comparison mode: manual record vs AI draft side by side */}
-      {compareMode && (
+      {/* Comparison mode: the editable clinical record (left) + the AI draft as
+          a reference to pull text from (right). Approving finalizes the record. */}
+      {compareMode && !recordDone && (
         <>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 16, background: '#e0f2fe', border: '1px solid #bae6fd', borderRadius: 10, padding: '11px 14px' }}>
             <Sparkles size={15} color="#0369a1" style={{ flexShrink: 0, marginTop: 1 }} />
             <p style={{ margin: 0, fontSize: 12.5, color: '#0c4a6e', lineHeight: 1.65 }}>
-              <strong>Modo comparación.</strong> Revisa lo que escribiste manualmente y lo que sugiere la IA. Usa el botón "Usar" de cada columna para elegir, o edita el campo final libremente. Al aprobar, se crea la historia clínica con la versión que seleccionaste.
+              A la <strong>izquierda</strong> está tu registro clínico (edítalo y completa el examen mental, la formulación y demás). A la <strong>derecha</strong>, lo que redactó la IA del audio: pulsa <strong>"Usar en el registro"</strong> para pasar cada sección a la izquierda. Al final, <strong>Aprobar registro</strong> crea la historia clínica.
             </p>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }}>
-            {sectionDefs.map(({ key, label }) => {
-              const manualVal = manualSections[key] ?? '';
-              const aiVal     = baseContent[key] ?? '';
-              const finalVal  = getDraftField(key);
-              return (
-                <div key={key} className="card" style={{ padding: '18px 20px' }}>
-                  <p style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>{label}</p>
-                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10, marginBottom: 12 }}>
-                    {/* Manual column */}
-                    <div style={{ borderRadius: 9, border: '1.5px solid var(--s200)', overflow: 'hidden' }}>
-                      <div style={{ padding: '7px 12px', background: 'var(--s50)', borderBottom: '1px solid var(--s200)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--s600)', letterSpacing: 0.3 }}>✍ TU REGISTRO</span>
-                        <button
-                          onClick={() => setDraftEdit(prev => ({ ...prev, [key]: manualVal }))}
-                          style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 6, border: '1px solid var(--s300)', background: '#fff', color: 'var(--s700)', cursor: 'pointer' }}
-                        >
-                          Usar →
-                        </button>
-                      </div>
-                      <p style={{ margin: 0, padding: '10px 12px', fontSize: 13, color: manualVal ? 'var(--s700)' : 'var(--s300)', lineHeight: 1.7, whiteSpace: 'pre-wrap', minHeight: 64 }}>
-                        {manualVal || <em>Sin contenido</em>}
-                      </p>
-                    </div>
-                    {/* AI column */}
-                    <div style={{ borderRadius: 9, border: '1.5px solid #fde68a', overflow: 'hidden' }}>
-                      <div style={{ padding: '7px 12px', background: '#fffbeb', borderBottom: '1px solid #fde68a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#92400e', letterSpacing: 0.3 }}>🤖 BORRADOR IA</span>
-                        <button
-                          onClick={() => setDraftEdit(prev => ({ ...prev, [key]: aiVal }))}
-                          style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 6, border: '1px solid #fcd34d', background: '#fffbeb', color: '#92400e', cursor: 'pointer' }}
-                        >
-                          ← Usar
-                        </button>
-                      </div>
-                      <p style={{ margin: 0, padding: '10px 12px', fontSize: 13, color: aiVal ? '#78350f' : 'var(--s300)', lineHeight: 1.7, whiteSpace: 'pre-wrap', minHeight: 64 }}>
-                        {aiVal || <em>Sin contenido</em>}
-                      </p>
-                    </div>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 18, marginBottom: 20, alignItems: 'start' }}>
+            {/* LEFT — the real, editable clinical record (all widgets) */}
+            <div>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--s600)', letterSpacing: 0.3, marginBottom: 10 }}>✍ TU REGISTRO CLÍNICO</div>
+              {leftDraft
+                ? <RecordSectionsForm recordType={compareUiType} value={leftDraft} onChange={setLeftDraft} />
+                : <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><Spinner size={20} color="var(--teal)" /></div>}
+            </div>
+
+            {/* RIGHT — the AI draft, read-only, pull sections into the record */}
+            <div style={{ position: isMobile ? 'static' : 'sticky', top: 12 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: '#92400e', letterSpacing: 0.3, marginBottom: 10 }}>🤖 BORRADOR IA (del audio)</div>
+              {aiTextSections.length === 0 ? (
+                <div className="card" style={{ padding: '16px 18px', fontSize: 13, color: 'var(--s400)' }}>La IA no redactó secciones de texto para esta sesión.</div>
+              ) : aiTextSections.map(({ key, label, value }) => (
+                <div key={key} className="card" style={{ padding: '14px 16px', marginBottom: 12, border: '1.5px solid #fde68a', background: '#fffdf7' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: '#92400e' }}>{label}</span>
+                    <button
+                      onClick={() => pullAiSection(key, value)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 6, border: '1px solid #fcd34d', background: '#fffbeb', color: '#92400e', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    >
+                      ← Usar en el registro
+                    </button>
                   </div>
-                  {/* Editable final version */}
-                  <div>
-                    <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 700, color: 'var(--teal)', letterSpacing: 0.3 }}>VERSIÓN FINAL (editable)</p>
-                    <textarea
-                      value={finalVal}
-                      onChange={e => setDraftEdit(prev => ({ ...prev, [key]: e.target.value }))}
-                      rows={4}
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: 9, border: '1.5px solid var(--teal)', fontSize: 13, color: 'var(--s700)', resize: 'vertical', background: '#f3f2fb', boxSizing: 'border-box', lineHeight: 1.7 }}
-                    />
-                  </div>
+                  <p style={{ margin: 0, fontSize: 13, color: '#78350f', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{value}</p>
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
 
-          {/* ICD-10 suggestion in comparison mode */}
+          {/* ICD-10 suggestion */}
           <Icd10Suggestion value={icd10 ?? null} editable={true} onChange={setIcd10} />
 
-          {recordType === 'INITIAL' && !useCustomTemplate && (
-            <MentalExamCard value={mentalExam} onChange={setMentalExam} />
-          )}
-
-          <RiskLevelSelector value={riskLevel} onChange={setRiskLevel} />
-
-          {/* Approve action */}
+          {/* Approve action — one button, finalizes the record on the left */}
           <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
             <button
-              onClick={handleApprove}
-              disabled={approving || !!createdRecordId}
-              style={{ flex: 1, padding: 13, borderRadius: 11, background: 'var(--teal)', color: '#fff', border: 'none', cursor: (approving || createdRecordId) ? 'not-allowed' : 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (approving || createdRecordId) ? 0.7 : 1 }}
+              onClick={handleApproveRecord}
+              disabled={recordSaving || !leftDraft}
+              style={{ flex: 1, padding: 13, borderRadius: 11, background: 'var(--teal)', color: '#fff', border: 'none', cursor: (recordSaving || !leftDraft) ? 'not-allowed' : 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (recordSaving || !leftDraft) ? 0.7 : 1 }}
             >
-              {approving ? <Spinner size={16} color="#fff" /> : <CheckCircle2 size={16} />}
-              {approving ? 'Aprobando…' : 'Aprobar versión final'}
+              {recordSaving ? <Spinner size={16} color="#fff" /> : <CheckCircle2 size={16} />}
+              {recordSaving ? 'Aprobando…' : 'Aprobar registro'}
             </button>
           </div>
-          {approveErr && (
+          {recordErr && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', background: '#fee2e2', borderRadius: 10, border: '1.5px solid #fca5a5', marginTop: 8 }}>
               <AlertTriangle size={15} color="#dc2626" />
-              <span style={{ fontSize: 13, color: '#991b1b' }}>{approveErr}</span>
-            </div>
-          )}
-          {(draft.status === 'APPROVED' || createdRecordId) && (
-            <div style={{ padding: '16px 20px', background: '#d1fae5', borderRadius: 12, border: '1.5px solid #6ee7b7', marginTop: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: createdRecordId ? 12 : 0 }}>
-                <CheckCircle2 size={18} color="#059669" />
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#065f46' }}>Historia clínica aprobada y firmada</span>
-              </div>
-              {createdRecordId && (
-                <button
-                  onClick={() => navigate(`/clinical-records/${createdRecordId}`)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 14px', background: '#059669', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
-                >
-                  <FileText size={14} /> Ver registro clínico
-                </button>
-              )}
+              <span style={{ fontSize: 13, color: '#991b1b' }}>{recordErr}</span>
             </div>
           )}
         </>
       )}
 
+      {/* Comparison mode — approved confirmation (survives the status refetch
+          that flips compareMode off once the draft becomes APPROVED). */}
+      {recordDone && (
+        <div style={{ padding: '16px 20px', background: '#d1fae5', borderRadius: 12, border: '1.5px solid #6ee7b7', marginTop: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <CheckCircle2 size={18} color="#059669" />
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#065f46' }}>Historia clínica aprobada y firmada</span>
+          </div>
+          <button
+            onClick={() => navigate(`/clinical-records/${qsRecordId}`)}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 14px', background: '#059669', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+          >
+            <FileText size={14} /> Ver registro clínico
+          </button>
+        </div>
+      )}
+
       {/* Draft content (normal mode — no manual record to compare) */}
-      {!compareMode && (isReady || draft.status === 'APPROVED') && !templateLoading && (
+      {!compareMode && !recordDone && (isReady || draft.status === 'APPROVED') && !templateLoading && (
         <>
           {/* Empty draft with no user edits: skip the form entirely, show a clean state */}
           {isEmptyDraft ? (

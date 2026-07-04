@@ -23,6 +23,30 @@ type draftContent struct {
 	Sections   map[string]any `json:"sections"`
 }
 
+// POST /api/v1/ai-drafts/{id}/link — mark the draft APPROVED and link it to an
+// existing clinical record, WITHOUT creating a new one. Used by the comparison
+// view, where the professional finalizes the manual record they were already
+// filling (merging in the accepted AI text) and this only records that the
+// draft was consumed by that record. The draft is org-scoped by ResolveDraft.
+func (h *Handler) linkDraft(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	draftID := chi.URLParam(r, "id")
+
+	var body struct {
+		ClinicalRecordID string `json:"clinical_record_id"`
+	}
+	if err := httputil.DecodeJSON(r, &body); err != nil || body.ClinicalRecordID == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "clinical_record_id is required")
+		return
+	}
+
+	if err := h.svc.ResolveDraft(r.Context(), claims.OrganizationID, draftID, body.ClinicalRecordID, claims.UserID); err != nil {
+		writeErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // POST /api/v1/ai-drafts/{id}/approve
 // Accepts the final (possibly edited) sections, creates a clinical_record,
 // and marks the draft as APPROVED.
