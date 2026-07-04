@@ -143,11 +143,11 @@ function NewPlanCard({ patientId, onCreated, onError }: { patientId: string; onC
             <button
               onClick={handleSuggest}
               disabled={suggesting}
-              title="Propuesta de plan TCC generada por IA — revísala y edítala antes de crear"
+              title="Propuesta de plan generada por IA — revísala y edítala antes de crear"
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', background: '#f3f2fb', color: '#5b52ad', border: '1px solid #cbc7ee', borderRadius: 7, cursor: suggesting ? 'wait' : 'pointer', fontSize: 12, fontWeight: 600 }}
             >
               {suggesting ? <Spinner size={12} color="#5b52ad" /> : <Sparkles size={12} />}
-              Sugerir con IA (TCC)
+              Sugerir con IA
             </button>
           )}
           <button
@@ -170,14 +170,14 @@ function NewPlanCard({ patientId, onCreated, onError }: { patientId: string; onC
           {suggesting && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#f3f2fb', border: '1px solid #e4e2f6', borderRadius: 9 }}>
               <Spinner size={16} color="#5b52ad" />
-              <span style={{ fontSize: 12.5, color: 'var(--s700)' }}>La IA está proponiendo un plan TCC a partir de la historia…</span>
+              <span style={{ fontSize: 12.5, color: 'var(--s700)' }}>La IA está proponiendo un plan a partir de la historia…</span>
             </div>
           )}
           {formulation && !suggesting && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 14px', background: '#f3f2fb', border: '1px solid #cbc7ee', borderRadius: 9 }}>
               <Sparkles size={14} color="#5b52ad" style={{ flexShrink: 0, marginTop: 1 }} />
               <div>
-                <p style={{ margin: '0 0 2px', fontSize: 11.5, fontWeight: 700, color: '#464093' }}>Formulación TCC sugerida (revisa y edita)</p>
+                <p style={{ margin: '0 0 2px', fontSize: 11.5, fontWeight: 700, color: '#464093' }}>Formulación sugerida (revisa y edita)</p>
                 <p style={{ margin: 0, fontSize: 12.5, color: 'var(--s700)', lineHeight: 1.5 }}>{formulation}</p>
               </div>
             </div>

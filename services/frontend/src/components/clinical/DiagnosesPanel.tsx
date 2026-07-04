@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Stethoscope, Plus, Search, X } from 'lucide-react';
+import { Stethoscope, Plus, Search, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { diagnosesApi, type Diagnosis, type DiagnosisStatus, type ICD10Code } from '@/api/diagnoses';
 import { Spinner } from '@/components/ui/Spinner';
 import { fmtDateOnly, todayLocalISO } from '@/lib/dates';
@@ -17,8 +17,14 @@ const NEXT_STATUS: Record<DiagnosisStatus, DiagnosisStatus[]> = {
   RULED_OUT: ['ACTIVE'],
 };
 
-export function DiagnosesPanel({ patientId, reason }: { patientId: string; reason?: string }) {
+export function DiagnosesPanel({ patientId, reason, canAdd, canUpdateStatus }: {
+  patientId: string;
+  reason?: string;
+  canAdd: boolean;
+  canUpdateStatus: boolean;
+}) {
   const queryClient = useQueryClient();
+  const [expanded, setExpanded] = useState(false);
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
@@ -63,21 +69,37 @@ export function DiagnosesPanel({ patientId, reason }: { patientId: string; reaso
     } catch { setErr('Error al actualizar el estado.'); }
   };
 
+  const activeCount = diagnoses.filter(d => d.status === 'ACTIVE').length;
+
   return (
     <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--s100)' }}>
+      <div
+        onClick={() => setExpanded(e => !e)}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: expanded ? '1px solid var(--s100)' : 'none', cursor: 'pointer' }}
+      >
         <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 14, color: 'var(--s800)' }}>
           <Stethoscope size={15} color="var(--teal)" /> Diagnósticos CIE-10
+          {diagnoses.length > 0 && (
+            <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 6, background: 'var(--s100)', color: 'var(--s600)' }}>
+              {activeCount} activo{activeCount === 1 ? '' : 's'}{diagnoses.length !== activeCount ? ` · ${diagnoses.length} en total` : ''}
+            </span>
+          )}
         </span>
-        <button
-          onClick={() => { setAdding(a => !a); setErr(''); }}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', background: adding ? 'var(--s100)' : 'var(--teal)', color: adding ? 'var(--s700)' : '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
-        >
-          {adding ? <X size={12} /> : <Plus size={12} />}
-          {adding ? 'Cancelar' : 'Asignar diagnóstico'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {canAdd && (
+            <button
+              onClick={e => { e.stopPropagation(); setAdding(a => !a); setErr(''); setExpanded(true); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', background: adding ? 'var(--s100)' : 'var(--teal)', color: adding ? 'var(--s700)' : '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+            >
+              {adding ? <X size={12} /> : <Plus size={12} />}
+              {adding ? 'Cancelar' : 'Asignar diagnóstico'}
+            </button>
+          )}
+          {expanded ? <ChevronUp size={16} color="var(--s400)" /> : <ChevronDown size={16} color="var(--s400)" />}
+        </div>
       </div>
 
+      {expanded && <>
       {adding && (
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--s100)', background: 'var(--s50)' }}>
           <div style={{ position: 'relative', marginBottom: results.length ? 10 : 0 }}>
@@ -133,21 +155,24 @@ export function DiagnosesPanel({ patientId, reason }: { patientId: string; reaso
                 </p>
               </div>
               <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 6, background: cfg.bg, color: cfg.color }}>{cfg.label}</span>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {NEXT_STATUS[dx.status].map(next => (
-                  <button
-                    key={next}
-                    onClick={() => handleStatus(dx, next)}
-                    style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s600)', cursor: 'pointer' }}
-                  >
-                    {STATUS_CFG[next].label}
-                  </button>
-                ))}
-              </div>
+              {canUpdateStatus && (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {NEXT_STATUS[dx.status].map(next => (
+                    <button
+                      key={next}
+                      onClick={() => handleStatus(dx, next)}
+                      style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--s200)', background: '#fff', color: 'var(--s600)', cursor: 'pointer' }}
+                    >
+                      {STATUS_CFG[next].label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })
       )}
+      </>}
     </div>
   );
 }

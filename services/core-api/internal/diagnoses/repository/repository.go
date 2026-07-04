@@ -105,7 +105,7 @@ func (r *Repository) UpdateStatus(ctx context.Context, orgID, diagnosisID string
 	tag, err := r.q(ctx).Exec(ctx, `
 		UPDATE patient_diagnoses
 		SET status = $3,
-		    resolved_at = CASE WHEN $3 = 'ACTIVE' THEN NULL ELSE COALESCE(resolved_at, CURRENT_DATE) END,
+		    resolved_at = CASE WHEN $3 = 'ACTIVE'::diagnosis_status THEN NULL ELSE COALESCE(resolved_at, CURRENT_DATE) END,
 		    updated_at = NOW()
 		WHERE id = $1 AND organization_id = $2
 	`, diagnosisID, orgID, status)

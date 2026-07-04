@@ -5,7 +5,7 @@ import {
   ArrowLeft, Phone, Mail, Calendar, FileText,
   Clock, AlertCircle,
   CreditCard, MapPin, Video, FileCheck, Cake, AlertTriangle,
-  Pencil, Receipt, BookOpen, Lock,
+  Pencil, BookOpen, Lock,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { EditPatientModal } from '@/components/patients/EditPatientModal';
@@ -24,14 +24,13 @@ import { DiagnosesPanel } from '@/components/clinical/DiagnosesPanel';
 import { TreatmentPlanPanel } from '@/components/clinical/TreatmentPlanPanel';
 import { RiskBanner } from '@/components/clinical/RiskBanner';
 import { riskMeta } from '@/components/clinical/constants';
-import { BillingPanel } from '@/components/billing/BillingPanel';
 import { ClinicalGate } from '@/components/clinical/ClinicalGate';
 import { isPureAdmin } from '@/lib/clinicalAccess';
 import { ApiError } from '@/api/client';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Tab = 'agenda' | 'historia' | 'consentimientos' | 'facturacion';
+type Tab = 'agenda' | 'historia' | 'consentimientos';
 
 type AppointmentStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
 
@@ -212,6 +211,8 @@ function HistoriaTab({
   clinicalReason,
   onReason,
   noAccess,
+  canAddDiagnosis,
+  canUpdateDiagnosisStatus,
 }: {
   records: RecordMeta[];
   appointments: Appointment[];
@@ -221,6 +222,8 @@ function HistoriaTab({
   clinicalReason: string | null;
   onReason: (r: string) => void;
   noAccess?: boolean;
+  canAddDiagnosis: boolean;
+  canUpdateDiagnosisStatus: boolean;
 }) {
   if (noAccess) {
     return (
@@ -308,7 +311,12 @@ function HistoriaTab({
 
     {/* ── Diagnósticos (gated for pure admin) ────────────────────────────── */}
     <ClinicalGate isPure={pureAdmin} reason={clinicalReason} onReason={onReason}>
-      <DiagnosesPanel patientId={patientId} reason={clinicalReason ?? undefined} />
+      <DiagnosesPanel
+        patientId={patientId}
+        reason={clinicalReason ?? undefined}
+        canAdd={canAddDiagnosis}
+        canUpdateStatus={canUpdateDiagnosisStatus}
+      />
     </ClinicalGate>
 
     {/* ── Plan terapéutico (same gate — shared reason) ────────────────────── */}
@@ -524,7 +532,8 @@ export function PatientProfilePage() {
   const { user } = useAuth();
 
   const pureAdmin = isPureAdmin(user?.roles);
-  const canSeeBilling = (user?.permissions ?? []).includes('billing:read');
+  const canAddDiagnosis = (user?.permissions ?? []).includes('clinical_records:create');
+  const canUpdateDiagnosisStatus = (user?.permissions ?? []).includes('clinical_records:update');
 
   // Clinical access reason — in-memory only; admin must justify on each page visit.
   const [clinicalReason, setClinicalReason] = useState<string | null>(null);
@@ -609,7 +618,6 @@ export function PatientProfilePage() {
     { id: 'agenda',          label: 'Agenda',           Icon: Calendar  },
     { id: 'historia',        label: 'Historia clínica', Icon: BookOpen  },
     { id: 'consentimientos', label: 'Consentimientos',  Icon: FileCheck },
-    ...(canSeeBilling ? [{ id: 'facturacion' as Tab, label: 'Facturación', Icon: Receipt }] : []),
   ];
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -772,10 +780,11 @@ export function PatientProfilePage() {
             clinicalReason={clinicalReason}
             onReason={setClinicalReason}
             noAccess={noPatientAccess}
+            canAddDiagnosis={canAddDiagnosis}
+            canUpdateDiagnosisStatus={canUpdateDiagnosisStatus}
           />
         )}
         {tab === 'consentimientos' && <ConsentimientosTab patientId={id!} />}
-        {tab === 'facturacion'     && <BillingPanel patientId={id!} />}
       </div>
 
       {editOpen && patient && (
