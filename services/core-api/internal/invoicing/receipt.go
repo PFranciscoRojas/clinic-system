@@ -40,7 +40,7 @@ var statusLabelsES = map[string]string{
 
 var methodLabelsES = map[string]string{
 	"CASH": "Efectivo", "DEBIT_CARD": "Tarjeta débito", "CREDIT_CARD": "Tarjeta crédito",
-	"BANK_TRANSFER": "Transferencia", "NEQUI": "Nequi", "DAVIPLATA": "Daviplata",
+	"BANK_TRANSFER": "Transferencia", "NEQUI": "Nequi", "DAVIPLATA": "Daviplata", "BREB": "Bre-B",
 	"PSE": "PSE", "INSURANCE_EPS": "EPS", "INSURANCE_PRIVATE": "Seguro privado", "OTHER": "Otro",
 }
 

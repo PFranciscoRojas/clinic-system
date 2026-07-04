@@ -12,7 +12,7 @@ import (
 
 var validPaymentMethods = map[string]bool{
 	"CASH": true, "DEBIT_CARD": true, "CREDIT_CARD": true, "BANK_TRANSFER": true,
-	"NEQUI": true, "DAVIPLATA": true, "PSE": true, "INSURANCE_EPS": true,
+	"NEQUI": true, "DAVIPLATA": true, "BREB": true, "PSE": true, "INSURANCE_EPS": true,
 	"INSURANCE_PRIVATE": true, "OTHER": true,
 }
 

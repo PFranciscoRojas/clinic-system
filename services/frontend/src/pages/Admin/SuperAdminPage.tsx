@@ -516,6 +516,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 const REFERRAL_LABELS: Record<string, string> = {
   recommendation: 'Recomendación de un colega',
   google:         'Búsqueda en Google',
+  ai:             'IA (ChatGPT, Claude, Gemini…)',
   social:         'Redes sociales',
   other:          'Otro',
 };

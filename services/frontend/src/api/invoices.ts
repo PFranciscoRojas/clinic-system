@@ -4,7 +4,7 @@ export type InvoiceStatus = 'DRAFT' | 'ISSUED' | 'PAID' | 'PARTIAL' | 'INSURED' 
 
 export type PaymentMethod =
   | 'CASH' | 'DEBIT_CARD' | 'CREDIT_CARD' | 'BANK_TRANSFER'
-  | 'NEQUI' | 'DAVIPLATA' | 'PSE' | 'INSURANCE_EPS' | 'INSURANCE_PRIVATE' | 'OTHER';
+  | 'NEQUI' | 'DAVIPLATA' | 'BREB' | 'PSE' | 'INSURANCE_EPS' | 'INSURANCE_PRIVATE' | 'OTHER';
 
 export interface Payment {
   id: string;
@@ -157,6 +157,7 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   BANK_TRANSFER: 'Transferencia',
   NEQUI: 'Nequi',
   DAVIPLATA: 'Daviplata',
+  BREB: 'Bre-B (llave)',
   PSE: 'PSE',
   INSURANCE_EPS: 'EPS',
   INSURANCE_PRIVATE: 'Seguro privado',
