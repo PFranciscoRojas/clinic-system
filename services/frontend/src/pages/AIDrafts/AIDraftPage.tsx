@@ -6,6 +6,7 @@ import {
   Edit3, Save, ChevronDown, ChevronUp, Sparkles, FileText, Stethoscope, Search, X,
 } from 'lucide-react';
 import { aiDraftsApi, type DraftStatus } from '@/api/aiDrafts';
+import { ApiError } from '@/api/client';
 import { useIsMobile } from '@/lib/useMediaQuery';
 import { diagnosesApi, type ICD10Code } from '@/api/diagnoses';
 import { recordTemplatesApi } from '@/api/recordTemplates';
@@ -149,8 +150,11 @@ export function AIDraftPage() {
         } catch { /* record is approved; diagnosis can be added later from the profile */ }
       }
       queryClient.invalidateQueries({ queryKey: ['ai-draft', id] });
-    } catch {
-      setApproveErr('Error al aprobar. Intenta de nuevo.');
+    } catch (e) {
+      // Surface the server's specific reason (e.g. "nivel de riesgo es
+      // obligatorio", "una sección requerida está vacía") instead of a generic
+      // message the professional can't act on.
+      setApproveErr(e instanceof ApiError && e.message ? e.message : 'Error al aprobar. Intenta de nuevo.');
     } finally {
       setApproving(false);
     }

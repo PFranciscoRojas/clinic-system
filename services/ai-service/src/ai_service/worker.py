@@ -43,6 +43,16 @@ HISTORY_MAX_RECORDS = 20
 HISTORY_MAX_CHARS = 30_000
 
 
+class SuggestionGone(Exception):
+    """The ai_suggestion row no longer exists when the worker picks up the job.
+
+    Happens when the request that enqueued it was rolled back, or the patient's
+    data was deleted (e.g. the smoke-test data reset) before the job ran. It is
+    terminal: retrying can never find the row, so the job is acked and dropped
+    instead of cycling through the PEL to a dead-letter.
+    """
+
+
 class AIWorker:
     """Consumes ai_jobs from Redis Streams and processes audio through the AI pipeline."""
 
@@ -154,6 +164,12 @@ class AIWorker:
         try:
             await self._set_suggestion_status(suggestion_id, "PROCESSING")
             await self._process_suggestion(suggestion_id, org_id, patient_id, kind, approach)
+            await self._ack(message_id)
+        except SuggestionGone:
+            # Terminal: the suggestion row was rolled back or deleted (e.g. a
+            # data reset) before we ran. Retrying can never find it, so ack and
+            # drop instead of spinning to a dead-letter.
+            logger.info("ai suggestion gone, dropping job", extra={"suggestion_id": suggestion_id, "kind": kind})
             await self._ack(message_id)
         except Exception as exc:
             logger.error("suggestion processing failed", extra={"suggestion_id": suggestion_id, "err": str(exc)})
@@ -313,7 +329,7 @@ class AIWorker:
             suggestion_id,
         )
         if sug is None:
-            raise RuntimeError(f"ai_suggestion {suggestion_id} not found")
+            raise SuggestionGone(suggestion_id)
         out_dek = self._decrypt_dek(sug["key_source"], bytes(sug["encrypted_dek"]))
 
         # 2. Read and decrypt the patient's approved clinical records (oldest → newest).
