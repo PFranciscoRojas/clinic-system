@@ -162,5 +162,13 @@ func seedTenant(t *testing.T, slug string) tenant {
 		t.Fatalf("seed payment %s: %v", slug, err)
 	}
 
+	if _, err = adminPool.Exec(ctx,
+		`INSERT INTO notifications (organization_id, recipient_user_id, kind, title)
+		 VALUES ($1, $2, 'NEW_PATIENT', 'seed')`,
+		tn.OrgID, tn.UserID,
+	); err != nil {
+		t.Fatalf("seed notification %s: %v", slug, err)
+	}
+
 	return tn
 }
