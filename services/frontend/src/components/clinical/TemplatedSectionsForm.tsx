@@ -29,6 +29,7 @@ import { RiskSelector } from './RiskSelector';
 import { TreatmentPlanPanel } from './TreatmentPlanPanel';
 import { DiagnosesPanel } from './DiagnosesPanel';
 import { AutoGrowTextarea } from './AutoGrowTextarea';
+import { useAuth } from '@/context/AuthContext';
 import type {
   SPAHistoryData, FamilyMentalHealthData,
   Formulation5FData, FunctionalAnalysisData,
@@ -53,6 +54,9 @@ function set(state: SectionsState, key: string, val: RecordSections[string]): Se
 
 /** TemplatedSectionsForm renders a dynamic form from a parsed template schema. */
 export default function TemplatedSectionsForm({ schema, value, onChange, disabled, patientId }: Props) {
+  const { user } = useAuth();
+  const canAddDiagnosis = (user?.permissions ?? []).includes('clinical_records:create');
+  const canUpdateDiagnosisStatus = (user?.permissions ?? []).includes('clinical_records:update');
   return (
     <div className="space-y-6">
       {schema.map((sec) => (
@@ -63,6 +67,8 @@ export default function TemplatedSectionsForm({ schema, value, onChange, disable
           onChange={(v) => onChange(set(value, sec.key, v))}
           disabled={disabled}
           patientId={patientId}
+          canAddDiagnosis={canAddDiagnosis}
+          canUpdateDiagnosisStatus={canUpdateDiagnosisStatus}
         />
       ))}
     </div>
@@ -75,9 +81,11 @@ interface FieldProps {
   onChange: (v: RecordSections[string]) => void;
   disabled?: boolean;
   patientId?: string;
+  canAddDiagnosis: boolean;
+  canUpdateDiagnosisStatus: boolean;
 }
 
-function SectionField({ def, value, onChange, disabled, patientId }: FieldProps) {
+function SectionField({ def, value, onChange, disabled, patientId, canAddDiagnosis, canUpdateDiagnosisStatus }: FieldProps) {
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -85,12 +93,12 @@ function SectionField({ def, value, onChange, disabled, patientId }: FieldProps)
         {def.required && <span className="text-red-500 ml-1">*</span>}
       </label>
       {def.hint && <p className="text-xs text-gray-400 mb-1">{def.hint}</p>}
-      <FieldInput def={def} value={value} onChange={onChange} disabled={disabled} patientId={patientId} />
+      <FieldInput def={def} value={value} onChange={onChange} disabled={disabled} patientId={patientId} canAddDiagnosis={canAddDiagnosis} canUpdateDiagnosisStatus={canUpdateDiagnosisStatus} />
     </div>
   );
 }
 
-function FieldInput({ def, value, onChange, disabled, patientId }: FieldProps) {
+function FieldInput({ def, value, onChange, disabled, patientId, canAddDiagnosis, canUpdateDiagnosisStatus }: FieldProps) {
   switch (def.type) {
     case 'text':
       return (
@@ -161,6 +169,8 @@ function FieldInput({ def, value, onChange, disabled, patientId }: FieldProps) {
           onChange={onChange}
           disabled={disabled}
           patientId={patientId}
+          canAddDiagnosis={canAddDiagnosis}
+          canUpdateDiagnosisStatus={canUpdateDiagnosisStatus}
         />
       );
 
@@ -237,12 +247,16 @@ export function WidgetField({
   onChange,
   disabled,
   patientId,
+  canAddDiagnosis = false,
+  canUpdateDiagnosisStatus = false,
 }: {
   name: string;
   value: RecordSections[string];
   onChange: (v: RecordSections[string]) => void;
   disabled?: boolean;
   patientId?: string;
+  canAddDiagnosis?: boolean;
+  canUpdateDiagnosisStatus?: boolean;
 }) {
   // Dispatch to the existing widget components by their canonical names
   // (matching services/shared/field-widgets.json).
@@ -345,7 +359,7 @@ export function WidgetField({
     case 'diagnoses':
       // DiagnosesPanel is self-contained (loads/saves its own data).
       if (!patientId) return <p className="text-xs text-gray-400">Diagnósticos (requiere paciente)</p>;
-      return <DiagnosesPanel patientId={patientId} />;
+      return <DiagnosesPanel patientId={patientId} canAdd={canAddDiagnosis} canUpdateStatus={canUpdateDiagnosisStatus} />;
     default:
       return (
         <div className="text-xs text-amber-600 p-2 border border-amber-200 rounded">
