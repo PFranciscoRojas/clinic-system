@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -19,6 +19,7 @@ import TemplatedSectionsForm, { type SectionsState } from '@/components/clinical
 import { MentalExamChecklist, defaultMentalExam, type MentalExam } from '@/components/clinical/MentalExamChecklist';
 import {
   RecordSectionsForm, recordToDraft, draftToPayload, validateDraft, toUIRecordType, emptyDraft,
+  draftHasContent, mergeSavedDraft,
   type ClinicalDraft, type UIRecordType,
 } from '@/components/clinical/RecordSectionsForm';
 
@@ -73,6 +74,9 @@ export function AIDraftPage() {
   // Approving finalizes THIS record (merging any AI text accepted into it),
   // rather than creating a second record.
   const [leftDraft, setLeftDraft] = useState<ClinicalDraft | null>(null);
+  // AI sections the professional has already pulled into the record — the right
+  // pane collapses these to a "used" accordion row instead of the full card.
+  const [usedKeys, setUsedKeys] = useState<Set<string>>(new Set());
   const [recordSaving, setRecordSaving] = useState(false);
   const [recordErr, setRecordErr] = useState('');
   const [recordDone, setRecordDone] = useState(false);
@@ -130,6 +134,78 @@ export function AIDraftPage() {
     enabled: !!compareRecordId,
   });
 
+  // Persist the composed left-hand record so pulled AI content and edits survive
+  // leaving the page. It shares the appointment's `clinical-draft-*` key with the
+  // manual RecordForm, so the two stay one draft; a separate key records which AI
+  // sections were already pulled (drives the "used" accordion on the right).
+  const draftStorageKey = draft?.appointment_id
+    ? `clinical-draft-${draft.appointment_id}`
+    : draft?.patient_id ? `clinical-draft-patient-${draft.patient_id}` : '';
+  const usedStorageKey = id ? `clinical-draft-ai-used-${id}` : '';
+  // Once we adopt a saved draft from localStorage, the server-record seed must
+  // not overwrite it (the local copy holds the professional's latest edits).
+  const localRestoredRef = useRef(false);
+  const restoreAttemptedRef = useRef(false);
+
+  // Restore the left draft + pulled-section markers from localStorage on mount.
+  // Only for integrated-format drafts — custom-template drafts use the old
+  // single-pane editor and their content lives under different storage.
+  useEffect(() => {
+    if (!draftStorageKey || draft?.template_id || restoreAttemptedRef.current) return;
+    restoreAttemptedRef.current = true;
+    try {
+      const raw = localStorage.getItem(draftStorageKey);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (saved.draft) {
+          const merged = mergeSavedDraft(saved.draft as Partial<ClinicalDraft>);
+          if (draftHasContent(merged)) {
+            setLeftDraft(merged);
+            localRestoredRef.current = true;
+          }
+        }
+      }
+      if (usedStorageKey) {
+        const rawUsed = localStorage.getItem(usedStorageKey);
+        if (rawUsed) {
+          const arr = JSON.parse(rawUsed);
+          if (Array.isArray(arr)) setUsedKeys(new Set(arr as string[]));
+        }
+      }
+    } catch { /* corrupt draft — start clean */ }
+  }, [draftStorageKey, usedStorageKey]);
+
+  // Save 600ms after the last change; also on tab hide / SPA navigation, since
+  // React Router unmounts without firing beforeunload (mirrors RecordForm).
+  useEffect(() => {
+    if (!draftStorageKey || draft?.template_id || !leftDraft) return;
+    const save = () => {
+      try {
+        if (draftHasContent(leftDraft)) {
+          const uiType: UIRecordType = manualRecord
+            ? toUIRecordType(manualRecord.record_type, manualRecord.sections)
+            : apiTypeToUI(
+                qsRecordType
+                || ((draft?.draft_content_plain as Record<string, unknown> | null)?.record_type as string)
+                || 'EVOLUTION',
+              );
+          localStorage.setItem(draftStorageKey, JSON.stringify({ uiType, draft: leftDraft }));
+        }
+        if (usedStorageKey) localStorage.setItem(usedStorageKey, JSON.stringify([...usedKeys]));
+      } catch { /* storage full */ }
+    };
+    const t = setTimeout(save, 600);
+    const onHide = () => save();
+    window.addEventListener('pagehide', onHide);
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      clearTimeout(t);
+      save();
+      window.removeEventListener('pagehide', onHide);
+      document.removeEventListener('visibilitychange', onHide);
+    };
+  }, [draftStorageKey, usedStorageKey, leftDraft, usedKeys, manualRecord, draft, qsRecordType]);
+
   // Seed customEdit from draft content when using a custom template
   useEffect(() => {
     if (!customTemplate || !draft) return;
@@ -154,6 +230,10 @@ export function AIDraftPage() {
   // record the professional fills by pulling AI sections in and completing the
   // widgets — approving then creates the record.
   useEffect(() => {
+    // A restored localStorage draft holds the professional's latest edits —
+    // never clobber it with the server seed. Custom-template drafts don't use
+    // the comparison left pane at all.
+    if (localRestoredRef.current || draft?.template_id) return;
     if (manualRecord) {
       setLeftDraft(recordToDraft(
         manualRecord.sections,
@@ -163,7 +243,7 @@ export function AIDraftPage() {
     } else if (resolutionSettled && !compareRecordId) {
       setLeftDraft(prev => prev ?? emptyDraft());
     }
-  }, [manualRecord, resolutionSettled, compareRecordId]);
+  }, [manualRecord, resolutionSettled, compareRecordId, draft?.template_id]);
 
   // Seed the ICD-10 selector from the AI suggestion once, when the draft loads
   useEffect(() => {
@@ -292,6 +372,13 @@ export function AIDraftPage() {
         } catch { /* record saved; diagnosis can be added later */ }
       }
       setRecordDone(true);
+      // The draft is now part of the clinical history — drop the local scratch
+      // copies so a future editor doesn't re-seed the consumed content.
+      try {
+        if (draftStorageKey) localStorage.removeItem(draftStorageKey);
+        if (usedStorageKey) localStorage.removeItem(usedStorageKey);
+        localStorage.removeItem(`${draftStorageKey}-serverid`);
+      } catch { /* ignore */ }
       queryClient.invalidateQueries({ queryKey: ['ai-draft', id] });
     } catch (e) {
       setRecordErr(e instanceof ApiError && e.message ? e.message : 'No se pudo aprobar el registro.');
@@ -370,8 +457,16 @@ export function AIDraftPage() {
         ...extraSections.map(([k, v]) => ({ key: k, label: k, value: v.trim() })),
       ].filter(s => s.value !== '')
     : [];
-  const pullAiSection = (key: string, value: string) =>
+  const usedCount = aiTextSections.filter(s => usedKeys.has(s.key)).length;
+  const pullAiSection = (key: string, value: string) => {
     setLeftDraft(prev => prev ? { ...prev, sections: { ...prev.sections, [key]: value } } : prev);
+    setUsedKeys(prev => new Set(prev).add(key));
+  };
+  // Re-open a collapsed "used" section (e.g. to re-paste it after editing the
+  // left pane). Only reveals the card again — it doesn't revert what's already
+  // in the record.
+  const undoAiSection = (key: string) =>
+    setUsedKeys(prev => { const next = new Set(prev); next.delete(key); return next; });
 
   return (
     <div style={{ maxWidth: compareMode ? 1200 : 760, margin: '0 auto', padding: isMobile ? '0 12px 32px' : 0 }}>
@@ -509,12 +604,36 @@ export function AIDraftPage() {
                 : <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><Spinner size={20} color="var(--teal)" /></div>}
             </div>
 
-            {/* RIGHT — the AI draft, read-only, pull sections into the record */}
+            {/* RIGHT — the AI draft, read-only, pull sections into the record.
+                Pulled sections collapse to a "used" accordion row. */}
             <div style={{ position: isMobile ? 'static' : 'sticky', top: 12 }}>
-              <div style={{ fontSize: 11.5, fontWeight: 700, color: '#92400e', letterSpacing: 0.3, marginBottom: 10 }}>🤖 BORRADOR IA (del audio)</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#92400e', letterSpacing: 0.3 }}>🤖 BORRADOR IA (del audio)</div>
+                {aiTextSections.length > 0 && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: usedCount === aiTextSections.length ? '#059669' : 'var(--s400)' }}>
+                    {usedCount}/{aiTextSections.length} usadas
+                  </span>
+                )}
+              </div>
               {aiTextSections.length === 0 ? (
                 <div className="card" style={{ padding: '16px 18px', fontSize: 13, color: 'var(--s400)' }}>La IA no redactó secciones de texto para esta sesión.</div>
-              ) : aiTextSections.map(({ key, label, value }) => (
+              ) : aiTextSections.map(({ key, label, value }) => usedKeys.has(key) ? (
+                /* Used — collapsed accordion row, click to re-open */
+                <button
+                  key={key}
+                  onClick={() => undoAiSection(key)}
+                  title="Pasada al registro — clic para volver a mostrarla"
+                  style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 14px', marginBottom: 10, borderRadius: 10, border: '1.5px solid #6ee7b7', background: '#f0fdf4', cursor: 'pointer' }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 700, color: '#065f46', minWidth: 0 }}>
+                    <CheckCircle2 size={14} color="#059669" style={{ flexShrink: 0 }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: '#059669', whiteSpace: 'nowrap' }}>
+                    Usada <ChevronDown size={13} color="#059669" />
+                  </span>
+                </button>
+              ) : (
                 <div key={key} className="card" style={{ padding: '14px 16px', marginBottom: 12, border: '1.5px solid #fde68a', background: '#fffdf7' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
                     <span style={{ fontSize: 12.5, fontWeight: 700, color: '#92400e' }}>{label}</span>

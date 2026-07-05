@@ -6,7 +6,7 @@ import { ApiError } from '@/api/client';
 import { recordTemplatesApi } from '@/api/recordTemplates';
 import { registerDraftFlush } from '@/lib/clinicalDrafts';
 import { Spinner } from '@/components/ui/Spinner';
-import { RecordSectionsForm, emptyDraft, draftToPayload, recordToDraft, validateDraft, toUIRecordType, type ClinicalDraft, type UIRecordType } from './RecordSectionsForm';
+import { RecordSectionsForm, emptyDraft, draftToPayload, recordToDraft, validateDraft, toUIRecordType, draftHasContent, mergeSavedDraft, type ClinicalDraft, type UIRecordType } from './RecordSectionsForm';
 import { RECORD_TYPE_LABELS } from './constants';
 import TemplatedSectionsForm, { type SectionsState } from './TemplatedSectionsForm';
 
@@ -42,46 +42,6 @@ interface RecordFormProps {
 }
 
 const UI_TYPES: UIRecordType[] = ['INITIAL', 'PLAN', 'EVOLUTION', 'DISCHARGE'];
-
-// A draft carries real work the user would lose on a format switch.
-function draftHasContent(d: ClinicalDraft): boolean {
-  if (Object.values(d.sections).some(v => (v ?? '').trim())) return true;
-  if ((d.riskNote ?? '').trim()) return true;
-  if (d.distressLevel !== undefined) return true;
-  if (d.dischargeReason) return true;
-  if ((d.achievementIndicators?.length ?? 0) > 0) return true;
-  if ((d.planTechniques?.length ?? 0) > 0) return true;
-  if ((d.taskChecklist?.length ?? 0) > 0) return true;
-  return false;
-}
-
-// Deep-merges a localStorage-saved draft over emptyDraft() so old/partial
-// drafts don't crash on render (e.g. spaHistory without alcohol/tobacco/other
-// would cause undefined errors). Shared by the normal restore path and the
-// blocked-type path (saved format no longer fits the open-process rule) —
-// both need the same safe merge, the blocked one just doesn't get applied as
-// the live draft.
-function mergeSavedDraft(saved: Partial<ClinicalDraft>): ClinicalDraft {
-  const def = emptyDraft();
-  return {
-    ...def,
-    ...saved,
-    spaHistory: saved.spaHistory ? (() => {
-      const defSPA = def.spaHistory!;
-      return {
-        ...defSPA,
-        ...saved.spaHistory,
-        alcohol: { ...defSPA.alcohol, ...(saved.spaHistory.alcohol ?? {}) },
-        tobacco: { ...defSPA.tobacco, ...(saved.spaHistory.tobacco ?? {}) },
-        other:   { ...defSPA.other,   ...(saved.spaHistory.other   ?? {}) },
-      };
-    })() : def.spaHistory,
-    familyMH: saved.familyMH ? { ...def.familyMH, ...saved.familyMH } : def.familyMH,
-    taskAdherence: saved.taskAdherence
-      ? { ...def.taskAdherence, ...saved.taskAdherence }
-      : def.taskAdherence,
-  };
-}
 
 type AutosaveState = 'idle' | 'saving' | 'saved' | 'error' | 'offline';
 
