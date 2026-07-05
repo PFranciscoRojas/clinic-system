@@ -206,6 +206,15 @@ export function AIDraftPage() {
     };
   }, [draftStorageKey, usedStorageKey, leftDraft, usedKeys, manualRecord, draft, qsRecordType]);
 
+  // An already-approved draft must not re-show the approval UI: send it to the
+  // finalized clinical record instead. Skips the in-session approval we just
+  // did (recordDone/createdRecordId) so that flow keeps its confirmation.
+  useEffect(() => {
+    if (draft?.status === 'APPROVED' && draft.clinical_record_id && !recordDone && !createdRecordId) {
+      navigate(`/clinical-records/${draft.clinical_record_id}`, { replace: true });
+    }
+  }, [draft?.status, draft?.clinical_record_id, recordDone, createdRecordId, navigate]);
+
   // Seed customEdit from draft content when using a custom template
   useEffect(() => {
     if (!customTemplate || !draft) return;

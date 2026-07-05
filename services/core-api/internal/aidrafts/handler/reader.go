@@ -93,5 +93,11 @@ func (h *Handler) getDraft(w http.ResponseWriter, r *http.Request) {
 	if draft.AppointmentID != "" {
 		resp["appointment_id"] = draft.AppointmentID
 	}
+	// The clinical record this draft was approved into — lets the review page
+	// send an already-approved draft straight to its finalized record instead
+	// of re-showing the approval UI.
+	if draft.ClinicalRecordID != "" {
+		resp["clinical_record_id"] = draft.ClinicalRecordID
+	}
 	httputil.WriteJSON(w, http.StatusOK, resp)
 }
