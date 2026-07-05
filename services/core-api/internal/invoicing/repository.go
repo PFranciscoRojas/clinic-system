@@ -154,7 +154,11 @@ func (r *Repository) SetActive(ctx context.Context, orgID, id string, active boo
 
 // ListBookingPayments returns bookings for the org: PAID ones in the period
 // window (or all if from/to are nil), plus active PENDING_PAYMENT holds.
-func (r *Repository) ListBookingPayments(ctx context.Context, orgID, status string, from, to *time.Time) ([]BookingPayment, error) {
+//
+// staffID scopes the result to bookings owned by that staff member — the "own
+// patients" view for a clinical professional. An empty staffID disables the
+// scope (org-wide view).
+func (r *Repository) ListBookingPayments(ctx context.Context, orgID, status, staffID string, from, to *time.Time) ([]BookingPayment, error) {
 	q := `
 		SELECT id,
 		       ROW_NUMBER() OVER (PARTITION BY organization_id ORDER BY created_at) AS booking_number,
@@ -168,6 +172,7 @@ func (r *Repository) ListBookingPayments(ctx context.Context, orgID, status stri
 		       (SELECT i.invoice_number FROM invoices i WHERE i.id = bookings.invoice_id)
 		FROM bookings
 		WHERE organization_id = $1
+		  AND ($5::text = '' OR staff_id = $5::uuid)
 		  AND (
 		    ($2::text = '' AND (
 		      (status = 'PAID' AND ($3::timestamptz IS NULL OR updated_at >= $3) AND ($4::timestamptz IS NULL OR updated_at < $4))
@@ -185,7 +190,7 @@ func (r *Repository) ListBookingPayments(ctx context.Context, orgID, status stri
 	if to != nil {
 		toP = to
 	}
-	rows, err := r.q(ctx).Query(ctx, q, orgID, status, fromP, toP)
+	rows, err := r.q(ctx).Query(ctx, q, orgID, status, fromP, toP, staffID)
 	if err != nil {
 		return nil, fmt.Errorf("list booking payments: %w", err)
 	}

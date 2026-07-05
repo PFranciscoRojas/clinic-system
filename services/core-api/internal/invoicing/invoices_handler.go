@@ -11,10 +11,52 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"sghcp/core-api/internal/notify"
+	"sghcp/core-api/internal/shared/clinicalperm"
 	"sghcp/core-api/internal/shared/dbctx"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
+	"sghcp/core-api/internal/shared/token"
 )
+
+// billingStaffScope returns the staff id that an invoice/booking listing must
+// be restricted to, or "" for the org-wide view. A clinical professional (or
+// intern) who is not also a billing admin may only see the billing of the
+// patients assigned to them (need-to-know, Res. 1995/1999). A CLINIC_ADMIN, an
+// owner who is also a professional (they hold billing:reports), or a
+// receptionist (front desk, not a clinical role) sees the whole organization.
+func billingStaffScope(claims *token.Claims) string {
+	if clinicalperm.HasClinicalRole(claims.Roles) && !hasPerm(claims.Permissions, "billing:reports") {
+		return claims.UserID
+	}
+	return ""
+}
+
+func hasPerm(perms []string, code string) bool {
+	for _, p := range perms {
+		if p == code {
+			return true
+		}
+	}
+	return false
+}
+
+// assertInvoiceAccess enforces the per-patient billing scope for a single
+// invoice: a scoped professional may only reach invoices of a patient assigned
+// to them. Returns ErrNotFound (mapped to 404) rather than 403 so a professional
+// can't probe which invoice ids exist for other patients.
+func (h *Handler) assertInvoiceAccess(ctx context.Context, claims *token.Claims, patientID string) error {
+	if billingStaffScope(claims) == "" {
+		return nil
+	}
+	ok, err := clinicalperm.IsAssignedToPatient(ctx, h.pool, claims.OrganizationID, claims.UserID, patientID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrNotFound
+	}
+	return nil
+}
 
 // InvoiceRoutes is mounted at /api/v1/invoices (JWT + tenant scope by the parent
 // group). Reading needs billing:read; creating/issuing/cancelling needs
@@ -68,7 +110,7 @@ func (h *Handler) listBookingPayments(w http.ResponseWriter, r *http.Request) {
 	from, to := periodBounds(q.Get("period"))
 	status := q.Get("status")
 
-	rows, err := h.svc.repo.ListBookingPayments(ctx, claims.OrganizationID, status, from, to)
+	rows, err := h.svc.repo.ListBookingPayments(ctx, claims.OrganizationID, status, billingStaffScope(claims), from, to)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "no se pudieron cargar las reservas")
 		return
@@ -104,7 +146,7 @@ func (h *Handler) listInvoices(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(ctx)
 	q := r.URL.Query()
 	from, to := periodBounds(q.Get("period"))
-	invoices, err := h.svc.ListInvoices(ctx, claims.OrganizationID, q.Get("patient_id"), q.Get("status"), from, to)
+	invoices, err := h.svc.ListInvoices(ctx, claims.OrganizationID, q.Get("patient_id"), q.Get("status"), billingStaffScope(claims), from, to)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "no se pudieron cargar las facturas")
 		return
@@ -173,6 +215,10 @@ func (h *Handler) getInvoice(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	inv, err := h.svc.GetInvoice(r.Context(), claims.OrganizationID, chi.URLParam(r, "invoice_id"))
 	if err != nil {
+		h.writeErr(w, err)
+		return
+	}
+	if err := h.assertInvoiceAccess(r.Context(), claims, inv.PatientID); err != nil {
 		h.writeErr(w, err)
 		return
 	}
@@ -274,9 +320,13 @@ type patientReceipt struct {
 	Email       string
 }
 
-func (h *Handler) buildReceipt(ctx context.Context, orgID, invoiceID string) (patientReceipt, error) {
+func (h *Handler) buildReceipt(ctx context.Context, claims *token.Claims, invoiceID string) (patientReceipt, error) {
+	orgID := claims.OrganizationID
 	inv, err := h.svc.GetInvoice(ctx, orgID, invoiceID)
 	if err != nil {
+		return patientReceipt{}, err
+	}
+	if err := h.assertInvoiceAccess(ctx, claims, inv.PatientID); err != nil {
 		return patientReceipt{}, err
 	}
 	name, doc, email := "", "", ""
@@ -313,7 +363,7 @@ func (h *Handler) receipt(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	claims := middleware.ClaimsFromContext(ctx)
 
-	rc, err := h.buildReceipt(ctx, claims.OrganizationID, chi.URLParam(r, "invoice_id"))
+	rc, err := h.buildReceipt(ctx, claims, chi.URLParam(r, "invoice_id"))
 	if err != nil {
 		h.writeErr(w, err)
 		return
@@ -329,7 +379,7 @@ func (h *Handler) sendReceipt(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	claims := middleware.ClaimsFromContext(ctx)
 
-	rc, err := h.buildReceipt(ctx, claims.OrganizationID, chi.URLParam(r, "invoice_id"))
+	rc, err := h.buildReceipt(ctx, claims, chi.URLParam(r, "invoice_id"))
 	if err != nil {
 		h.writeErr(w, err)
 		return

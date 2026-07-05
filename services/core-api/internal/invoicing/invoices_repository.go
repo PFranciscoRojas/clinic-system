@@ -98,7 +98,11 @@ func (r *Repository) CreateInvoice(ctx context.Context, p createInvoiceParams) (
 // ListInvoices returns the org's invoices, optionally filtered by patient,
 // status and an issued/created-date window ([from, to); nil bounds disable it),
 // newest first. Notes are left encrypted (the list view doesn't show them).
-func (r *Repository) ListInvoices(ctx context.Context, orgID string, patientID, status string, from, to *time.Time) ([]rawInvoice, error) {
+//
+// staffID scopes the result to the invoices of patients assigned to that staff
+// member (via patient_staff_rel) — the "own patients" view for a clinical
+// professional. An empty staffID disables the scope (org-wide view).
+func (r *Repository) ListInvoices(ctx context.Context, orgID string, patientID, status, staffID string, from, to *time.Time) ([]rawInvoice, error) {
 	rows, err := r.q(ctx).Query(ctx, `
 		SELECT `+invoiceColumns+`
 		FROM invoices
@@ -107,8 +111,11 @@ func (r *Repository) ListInvoices(ctx context.Context, orgID string, patientID, 
 		  AND ($3 = '' OR status = $3::invoice_status)
 		  AND ($4::timestamptz IS NULL OR COALESCE(issued_at, created_at) >= $4)
 		  AND ($5::timestamptz IS NULL OR COALESCE(issued_at, created_at) <  $5)
+		  AND ($6 = '' OR patient_id IN (
+		        SELECT patient_id FROM patient_staff_rel
+		        WHERE organization_id = $1 AND staff_id = $6::uuid AND ended_at IS NULL))
 		ORDER BY created_at DESC
-	`, orgID, patientID, status, from, to)
+	`, orgID, patientID, status, from, to, staffID)
 	if err != nil {
 		return nil, fmt.Errorf("list invoices: %w", err)
 	}
