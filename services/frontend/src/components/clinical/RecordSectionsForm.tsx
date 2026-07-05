@@ -73,6 +73,44 @@ export function emptyDraft(): ClinicalDraft {
   };
 }
 
+// A draft carries real work the user would lose on a format switch or navigation.
+export function draftHasContent(d: ClinicalDraft): boolean {
+  if (Object.values(d.sections).some(v => (v ?? '').trim())) return true;
+  if ((d.riskNote ?? '').trim()) return true;
+  if (d.distressLevel !== undefined) return true;
+  if (d.dischargeReason) return true;
+  if ((d.achievementIndicators?.length ?? 0) > 0) return true;
+  if ((d.planTechniques?.length ?? 0) > 0) return true;
+  if ((d.taskChecklist?.length ?? 0) > 0) return true;
+  return false;
+}
+
+// Deep-merges a localStorage-saved draft over emptyDraft() so old/partial drafts
+// don't crash on render (e.g. spaHistory without alcohol/tobacco/other would
+// cause undefined errors). Shared by the appointment RecordForm and the AI-draft
+// comparison view, which persist to the same `clinical-draft-*` keys.
+export function mergeSavedDraft(saved: Partial<ClinicalDraft>): ClinicalDraft {
+  const def = emptyDraft();
+  return {
+    ...def,
+    ...saved,
+    spaHistory: saved.spaHistory ? (() => {
+      const defSPA = def.spaHistory!;
+      return {
+        ...defSPA,
+        ...saved.spaHistory,
+        alcohol: { ...defSPA.alcohol, ...(saved.spaHistory.alcohol ?? {}) },
+        tobacco: { ...defSPA.tobacco, ...(saved.spaHistory.tobacco ?? {}) },
+        other:   { ...defSPA.other,   ...(saved.spaHistory.other   ?? {}) },
+      };
+    })() : def.spaHistory,
+    familyMH: saved.familyMH ? { ...def.familyMH, ...saved.familyMH } : def.familyMH,
+    taskAdherence: saved.taskAdherence
+      ? { ...def.taskAdherence, ...saved.taskAdherence }
+      : def.taskAdherence,
+  };
+}
+
 // ── Payload builder ───────────────────────────────────────────────────────────
 export function draftToPayload(uiType: UIRecordType, d: ClinicalDraft): {
   sections: RecordSections; risk_level?: RiskLevel; discharge_reason?: DischargeReason;
