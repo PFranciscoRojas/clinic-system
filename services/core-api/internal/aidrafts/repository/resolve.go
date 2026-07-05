@@ -28,5 +28,21 @@ func (r *Repository) Resolve(ctx context.Context, orgID, draftID, clinicalRecord
 	if tag.RowsAffected() == 0 {
 		return aidrafts.ErrNotFound
 	}
+
+	// Retire the "AI draft ready" bell notification for this draft: it has been
+	// approved, so it must no longer route back to the draft for approval. Mark
+	// it read (drops it from the unread bell) and repoint it to the resulting
+	// clinical record, so opening it from history lands on the finalized record.
+	// Best-effort — a notification update must never fail an approval that has
+	// already committed the record. Same tenant-scoped conn, so RLS matches.
+	_, _ = dbctx.From(ctx, r.db).Exec(ctx, `
+		UPDATE notifications
+		SET read_at = COALESCE(read_at, NOW()),
+		    link    = $3
+		WHERE organization_id = $1
+		  AND kind = 'AI_DRAFT_READY'
+		  AND link = $2
+	`, orgID, fmt.Sprintf("/ai-drafts/%s", draftID), fmt.Sprintf("/clinical-records/%s", clinicalRecordID))
+
 	return nil
 }

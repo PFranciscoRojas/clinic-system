@@ -8,6 +8,8 @@ export interface AIDraft {
   patient_id: string;
   appointment_id?: string;
   status: DraftStatus;
+  /** Set once the draft is APPROVED — the clinical record it became. */
+  clinical_record_id?: string;
   ai_model_version: string;
   whisper_model: string;
   /** Optional custom template used when the recording was initiated. */
