@@ -21,6 +21,7 @@ type AIDraft struct {
 	ProcessedAt      *time.Time
 	ResolvedAt       *time.Time
 	ResolvedBy       string
+	SupersededBy     string // set when a later take on the same appointment absorbed this one
 	CreatedAt        time.Time
 	DeleteAfter      *time.Time
 }

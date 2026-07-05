@@ -99,5 +99,10 @@ func (h *Handler) getDraft(w http.ResponseWriter, r *http.Request) {
 	if draft.ClinicalRecordID != "" {
 		resp["clinical_record_id"] = draft.ClinicalRecordID
 	}
+	// A SUPERSEDED draft was folded into a later take — the review page uses this
+	// to redirect the professional to the single, consolidated draft.
+	if draft.SupersededBy != "" {
+		resp["superseded_by"] = draft.SupersededBy
+	}
 	httputil.WriteJSON(w, http.StatusOK, resp)
 }

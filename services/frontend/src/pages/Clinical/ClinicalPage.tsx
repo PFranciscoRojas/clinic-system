@@ -26,6 +26,8 @@ const DRAFT_STATUS: Record<DraftStatus, { label: string; color: string; bg: stri
   APPROVED:   { label: 'Aprobado',   color: '#059669', bg: '#d1fae5', Icon: CheckCircle2 },
   REJECTED:   { label: 'Rechazado',  color: '#6b7280', bg: '#f3f4f6', Icon: XCircle },
   ERROR:      { label: 'Error',      color: '#dc2626', bg: '#fee2e2', Icon: AlertTriangle },
+  // Folded into a later consolidated take — hidden from the list, listed here only for type completeness.
+  SUPERSEDED: { label: 'Consolidado', color: '#6b7280', bg: '#f3f4f6', Icon: Loader2 },
 };
 
 function DraftBadge({ status }: { status: DraftStatus }) {

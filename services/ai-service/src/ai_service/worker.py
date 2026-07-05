@@ -194,6 +194,69 @@ class AIWorker:
             logger.warning("invalid template schema JSON", extra={"template_id": template_id})
             return None
 
+    async def _prior_transcriptions(
+        self, appointment_id: str, this_draft_id: str
+    ) -> tuple[str, list[str]]:
+        """Gather the decrypted transcriptions of earlier, still-open takes on the
+        same appointment, oldest first, so they can be prepended to this draft's
+        own transcription. Returns (combined_text, [ids to supersede]).
+
+        Only DRAFT_READY takes with a stored transcription qualify: their audio
+        has already been transcribed and deleted, so their text is the only copy.
+        In normal flow each new upload supersedes the previous one, so there is at
+        most one such predecessor (already carrying the whole session so far).
+        """
+        assert self._db is not None
+        rows = await self._db.fetch(
+            """
+            SELECT d.id, d.transcription_enc, k.encrypted_dek, k.key_source
+            FROM ai_drafts d
+            JOIN encryption_keys k ON k.id = d.dek_id
+            WHERE d.appointment_id = $1
+              AND d.id <> $2
+              AND d.status = 'DRAFT_READY'
+              AND d.transcription_enc IS NOT NULL
+              -- only older takes, so this (newest) draft is always the consolidator
+              -- and the folded text stays in chronological order (no ping-pong if
+              -- an earlier take happens to finish transcribing last)
+              AND d.created_at < (SELECT created_at FROM ai_drafts WHERE id = $2)
+            ORDER BY d.created_at ASC
+            """,
+            appointment_id,
+            this_draft_id,
+        )
+        parts: list[str] = []
+        ids: list[str] = []
+        for r in rows:
+            try:
+                dek = self._decrypt_dek(r["key_source"], bytes(r["encrypted_dek"]))
+                text = open_(dek, bytes(r["transcription_enc"])).decode()
+            except ValueError as exc:
+                logger.warning("cannot decrypt prior take transcription", extra={"err": str(exc)})
+                continue
+            if text.strip():
+                parts.append(text.strip())
+                ids.append(str(r["id"]))
+        return ("\n\n".join(parts), ids)
+
+    async def _supersede_drafts(self, draft_ids: list[str], consolidated_id: str) -> None:
+        """Mark earlier takes SUPERSEDED and point them at the consolidated draft.
+        Their transcription/content is nulled out — it now lives (folded in) on the
+        consolidated draft, so keeping a second copy is only dead PII at rest."""
+        assert self._db is not None
+        await self._db.execute(
+            """
+            UPDATE ai_drafts
+            SET status            = 'SUPERSEDED',
+                superseded_by     = $2,
+                transcription_enc = NULL,
+                draft_content_enc = NULL
+            WHERE id = ANY($1::uuid[])
+            """,
+            draft_ids,
+            consolidated_id,
+        )
+
     async def _process_draft(
         self,
         draft_id: str,
@@ -211,7 +274,7 @@ class AIWorker:
         row = await self._db.fetchrow(
             """
             SELECT d.patient_id, d.dek_id, d.organization_id, d.requested_by,
-                   k.encrypted_dek, k.key_source
+                   d.appointment_id, k.encrypted_dek, k.key_source
             FROM ai_drafts d
             JOIN encryption_keys k ON k.id = d.dek_id
             WHERE d.id = $1
@@ -223,6 +286,27 @@ class AIWorker:
 
         # 2. Transcribe locally — audio never leaves the server
         transcription = await asyncio.to_thread(transcribe_audio, audio_path)
+
+        # 2b. Consolidate: a session can be recorded in several takes (a power cut
+        #     mid-session, an F5, then a fresh recording). Fold the earlier takes'
+        #     transcriptions on the same appointment into this newest draft so one
+        #     draft — and one clinical record — covers the whole session. The older
+        #     takes are marked SUPERSEDED after this draft is stored.
+        appointment_id = row["appointment_id"]
+        superseded_ids: list[str] = []
+        if appointment_id:
+            try:
+                prior_text, superseded_ids = await self._prior_transcriptions(
+                    str(appointment_id), draft_id
+                )
+                if prior_text:
+                    transcription = f"{prior_text}\n\n{transcription}"
+            except Exception as exc:  # noqa: BLE001 — best-effort; fall back to this take alone
+                logger.warning(
+                    "prior-take consolidation failed; using this take only",
+                    extra={"draft_id": draft_id, "err": str(exc)},
+                )
+                superseded_ids = []
 
         # 3. Anonymize — the patient's real name parts (decrypted here) are
         #    replaced literally, then NER/regex strip everything else
@@ -266,6 +350,18 @@ class AIWorker:
             transcription_enc,
             draft_content_enc,
         )
+
+        # Mark the earlier takes SUPERSEDED now that this draft carries their
+        # transcription. Bookkeeping only — a failure here must not fail the
+        # consolidated draft, which is already stored and ready.
+        if superseded_ids:
+            try:
+                await self._supersede_drafts(superseded_ids, draft_id)
+            except Exception as exc:  # noqa: BLE001 — best-effort
+                logger.warning(
+                    "could not mark prior takes superseded",
+                    extra={"draft_id": draft_id, "err": str(exc)},
+                )
 
         # Notify the professional who requested the draft that it's ready to
         # review (the topbar bell). The notifications table is not encrypted, so
