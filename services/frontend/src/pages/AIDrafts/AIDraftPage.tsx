@@ -18,9 +18,18 @@ import { todayLocalISO } from '@/lib/dates';
 import TemplatedSectionsForm, { type SectionsState } from '@/components/clinical/TemplatedSectionsForm';
 import { MentalExamChecklist, defaultMentalExam, type MentalExam } from '@/components/clinical/MentalExamChecklist';
 import {
-  RecordSectionsForm, recordToDraft, draftToPayload, validateDraft, toUIRecordType,
+  RecordSectionsForm, recordToDraft, draftToPayload, validateDraft, toUIRecordType, emptyDraft,
   type ClinicalDraft, type UIRecordType,
 } from '@/components/clinical/RecordSectionsForm';
+
+// Map a stored record type to the UI variant driving the left-pane form when
+// there is no manual record to derive it from (the AI never sets is_plan_session,
+// so PLAN can't be distinguished — it edits as EVOLUTION, which is harmless).
+function apiTypeToUI(rt: string): UIRecordType {
+  if (rt === 'INITIAL') return 'INITIAL';
+  if (rt === 'DISCHARGE') return 'DISCHARGE';
+  return 'EVOLUTION';
+}
 
 const STATUS_CONFIG: Record<DraftStatus, { label: string; color: string; bg: string; Icon: React.ElementType }> = {
   PENDING:      { label: 'En cola',        color: '#6b7280', bg: '#f3f4f6', Icon: Clock        },
@@ -90,11 +99,35 @@ export function AIDraftPage() {
     enabled: !!draft?.template_id,
   });
 
-  // Load the manual record for comparison mode (only when record_id is in the URL)
-  const { data: manualRecord, isLoading: manualLoading } = useQuery<ClinicalRecord>({
-    queryKey: ['clinical-record', qsRecordId],
-    queryFn: () => clinicalRecordsApi.get(qsRecordId, 'Comparación con borrador IA'),
-    enabled: !!qsRecordId,
+  // When the URL didn't carry record_id (arriving from the drafts list in
+  // Clínico, or an audio upload that never opened the manual editor), resolve
+  // the in-progress clinical record for this draft's appointment so the
+  // comparison view still shows the professional's record on the left.
+  const canResolve = !qsRecordId && !!draft?.patient_id && !!draft?.appointment_id;
+  const { data: patientRecords } = useQuery({
+    queryKey: ['records-for-draft', draft?.patient_id, draft?.appointment_id],
+    queryFn: () => clinicalRecordsApi.list(draft!.patient_id, 'Comparación con borrador IA'),
+    enabled: canResolve,
+  });
+  const autoRecordId = canResolve
+    ? (patientRecords?.items ?? []).find(
+        r => r.appointment_id === draft?.appointment_id && r.finalized === false && r.status === 'DRAFT',
+      )?.id ?? ''
+    : '';
+  // The record to compare against: the one passed in the URL, or the one we
+  // resolved from the appointment. Empty when the appointment has no
+  // in-progress record yet — then the left pane starts blank and approving
+  // CREATES the record instead of finalizing an existing one.
+  const compareRecordId = qsRecordId || autoRecordId;
+  // Resolution is settled once we have a record id or know there is none, so the
+  // comparison view never flashes an empty left pane while the lookup is pending.
+  const resolutionSettled = !!qsRecordId || !draft?.appointment_id || patientRecords !== undefined;
+
+  // Load the resolved manual record for comparison mode
+  const { data: manualRecord } = useQuery<ClinicalRecord>({
+    queryKey: ['clinical-record', compareRecordId],
+    queryFn: () => clinicalRecordsApi.get(compareRecordId, 'Comparación con borrador IA'),
+    enabled: !!compareRecordId,
   });
 
   // Seed customEdit from draft content when using a custom template
@@ -116,16 +149,21 @@ export function AIDraftPage() {
     }
   }, [draft]);
 
-  // Seed the editable left-hand record from the manual autosave draft (with all
-  // its widgets and text) once it loads, for the comparison view.
+  // Seed the editable left-hand record for the comparison view: from the manual
+  // autosave draft when one exists (all its widgets and text), otherwise a blank
+  // record the professional fills by pulling AI sections in and completing the
+  // widgets — approving then creates the record.
   useEffect(() => {
-    if (!manualRecord) return;
-    setLeftDraft(recordToDraft(
-      manualRecord.sections,
-      manualRecord.risk_level,
-      manualRecord.discharge_reason,
-    ));
-  }, [manualRecord]);
+    if (manualRecord) {
+      setLeftDraft(recordToDraft(
+        manualRecord.sections,
+        manualRecord.risk_level,
+        manualRecord.discharge_reason,
+      ));
+    } else if (resolutionSettled && !compareRecordId) {
+      setLeftDraft(prev => prev ?? emptyDraft());
+    }
+  }, [manualRecord, resolutionSettled, compareRecordId]);
 
   // Seed the ICD-10 selector from the AI suggestion once, when the draft loads
   useEffect(() => {
@@ -205,25 +243,49 @@ export function AIDraftPage() {
     }
   };
 
-  // Comparison view: finalize the manual record the professional was filling
-  // (all widgets + whatever AI text they accepted into it) into the clinical
-  // history, then mark the AI draft as consumed by it. One record, no duplicate.
-  const handleApproveRecord = async () => {
-    if (!leftDraft || !qsRecordId || !id || recordSaving || recordDone) return;
-    const uiType = manualRecord ? toUIRecordType(manualRecord.record_type, manualRecord.sections) : 'EVOLUTION';
+  // Comparison view approve: take the composed left-hand record (all widgets +
+  // whatever AI text the professional accepted into it) into the clinical
+  // history as ONE record. When an in-progress record exists it is finalized in
+  // place (no duplicate); otherwise a new record is created from it. Either way
+  // the AI draft is marked consumed.
+  const handleApproveComparison = async () => {
+    if (!leftDraft || !id || recordSaving || recordDone || createdRecordId) return;
+    const rt = qsRecordType
+      || ((draft?.draft_content_plain as Record<string, unknown> | null)?.record_type as string)
+      || 'EVOLUTION';
+    const uiType: UIRecordType = manualRecord
+      ? toUIRecordType(manualRecord.record_type, manualRecord.sections)
+      : apiTypeToUI(rt);
     const miss = validateDraft(uiType, leftDraft);
     if (miss) { setRecordErr(miss.message); return; }
     setRecordSaving(true); setRecordErr('');
+    const payload = draftToPayload(uiType, leftDraft);
     try {
-      await clinicalRecordsApi.finalize(qsRecordId, draftToPayload(uiType, leftDraft));
-      // Bookkeeping: mark the draft approved + linked. The record is already
-      // saved, so a link failure must not fail the approval.
-      try { await aiDraftsApi.link(id, qsRecordId); } catch { /* draft link is best-effort */ }
-      if (icd10?.code && draft?.patient_id) {
+      let recordId = compareRecordId;
+      if (recordId) {
+        // Finalize the in-progress record the professional was filling.
+        await clinicalRecordsApi.finalize(recordId, payload);
+        // Bookkeeping: mark the draft approved + linked. The record is already
+        // saved, so a link failure must not fail the approval.
+        try { await aiDraftsApi.link(id, recordId); } catch { /* draft link is best-effort */ }
+      } else {
+        // No in-progress record — create one from the composed left pane. The
+        // approve endpoint both creates the record and marks the draft APPROVED.
+        const res = await aiDraftsApi.approve(id, {
+          sections: payload.sections,
+          risk_level: payload.risk_level,
+          record_type: rt,
+          session_date: qsSessionDate || todayLocalISO(),
+          appointment_id: qsAppointmentId || draft?.appointment_id || undefined,
+        });
+        recordId = res.clinical_record_id;
+        setCreatedRecordId(recordId);
+      }
+      if (icd10?.code && draft?.patient_id && recordId) {
         try {
           await diagnosesApi.create(draft.patient_id, {
             icd10_code: icd10.code,
-            clinical_record_id: qsRecordId,
+            clinical_record_id: recordId,
             diagnosis_type: 'PRINCIPAL',
             diagnosed_at: qsSessionDate || todayLocalISO(),
           });
@@ -291,11 +353,15 @@ export function AIDraftPage() {
   const isEmptyDraft = isReady && !editing && !useCustomTemplate
     && sectionDefs.every(({ key }) => !getDraftField(key).trim());
 
-  // Comparison mode: a manual record exists alongside the AI draft
-  const compareMode = !!qsRecordId && !!manualRecord && isReady && !useCustomTemplate;
+  // Comparison mode is the default for a ready integrated-format draft, whatever
+  // the entry point (appointment button, drafts list, or an audio upload with no
+  // manual record yet): the professional's clinical record on the left, the AI
+  // draft to pull from on the right. We wait until record resolution settles so
+  // the left pane is seeded correctly (existing record vs. blank) before showing.
+  const compareMode = isReady && !useCustomTemplate && !templateLoading && resolutionSettled;
   const compareUiType: UIRecordType = manualRecord
     ? toUIRecordType(manualRecord.record_type, manualRecord.sections)
-    : 'EVOLUTION';
+    : apiTypeToUI(recordType);
   // AI text sections to offer on the right of the comparison (only ones the AI
   // actually produced). The professional pulls any into the record on the left.
   const aiTextSections: { key: string; label: string; value: string }[] = compareMode
@@ -346,7 +412,7 @@ export function AIDraftPage() {
               <InfoLine label="Draft ID" value={id?.slice(-8) ?? '—'} />
             </div>
           </div>
-          {isReady && !editing && (
+          {isReady && !editing && !compareMode && (
             <button
               onClick={() => setEditing(true)}
               style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
@@ -394,8 +460,10 @@ export function AIDraftPage() {
         </div>
       )}
 
-      {/* Loading manual record for comparison */}
-      {!!qsRecordId && manualLoading && (
+      {/* Resolving which clinical record to compare against (looking up the
+          appointment's in-progress record) — hold the comparison view until we
+          know whether to seed the left pane from it or start blank. */}
+      {isReady && !useCustomTemplate && !templateLoading && !resolutionSettled && (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
           <Spinner size={24} color="var(--teal)" />
         </div>
@@ -411,6 +479,26 @@ export function AIDraftPage() {
               A la <strong>izquierda</strong> está tu registro clínico (edítalo y completa el examen mental, la formulación y demás). A la <strong>derecha</strong>, lo que redactó la IA del audio: pulsa <strong>"Usar en el registro"</strong> para pasar cada sección a la izquierda. Al final, <strong>Aprobar registro</strong> crea la historia clínica.
             </p>
           </div>
+
+          {/* Transcription — what Whisper heard, always available once processed */}
+          {transcription && (
+            <div className="card" style={{ padding: 0, marginBottom: 16, overflow: 'hidden' }}>
+              <button
+                onClick={() => setShowTranscript(v => !v)}
+                style={{ width: '100%', padding: '12px 18px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', textAlign: 'left' }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--s700)' }}>
+                  <FileText size={14} color="var(--s400)" /> Transcripción del audio
+                </span>
+                {showTranscript ? <ChevronUp size={16} color="var(--s400)" /> : <ChevronDown size={16} color="var(--s400)" />}
+              </button>
+              {showTranscript && (
+                <div style={{ padding: '0 18px 16px', borderTop: '1px solid var(--s100)' }}>
+                  <p style={{ margin: '12px 0 0', fontSize: 13, color: 'var(--s600)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{transcription}</p>
+                </div>
+              )}
+            </div>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 18, marginBottom: 20, alignItems: 'start' }}>
             {/* LEFT — the real, editable clinical record (all widgets) */}
@@ -449,7 +537,7 @@ export function AIDraftPage() {
           {/* Approve action — one button, finalizes the record on the left */}
           <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
             <button
-              onClick={handleApproveRecord}
+              onClick={handleApproveComparison}
               disabled={recordSaving || !leftDraft}
               style={{ flex: 1, padding: 13, borderRadius: 11, background: 'var(--teal)', color: '#fff', border: 'none', cursor: (recordSaving || !leftDraft) ? 'not-allowed' : 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (recordSaving || !leftDraft) ? 0.7 : 1 }}
             >
@@ -475,7 +563,7 @@ export function AIDraftPage() {
             <span style={{ fontSize: 14, fontWeight: 600, color: '#065f46' }}>Historia clínica aprobada y firmada</span>
           </div>
           <button
-            onClick={() => navigate(`/clinical-records/${qsRecordId}`)}
+            onClick={() => navigate(`/clinical-records/${compareRecordId || createdRecordId}`)}
             style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 14px', background: '#059669', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
           >
             <FileText size={14} /> Ver registro clínico
