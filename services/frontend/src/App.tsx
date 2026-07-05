@@ -91,7 +91,13 @@ export function App() {
                 <Route path="clinical-records/:id" element={<ClinicalRecordPage />} />
                 <Route path="billing" element={<BillingPage />} />
                 <Route path="settings/:section?" element={<SettingsPage />} />
-                <Route path="admin" element={<SuperAdminPage />} />
+                {/* Operator console — SYSTEM_ADMIN only. Guarded here too so a
+                    non-operator can't reach it by typing the URL; the API also
+                    enforces the role, so this is defence in depth, not the only gate. */}
+                <Route
+                  path="admin"
+                  element={user?.roles?.includes('SYSTEM_ADMIN') ? <SuperAdminPage /> : <Navigate to="/" replace />}
+                />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </AppShell>
