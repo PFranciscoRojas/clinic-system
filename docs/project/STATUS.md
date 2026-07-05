@@ -57,11 +57,8 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 
 ### Últimos PRs a `main`
 
-- `#120` fix(booking): restore tenant editorial palette on public wizard (marcelachapues.com colors) — 2026-07-03
-- `#119` feat(infra): serve app.chapni.com as primary domain; legacy api.marcelachapues.com keeps /api + 308 redirect — 2026-07-03
-- `#118` feat(core): rebrand product surfaces to Chapni (emails, PDF, config) — 2026-07-02
-- `#117` feat(frontend): rebrand to Chapni — Indigo & Oro identity (tokens, symbol, legal) — 2026-07-02
-- `#116` enhancement(clinical): collapsible recap + topbar indicator para borradores en proceso — 2026-07-02
+- `#146` enhancement(clinical): **consolidación de borradores IA multi-toma** — 2026-07-05. Cuando una sesión se graba en varias tomas (corte de luz, F5, nueva grabación), el worker de `ai-service` funde la transcripción de la toma anterior (`DRAFT_READY`, misma cita) en la más nueva, generando un solo borrador consolidado en vez de dos sueltos; las tomas anteriores quedan `SUPERSEDED` (contenido anulado) apuntando a la consolidada vía `superseded_by`. Migraciones `000058` (valor enum `SUPERSEDED`) + `000059` (`ai_drafts.superseded_by` FK). `core-api` oculta `SUPERSEDED` de la lista de revisión; frontend redirige un borrador `SUPERSEDED` al consolidado conservando el contexto de sesión. **Desplegado completo**: migraciones aplicadas en VPS, CI verde para `core-api` (test+lint+build+deploy+smoke) y `ai-service` (build+deploy), frontend reconstruido manualmente — todo verificado (`/healthz` 200, logs limpios, smoke funcional).
+- `#145`–`#141` (2026-07-05) y `#140`–`#137` (2026-07-04): iteración sobre el flujo de comparación manual-vs-IA en `AIDraftPage` (routing de borradores aprobados, colapso de secciones IA usadas, entrada desde cualquier punto, aprobar finalizando el registro en progreso) + guard de rol en consola de operador + scoping de facturación por profesional. Detalle no capturado en una sesión de `/actualizar-contexto` propia — ver `git log` para hashes exactos.
 
 > Flujo actual: rama `fix/*` → PR → squash-merge → CI deploy. Branch protection sigue pendiente (BACKLOG → Infraestructura).
 > **CI/CD:** `test → build → smoke`. `go test ./...` bloquea el build; `tsc --noEmit` corre en cada PR de frontend; smoke test de 8 pasos HTTP corre tras cada deploy al VPS.
@@ -75,7 +72,6 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 |---|---|---|
 | **WhatsApp Meta API** | Cargo COP $90.675 pagado. Pendiente: confirmar que la API se desbloqueó, configurar `tpl_reminder_24h` y `tpl_reminder_2h` en Ajustes → Integraciones con los nombres exactos de las plantillas aprobadas. | 🟡 verificar desbloqueo |
 | **Validación de demanda** | Conseguir 2-3 psicólogas externas en beta de diseño (acceso gratis 2 semanas, acompañamiento 1ª sesión en vivo). Sin esto, el go-live 1.0.0 carece de señal de mercado. 2 contactos disponibles (colegas de la esposa). Fases 1-2 de la auditoría deben cerrarse antes de la beta (logout/pérdida de borrador ya resueltos). | 🔴 sin iniciar |
-| **Smoke test `login` roto** | El secret `SMOKE_PASSWORD` apunta a una cuenta inexistente en prod (audit_log: `USER-NOT-FOUND` con código viejo y nuevo). Falla desde antes de la auditoría; no bloquea deploy pero enmascara el gate de smoke. Arreglar el secret o el email que usa el test. | 🟡 pre-existente |
 
 ---
 
@@ -108,9 +104,9 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción — CI deploy (PR #118 `751a803`, rebrand). Migración 000050 ejecutada. |
-| `ai-service` | ✅ producción — CI deploy (PR #118, título "Chapni AI Service") |
-| `frontend` (Caddy :80/:443) | ✅ producción — rebuild manual desde `3950048` (PR #120, 2026-07-03) — booking restaura estilos de marcelachapues.com. **Dominio:** `https://app.chapni.com` (principal, `CADDY_APP_DOMAIN`); `api.marcelachapues.com` legacy (mantiene `/api` para webhooks, redirige 308 el resto). `APP_BASE_URL` = `https://app.chapni.com`. Cert Let's Encrypt emitido. Google OAuth redirect URI actualizado en Cloud Console. |
+| `core-api:8080` | ✅ producción — CI deploy (PR #146 `e62367d`, 2026-07-05, consolidación borradores IA). Migraciones 000058+000059 ejecutadas. |
+| `ai-service` | ✅ producción — CI deploy (PR #146, 2026-07-05, fusión de transcripciones multi-toma) |
+| `frontend` (Caddy :80/:443) | ✅ producción — rebuild manual desde `e62367d` (PR #146, 2026-07-05). **Dominio:** `https://app.chapni.com` (principal, `CADDY_APP_DOMAIN`); `api.marcelachapues.com` legacy (mantiene `/api` para webhooks, redirige 308 el resto). `APP_BASE_URL` = `https://app.chapni.com`. Cert Let's Encrypt emitido. Google OAuth redirect URI actualizado en Cloud Console. |
 | Backups | `pg_dump` cifrado GPG → Backblaze B2 |
 | **Disco** | ~40% (15/38 GB) — cron semanal en el **host** (ya no en el admin UI): `0 4 * * 0 docker system prune -af` → `/var/log/docker-prune.log`. Alerta email si >80% |
 
@@ -135,7 +131,7 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 | `core-api` | `services/core-api/` | ✅ Go 1.25, prod |
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
-| Migrations | `services/core-api/migrations/` | Última: `000050_ai_draft_template` (template_id en ai_drafts — PR #114, ejecutada en prod 2026-07-02) |
+| Migrations | `services/core-api/migrations/` | Última: `000059_ai_draft_superseded_by` (+ `000058` valor enum `SUPERSEDED`) — consolidación de tomas de borrador IA, PR #146, ejecutada en prod 2026-07-05 |
 | CI/CD | `.github/workflows/build-ai-service.yml` + `build-core-api.yml` | Build+push ghcr.io + deploy SSH al VPS (secrets: `VPS_HOST`, `VPS_SSH_KEY`, `GHCR_TOKEN`) |
 | Claude skills | `~/.claude/commands/` + `~/.claude/skills/` | `ui-ux-pro-max` instalada; `ui-styling` (Tailwind/shadcn) desinstalada 2026-06-28 — proyecto usa inline styles |
 

@@ -4,6 +4,13 @@
 
 ---
 
+## 2026-07-05
+
+- enhancement(clinical): consolidación de borradores IA multi-toma (PR #146) — cuando una sesión se graba en varias tomas (corte de luz, F5, nueva grabación), el worker de `ai-service` funde la transcripción de la toma `DRAFT_READY` anterior de la misma cita en la más nueva, generando un solo borrador consolidado; las tomas absorbidas quedan `SUPERSEDED` (contenido anulado) con `superseded_by` apuntando a la consolidada. Migraciones 000058 (enum `SUPERSEDED`) + 000059 (`ai_drafts.superseded_by`). `core-api` oculta `SUPERSEDED` de la lista de revisión; frontend redirige el borrador superado al consolidado conservando el contexto de sesión (cita, fecha, tipo de registro).
+- ops: pipeline de deploy completo ejecutado y verificado — migraciones aplicadas en VPS antes del restart, CI verde para `core-api` (test+lint+build+deploy+smoke funcional) y `ai-service` (build+deploy), frontend reconstruido manualmente; confirmado en BD (`superseded_by` + enum) y en logs de ambos servicios sin errores.
+
+---
+
 ## 2026-07-03 (sesión 26 — dominio + rebrand finales)
 
 **Migración a app.chapni.com (PR #119):**
