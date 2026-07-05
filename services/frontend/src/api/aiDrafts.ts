@@ -1,6 +1,6 @@
 import { api } from './client';
 
-export type DraftStatus = 'PENDING' | 'PROCESSING' | 'DRAFT_READY' | 'APPROVED' | 'REJECTED' | 'ERROR';
+export type DraftStatus = 'PENDING' | 'PROCESSING' | 'DRAFT_READY' | 'APPROVED' | 'REJECTED' | 'ERROR' | 'SUPERSEDED';
 
 export interface AIDraft {
   id: string;
@@ -10,6 +10,8 @@ export interface AIDraft {
   status: DraftStatus;
   /** Set once the draft is APPROVED — the clinical record it became. */
   clinical_record_id?: string;
+  /** Set when this take was folded into a later, consolidated draft. */
+  superseded_by?: string;
   ai_model_version: string;
   whisper_model: string;
   /** Optional custom template used when the recording was initiated. */

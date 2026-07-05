@@ -13,13 +13,13 @@ import (
 
 func (r *Repository) FindByID(ctx context.Context, orgID, draftID string) (*aidrafts.AIDraft, error) {
 	var d aidrafts.AIDraft
-	var clinicalRecordID, appointmentID, resolvedBy, errorMessage, templateID *string
+	var clinicalRecordID, appointmentID, resolvedBy, errorMessage, templateID, supersededBy *string
 	err := dbctx.From(ctx, r.db).QueryRow(ctx, `
 		SELECT id, organization_id, clinical_record_id, appointment_id, patient_id,
 		       requested_by, dek_id, audio_path_enc, transcription_enc,
 		       draft_content_enc, ai_model_version, whisper_model, template_id,
 		       status, error_message, processed_at, resolved_at, resolved_by,
-		       created_at, delete_after
+		       superseded_by, created_at, delete_after
 		FROM ai_drafts
 		WHERE id = $1 AND organization_id = $2
 	`, draftID, orgID).Scan(
@@ -27,7 +27,7 @@ func (r *Repository) FindByID(ctx context.Context, orgID, draftID string) (*aidr
 		&d.RequestedBy, &d.DEKID, &d.AudioPathEnc, &d.TranscriptionEnc,
 		&d.DraftContentEnc, &d.AIModelVersion, &d.WhisperModel, &templateID,
 		&d.Status, &errorMessage, &d.ProcessedAt, &d.ResolvedAt, &resolvedBy,
-		&d.CreatedAt, &d.DeleteAfter,
+		&supersededBy, &d.CreatedAt, &d.DeleteAfter,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, aidrafts.ErrNotFound
@@ -50,6 +50,9 @@ func (r *Repository) FindByID(ctx context.Context, orgID, draftID string) (*aidr
 	if templateID != nil {
 		d.TemplateID = *templateID
 	}
+	if supersededBy != nil {
+		d.SupersededBy = *supersededBy
+	}
 	return &d, nil
 }
 
@@ -62,6 +65,8 @@ func (r *Repository) ListByOrg(ctx context.Context, orgID, status string) ([]*ai
 		LEFT JOIN patients p ON p.id = d.patient_id
 		WHERE d.organization_id = $1
 		  AND ($2 = '' OR d.status::text = $2)
+		  -- takes folded into a later consolidated draft never show on their own
+		  AND d.status <> 'SUPERSEDED'
 		  -- hide orphan drafts superseded by an approved record or draft on the same appointment
 		  AND NOT (
 		    d.appointment_id IS NOT NULL

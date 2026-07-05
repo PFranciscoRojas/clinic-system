@@ -39,6 +39,7 @@ const STATUS_CONFIG: Record<DraftStatus, { label: string; color: string; bg: str
   APPROVED:     { label: 'Aprobado',       color: '#fff',    bg: '#059669', Icon: CheckCircle2 },
   REJECTED:     { label: 'Rechazado',      color: '#92400e', bg: '#fef3c7', Icon: AlertTriangle },
   ERROR:        { label: 'Error',          color: '#991b1b', bg: '#fee2e2', Icon: AlertTriangle },
+  SUPERSEDED:   { label: 'Consolidado',    color: '#6b7280', bg: '#f3f4f6', Icon: RefreshCw    },
 };
 
 
@@ -214,6 +215,16 @@ export function AIDraftPage() {
       navigate(`/clinical-records/${draft.clinical_record_id}`, { replace: true });
     }
   }, [draft?.status, draft?.clinical_record_id, recordDone, createdRecordId, navigate]);
+
+  // This take was folded into a later recording of the same session: send the
+  // professional to the single, consolidated draft (carrying the session
+  // context so its approval still lands on the right appointment/record).
+  useEffect(() => {
+    if (draft?.status === 'SUPERSEDED' && draft.superseded_by) {
+      const qs = params.toString();
+      navigate(`/ai-drafts/${draft.superseded_by}${qs ? `?${qs}` : ''}`, { replace: true });
+    }
+  }, [draft?.status, draft?.superseded_by, params, navigate]);
 
   // Seed customEdit from draft content when using a custom template
   useEffect(() => {
