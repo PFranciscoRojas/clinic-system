@@ -793,14 +793,26 @@ export function BillingPage() {
   const [tab, setTab] = useState<Tab>('facturas');
   const [period, setPeriod] = useState<BillingPeriod>('month');
   const isMobile = useIsMobile();
+  const { user } = useAuth();
 
-  const { data: ov } = useQuery<BillingOverview>({ queryKey: ['billing-overview', period], queryFn: () => invoicesApi.overview(period) });
+  // Org-wide financial reports (overview KPIs, per-patient balance, team stats)
+  // need billing:reports — a CLINIC_ADMIN/owner permission. A plain professional
+  // only sees the Facturas tab, scoped by the API to their own patients.
+  const canSeeReports = (user?.permissions ?? []).includes('billing:reports');
+
+  const { data: ov } = useQuery<BillingOverview>({
+    queryKey: ['billing-overview', period],
+    queryFn: () => invoicesApi.overview(period),
+    enabled: canSeeReports,
+  });
 
   const TABS: { id: Tab; label: string; Icon: React.ElementType }[] = [
     { id: 'facturas',  label: 'Facturas', Icon: FileText },
-    { id: 'resumen',   label: 'Resumen financiero', Icon: BarChart3 },
-    { id: 'pacientes', label: 'Balance por paciente', Icon: Users },
-    { id: 'equipo',    label: 'Equipo', Icon: Stethoscope },
+    ...(canSeeReports ? [
+      { id: 'resumen'   as Tab, label: 'Resumen financiero', Icon: BarChart3 },
+      { id: 'pacientes' as Tab, label: 'Balance por paciente', Icon: Users },
+      { id: 'equipo'    as Tab, label: 'Equipo', Icon: Stethoscope },
+    ] : []),
   ];
 
   return (
@@ -823,7 +835,7 @@ export function BillingPage() {
         </div>
       </div>
 
-      <KpiCards ov={ov} period={period} />
+      {canSeeReports && <KpiCards ov={ov} period={period} />}
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--s200)' }}>
         {TABS.map(t => {
@@ -841,9 +853,9 @@ export function BillingPage() {
       </div>
 
       {tab === 'facturas'  && <FacturasTab period={period} />}
-      {tab === 'resumen'   && <ResumenTab ov={ov} />}
-      {tab === 'pacientes' && <PacientesTab period={period} />}
-      {tab === 'equipo'    && <EquipoTab period={period} />}
+      {canSeeReports && tab === 'resumen'   && <ResumenTab ov={ov} />}
+      {canSeeReports && tab === 'pacientes' && <PacientesTab period={period} />}
+      {canSeeReports && tab === 'equipo'    && <EquipoTab period={period} />}
 
       <p style={{ fontSize: 11.5, color: 'var(--s400)', marginTop: 16, lineHeight: 1.5 }}>
         Facturación interna del consultorio (comprobantes de pago). <b>Online</b> = pagos por MercadoPago; <b>Directo</b> = pagos registrados a mano. No constituye facturación electrónica DIAN.

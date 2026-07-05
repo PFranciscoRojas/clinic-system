@@ -138,8 +138,8 @@ func (s *Service) CreateInvoice(ctx context.Context, orgID, userID string, in In
 	return inv, nil
 }
 
-func (s *Service) ListInvoices(ctx context.Context, orgID, patientID, status string, from, to *time.Time) ([]Invoice, error) {
-	raws, err := s.repo.ListInvoices(ctx, orgID, patientID, strings.ToUpper(strings.TrimSpace(status)), from, to)
+func (s *Service) ListInvoices(ctx context.Context, orgID, patientID, status, staffID string, from, to *time.Time) ([]Invoice, error) {
+	raws, err := s.repo.ListInvoices(ctx, orgID, patientID, strings.ToUpper(strings.TrimSpace(status)), staffID, from, to)
 	if err != nil {
 		return nil, err
 	}
