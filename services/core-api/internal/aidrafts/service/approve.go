@@ -16,7 +16,7 @@ func (s *Service) DecryptDraftContent(ctx context.Context, orgID, draftID string
 		return nil, "", err
 	}
 	if draft.Status != "DRAFT_READY" {
-		return nil, "", fmt.Errorf("%w: draft is not DRAFT_READY", aidrafts.ErrInvalidInput)
+		return nil, "", fmt.Errorf("%w: draft is not DRAFT_READY", aidrafts.ErrNotReady)
 	}
 
 	encKey, err := s.repo.FindEncKey(ctx, draft.DEKID)
