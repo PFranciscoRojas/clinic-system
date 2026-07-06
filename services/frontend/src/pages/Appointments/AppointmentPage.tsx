@@ -388,6 +388,11 @@ export function AppointmentPage() {
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  // Set once the professional confirms "Salir de todos modos" so the
+  // back-button trap below stops re-arming itself on the exit's own
+  // history.go() — otherwise the confirmed exit's popstate re-triggers the
+  // same trap and the modal reopens, leaving the user stuck on the page.
+  const exitingRef = useRef(false);
   const [recording, setRecording] = useState(false);
   const [blockTarget, setBlockTarget] = useState<string | number | null>(null);
   const [recPaused, setRecPaused] = useState(false);
@@ -496,6 +501,7 @@ export function AppointmentPage() {
     if (!recording) return;
     window.history.pushState(null, '', window.location.href);
     const onPop = () => {
+      if (exitingRef.current) return; // confirmed exit unwinding — let it through
       window.history.pushState(null, '', window.location.href);
       setBlockTarget(-1);
     };
@@ -584,14 +590,21 @@ export function AppointmentPage() {
     staleTime: 60_000,
   });
 
-  // Session-level persistence: survives F5 while the appointment is IN_PROGRESS.
+  // Session-level persistence: survives F5 while the appointment is IN_PROGRESS,
+  // and also survives leaving to review the AI draft (/ai-drafts/:id) and
+  // coming back — the session is COMPLETED by then, but as long as nothing
+  // was finalized yet the format/content already chosen should still be
+  // there instead of asking to pick a format again.
   // Uses localStorage (not sessionStorage) so it also survives opening the
   // appointment in a new tab/window — sessionStorage is tab-scoped, so a new
   // tab would show the format picker again even though the actual draft
   // content (also in localStorage) is still there.
   const setupKey = `sghcp_sess_${id}`;
   useEffect(() => {
-    if (!appt || appt.status !== 'IN_PROGRESS') return;
+    if (!appt) return;
+    const hasFinalizedNote = (recordsData?.items ?? []).some(r => r.appointment_id === id && r.finalized !== false);
+    const canResume = appt.status === 'IN_PROGRESS' || (appt.status === 'COMPLETED' && !hasFinalizedNote);
+    if (!canResume) return;
     try {
       const raw = localStorage.getItem(setupKey);
       if (!raw) return;
@@ -603,7 +616,7 @@ export function AppointmentPage() {
       }
     } catch { /* corrupt entry — ignore */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appt?.status, setupKey]);
+  }, [appt?.status, setupKey, recordsData, id]);
 
   // Write session state whenever the form/setup changes.
   useEffect(() => {
@@ -655,8 +668,12 @@ export function AppointmentPage() {
   // server-side draft still has the content. The exact UI type (e.g.
   // PLAN vs EVOLUTION) gets corrected moments later by RecordForm's own
   // restore-from-server effect; this only needs to get the form open.
+  // Also applies once COMPLETED (not just IN_PROGRESS): coming back from the
+  // AI-draft review page shouldn't re-prompt for a format when nothing was
+  // finalized yet — finalizedRecords.length > 0 below already excludes the
+  // case where a note (manual or approved draft) already exists.
   useEffect(() => {
-    if (appt?.status !== 'IN_PROGRESS') return;
+    if (appt?.status !== 'IN_PROGRESS' && appt?.status !== 'COMPLETED') return;
     if (!autosaveDraft || finalizedRecords.length > 0) return;
     if (showRecordForm || setupOpen) return;
     setSetupType(autosaveDraft.record_type as UIRecordType);
@@ -1697,8 +1714,16 @@ export function AppointmentPage() {
                 onClick={() => {
                   const target = blockTarget;
                   setBlockTarget(null);
-                  if (typeof target === 'number') rawNavigate(target);
-                  else if (target !== null) rawNavigate(target);
+                  exitingRef.current = true;
+                  if (typeof target === 'number') {
+                    // One extra step to skip the dummy history entry the trap
+                    // pushed when recording started, then the real one that
+                    // actually leaves this page.
+                    rawNavigate(-1);
+                    rawNavigate(-1);
+                  } else if (target !== null) {
+                    rawNavigate(target);
+                  }
                 }}
                 style={{ flex: 1, padding: '10px 0', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
               >
