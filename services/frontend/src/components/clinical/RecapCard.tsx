@@ -13,7 +13,10 @@ export function RecapCard({ patientId }: { patientId: string }) {
   const [requesting, setRequesting] = useState(false);
   const [reqErr, setReqErr] = useState('');
   const collapseKey = `sghcp_recap_collapsed_${patientId}`;
-  const [collapsed, setCollapsed] = useState(() => sessionStorage.getItem(collapseKey) === '1');
+  const [collapsed, setCollapsed] = useState(() => {
+    const stored = sessionStorage.getItem(collapseKey);
+    return stored === null ? true : stored === '1';
+  });
 
   const toggleCollapsed = () => {
     setCollapsed(v => {
