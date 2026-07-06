@@ -291,7 +291,7 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 	// until the voucher's real expiration won't outlive (or barely predate)
 	// the session itself. Closer appointments only offer instant methods
 	// (card/PSE) so the booking confirms in seconds, not days.
-	allowDeferred := when.Sub(time.Now()) >= deferredMinLead
+	allowDeferred := time.Until(when) >= deferredMinLead
 
 	var bookingID, initPoint string
 
