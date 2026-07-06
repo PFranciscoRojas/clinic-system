@@ -338,6 +338,11 @@ export function AIDraftPage() {
       // obligatorio", "una sección requerida está vacía") instead of a generic
       // message the professional can't act on.
       setApproveErr(e instanceof ApiError && e.message ? e.message : 'Error al aprobar. Intenta de nuevo.');
+      // The draft may have moved on since this page loaded (e.g. a later take
+      // got merged into it and this one is now SUPERSEDED) — refetch so the
+      // status-based redirect effects can pick up the real current state
+      // instead of leaving the professional stuck on a stale error.
+      refetch();
     } finally {
       setApproving(false);
     }
@@ -402,6 +407,9 @@ export function AIDraftPage() {
       queryClient.invalidateQueries({ queryKey: ['ai-draft', id] });
     } catch (e) {
       setRecordErr(e instanceof ApiError && e.message ? e.message : 'No se pudo aprobar el registro.');
+      // Same race as handleApprove: the draft may have been superseded since
+      // this page loaded — refetch so the redirect effects can react.
+      refetch();
     } finally {
       setRecordSaving(false);
     }
