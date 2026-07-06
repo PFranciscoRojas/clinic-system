@@ -1,5 +1,9 @@
 # Ideas y Tareas Futuras (No procesar aún)
 
+## Marketing / SEO (2026-07-06)
+
+- **Plan Backlinks + SEO + GEO para chapni.com (2026-07-06)** — auditoría SEO puntúa bajo solo por Enlaces (0-3 backlinks, 1 dominio ref) + contenido delgado (landing de 1 página); lo técnico ya está en verde. Estrategia de 4 frentes en paralelo (fundamentos de entidad/perfiles, directorios, motor de contenido `/recursos`, PR institucional colombiano) documentada en el repo `../chapni`: `docs/marketing/plan-seo-backlinks-geo.md`. Fixes técnicos ya desplegados (2026-07-06): estilos inline eliminados, email fuera de texto plano, schema local (Bogotá + WhatsApp), redirect `/sitemap.xml`, Cloudflare Web Analytics activado. **Mayor multiplicador pendiente: construir el hub `/recursos` en Astro** (blog + plantillas descargables + FAQ schema) — sin él los frentes de contenido no tienen dónde vivir.
+
 ## Ola B2B Clínicas (2026-07-03)
 
 > Análisis completo en conversación 2026-07-03. Base multi-usuario ya existe (roles, invitaciones, need-to-know, RLS); lo que falta son los flujos de producto que quedaron uni-profesional.
