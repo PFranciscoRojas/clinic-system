@@ -88,6 +88,32 @@ func TestParseMarkdown_Widget(t *testing.T) {
 	}
 }
 
+func TestParseMarkdown_Collapsed(t *testing.T) {
+	src := "## Compromisos y tareas extra-consulta {widget:task_checklist} {collapsed}\n"
+	sections, _, err := recordtemplates.ParseMarkdown(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := sections[0]
+	if !s.Collapsed {
+		t.Errorf("Collapsed = false, want true")
+	}
+	if s.Type != recordtemplates.FieldWidget || s.Widget != "task_checklist" {
+		t.Errorf("type/widget = %q/%q, want widget/task_checklist", s.Type, s.Widget)
+	}
+}
+
+func TestParseMarkdown_NotCollapsedByDefault(t *testing.T) {
+	src := "## Motivo de consulta {text}\n"
+	sections, _, err := recordtemplates.ParseMarkdown(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sections[0].Collapsed {
+		t.Errorf("Collapsed = true, want false (default)")
+	}
+}
+
 func TestParseMarkdown_UnknownWidget(t *testing.T) {
 	src := "## Foo {widget:nonexistent}\n"
 	_, _, err := recordtemplates.ParseMarkdown(src)

@@ -43,6 +43,8 @@ var (
 //       {checklist}    → checklist (string[])
 //       {widget:name}  → named widget from the registry
 //       {required}     → marks the section as required
+//       {collapsed}    → starts hidden behind an accordion (e.g. an optional,
+//                        rarely-needed section the form shouldn't lead with)
 //   - Non-heading text following a heading (until the next "##" or "##") is
 //     the hint/placeholder for that section.
 //   - The first "# " line (single hash) is the template name if the caller
@@ -116,6 +118,9 @@ func parseHeading(raw string) (*SectionDef, error) {
 		switch {
 		case lower == "required":
 			def.Required = true
+
+		case lower == "collapsed":
+			def.Collapsed = true
 
 		case lower == "text":
 			def.Type = FieldText

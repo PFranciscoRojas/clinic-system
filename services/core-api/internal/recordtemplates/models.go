@@ -31,6 +31,7 @@ type SectionDef struct {
 	Label     string    `json:"label"`
 	Hint      string    `json:"hint,omitempty"`
 	Required  bool      `json:"required"`
+	Collapsed bool      `json:"collapsed"` // starts hidden behind an accordion; the professional expands it on demand
 	Type      FieldType `json:"type"`
 	Options   []string  `json:"options,omitempty"`    // for type=select
 	ScaleMin  *int      `json:"scale_min,omitempty"`  // for type=scale

@@ -35,6 +35,7 @@ const PALETTE = `
 | \`{checklist}\` | Lista de ítems | \`## Tareas {checklist}\` |
 | \`{widget:nombre}\` | Componente clínico integrado | \`## Riesgo {widget:risk}\` |
 | \`{required}\` | Marca campo como obligatorio | \`## Motivo {text} {required}\` |
+| \`{collapsed}\` | Inicia oculto tras un acordeón | \`## Tareas para casa {checklist} {collapsed}\` |
 
 **Widgets disponibles:**
 ${Object.entries(WIDGET_LABELS).map(([k, v]) => `- \`{widget:${k}}\` — ${v}`).join('\n')}
@@ -166,6 +167,7 @@ function SectionPreview({ sections }: { sections: SectionDef[] }) {
             {s.type === 'select' ? ` [${(s.options ?? []).join(' | ')}]` : ''}
             {s.type === 'scale' ? ` [${s.scale_min ?? 0}–${s.scale_max ?? 10}]` : ''}
             {s.required ? ' *' : ''}
+            {s.collapsed ? ' ⌄ oculto por defecto' : ''}
           </span>
         </li>
       ))}
