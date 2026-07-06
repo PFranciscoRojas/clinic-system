@@ -1,4 +1,5 @@
-import { ClipboardList } from 'lucide-react';
+import { useState } from 'react';
+import { ClipboardList, ChevronDown, ChevronRight } from 'lucide-react';
 import { TASK_CHECKLIST_AREAS } from './constants';
 
 interface Props {
@@ -13,12 +14,23 @@ function toggle(arr: string[], key: string): string[] {
 
 // Task checklist — 6 areas with ~24 therapeutic techniques.
 // Shared between EVOLUTION (Formato 3) and plan-session EVOLUTION (Formato 2).
+// Starts collapsed: it's a long, rarely-touched checklist most sessions don't
+// need — the count badge stays visible so a filled-in checklist is never
+// invisible, but the professional isn't forced to scroll past it every time.
 export function TaskChecklist({ selected, onChange, disabled }: Props) {
   const count = selected.length;
+  const [open, setOpen] = useState(false);
 
   return (
     <div className="card" style={{ padding: '16px 20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setOpen(o => !o)}
+        onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setOpen(o => !o)}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: open ? 4 : 0, cursor: 'pointer' }}
+      >
+        {open ? <ChevronDown size={14} color="var(--s400)" /> : <ChevronRight size={14} color="var(--s400)" />}
         <ClipboardList size={16} color="var(--teal)" />
         <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
           Compromisos y tareas extra-consulta
@@ -30,6 +42,8 @@ export function TaskChecklist({ selected, onChange, disabled }: Props) {
           )}
         </p>
       </div>
+      {open && (
+      <>
       <p style={{ margin: '0 0 14px', fontSize: 12, color: 'var(--s400)' }}>
         Marca las técnicas asignadas para casa. Las seleccionadas quedan en la historia clínica.
       </p>
@@ -71,6 +85,8 @@ export function TaskChecklist({ selected, onChange, disabled }: Props) {
           );
         })}
       </div>
+      </>
+      )}
     </div>
   );
 }

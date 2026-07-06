@@ -10,6 +10,7 @@ export interface SectionDef {
   label: string;
   hint?: string;
   required: boolean;
+  collapsed: boolean; // starts hidden behind an accordion
   type: FieldType;
   options?: string[];    // for type=select
   scale_min?: number;    // for type=scale

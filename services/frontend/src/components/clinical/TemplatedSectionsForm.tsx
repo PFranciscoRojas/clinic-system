@@ -12,6 +12,7 @@
  */
 
 import { useState } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { SectionDef } from '../../api/recordTemplates';
 import type { RecordSections } from '../../api/clinicalRecords';
 
@@ -86,12 +87,44 @@ interface FieldProps {
 }
 
 function SectionField({ def, value, onChange, disabled, patientId, canAddDiagnosis, canUpdateDiagnosisStatus }: FieldProps) {
+  // Widget components manage their own internal layout (and, where it makes
+  // sense, their own collapse state — see TaskChecklist) — wrapping them in a
+  // second accordion here would double up the toggle. The generic accordion
+  // below is only for the plain field types (text/select/scale/checklist).
+  const [open, setOpen] = useState(!def.collapsed || def.type === 'widget');
+
+  const label = (
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+      {def.label}
+      {def.required && <span className="text-red-500 ml-1">*</span>}
+    </label>
+  );
+
+  if (def.type !== 'widget' && def.collapsed) {
+    return (
+      <div>
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1"
+        >
+          {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          {def.label}
+          {def.required && <span className="text-red-500 ml-1">*</span>}
+        </button>
+        {open && (
+          <>
+            {def.hint && <p className="text-xs text-gray-400 mb-1">{def.hint}</p>}
+            <FieldInput def={def} value={value} onChange={onChange} disabled={disabled} patientId={patientId} canAddDiagnosis={canAddDiagnosis} canUpdateDiagnosisStatus={canUpdateDiagnosisStatus} />
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">
-        {def.label}
-        {def.required && <span className="text-red-500 ml-1">*</span>}
-      </label>
+      {label}
       {def.hint && <p className="text-xs text-gray-400 mb-1">{def.hint}</p>}
       <FieldInput def={def} value={value} onChange={onChange} disabled={disabled} patientId={patientId} canAddDiagnosis={canAddDiagnosis} canUpdateDiagnosisStatus={canUpdateDiagnosisStatus} />
     </div>
