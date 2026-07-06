@@ -41,13 +41,15 @@ func (r *Repository) List(ctx context.Context, orgID string, f appointments.List
 		WHERE a.organization_id = $1`
 	args := []any{orgID}
 
+	var staffIdx, dateFromIdx, dateToIdx int
 	if f.PatientID != "" {
 		args = append(args, f.PatientID)
 		q += fmt.Sprintf(" AND a.patient_id = $%d", len(args))
 	}
 	if f.StaffID != "" {
 		args = append(args, f.StaffID)
-		q += fmt.Sprintf(" AND a.staff_id = $%d", len(args))
+		staffIdx = len(args)
+		q += fmt.Sprintf(" AND a.staff_id = $%d", staffIdx)
 	}
 	if f.Status != "" {
 		args = append(args, f.Status)
@@ -55,15 +57,43 @@ func (r *Repository) List(ctx context.Context, orgID string, f appointments.List
 	}
 	if !f.DateFrom.IsZero() {
 		args = append(args, f.DateFrom)
-		q += fmt.Sprintf(" AND a.scheduled_at >= $%d", len(args))
+		dateFromIdx = len(args)
+		q += fmt.Sprintf(" AND a.scheduled_at >= $%d", dateFromIdx)
 	}
 	if !f.DateTo.IsZero() {
 		args = append(args, f.DateTo)
-		q += fmt.Sprintf(" AND a.scheduled_at <= $%d", len(args))
+		dateToIdx = len(args)
+		q += fmt.Sprintf(" AND a.scheduled_at <= $%d", dateToIdx)
+	}
+
+	// Surface unpaid Efecty/cash-voucher holds alongside real appointments in
+	// the default (unfiltered) agenda view, so the clinic sees the slot as
+	// occupied instead of looking free — a hold has no patient_id and no
+	// status but PENDING_PAYMENT, so a patient/status filter would never
+	// match it anyway; skip the branch entirely in that case.
+	if f.PatientID == "" && f.Status == "" {
+		q += `
+		UNION ALL
+		SELECT b.id::text, b.organization_id::text, NULL::text, b.guest_name, b.staff_id::text,
+		       b.scheduled_at, b.duration_min, b.modality::text, 'PENDING_PAYMENT'::text,
+		       NULL::bytea, NULL::text, NULL::text, NULL::text,
+		       NULL::timestamptz, b.created_at, b.updated_at,
+		       NULL::integer, NULL::text, NULL::text
+		FROM bookings b
+		WHERE b.organization_id = $1 AND b.status = 'PENDING_PAYMENT' AND b.hold_expires_at > NOW()`
+		if staffIdx > 0 {
+			q += fmt.Sprintf(" AND b.staff_id = $%d", staffIdx)
+		}
+		if dateFromIdx > 0 {
+			q += fmt.Sprintf(" AND b.scheduled_at >= $%d", dateFromIdx)
+		}
+		if dateToIdx > 0 {
+			q += fmt.Sprintf(" AND b.scheduled_at <= $%d", dateToIdx)
+		}
 	}
 
 	args = append(args, f.Limit, f.Offset)
-	q += fmt.Sprintf(" ORDER BY a.scheduled_at ASC LIMIT $%d OFFSET $%d", len(args)-1, len(args))
+	q = fmt.Sprintf("SELECT * FROM (%s) t ORDER BY scheduled_at ASC LIMIT $%d OFFSET $%d", q, len(args)-1, len(args))
 
 	rows, err := r.q(ctx).Query(ctx, q, args...)
 	if err != nil {

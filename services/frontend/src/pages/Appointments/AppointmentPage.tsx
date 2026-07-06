@@ -41,6 +41,10 @@ const STATUS_CFG: Record<AppointmentStatus, { label: string; color: string; bg: 
   COMPLETED:   { label: 'Completada',  color: CLR_NEUTRAL.text, bg: '#f4eedd' },
   CANCELLED:   { label: 'Cancelada',   color: CLR_DANGER.text,  bg: CLR_DANGER.bg },
   NO_SHOW:     { label: 'No asistió',  color: CLR_WARN.text,    bg: CLR_WARN.bg },
+  // Not a real appointment — an Efecty/cash-voucher hold pending payment.
+  // Never actually loaded here (GET /appointments/:id only reads the
+  // appointments table), kept only to satisfy the Record's exhaustiveness.
+  PENDING_PAYMENT: { label: 'Pendiente de pago', color: CLR_WARN.text, bg: CLR_WARN.bg },
 };
 
 const MODALITY_LABEL: Record<string, string> = {
