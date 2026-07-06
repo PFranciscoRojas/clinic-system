@@ -153,10 +153,11 @@ func (c *Client) PatchPreapprovalNotificationURL(ctx context.Context, preapprova
 
 // CreatePreference creates a one-time Checkout Pro preference (used for patient
 // appointment payments) and returns its id and hosted checkout URL.
-// Deadline enforcement for deferred (Efecty/cash) payments is done server-side:
-// holdDeferred caps hold_expires_at to before the appointment, so a voucher
-// paid after the deadline won't confirm a slot that's already been freed.
-func (c *Client) CreatePreference(ctx context.Context, title string, amountCOP int, externalRef, payerEmail, payerFirstName, payerLastName, backURL, notificationURL string) (prefID, initPoint string, err error) {
+// When allowDeferred is false, cash/voucher methods (Efecty = "ticket", ATM)
+// are excluded — the caller only allows those when the appointment is far
+// enough out that holding the slot until the voucher's real expiration
+// (days, not hours) still makes sense.
+func (c *Client) CreatePreference(ctx context.Context, title string, amountCOP int, externalRef, payerEmail, payerFirstName, payerLastName, backURL, notificationURL string, allowDeferred bool) (prefID, initPoint string, err error) {
 	payload := map[string]any{
 		"items": []map[string]any{{
 			"title":       title,
@@ -175,6 +176,11 @@ func (c *Client) CreatePreference(ctx context.Context, title string, amountCOP i
 			"first_name": payerFirstName,
 			"last_name":  payerLastName,
 		},
+	}
+	if !allowDeferred {
+		payload["payment_methods"] = map[string]any{
+			"excluded_payment_types": []map[string]string{{"id": "ticket"}, {"id": "atm"}},
+		}
 	}
 	var out struct {
 		ID        string `json:"id"`

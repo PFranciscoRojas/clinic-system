@@ -220,19 +220,22 @@ function AppBlock({ appt, staffName, onClick, startH, totalH }: { appt: Appointm
   const inProg  = isInProgress(appt);
   const done    = appt.status === 'COMPLETED';
   const cancel  = appt.status === 'CANCELLED';
+  // Efecty/cash-voucher hold: not a real appointment yet (no clinical record,
+  // no /appointments/:id to open), just a slot reserved awaiting payment.
+  const pending = appt.status === 'PENDING_PAYMENT';
 
   const top = apptTop(appt, startH);
   const h   = apptH(appt);
   if (top < 0 || top >= totalH) return null;
 
   const clampedH = Math.min(h, totalH - top);
-  const bg     = (done || cancel) ? 'var(--s100)' : mc.bg;
-  const bdr    = (done || cancel) ? 'var(--s200)' : mc.border;
-  const lBdr   = (done || cancel) ? 'var(--s300)' : mc.color;
-  const txtClr = (done || cancel) ? 'var(--s400)' : mc.color;
-  const nmClr  = (done || cancel) ? 'var(--s500)' : 'var(--s800)';
+  const bg     = pending ? 'var(--s50, #f8fafc)' : (done || cancel) ? 'var(--s100)' : mc.bg;
+  const bdr    = pending ? 'var(--s300)' : (done || cancel) ? 'var(--s200)' : mc.border;
+  const lBdr   = pending ? 'var(--s400)' : (done || cancel) ? 'var(--s300)' : mc.color;
+  const txtClr = pending ? 'var(--s500)' : (done || cancel) ? 'var(--s400)' : mc.color;
+  const nmClr  = pending ? 'var(--s500)' : (done || cancel) ? 'var(--s500)' : 'var(--s800)';
 
-  const name = patient ? pName(patient) : appt.guest_name || '···';
+  const name = pending ? `${appt.guest_name || 'Reserva'} · pendiente de pago` : patient ? pName(patient) : appt.guest_name || '···';
   const abbr = patient ? initials(pName(patient)) : appt.guest_name ? initials(appt.guest_name) : '?';
   const t0   = fmtHHMM(appt.scheduled_at);
   const t1   = endHHMM(appt);
@@ -250,7 +253,8 @@ function AppBlock({ appt, staffName, onClick, startH, totalH }: { appt: Appointm
 
   return (
     <div
-      onClick={e => { e.stopPropagation(); onClick(appt); }}
+      title={pending ? `Reserva apartada — pago pendiente (Efecty). Se libera si no se acredita el pago.` : undefined}
+      onClick={e => { e.stopPropagation(); if (!pending) onClick(appt); }}
       onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}
       style={{
@@ -258,11 +262,11 @@ function AppBlock({ appt, staffName, onClick, startH, totalH }: { appt: Appointm
         height: clampedH,
         borderRadius: 8,
         background: bg,
-        border: `1.5px solid ${bdr}`,
+        border: `1.5px ${pending ? 'dashed' : 'solid'} ${bdr}`,
         borderLeft: `3px solid ${lBdr}`,
-        overflow: 'hidden', cursor: 'pointer',
+        overflow: 'hidden', cursor: pending ? 'default' : 'pointer',
         zIndex: inProg ? 2 : 1,
-        opacity: cancel ? 0.6 : 1,
+        opacity: pending ? 0.75 : cancel ? 0.6 : 1,
         boxShadow: inProg ? `0 3px 12px ${mc.color}30` : 'none',
         transition: 'box-shadow .15s, transform .12s',
       }}

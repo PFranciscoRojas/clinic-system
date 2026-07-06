@@ -35,6 +35,13 @@ var (
 	errPreference = errors.New("preference failed")
 )
 
+// deferredMinLead is the minimum time until the appointment for Efecty/cash
+// vouchers to be offered as a payment method. MercadoPago settles those in
+// ~3 business days; closer appointments only offer instant methods
+// (card/PSE) so the slot confirms in seconds instead of being held on a
+// promise that can't be honored in time.
+const deferredMinLead = 4 * 24 * time.Hour
+
 // bookingOrg maps a booking id to its organization via the SECURITY DEFINER
 // resolver (bypassing RLS — the unguessable id is the credential), so the
 // id-first webhook/status/release lookups can pin the org's RLS scope before
@@ -279,6 +286,13 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 	amount := pay.price
 	title := "Sesión psicológica · " + when.Format("02/01 03:04 pm") + " · " + modalityLabel(modality)
 
+	// Efecty/cash vouchers take MercadoPago ~3 business days to settle, so
+	// they're only offered when the appointment is far enough out that a hold
+	// until the voucher's real expiration won't outlive (or barely predate)
+	// the session itself. Closer appointments only offer instant methods
+	// (card/PSE) so the booking confirms in seconds, not days.
+	allowDeferred := when.Sub(time.Now()) >= deferredMinLead
+
 	var bookingID, initPoint string
 
 	// Public route: pin the resolved org's RLS scope for every bookings
@@ -305,11 +319,17 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 			return errSlotTaken
 		}
 
-		if err := q.QueryRow(ctx, `
+		err = q.QueryRow(ctx, `
 			INSERT INTO bookings (organization_id, staff_id, scheduled_at, modality, guest_name, email, phone, amount, hold_expires_at, policy_accepted_at)
 			VALUES ($1, $2, $3, $4::appointment_modality, $5, $6, $7, $8, NOW() + interval '15 minutes', NOW())
+			ON CONFLICT (staff_id, scheduled_at) WHERE status = 'PENDING_PAYMENT' DO NOTHING
 			RETURNING id
-		`, prof.OrgID, prof.StaffID, scheduledAt, modality, body.Name, body.Email, body.Phone, amount).Scan(&bookingID); err != nil {
+		`, prof.OrgID, prof.StaffID, scheduledAt, modality, body.Name, body.Email, body.Phone, amount).Scan(&bookingID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Lost the race against a concurrent checkout for the same slot.
+			return errSlotTaken
+		}
+		if err != nil {
 			return err
 		}
 
@@ -322,6 +342,7 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 			ctx, title, amount, bookingID, body.Email, firstName, lastName,
 			h.cfg.AppBaseURL+"/book/return?slug="+url.QueryEscape(body.OrgSlug),
 			h.cfg.AppBaseURL+"/api/v1/public/pay/webhook?org="+url.QueryEscape(prof.OrgID),
+			allowDeferred,
 		)
 		if err != nil {
 			// Release the hold so a failed gateway call doesn't block the slot.
@@ -569,6 +590,12 @@ func (h *Handler) confirm(ctx context.Context, bookingID, paymentID, paymentType
 // 15-minute checkout hold, and record the voucher URL for the return page. The
 // booking stays PENDING_PAYMENT — the later "approved" webhook confirms it, and
 // "cancelled" (voucher expired) releases it (both already handled).
+//
+// MercadoPago retries "pending"/"in_process" webhook notifications for the
+// same payment (creation, status refresh, timeout retries...), so this must
+// be idempotent: deferred_notified_at is set on the first call and guards the
+// UPDATE on every later retry, which then returns no row and skips re-sending
+// both emails.
 func (h *Handler) holdDeferred(ctx context.Context, bookingID, paymentID string, pay *mercadopago.Payment) {
 	orgID, err := h.bookingOrg(ctx, bookingID)
 	if err != nil || orgID == "" {
@@ -584,28 +611,39 @@ func (h *Handler) holdDeferred(ctx context.Context, bookingID, paymentID string,
 	var guest, email, modality string
 	var scheduledAt time.Time
 	var holdUntil time.Time
+	var notified bool
 	scopeErr := dbctx.WithOrgScope(ctx, h.pool, orgID, func(ctx context.Context) error {
 		q := dbctx.From(ctx, h.pool)
-		if err := q.QueryRow(ctx, `
+		err := q.QueryRow(ctx, `
 			UPDATE bookings
 			SET mp_payment_id = $2,
 			    mp_payment_type = NULLIF($3, ''), mp_payment_method = NULLIF($4, ''),
 			    payment_voucher_url = NULLIF($5, ''),
-			    -- Never hold past the appointment: cap the deadline at 2h before it.
-			    hold_expires_at = LEAST($6, scheduled_at - interval '2 hours'),
+			    -- Never hold past the appointment itself; otherwise honor the
+			    -- voucher's real expiration (Efecty is only offered when the
+			    -- appointment is far enough out for this to make sense).
+			    hold_expires_at = LEAST($6, scheduled_at),
+			    deferred_notified_at = NOW(),
 			    updated_at = NOW()
-			WHERE id = $1 AND status = 'PENDING_PAYMENT'
-			RETURNING guest_name, email, modality, scheduled_at,
-			          LEAST($6, scheduled_at - interval '2 hours')
+			WHERE id = $1 AND status = 'PENDING_PAYMENT' AND deferred_notified_at IS NULL
+			RETURNING guest_name, email, modality, scheduled_at, LEAST($6, scheduled_at)
 		`, bookingID, paymentID, pay.PaymentTypeID, pay.PaymentMethodID,
 			pay.TransactionDetails.ExternalResourceURL, expires).
-			Scan(&guest, &email, &modality, &scheduledAt, &holdUntil); err != nil {
+			Scan(&guest, &email, &modality, &scheduledAt, &holdUntil)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil // already notified (webhook retry) or not pending anymore
+		}
+		if err != nil {
 			return err
 		}
+		notified = true
 		return nil
 	})
 	if scopeErr != nil {
 		slog.Error("booking.holdDeferred", "err", scopeErr)
+		return
+	}
+	if !notified {
 		return
 	}
 

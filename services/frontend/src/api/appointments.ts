@@ -1,7 +1,7 @@
 import { api } from './client';
 
 export type AppointmentModality = 'IN_PERSON' | 'VIRTUAL' | 'HYBRID';
-export type AppointmentStatus   = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
+export type AppointmentStatus   = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW' | 'PENDING_PAYMENT';
 
 export interface Appointment {
   id: string;
