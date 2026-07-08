@@ -29,6 +29,7 @@ type svcPort interface {
 	CompleteOnboarding(ctx context.Context, userID string) error
 	OnboardingCompleted(ctx context.Context, userID string) (bool, error)
 	OrgInfo(ctx context.Context, orgID string) (name, status string, trialEndsAt, currentPeriodEnd *time.Time, err error)
+	IsInternalOrg(ctx context.Context, orgID string) (bool, error)
 
 	// Email change.
 	RequestEmailChange(ctx context.Context, userID, newEmail string) error

@@ -47,10 +47,6 @@ type Config struct {
 	// used to build wa.me links in the welcome email. Empty hides the CTA.
 	SupportWhatsApp string
 
-	// AllowDataReset enables the admin-only "wipe clinical test data" endpoint.
-	// Off by default; turn on only while the clinic is in a testing phase.
-	AllowDataReset bool
-
 	// MercadoPago subscription billing (MT5b). When the access token is empty,
 	// the billing endpoints respond 503 and tenants are activated manually.
 	MPAccessToken   string
@@ -117,8 +113,6 @@ func Load() Config {
 
 		SignupNotifyEmail: getEnv("SIGNUP_NOTIFY_EMAIL", ""),
 		SupportWhatsApp:   getEnv("SUPPORT_WHATSAPP", ""),
-
-		AllowDataReset: getEnvBool("ALLOW_DATA_RESET", false),
 
 		MPAccessToken:    mpAccessToken,
 		MPWebhookSecret:  mpWebhookSecret,

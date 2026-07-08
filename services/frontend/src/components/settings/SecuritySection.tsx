@@ -203,8 +203,8 @@ export function SecuritySection() {
 }
 
 // Wipes all clinical test data for the organization. Gated three ways: the
-// server flag (ALLOW_DATA_RESET), the CLINIC_ADMIN role, and a typed
-// confirmation. Meant for the testing phase only.
+// server-side is_internal check (only the operator's own org and the CI demo
+// org), the CLINIC_ADMIN role, and a typed confirmation.
 function DataResetCard() {
   const queryClient = useQueryClient();
   const [confirm, setConfirm] = useState('');

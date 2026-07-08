@@ -97,6 +97,12 @@ func (s *Service) OrgInfo(ctx context.Context, orgID string) (name, status strin
 	return s.repo.OrgInfo(ctx, orgID)
 }
 
+// IsInternalOrg reports whether orgID is an operational fixture rather than
+// a real tenant — used by /me to gate the "reset test data" feature.
+func (s *Service) IsInternalOrg(ctx context.Context, orgID string) (bool, error) {
+	return s.repo.IsInternalOrg(ctx, orgID)
+}
+
 // ResendVerification re-issues a verification link for an unverified account.
 // Like the password-reset flow it never reveals whether the email exists or is
 // already verified — the handler always answers 200 — so it can't be used to

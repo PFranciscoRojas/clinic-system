@@ -131,6 +131,17 @@ func (r *Repository) OrgInfo(ctx context.Context, orgID string) (name, status st
 	return name, status, trialEndsAt, currentPeriodEnd, nil
 }
 
+// IsInternalOrg reports whether orgID is an operational fixture (the SaaS
+// operator's own org or the CI-seeded demo org) rather than a real tenant.
+func (r *Repository) IsInternalOrg(ctx context.Context, orgID string) (bool, error) {
+	var isInternal bool
+	err := r.db.QueryRow(ctx, `SELECT is_internal FROM organizations WHERE id = $1`, orgID).Scan(&isInternal)
+	if err != nil {
+		return false, fmt.Errorf("load org is_internal: %w", err)
+	}
+	return isInternal, nil
+}
+
 // MarkEmailVerified stamps email_verified_at for a user. Idempotent: a second
 // call on an already-verified user is a no-op (RowsAffected 0 is not an error).
 func (r *Repository) MarkEmailVerified(ctx context.Context, userID string) error {

@@ -31,6 +31,14 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		dpaAccepted = true // fail open: a lookup hiccup must never block the UI
 	}
 
+	// "Reset test data" only ever exists for operational fixtures (the
+	// operator's own org, the CI-seeded demo org) — never a real tenant. A
+	// lookup failure hides the feature rather than risking exposing it.
+	dataResetEnabled, err := h.svc.IsInternalOrg(r.Context(), claims.OrganizationID)
+	if err != nil {
+		dataResetEnabled = false
+	}
+
 	resp := map[string]any{
 		"user_id":              claims.UserID,
 		"org_id":               claims.OrganizationID,
@@ -40,7 +48,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		"permissions":          claims.Permissions,
 		"onboarding_completed": onboarded,
 		"dpa_accepted":         dpaAccepted,
-		"data_reset_enabled":   h.dataResetOpen,
+		"data_reset_enabled":   dataResetEnabled,
 	}
 
 	// Org name labels the current tenant; subscription state drives the trial

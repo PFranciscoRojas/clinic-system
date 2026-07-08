@@ -176,8 +176,10 @@ func (a *app) buildRouter() http.Handler {
 		r.Mount("/api/v1/users", authhandler.New(a.pool, a.rdb, a.cfg).UserRoutes([]byte(a.cfg.JWTSecret)))
 
 		// Operator console: SYSTEM_ADMIN billing endpoints are always mounted;
-		// the destructive data-reset route only exists while ALLOW_DATA_RESET is on.
-		r.Mount("/api/v1/admin", adminhandler.New(a.pool, a.rdb, a.km, a.cfg, a.cfg.AllowDataReset).Routes())
+		// the destructive data-reset route is always mounted too, but only ever
+		// wipes organizations flagged is_internal (operator's own org + the
+		// CI-seeded demo org) — enforced inside the handler, not by env flag.
+		r.Mount("/api/v1/admin", adminhandler.New(a.pool, a.rdb, a.km, a.cfg).Routes())
 
 		// Legal document CMS — SYSTEM_ADMIN write (public reads are above).
 		legalH.RegisterAdminRoutes(r.With(middleware.RequireRole("SYSTEM_ADMIN")))
