@@ -469,24 +469,9 @@ export function LoginPage() {
                 </button>
               </form>
 
-              {/* Divider */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '16px 0' }}>
-                <div style={{ flex: 1, height: 1, background: 'var(--s200)' }} />
-                <span style={{ fontSize: 12, color: 'var(--s400)', fontWeight: 500 }}>o continúa con</span>
-                <div style={{ flex: 1, height: 1, background: 'var(--s200)' }} />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-                <button type="button" disabled title="Próximamente" style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  padding: '10px', borderRadius: 10, border: '1.5px solid var(--s200)',
-                  background: 'var(--s50)', color: 'var(--s400)', fontSize: 13, fontWeight: 600,
-                  cursor: 'not-allowed', opacity: 0.7,
-                }}>
-                  SSO Clínica
-                </button>
+              <div style={{ marginBottom: 20 }}>
                 <button type="button" onClick={() => setScreen('register')} style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                   padding: '10px', borderRadius: 10, border: '1.5px solid var(--s200)',
                   background: '#fff', color: 'var(--s600)', fontSize: 13, fontWeight: 600,
                   transition: 'all .12s', cursor: 'pointer',
