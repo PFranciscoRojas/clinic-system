@@ -23,6 +23,7 @@ import (
 	"sghcp/core-api/internal/shared/crypto"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
+	"sghcp/core-api/internal/shared/token"
 )
 
 type livePlatformCfg struct {
@@ -149,12 +150,24 @@ func (h *Handler) clinicalSeatsUsed(ctx context.Context, orgID string) int {
 	return used
 }
 
+// annualPrefix marks the external_reference of a one-time annual-prepay
+// Checkout Pro payment, so the webhook and reconcile() can tell it apart from
+// a monthly preapproval's recurring charge (both arrive as "payment" events).
+const annualPrefix = "annual:"
+
+// annualMonthsCharged is how many months are billed upfront for a 12-month
+// prepay — the other 2 are the discount ("2 meses gratis").
+const annualMonthsCharged = 10
+
 // POST /api/v1/billing/checkout — create a per-org subscription plan and return
 // its hosted checkout URL. Allowed even when the trial has lapsed (the gate
 // whitelists /api/v1/billing) so a blocked tenant can still subscribe.
 // The monthly amount is per clinical seat: the org chooses how many seats to
 // pay for (never fewer than its current active clinical headcount), and the
 // chosen count is stored in pending_seats until MercadoPago confirms.
+// period "annual" bills 10 months upfront as a one-time Checkout Pro payment
+// (2 months free, and unlike the card-only monthly preapproval it accepts
+// PSE/Efecty/Nequi too); anything else defaults to the monthly card plan.
 func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 	pcfg := h.platformConfig(r.Context())
 	mp := mercadopago.New(pcfg.accessToken)
@@ -165,9 +178,10 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 
 	var body struct {
-		Seats int `json:"seats"`
+		Seats  int    `json:"seats"`
+		Period string `json:"period"` // "monthly" (default) | "annual"
 	}
-	_ = httputil.DecodeJSON(r, &body) // body is optional; default = current headcount
+	_ = httputil.DecodeJSON(r, &body) // body is optional; default = current headcount, monthly
 
 	seats := body.Seats
 	if used := h.clinicalSeatsUsed(r.Context(), claims.OrganizationID); seats < used {
@@ -190,6 +204,28 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 		reason += " · " + orgName
 	}
 
+	if body.Period == "annual" {
+		reason += " · anual (12 meses, pago único)"
+		email, first, last := payerInfo(claims)
+		prefID, initPoint, err := mp.CreatePreference(
+			r.Context(), reason, pcfg.amount*seats*annualMonthsCharged,
+			annualPrefix+claims.OrganizationID, email, first, last,
+			h.cfg.AppBaseURL+"/billing/return",
+			h.cfg.AppBaseURL+"/api/v1/public/billing/webhook",
+			true, // allowDeferred: no slot to hold, so PSE/Efecty/Nequi are fine
+		)
+		if err != nil {
+			slog.Error("billing.checkout.annual", "err", err)
+			httputil.WriteError(w, http.StatusBadGateway, "no se pudo iniciar el pago")
+			return
+		}
+		_, _ = h.pool.Exec(r.Context(),
+			`UPDATE organizations SET provider_customer_id = $2, pending_seats = $3, updated_at = NOW() WHERE id = $1`,
+			claims.OrganizationID, annualPrefix+prefID, seats)
+		httputil.WriteJSON(w, http.StatusOK, map[string]string{"init_point": initPoint})
+		return
+	}
+
 	planID, initPoint, err := mp.CreatePlan(
 		r.Context(), claims.OrganizationID, reason, pcfg.amount*seats,
 		h.cfg.AppBaseURL+"/billing/return",
@@ -210,6 +246,21 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"init_point": initPoint})
 }
 
+// payerInfo pulls the email/first/last name Checkout Pro wants for the payer
+// straight from the JWT — no extra DB round-trip.
+func payerInfo(claims *token.Claims) (email, first, last string) {
+	email = claims.Email
+	if claims.DisplayName != nil {
+		full := strings.TrimSpace(*claims.DisplayName)
+		if i := strings.LastIndex(full, " "); i >= 0 {
+			first, last = strings.TrimSpace(full[:i]), strings.TrimSpace(full[i+1:])
+		} else {
+			first = full
+		}
+	}
+	return email, first, last
+}
+
 // GET /api/v1/billing/plan — seats and per-seat price for the billing UI.
 func (h *Handler) plan(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
@@ -225,11 +276,12 @@ func (h *Handler) plan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{
-		"subscription_status": status,
-		"seat_limit":          seatLimit,
-		"seats_used":          h.clinicalSeatsUsed(r.Context(), claims.OrganizationID),
-		"per_seat_amount":     pcfg.amount,
-		"currency":            "COP",
+		"subscription_status":    status,
+		"seat_limit":             seatLimit,
+		"seats_used":             h.clinicalSeatsUsed(r.Context(), claims.OrganizationID),
+		"per_seat_amount":        pcfg.amount,
+		"per_seat_annual_amount": pcfg.amount * annualMonthsCharged, // 12 months, 2 free
+		"currency":               "COP",
 	})
 }
 
@@ -262,13 +314,17 @@ func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case strings.Contains(kind, "payment"):
-		// A recurring charge: approved → extend the tenant another month.
+		// Either a recurring monthly charge (external_reference = org id) or a
+		// one-time annual prepay (external_reference = "annual:<org id>").
 		pay, err := mp.GetPayment(ctx, id)
-		if err != nil || pay.ExternalReference == "" {
+		if err != nil || pay.ExternalReference == "" || pay.Status != "approved" {
 			return
 		}
-		if pay.Status == "approved" {
-			h.extend(ctx, pay.ExternalReference)
+		paymentID := strconv.FormatInt(pay.ID, 10)
+		if orgID, ok := strings.CutPrefix(pay.ExternalReference, annualPrefix); ok {
+			h.extendAnnual(ctx, orgID, paymentID)
+		} else {
+			h.extend(ctx, pay.ExternalReference, 1, paymentID)
 		}
 	default:
 		// The subscription itself (created/authorized/paused/cancelled).
@@ -305,6 +361,26 @@ func (h *Handler) reconcile(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+
+	// Annual prepay is a one-time Checkout Pro payment, not a preapproval — look
+	// it up by external_reference instead of walking the preapproval flow below.
+	if strings.HasPrefix(planID, annualPrefix) {
+		pay, err := mp.SearchPayment(ctx, annualPrefix+claims.OrganizationID)
+		if err != nil {
+			slog.Warn("billing.reconcile: annual payment not found", "org", claims.OrganizationID, "err", err)
+			httputil.WriteError(w, http.StatusNotFound, "pago no encontrado en MercadoPago")
+			return
+		}
+		if pay.Status == "approved" {
+			h.extendAnnual(ctx, claims.OrganizationID, strconv.FormatInt(pay.ID, 10))
+		}
+		var status string
+		_ = h.pool.QueryRow(r.Context(),
+			`SELECT subscription_status FROM organizations WHERE id = $1`,
+			claims.OrganizationID).Scan(&status)
+		httputil.WriteJSON(w, http.StatusOK, map[string]string{"subscription_status": status})
+		return
+	}
 
 	pre, err := mp.FindPreapprovalByPlan(ctx, planID)
 	if err != nil {
@@ -356,15 +432,36 @@ func (h *Handler) applyPreapproval(ctx context.Context, pre *mercadopago.Preappr
 	}
 }
 
-// extend pushes the paid period one month past the later of now or the current
-// end — the recurring-charge counterpart of a manual activation.
-func (h *Handler) extend(ctx context.Context, orgID string) {
+// extend pushes the paid period `months` past the later of now or the current
+// end — the recurring-charge counterpart of a manual activation. Guarded by
+// paymentID so a duplicate webhook delivery for the same MercadoPago payment
+// can't double-extend the period.
+func (h *Handler) extend(ctx context.Context, orgID string, months int, paymentID string) {
 	_, _ = h.pool.Exec(ctx, `
 		UPDATE organizations
 		SET subscription_status = 'active',
-		    current_period_end = GREATEST(COALESCE(current_period_end, NOW()), NOW()) + make_interval(months => 1),
+		    current_period_end = GREATEST(COALESCE(current_period_end, NOW()), NOW()) + make_interval(months => $3),
+		    last_billing_payment_id = $2,
 		    updated_at = NOW()
-		WHERE id = $1`, orgID)
+		WHERE id = $1 AND last_billing_payment_id IS DISTINCT FROM $2`, orgID, paymentID, months)
+}
+
+// extendAnnual activates or renews a 12-month prepaid period from a one-time
+// Checkout Pro payment — the annual-prepay counterpart of applyPreapproval's
+// "authorized" case, since a one-time payment never fires that preapproval
+// event. Also promotes pending_seats into seat_limit (the first annual
+// checkout is this plan's only activation signal) and is guarded by
+// paymentID the same way extend() is.
+func (h *Handler) extendAnnual(ctx context.Context, orgID, paymentID string) {
+	_, _ = h.pool.Exec(ctx, `
+		UPDATE organizations
+		SET subscription_status = 'active',
+		    current_period_end = GREATEST(COALESCE(current_period_end, NOW()), NOW()) + INTERVAL '12 months',
+		    seat_limit = GREATEST(COALESCE(pending_seats, seat_limit), 1),
+		    pending_seats = NULL,
+		    last_billing_payment_id = $2,
+		    updated_at = NOW()
+		WHERE id = $1 AND last_billing_payment_id IS DISTINCT FROM $2`, orgID, paymentID)
 }
 
 // notification extracts the resource kind and id from a MercadoPago webhook,

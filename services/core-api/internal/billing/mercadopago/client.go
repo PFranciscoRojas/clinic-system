@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -221,6 +222,24 @@ func (c *Client) GetPayment(ctx context.Context, id string) (*Payment, error) {
 		return nil, err
 	}
 	return &p, nil
+}
+
+// SearchPayment returns the most recent payment for the given external
+// reference. Used to reconcile a one-time Checkout Pro payment (e.g. annual
+// prepay) on return from checkout, when the webhook hasn't arrived yet.
+func (c *Client) SearchPayment(ctx context.Context, externalRef string) (*Payment, error) {
+	var out struct {
+		Results []Payment `json:"results"`
+	}
+	q := "/v1/payments/search?external_reference=" + url.QueryEscape(externalRef) +
+		"&sort=date_created&criteria=desc&limit=1"
+	if err := c.do(ctx, http.MethodGet, q, nil, &out); err != nil {
+		return nil, err
+	}
+	if len(out.Results) == 0 {
+		return nil, fmt.Errorf("mercadopago: no payment found for external_reference %s", externalRef)
+	}
+	return &out.Results[0], nil
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body, out any) error {
