@@ -12,20 +12,20 @@ import (
 	"sghcp/core-api/internal/shared/middleware"
 )
 
-// Handler exposes operator endpoints: the SYSTEM_ADMIN billing console (always
-// available) and the destructive data-reset route (only while the operator
-// opts in via ALLOW_DATA_RESET).
+// Handler exposes operator endpoints: the SYSTEM_ADMIN billing console and
+// the destructive data-reset route. The latter is scoped inside the handler
+// to organizations.is_internal (the operator's own org + the CI-seeded demo
+// org) — it can never touch a real paying tenant, regardless of env config.
 type Handler struct {
-	pool           *pgxpool.Pool
-	rdb            *redis.Client
-	km             *crypto.KeyManager
-	cfg            config.Config
-	startedAt      time.Time
-	allowDataReset bool
+	pool      *pgxpool.Pool
+	rdb       *redis.Client
+	km        *crypto.KeyManager
+	cfg       config.Config
+	startedAt time.Time
 }
 
-func New(pool *pgxpool.Pool, rdb *redis.Client, km *crypto.KeyManager, cfg config.Config, allowDataReset bool) *Handler {
-	return &Handler{pool: pool, rdb: rdb, km: km, cfg: cfg, startedAt: time.Now(), allowDataReset: allowDataReset}
+func New(pool *pgxpool.Pool, rdb *redis.Client, km *crypto.KeyManager, cfg config.Config) *Handler {
+	return &Handler{pool: pool, rdb: rdb, km: km, cfg: cfg, startedAt: time.Now()}
 }
 
 func (h *Handler) Routes() chi.Router {
@@ -49,13 +49,12 @@ func (h *Handler) Routes() chi.Router {
 		r.Put("/platform/mp/tokens", h.updatePlatformTokens)
 	})
 
-	// Destructive per-org wipe — exists only during the testing phase.
-	if h.allowDataReset {
-		// Permission gate is in addition to the env flag and the CLINIC_ADMIN
-		// role check inside the handler — defence in depth for a destructive op.
-		r.With(middleware.RequirePermission("organization:configure")).
-			Post("/reset-clinical-data", h.resetClinicalData)
-	}
+	// Destructive per-org wipe. Always mounted; the handler itself rejects
+	// any org that isn't flagged is_internal, so it can never reach real
+	// tenant data — the permission gate and CLINIC_ADMIN role check below
+	// are defence in depth on top of that.
+	r.With(middleware.RequirePermission("organization:configure")).
+		Post("/reset-clinical-data", h.resetClinicalData)
 
 	return r
 }

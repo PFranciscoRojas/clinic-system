@@ -12,13 +12,12 @@ import (
 )
 
 type Handler struct {
-	svc           svcPort
-	dataResetOpen bool
+	svc svcPort
 }
 
 func New(db *pgxpool.Pool, rdb *redis.Client, cfg config.Config) *Handler {
 	repo := authrepo.New(db)
-	return &Handler{svc: authsvc.New(repo, rdb, cfg), dataResetOpen: cfg.AllowDataReset}
+	return &Handler{svc: authsvc.New(repo, rdb, cfg)}
 }
 
 // UserRoutes returns a chi.Router for /api/v1/users (team management).

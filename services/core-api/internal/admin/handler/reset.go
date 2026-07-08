@@ -36,6 +36,23 @@ func (h *Handler) resetClinicalData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The wipe only ever applies to operational fixtures (the operator's own
+	// org, the CI-seeded demo org) — never a real paying tenant, regardless
+	// of role or permission. This is the actual gate; everything else above
+	// is defence in depth.
+	var isInternal bool
+	if err := h.pool.QueryRow(r.Context(),
+		`SELECT is_internal FROM organizations WHERE id = $1`, claims.OrganizationID,
+	).Scan(&isInternal); err != nil {
+		slog.Default().Error("admin: reset-clinical-data org lookup failed", "org_id", claims.OrganizationID, "err", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "no se pudo verificar la organización")
+		return
+	}
+	if !isInternal {
+		httputil.WriteError(w, http.StatusForbidden, "reset no disponible para esta organización")
+		return
+	}
+
 	var body struct {
 		Confirmation string `json:"confirmation"`
 	}

@@ -22,6 +22,9 @@ type Repository interface {
 	CreateUser(ctx context.Context, orgID, email, passwordHash, displayName string) (string, error)
 	CreateOrgWithOwner(ctx context.Context, p CreateOrgParams) (orgID, slug, userID string, err error)
 	OrgInfo(ctx context.Context, orgID string) (name, status string, trialEndsAt, currentPeriodEnd *time.Time, err error)
+	// IsInternalOrg reports whether orgID is an operational fixture (the SaaS
+	// operator's own org or the CI-seeded demo org) rather than a real tenant.
+	IsInternalOrg(ctx context.Context, orgID string) (bool, error)
 	MarkEmailVerified(ctx context.Context, userID string) error
 	AssignRole(ctx context.Context, orgID, userID, roleID, assignedByUserID string) error
 	UpdatePassword(ctx context.Context, orgID, targetEmail, passwordHash string) error
