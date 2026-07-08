@@ -105,7 +105,7 @@ export function LegalDoc({ title, subtitle, sections, version }: Props) {
           fontSize: 12, color: 'var(--s400, #8f8a9e)', textAlign: 'center', lineHeight: 1.7,
         }}>
           Chapni · Historia clínica cifrada<br />
-          Colombia · franciscorojas92@gmail.com
+          Colombia · legal@chapni.com
         </div>
       </div>
     </div>

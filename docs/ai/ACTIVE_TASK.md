@@ -1,13 +1,19 @@
-## Sin tarea pendiente
+## Tarea en progreso
+Remoción del correo personal `franciscorojas92@gmail.com` de contenido legal/consentimientos (clinic-system + `../chapni`) y reemplazo por direcciones `@chapni.com`.
 
-Sesión 2026-07-05: consolidación de borradores IA multi-toma ✅ (PR #146) — worker funde transcripciones de tomas anteriores de la misma cita en un solo borrador; migraciones 000058/000059 aplicadas; pipeline completo desplegado y verificado (core-api, ai-service, frontend, smoke funcional).
+## Checklist
+✅ BD de producción corregida — `legal_documents` (privacy, terms) republicados sin correo personal, versión `2026-07-07`, versiones previas archivadas
+✅ Fuente local actualizada — `content.ts`, `LegalDoc.tsx`, `TermsPage.tsx`, `PrivacyPage.tsx`, seed `000040_legal_documents.up.sql`
+✅ Verificado: sin ocurrencias del correo en repo `../chapni`
+✅ Recomendación dada al usuario: mantener `hola@chapni.com` (no cambiar a `info@chapni.com`)
+⬜ Commit de los cambios locales — nada de esta sesión está commiteado aún, preguntar al usuario si procede
+⬜ Rebuild manual de frontend en VPS para que `TermsPage.tsx`/`PrivacyPage.tsx` (footer) reflejen el cambio — la BD ya está corregida, solo falta el footer hardcoded en el bundle desplegado
+⬜ Decidir si limpiar código muerto: `content.ts`, `LegalDoc.tsx`, constante `LEGAL_VERSION` sin uso
+⬜ Decidir si vale la pena arreglar branding "SGHCP" obsoleto en migración `000040` (no afecta prod, solo instalaciones nuevas)
+⬜ Decidir si limpiar `docs/history/RFC-001-Sistema-Clinico.md` (3 menciones del correo personal en logs históricos de dev, no es contenido legal)
 
-## Sugerencia de siguiente paso
+## Último archivo
+`services/frontend/src/pages/Public/legal/PrivacyPage.tsx` — cambio simple de string, no requiere compilación para verificar
 
-Basándome en STATUS.md (bloqueantes + roadmap) y BACKLOG.md, lo más valioso a atacar ahora es:
-
-1. **Validación de demanda con beta de diseño (2-3 psicólogas externas, 2 semanas, acceso gratis)** — Sin señal externa sobre willingness-to-pay, seguir buildiendo features es ruido. 2 contactos disponibles (colegas). Alto riesgo si no validamos antes de go-live 1.0.0.
-
-2. **Fase 3 de auditoría — IA guardrails** (aislado, 1-2 sesiones): temperature=0.2, anonimización reforzada (regex + nombres), anti-injection, validación ICD-10, jobs huérfanos del worker. High-value defensivo antes de exponer a users externos.
-
-3. **WhatsApp Meta API** — confirmar que el cargo pagado desbloqueó la API y configurar `tpl_reminder_24h`/`tpl_reminder_2h` en Ajustes → Integraciones.
+## Próximo paso
+Preguntar al usuario si quiere: (1) commitear los cambios ahora, (2) hacer el rebuild manual del frontend en el VPS para que el footer en vivo quede consistente con la BD ya corregida.

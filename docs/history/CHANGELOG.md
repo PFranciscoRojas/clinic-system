@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-07-07
+
+- chore(legal): remoción del correo personal `franciscorojas92@gmail.com` de todo el contenido legal/consentimientos — reemplazado por `legal@chapni.com` (términos, reembolsos, pie de página genérico) y `privacidad@chapni.com` (política de privacidad, ejercicio de derechos habeas data) en `content.ts`, `LegalDoc.tsx`, `TermsPage.tsx`, `PrivacyPage.tsx` y seed `000040_legal_documents.up.sql`. Publicado directo en la BD de producción (nueva versión `2026-07-07` de `privacy` y `terms` en `legal_documents`, replicando a mano el patrón atómico `is_current=false`→`INSERT is_current=true` del endpoint admin, ya que no había JWT de admin a mano) — versiones anteriores quedan archivadas para trazabilidad. Verificado sin ocurrencias del correo en el repo `../chapni`. **Nada de esto está commiteado aún** en `clinic-system`; el footer hardcoded de `TermsPage.tsx`/`PrivacyPage.tsx` sigue pendiente de rebuild manual en el VPS (la BD ya está corregida, el footer visible en vivo todavía no).
+- decisión: mantener `hola@chapni.com` como contacto general en vez de cambiar a `info@chapni.com` — ya está fijado como ancla NAP ("idénticos, sin variantes") en `plan-seo-backlinks-geo.md` de `../chapni`, y encaja mejor con el tono cálido de marca que un genérico "info@".
+- chore(tools): skill `chapni-social` — añadidas a `strategy.md` reglas de puntuación casual (sin ¿/¡ de apertura), formato crudo (prohibido — y →, usar `...`/`-`), cero negrita, y lista de "tells" de IA a evitar (aperturas genéricas, listas de 3 en 3 con estructura paralela, conectores de ensayo, conclusiones perfectamente cerradas) — debatido con el usuario antes de aplicar. Permiso acotado de imperfección leve/regionalismos bogotanos, solo IG/FB, nunca LinkedIn ni cifras clínicas.
+
+---
+
+## 2026-07-06
+
+- feat(marketing): primer post de redes para Chapni ("La sesión termina. Las notas, no.") — pieza visual 1080×1080 + copy adaptado a Instagram/Facebook/LinkedIn, basado en copy real de la landing (`Empathy.astro`, `Hero.astro`, `consts.ts`), no inventado.
+- chore(tools): skill `chapni-social` creada en `~/.claude/skills/chapni-social/` (fuera del repo `claude-skills`) — estrategia completa (6 pilares, calendario semanal IG 3x/FB 2x/LinkedIn 2x, modo oscuro=emocional/claro=funcional, guía de tono + hashtags por canal), script `render_post.py` (genera la pieza en claro u oscuro con fuentes/logos oficiales embebidos, requiere chromium headless) y `content-log.md` para no repetir gancho/pilar.
+- research: primer corte de validación de demanda B2B/clínicas — consulta de solo-lectura a producción confirma que aún no hay señal orgánica (5 orgs totales, casi todas internas/de prueba, 1 solo signup real de tercero hoy). Búsqueda de mercado sí confirma demanda real de software para clínica en Colombia: competidores ya venden a clínicas/IPS (Psiris y MedSystem, colombianos, con RIPS/CIE-10/Res. 1888; Medesk/Clinic Cloud/AgendaPro/Biofile genéricos) e IPS de salud mental reales operan en Bogotá/Medellín — ninguno especializado en psicología+cifrado. Decisión pendiente: entrevistas de validación directa antes del plan B2B completo, o construirlo ya.
+- decisión: mantener "Hecho en Colombia" en el copy de marca (señal de confianza local para datos clínicos sensibles); si se avanza a B2B, mantener ambos motores de venta (self-serve individual + asistido para clínicas) en vez de reemplazar uno por otro.
+- ops: evaluado instalar Claude Code directo en el VPS de producción para no depender del PC encendido — descartado por riesgo de credenciales en la máquina que sirve tráfico real; recomendado usar Routines (nube de Anthropic) en su lugar.
+
+---
+
 ## 2026-07-05
 
 - enhancement(clinical): consolidación de borradores IA multi-toma (PR #146) — cuando una sesión se graba en varias tomas (corte de luz, F5, nueva grabación), el worker de `ai-service` funde la transcripción de la toma `DRAFT_READY` anterior de la misma cita en la más nueva, generando un solo borrador consolidado; las tomas absorbidas quedan `SUPERSEDED` (contenido anulado) con `superseded_by` apuntando a la consolidada. Migraciones 000058 (enum `SUPERSEDED`) + 000059 (`ai_drafts.superseded_by`). `core-api` oculta `SUPERSEDED` de la lista de revisión; frontend redirige el borrador superado al consolidado conservando el contexto de sesión (cita, fecha, tipo de registro).

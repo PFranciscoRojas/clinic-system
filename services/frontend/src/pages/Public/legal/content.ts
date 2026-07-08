@@ -18,7 +18,7 @@ export const privacyContent: LegalSection[] = [
       'Chapni (en adelante "Chapni", "nosotros" o "el Encargado") es una plataforma de software como servicio (SaaS) para la gestión de historias clínicas psicológicas. Opera bajo la legislación colombiana.',
       'Para efectos de la Ley 1581 de 2012, el profesional o la institución que contrata el servicio (en adelante "el Responsable") es quien determina los fines y medios del tratamiento de los datos personales de sus pacientes. Chapni actúa como Encargado del tratamiento, procesando dichos datos únicamente por instrucción del Responsable y conforme a las condiciones pactadas.',
       'Los datos personales del Responsable y de los usuarios de la plataforma (correo, nombre, información de pago) son tratados directamente por Chapni en su calidad de Responsable para los fines descritos en esta política.',
-      'Canal de contacto: franciscorojas92@gmail.com',
+      'Canal de contacto: privacidad@chapni.com',
     ],
   },
   {
@@ -54,7 +54,7 @@ export const privacyContent: LegalSection[] = [
   {
     title: '5. Cómo ejercer sus derechos (consultas y reclamos)',
     paragraphs: [
-      'Para ejercer sus derechos, envíe una solicitud al correo franciscorojas92@gmail.com indicando: (i) nombre completo y documento de identidad, (ii) descripción clara de la solicitud, (iii) documentos que soporten la solicitud si aplica.',
+      'Para ejercer sus derechos, envíe una solicitud al correo privacidad@chapni.com indicando: (i) nombre completo y documento de identidad, (ii) descripción clara de la solicitud, (iii) documentos que soporten la solicitud si aplica.',
       'El término de respuesta es de 10 días hábiles para consultas y 15 días hábiles para reclamos, conforme al Decreto 1377 de 2013. Si el reclamo está incompleto, se solicitará la información faltante dentro de los 5 días hábiles siguientes a la recepción.',
     ],
   },
@@ -122,7 +122,7 @@ export const termsContent: LegalSection[] = [
     paragraphs: [
       'El usuario podrá solicitar reembolso dentro de los 5 días calendario siguientes al primer cobro de una nueva suscripción, siempre que no haya realizado más de 10 sesiones de uso activo durante ese período.',
       'No se realizan reembolsos proporcionales por cancelaciones anticipadas de suscripciones en curso. Al cancelar, el servicio permanece activo hasta el final del período pagado.',
-      'Para solicitar un reembolso, contacte a franciscorojas92@gmail.com con el asunto "Solicitud de reembolso" adjuntando el comprobante de pago. El reembolso se tramitará en un plazo de 5 a 15 días hábiles.',
+      'Para solicitar un reembolso, contacte a legal@chapni.com con el asunto "Solicitud de reembolso" adjuntando el comprobante de pago. El reembolso se tramitará en un plazo de 5 a 15 días hábiles.',
     ],
   },
   {
