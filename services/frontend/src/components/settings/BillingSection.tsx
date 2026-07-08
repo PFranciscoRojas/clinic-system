@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
 import { orgApi, type PaymentSettings } from '@/api/org';
 import { serviceRatesApi, type ServiceRate, type RateModality } from '@/api/serviceRates';
-import { startCheckout, billingApi, type PlanInfo } from '@/api/billing';
+import { startCheckout, billingApi, type PlanInfo, type BillingPeriod } from '@/api/billing';
 import { Toggle, FieldRow, FInput, FSelect, SectionCard } from './primitives';
 
 const MODALITY_LABELS: Record<string, string> = {
@@ -36,8 +36,9 @@ const STATUS_DISPLAY: Record<string, { label: string; color: string; bg: string 
 
 export function PlanStatusCard() {
   const { user } = useAuth();
-  const [plan,  setPlan]  = useState<PlanInfo | null>(null);
-  const [seats, setSeats] = useState(1);
+  const [plan,   setPlan]   = useState<PlanInfo | null>(null);
+  const [seats,  setSeats]  = useState(1);
+  const [period, setPeriod] = useState<BillingPeriod>('monthly');
 
   useEffect(() => {
     billingApi.plan()
@@ -61,12 +62,20 @@ export function PlanStatusCard() {
   // professional; solo practices keep the simple card.
   const multiSeat = plan !== null && (plan.seats_used > 1 || plan.seat_limit > 1);
   const minSeats  = Math.max(plan?.seats_used ?? 1, 1);
-  const monthly   = plan ? plan.per_seat_amount * seats : 0;
+  const total     = plan ? (period === 'annual' ? plan.per_seat_annual_amount : plan.per_seat_amount) * seats : 0;
 
   const stepBtn = (label: string, onClick: () => void, disabled: boolean) => (
     <button onClick={onClick} disabled={disabled} style={{
       width: 26, height: 26, borderRadius: 7, border: '1.5px solid #c7c3e8', background: '#fff',
       color: disabled ? '#c7c3e8' : '#2a2769', fontWeight: 700, fontSize: 14, cursor: disabled ? 'default' : 'pointer', lineHeight: 1,
+    }}>{label}</button>
+  );
+
+  const periodBtn = (label: string, value: BillingPeriod) => (
+    <button onClick={() => setPeriod(value)} style={{
+      padding: '5px 12px', borderRadius: 7, border: '1.5px solid #c7c3e8',
+      background: period === value ? '#2a2769' : '#fff', color: period === value ? '#fff' : '#2a2769',
+      fontWeight: 700, fontSize: 12.5, cursor: 'pointer',
     }}>{label}</button>
   );
 
@@ -87,24 +96,35 @@ export function PlanStatusCard() {
         )}
       </div>
       {(status !== 'active') && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          {multiSeat && plan && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12.5, color: '#5f5a6e' }}>Profesionales:</span>
-              {stepBtn('−', () => setSeats(s => Math.max(minSeats, s - 1)), seats <= minSeats)}
-              <span style={{ fontWeight: 700, fontSize: 14, color: '#2a2769', minWidth: 18, textAlign: 'center' }}>{seats}</span>
-              {stepBtn('+', () => setSeats(s => Math.min(100, s + 1)), seats >= 100)}
-              <span style={{ fontSize: 12.5, color: '#5f5a6e', whiteSpace: 'nowrap' }}>
-                = <strong>${monthly.toLocaleString('es-CO')}</strong> COP/mes
-              </span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {periodBtn('Mensual', 'monthly')}
+              {periodBtn('Anual', 'annual')}
             </div>
-          )}
-          <button
-            onClick={() => startCheckout(multiSeat ? seats : undefined).catch(() => {})}
-            style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#2a2769', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
-          >
-            Activar plan
-          </button>
+            {multiSeat && plan && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 12.5, color: '#5f5a6e' }}>Profesionales:</span>
+                {stepBtn('−', () => setSeats(s => Math.max(minSeats, s - 1)), seats <= minSeats)}
+                <span style={{ fontWeight: 700, fontSize: 14, color: '#2a2769', minWidth: 18, textAlign: 'center' }}>{seats}</span>
+                {stepBtn('+', () => setSeats(s => Math.min(100, s + 1)), seats >= 100)}
+              </div>
+            )}
+            <span style={{ fontSize: 12.5, color: '#5f5a6e', whiteSpace: 'nowrap' }}>
+              = <strong>${total.toLocaleString('es-CO')}</strong> COP{period === 'annual' ? ' (pago único, 12 meses)' : '/mes'}
+            </span>
+            <button
+              onClick={() => startCheckout(multiSeat ? seats : undefined, period).catch(() => {})}
+              style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#2a2769', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+            >
+              Activar plan
+            </button>
+          </div>
+          <span style={{ fontSize: 11.5, color: '#5f5a6e', textAlign: 'right' }}>
+            {period === 'annual'
+              ? '2 meses gratis · tarjeta, PSE, Efecty o Nequi'
+              : 'Débito automático mensual · solo tarjeta de crédito'}
+          </span>
         </div>
       )}
     </div>
