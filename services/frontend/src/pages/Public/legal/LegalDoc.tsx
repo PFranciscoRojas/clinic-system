@@ -69,15 +69,6 @@ export function LegalDoc({ title, subtitle, sections, version }: Props) {
           Versión: {version}
         </p>
 
-        {/* Disclaimer */}
-        <div style={{
-          background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10,
-          padding: '13px 16px', marginBottom: 36, fontSize: 13, color: '#92400e', lineHeight: 1.6,
-        }}>
-          Este documento es un borrador redactado como base informativa. Para plena validez jurídica,
-          consulte con un abogado especializado en derecho colombiano antes del lanzamiento comercial.
-        </div>
-
         {sections.map((section, i) => (
           <div key={i} style={{ marginBottom: 36 }}>
             <h2 style={{

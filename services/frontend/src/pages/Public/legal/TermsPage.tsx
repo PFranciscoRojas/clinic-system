@@ -33,9 +33,6 @@ export function TermsPage() {
         ) : data ? (
           <>
             <p style={{ fontSize: 12.5, color: 'var(--s400)', marginBottom: 32 }}>Versión: {data.version} · {new Date(data.published_at).toLocaleDateString('es-CO')}</p>
-            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '13px 16px', marginBottom: 36, fontSize: 13, color: '#92400e', lineHeight: 1.6 }}>
-              Este documento es un borrador redactado como base informativa. Para plena validez jurídica, consulte con un abogado especializado en derecho colombiano antes del lanzamiento comercial.
-            </div>
             <Markdown content={data.body_md} />
           </>
         ) : null}
