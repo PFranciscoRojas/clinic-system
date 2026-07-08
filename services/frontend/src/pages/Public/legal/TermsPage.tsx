@@ -40,7 +40,7 @@ export function TermsPage() {
           </>
         ) : null}
         <div style={{ marginTop: 60, paddingTop: 24, borderTop: '1px solid var(--s200)', fontSize: 12, color: 'var(--s400)', textAlign: 'center', lineHeight: 1.7 }}>
-          Chapni · Historia clínica cifrada<br />Colombia · franciscorojas92@gmail.com
+          Chapni · Historia clínica cifrada<br />Colombia · legal@chapni.com
         </div>
       </div>
     </div>

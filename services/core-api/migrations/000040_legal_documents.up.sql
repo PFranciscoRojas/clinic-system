@@ -31,7 +31,7 @@ Para efectos de la Ley 1581 de 2012, el profesional o la institución que contra
 
 Los datos personales del Responsable y de los usuarios de la plataforma (correo, nombre, información de pago) son tratados directamente por SGHCP en su calidad de Responsable para los fines descritos en esta política.
 
-Canal de contacto: franciscorojas92@gmail.com
+Canal de contacto: privacidad@chapni.com
 
 ### 2. Datos que recopilamos
 
@@ -62,7 +62,7 @@ Como titular de datos personales, usted tiene los siguientes derechos reconocido
 
 ### 5. Cómo ejercer sus derechos (consultas y reclamos)
 
-Para ejercer sus derechos, envíe una solicitud al correo franciscorojas92@gmail.com indicando: (i) nombre completo y documento de identidad, (ii) descripción clara de la solicitud, (iii) documentos que soporten la solicitud si aplica.
+Para ejercer sus derechos, envíe una solicitud al correo privacidad@chapni.com indicando: (i) nombre completo y documento de identidad, (ii) descripción clara de la solicitud, (iii) documentos que soporten la solicitud si aplica.
 
 El término de respuesta es de 10 días hábiles para consultas y 15 días hábiles para reclamos, conforme al Decreto 1377 de 2013. Si el reclamo está incompleto, se solicitará la información faltante dentro de los 5 días hábiles siguientes a la recepción.
 
@@ -125,7 +125,7 @@ El usuario podrá solicitar reembolso dentro de los 5 días calendario siguiente
 
 No se realizan reembolsos proporcionales por cancelaciones anticipadas de suscripciones en curso. Al cancelar, el servicio permanece activo hasta el final del período pagado.
 
-Para solicitar un reembolso, contacte a franciscorojas92@gmail.com con el asunto "Solicitud de reembolso" adjuntando el comprobante de pago. El reembolso se tramitará en un plazo de 5 a 15 días hábiles.
+Para solicitar un reembolso, contacte a legal@chapni.com con el asunto "Solicitud de reembolso" adjuntando el comprobante de pago. El reembolso se tramitará en un plazo de 5 a 15 días hábiles.
 
 ### 5. Obligaciones del usuario
 
