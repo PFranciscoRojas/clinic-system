@@ -168,11 +168,12 @@ export function ClinicalRecordPage() {
 
       {/* Header */}
       <div className="card" style={{ padding: 24, marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ width: 52, height: 52, borderRadius: 14, background: '#f3f2fb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <FileText size={24} color="var(--teal)" />
           </div>
-          <div style={{ flex: 1 }}>
+          {/* minWidth lets the info column shrink on phones and push the action buttons to their own line instead of overflowing */}
+          <div style={{ flex: 1, minWidth: 220 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
               <h1 style={{ fontSize: 18, fontWeight: 700, color: 'var(--s800)', margin: 0 }}>
                 Registro clínico · {RECORD_TYPE_LABELS[record.record_type] ?? record.record_type}
@@ -240,7 +241,7 @@ export function ClinicalRecordPage() {
 
       {/* Action bar */}
       {isDraft && (
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           {editing ? (
             <>
               <button onClick={() => { setDraft(null); setEditing(false); }} style={{ flex: 1, padding: 13, borderRadius: 11, background: 'var(--s100)', color: 'var(--s700)', border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 600 }}>
