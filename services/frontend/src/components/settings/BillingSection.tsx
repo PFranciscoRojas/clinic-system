@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { AlertCircle, CheckCircle, Save, Plus, Receipt, Pencil, X, CreditCard } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Badge } from '@/components/ui/Badge';
@@ -229,14 +229,19 @@ export function RatesSection() {
   const [saving,  setSaving]  = useState(false);
   const [formErr, setFormErr] = useState('');
 
-  const load = () => {
-    setLoading(true);
+  // Initial fetch: `loading` already starts true, so the effect only fires the
+  // request. `load` (spinner + fetch) is for event-handler refreshes.
+  const fetchRates = useCallback(() => {
     serviceRatesApi.list(true)
       .then(setRates)
       .catch(() => setLoadErr('No se pudieron cargar las tarifas.'))
       .finally(() => setLoading(false));
+  }, []);
+  const load = () => {
+    setLoading(true);
+    fetchRates();
   };
-  useEffect(load, []);
+  useEffect(() => { fetchRates(); }, [fetchRates]);
 
   const openNew = () => { setForm(EMPTY_RATE); setFormErr(''); setEditing('new'); };
   const openEdit = (r: ServiceRate) => {

@@ -75,12 +75,16 @@ export function BookingPaymentReturnPage() {
   // Free the held slot when the patient explicitly abandoned (came back via
   // MercadoPago's failure status). A 404 means it's already gone; a timeout
   // (processing) must NOT release — the payment may still be accrediting.
+  // `released` is set synchronously ON PURPOSE, before the request: it is the
+  // idempotence latch that guarantees the release fires exactly once.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (abandoned && bookingId && !released && !notFound) {
       setReleased(true);
       publicBookingApi.release(bookingId).catch(() => {});
     }
   }, [abandoned, bookingId, released, notFound]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Send the patient back to the clinic's own site ("la tienda"), not the API host.
   // Prefer the configured website; otherwise reopen the booking flow by slug

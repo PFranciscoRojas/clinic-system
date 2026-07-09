@@ -39,7 +39,7 @@ export function AppShell({ children }: Props) {
   const [locked,      setLocked]      = useState(false);
   const [collapsed,   setCollapsed]   = useState(() => localStorage.getItem('sghcp_sidebar_collapsed') === '1');
   const [brainHover,  setBrainHover]  = useState(false);
-  const [dpaOpen,     setDpaOpen]     = useState(false);
+  const [dpaDismissed, setDpaDismissed] = useState(false);
   const isMobile = useIsMobile();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   // On phones the sidebar is an overlay drawer — always full width when open.
@@ -83,15 +83,12 @@ export function AppShell({ children }: Props) {
     navigate(`/patients/${p.id}`);
   };
 
-  // Show the DPA modal once to CLINIC_ADMIN/PROFESSIONAL who haven't accepted yet.
-  useEffect(() => {
-    if (
-      user?.dpa_accepted === false &&
-      (user.roles?.includes('CLINIC_ADMIN') || user.roles?.includes('PROFESSIONAL'))
-    ) {
-      setDpaOpen(true);
-    }
-  }, [user?.dpa_accepted, user?.roles]);
+  // Show the DPA modal to CLINIC_ADMIN/PROFESSIONAL who haven't accepted yet —
+  // fully derived from the user, no effect; accepting flips user.dpa_accepted.
+  const dpaOpen =
+    !dpaDismissed &&
+    user?.dpa_accepted === false &&
+    (user.roles?.includes('CLINIC_ADMIN') || user.roles?.includes('PROFESSIONAL'));
 
   // Re-arm the auto-lock effect whenever the user changes the lock config in Settings.
   useEffect(() => onLockConfigChange(() => setLockCfgTick(t => t + 1)), []);
@@ -190,7 +187,7 @@ export function AppShell({ children }: Props) {
         <DpaModal
           onAccept={async () => {
             await authApi.acceptDpa();
-            setDpaOpen(false);
+            setDpaDismissed(true);
           }}
         />
       )}

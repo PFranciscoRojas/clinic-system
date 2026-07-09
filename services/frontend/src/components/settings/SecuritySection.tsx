@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { AlertCircle, Lock, Key, CheckCircle, Mail, Trash2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
@@ -12,8 +12,10 @@ export function SecuritySection() {
 
   // Screen-lock config persists immediately to localStorage (device-local, like
   // the PIN) — it does NOT go through the global SaveBar, so no false "guardado".
-  const [autoLock,    setAutoLock]    = useState(true);
-  const [lockMin,     setLockMin]     = useState(5);
+  // Seeded synchronously: getLockConfig reads localStorage, so there is nothing
+  // to wait for and no flash of default values.
+  const [autoLock,    setAutoLock]    = useState(() => getLockConfig(user?.user_id).enabled);
+  const [lockMin,     setLockMin]     = useState(() => getLockConfig(user?.user_id).minutes);
   const [lockSaved,   setLockSaved]   = useState(false);
   const [pin,         setPin]         = useState('');
   const [pin2,        setPin2]        = useState('');
@@ -50,12 +52,15 @@ export function SecuritySection() {
     }
   };
 
-  // Load the device-local lock config on mount.
-  useEffect(() => {
+  // Re-read the device-local lock config if the logged user ever changes
+  // while this section stays mounted (render-time adjust, no effect).
+  const [prevUserId, setPrevUserId] = useState(user?.user_id);
+  if (user?.user_id !== prevUserId) {
+    setPrevUserId(user?.user_id);
     const cfg = getLockConfig(user?.user_id);
     setAutoLock(cfg.enabled);
     setLockMin(cfg.minutes);
-  }, [user?.user_id]);
+  }
 
   // Persist lock config immediately and flash an inline "guardado".
   const persistLock = (enabled: boolean, minutes: number) => {

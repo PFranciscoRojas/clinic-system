@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { X, Download, Ban, CheckCircle, Plus, Send, AlertCircle, Mail } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Badge } from '@/components/ui/Badge';
@@ -47,8 +47,11 @@ export function InvoiceDetailModal({ summary, onClose, onChange }: {
   const [confirmSend, setConfirmSend] = useState(false);
   const [sentMsg, setSentMsg] = useState('');
 
-  const reload = () => invoicesApi.get(summary.id).then(setDetail).catch(() => {});
-  useEffect(() => { reload(); }, [summary.id]);
+  const reload = useCallback(
+    () => invoicesApi.get(summary.id).then(setDetail).catch(() => {}),
+    [summary.id],
+  );
+  useEffect(() => { reload(); }, [reload]);
 
   const inv = detail ?? summary;
   const meta = INVOICE_STATUS_META[inv.status as InvoiceStatus];

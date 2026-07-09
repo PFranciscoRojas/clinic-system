@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 // Three explicit selects (Año / Mes / Día) instead of a native <input type="date">,
 // whose placeholder order depended on the browser locale and was confusing.
@@ -26,15 +26,20 @@ function daysInMonth(y: number, m: number): number {
 }
 
 export function BirthDateField({ value, onChange, error }: Props) {
-  // Local partial state — the source of truth for the three selects.
-  const [y, setY] = useState('');
-  const [m, setM] = useState('');
-  const [d, setD] = useState('');
+  // Local partial state — the source of truth for the three selects,
+  // seeded from the incoming ISO (e.g. editing an existing patient).
+  const [iy = '', im = '', id = ''] = (value || '').split('-');
+  const [y, setY] = useState(iy);
+  const [m, setM] = useState(im ? String(Number(im)) : '');
+  const [d, setD] = useState(id ? String(Number(id)) : '');
 
-  // Sync from the parent value (e.g. editing an existing patient). Only runs
-  // when the incoming ISO actually differs from what the selects represent,
-  // so it never fights the user mid-selection.
-  useEffect(() => {
+  // Sync from the parent value (e.g. editing an existing patient), adjusting
+  // state during render (no effect → no extra paint). Only when the incoming
+  // ISO changed since the last render AND differs from what the selects
+  // represent, so it never fights the user mid-selection.
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
     const iso = y && m && d ? `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}` : '';
     if (value !== iso) {
       const [py = '', pm = '', pd = ''] = (value || '').split('-');
@@ -42,8 +47,7 @@ export function BirthDateField({ value, onChange, error }: Props) {
       setM(pm ? String(Number(pm)) : '');
       setD(pd ? String(Number(pd)) : '');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
+  }
 
   const currentYear = new Date().getFullYear();
   const years = useMemo(

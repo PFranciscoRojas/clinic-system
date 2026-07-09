@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -48,11 +48,14 @@ export function ClinicalRecordPage() {
     enabled: !!record?.template_id,
   });
 
-  useEffect(() => {
-    if (recordError instanceof ApiError && recordError.status === 403 && recordError.message === 'BREAK_GLASS_REASON_REQUIRED') {
-      setShowBreakGlass(true);
-    }
-  }, [recordError]);
+  // Render-time adjust (converges: opening the modal makes the guard false;
+  // confirming changes the query key, so the stale 403 never re-triggers it).
+  if (
+    !showBreakGlass &&
+    recordError instanceof ApiError && recordError.status === 403 && recordError.message === 'BREAK_GLASS_REASON_REQUIRED'
+  ) {
+    setShowBreakGlass(true);
+  }
 
   const startEditing = () => {
     if (record) {

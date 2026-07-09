@@ -17,10 +17,12 @@ export default tseslint.config(
       'react-hooks/purity': 'error',
       'react-hooks/static-components': 'error',
       'react-hooks/refs': 'error',
-      // Remaining pre-existing findings (24 + 8) kept as warnings; ratchet to
-      // 'error' once those effects are refactored (see BACKLOG).
-      'react-hooks/set-state-in-effect': 'warn',
-      'react-hooks/exhaustive-deps': 'warn',
+      // Ratcheted to 'error' (2026-07-09) after refactoring the legacy effects:
+      // derived-state syncs became render-time adjusts / lazy initializers;
+      // the few remaining sync-set effects (one-shot restores, fetch-cycle
+      // resets) carry a scoped eslint-disable with the reason inline.
+      'react-hooks/set-state-in-effect': 'error',
+      'react-hooks/exhaustive-deps': 'error',
     },
   },
   { ignores: ['dist/', 'node_modules/', 'dev-dist/'] },

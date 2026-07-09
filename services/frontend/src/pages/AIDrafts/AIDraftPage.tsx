@@ -151,6 +151,10 @@ export function AIDraftPage() {
   // Restore the left draft + pulled-section markers from localStorage on mount.
   // Only for integrated-format drafts — custom-template drafts use the old
   // single-pane editor and their content lives under different storage.
+  // The sync setState here is a one-shot restore gated by restoreAttemptedRef;
+  // it shares that ref with the server-seed effect below, so restructuring
+  // either alone would break the "local edits win over server seed" contract.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!draftStorageKey || draft?.template_id || restoreAttemptedRef.current) return;
     restoreAttemptedRef.current = true;
@@ -174,7 +178,8 @@ export function AIDraftPage() {
         }
       }
     } catch { /* corrupt draft — start clean */ }
-  }, [draftStorageKey, usedStorageKey]);
+  }, [draftStorageKey, usedStorageKey, draft?.template_id]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Save 600ms after the last change; also on tab hide / SPA navigation, since
   // React Router unmounts without firing beforeunload (mirrors RecordForm).
@@ -226,29 +231,32 @@ export function AIDraftPage() {
     }
   }, [draft?.status, draft?.superseded_by, params, navigate]);
 
-  // Seed customEdit from draft content when using a custom template
-  useEffect(() => {
-    if (!customTemplate || !draft) return;
+  // Seed customEdit / the mental exam from the draft content — render-time
+  // adjust replacing two effects (no extra paint with unseeded forms). The
+  // customEdit seed waits for BOTH the draft and its template, whichever
+  // query resolves last; refetches of either re-seed exactly as before.
+  const [seededCustom, setSeededCustom] = useState<{ d?: typeof draft; t?: typeof customTemplate }>({});
+  if (customTemplate && draft && (seededCustom.d !== draft || seededCustom.t !== customTemplate)) {
+    setSeededCustom({ d: draft, t: customTemplate });
     const raw = draft.draft_content_plain as Record<string, unknown> | null;
-    const sections = (raw?.sections ?? {}) as RecordSections;
-    setCustomEdit(sections);
-  }, [customTemplate, draft]);
-
-  // Seed the mental exam from the draft if it already carries one (an edited or
-  // legacy draft); otherwise it stays the empty default the professional fills.
-  useEffect(() => {
-    if (!draft) return;
+    setCustomEdit((raw?.sections ?? {}) as RecordSections);
+  }
+  const [seededExamDraft, setSeededExamDraft] = useState<typeof draft>(undefined);
+  if (draft && draft !== seededExamDraft) {
+    setSeededExamDraft(draft);
     const raw = draft.draft_content_plain as Record<string, unknown> | null;
     const me = (raw?.sections as Record<string, unknown> | undefined)?.mental_exam;
     if (me && typeof me === 'object' && !Array.isArray(me)) {
       setMentalExam({ ...defaultMentalExam(), ...(me as Partial<MentalExam>) });
     }
-  }, [draft]);
+  }
 
   // Seed the editable left-hand record for the comparison view: from the manual
   // autosave draft when one exists (all its widgets and text), otherwise a blank
   // record the professional fills by pulling AI sections in and completing the
   // widgets — approving then creates the record.
+  // Ref-guarded server seed, counterpart of the localStorage restore above.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     // A restored localStorage draft holds the professional's latest edits —
     // never clobber it with the server seed. Custom-template drafts don't use
@@ -264,17 +272,18 @@ export function AIDraftPage() {
       setLeftDraft(prev => prev ?? emptyDraft());
     }
   }, [manualRecord, resolutionSettled, compareRecordId, draft?.template_id]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Seed the ICD-10 selector from the AI suggestion once, when the draft loads
-  useEffect(() => {
-    if (icd10 !== undefined) return;
+  // (render-time adjust: the `icd10 === undefined` guard makes it run at most
+  // once — any later change comes from the professional and is never clobbered).
+  if (icd10 === undefined) {
     const sug = (draft?.draft_content_plain as Record<string, unknown> | null)?.suggested_icd10 as
       | { code?: string; description?: string } | null | undefined;
     if (sug && typeof sug.code === 'string' && sug.code.trim()) {
       setIcd10({ code: sug.code.trim(), description: sug.description ?? '', chapter: '' });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft]);
+  }
 
   const handleApprove = async () => {
     // A record was already created from this draft — never create a second one,

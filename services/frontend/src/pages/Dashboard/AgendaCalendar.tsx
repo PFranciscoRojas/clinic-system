@@ -194,8 +194,15 @@ function NowIndicator({ startH, endH }: { startH: number; endH: number }) {
   };
   const [top, setTop] = useState(calcTop);
 
-  useEffect(() => {
+  // A startH change recomputes immediately (render-time adjust); the interval
+  // only keeps the line drifting minute by minute.
+  const [prevStartH, setPrevStartH] = useState(startH);
+  if (startH !== prevStartH) {
+    setPrevStartH(startH);
     setTop(calcTop());
+  }
+
+  useEffect(() => {
     const id = setInterval(() => setTop(calcTop()), 60_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -810,17 +817,20 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
   // pure admins/receptionists default to the whole clinic.
   const [staffFilter, setStaffFilterRaw] = useState<string | null>(() => sessionStorage.getItem('sghcp_cal_staff'));
   const setStaffFilter = (v: string) => { sessionStorage.setItem('sghcp_cal_staff', v); setStaffFilterRaw(v); };
-  useEffect(() => {
-    if (!user) return;
-    if (profsFailed) { setStaffFilterRaw(''); return; } // never block the agenda
-    if (!profsLoaded) return;
-    if (staffFilter === null) {
-      setStaffFilterRaw(multiProf && professionals.some(p => p.id === user.user_id) ? user.user_id : '');
-      return;
+  // Render-time adjust — every branch converges: each set changes staffFilter
+  // to a value that makes its own guard false on the re-render.
+  if (user) {
+    if (profsFailed) {
+      if (staffFilter !== '') setStaffFilterRaw(''); // never block the agenda
+    } else if (profsLoaded) {
+      if (staffFilter === null) {
+        setStaffFilterRaw(multiProf && professionals.some(p => p.id === user.user_id) ? user.user_id : '');
+      } else if (staffFilter !== '' && !professionals.some(p => p.id === staffFilter)) {
+        // A stored filter may point to a professional deactivated since.
+        setStaffFilter('');
+      }
     }
-    // A stored filter may point to a professional deactivated since.
-    if (staffFilter !== '' && !professionals.some(p => p.id === staffFilter)) setStaffFilter('');
-  }, [profsLoaded, profsFailed, professionals, multiProf, user, staffFilter]);
+  }
 
   // ── Query: visible range (week or month grid) ────────────────────────────
   const { data: appts = [], isLoading } = useQuery({
@@ -877,8 +887,13 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
   const hours  = useMemo(() => Array.from({ length: endH - startH }, (_, i) => startH + i), [startH, endH]);
   const totalH = (endH - startH) * HOUR_H;
 
-  // Dismiss the quick-booking popover when the day/week or view changes.
-  useEffect(() => { setQuickSlot(null); }, [selected, calView]);
+  // Dismiss the quick-booking popover when the day/week or view changes —
+  // render-time adjust keyed on the (selected, calView) pair.
+  const [prevViewKey, setPrevViewKey] = useState<string>(`${selected}|${calView}`);
+  if (`${selected}|${calView}` !== prevViewKey) {
+    setPrevViewKey(`${selected}|${calView}`);
+    setQuickSlot(null);
+  }
 
   // Scroll to current time on first render and view change
   useEffect(() => {

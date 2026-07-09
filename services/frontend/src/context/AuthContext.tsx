@@ -15,10 +15,12 @@ const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser]       = useState<Me | null>(null);
-  const [isLoading, setLoading] = useState(true);
+  // Only start in "loading" when there is actually a session to restore — the
+  // no-token case is decidable synchronously at init, not inside the effect.
+  const [isLoading, setLoading] = useState(() => !!localStorage.getItem('access_token'));
 
   const fetchMe = useCallback(async (): Promise<Me | null> => {
-    if (!localStorage.getItem('access_token')) { setLoading(false); return null; }
+    if (!localStorage.getItem('access_token')) return null;
     try {
       const me = await authApi.me();
       setUser(me);
@@ -32,6 +34,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Session restore is a genuine external sync: every setState inside fetchMe
+  // happens after an await (or not at all), so no sync render cascade exists —
+  // the rule just can't see through the async boundary.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchMe(); }, [fetchMe]);
 
   const login = async (email: string, password: string): Promise<Me> => {
