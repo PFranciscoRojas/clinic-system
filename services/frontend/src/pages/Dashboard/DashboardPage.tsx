@@ -509,7 +509,8 @@ export function DashboardPage() {
 
       {/* ── Agenda tab ──────────────────────────────────────────────────────── */}
       {mainTab === 'agenda' && (
-        <div style={{ display: 'grid', gridTemplateColumns: compact ? '1fr' : '1fr 260px', flex: 1, overflow: compact ? 'visible' : 'hidden' }}>
+        // minmax(0,…) — a bare 1fr track grows to its content's min-width and drags the whole page into horizontal scroll on phones
+        <div style={{ display: 'grid', gridTemplateColumns: compact ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) 260px', flex: 1, overflow: compact ? 'visible' : 'hidden' }}>
           {/* Left column */}
           <div style={{ overflowY: compact ? 'visible' : 'auto', padding: compact ? '20px 16px' : '28px 32px' }}>
 

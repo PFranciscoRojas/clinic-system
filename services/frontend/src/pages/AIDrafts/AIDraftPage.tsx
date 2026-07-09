@@ -623,7 +623,7 @@ export function AIDraftPage() {
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 18, marginBottom: 20, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)', gap: 18, marginBottom: 20, alignItems: 'start' }}>
             {/* LEFT — the real, editable clinical record (all widgets) */}
             <div>
               <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--s600)', letterSpacing: 0.3, marginBottom: 10 }}>✍ TU REGISTRO CLÍNICO</div>

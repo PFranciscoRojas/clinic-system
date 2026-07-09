@@ -837,7 +837,7 @@ export function BillingPage() {
 
       {canSeeReports && <KpiCards ov={ov} period={period} />}
 
-      <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--s200)' }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--s200)', flexWrap: 'wrap' }}>
         {TABS.map(t => {
           const on = tab === t.id;
           return (

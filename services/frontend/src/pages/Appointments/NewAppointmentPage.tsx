@@ -865,7 +865,7 @@ export function NewAppointmentPage() {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: compact ? '1fr' : '300px 1fr 272px',
+      gridTemplateColumns: compact ? 'minmax(0, 1fr)' : '300px minmax(0, 1fr) 272px',
       ...(compact ? { minHeight: 'calc(100dvh - var(--topbar-h))' } : { height: 'calc(100dvh - var(--topbar-h))', overflow: 'hidden' }),
     }}>
       {/* ── Column 1: Calendar + Patient ──────────────────────────────── */}
