@@ -97,6 +97,11 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   // just being described in a message.
   const [blockedRestoreType, setBlockedRestoreType] = useState<UIRecordType | null>(null);
   const [blockedRestoreDraft, setBlockedRestoreDraft] = useState<ClinicalDraft | null>(null);
+  // Template-based records keep their content in customSections, not draft —
+  // a blocked restore of one of those must carry the sections (and which
+  // template labels them) or the viewer below would render an empty form.
+  const [blockedRestoreSections, setBlockedRestoreSections] = useState<SectionsState | null>(null);
+  const [blockedRestoreTemplateId, setBlockedRestoreTemplateId] = useState<string>('');
   const [showBlockedContent, setShowBlockedContent] = useState(false);
   const [pendingType, setPendingType] = useState<UIRecordType | null>(null);
   const [err, setErr] = useState('');
@@ -122,6 +127,15 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   });
 
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
+
+  // Schema of the template a blocked restore was written with — fetched by id
+  // because that template can belong to a record type outside `templates`
+  // (the list is filtered by the currently active apiType).
+  const { data: blockedTemplate } = useQuery({
+    queryKey: ['record-template', blockedRestoreTemplateId],
+    queryFn: () => recordTemplatesApi.get(blockedRestoreTemplateId),
+    enabled: !!blockedRestoreTemplateId && !!blockedRestoreSections,
+  });
 
   // Apply default template when apiType changes and a default is available.
   // Skipped when a template is locked by the parent — it already pre-selected
@@ -214,7 +228,12 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
           // rejected by the server — but still show the actual content
           // read-only instead of just describing that it exists.
           setBlockedRestoreType(saved.uiType);
-          if (saved.draft) setBlockedRestoreDraft(mergeSavedDraft(saved.draft as Partial<ClinicalDraft>));
+          if (hasTemplateContent) {
+            setBlockedRestoreSections(savedCustomSections);
+            setBlockedRestoreTemplateId(typeof saved.selectedTemplateId === 'string' ? saved.selectedTemplateId : '');
+          } else if (saved.draft) {
+            setBlockedRestoreDraft(mergeSavedDraft(saved.draft as Partial<ClinicalDraft>));
+          }
           if (hasTemplateContent || saved.draft) gotContentRef.current = true; // a blocked restore still counts — don't also fetch the server
         } else {
           if (saved.uiType) setUIType(saved.uiType);
@@ -578,28 +597,62 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
           <p style={{ margin: '0 0 8px', lineHeight: 1.5 }}>
             Tenías contenido sin guardar en formato <strong>{RECORD_TYPE_LABELS[blockedRestoreType]}</strong>, pero ya no aplica al estado actual del proceso clínico — no se cargó automáticamente para evitar guardar un formato inválido.
           </p>
-          {blockedRestoreDraft && (
+          {(blockedRestoreDraft || blockedRestoreSections) && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button
                 type="button"
                 onClick={() => setShowBlockedContent(v => !v)}
                 style={{ padding: '6px 12px', background: '#fff', color: '#92400e', border: '1.5px solid #fde68a', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
               >{showBlockedContent ? 'Ocultar contenido' : 'Ver contenido'}</button>
-              <button
-                type="button"
-                onClick={() => {
-                  setDraft(blockedRestoreDraft);
-                  setBlockedRestoreType(null);
-                  setBlockedRestoreDraft(null);
-                  setShowBlockedContent(false);
-                }}
-                style={{ padding: '6px 12px', background: '#92400e', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
-              >Recuperar en {RECORD_TYPE_LABELS[uiType]}</button>
+              {blockedRestoreDraft && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraft(blockedRestoreDraft);
+                    setBlockedRestoreType(null);
+                    setBlockedRestoreDraft(null);
+                    setShowBlockedContent(false);
+                  }}
+                  style={{ padding: '6px 12px', background: '#92400e', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                >Recuperar en {RECORD_TYPE_LABELS[uiType]}</button>
+              )}
+              {blockedRestoreSections && !formatLocked && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedTemplateId(blockedRestoreTemplateId);
+                    setCustomSections(blockedRestoreSections);
+                    setBlockedRestoreType(null);
+                    setBlockedRestoreSections(null);
+                    setBlockedRestoreTemplateId('');
+                    setShowBlockedContent(false);
+                  }}
+                  style={{ padding: '6px 12px', background: '#92400e', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                >Recuperar con su formato</button>
+              )}
             </div>
           )}
           {showBlockedContent && blockedRestoreDraft && (
             <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid var(--s200)' }}>
               <RecordSectionsForm recordType={blockedRestoreType} value={blockedRestoreDraft} onChange={() => {}} disabled />
+            </div>
+          )}
+          {showBlockedContent && blockedRestoreSections && (
+            <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid var(--s200)' }}>
+              {blockedTemplate ? (
+                <TemplatedSectionsForm schema={blockedTemplate.schema} value={blockedRestoreSections} onChange={() => {}} disabled />
+              ) : (
+                // Template deleted or unreachable — show the raw sections so the
+                // content is still recoverable by hand instead of invisible.
+                Object.entries(blockedRestoreSections).map(([key, val]) => (
+                  <div key={key} style={{ marginBottom: 10 }}>
+                    <p style={{ margin: '0 0 2px', fontSize: 12, fontWeight: 700, color: 'var(--s600)' }}>{key}</p>
+                    <p style={{ margin: 0, fontSize: 13, color: 'var(--s700)', whiteSpace: 'pre-wrap' }}>
+                      {typeof val === 'string' ? val : JSON.stringify(val, null, 1)}
+                    </p>
+                  </div>
+                ))
+              )}
             </div>
           )}
         </div>
