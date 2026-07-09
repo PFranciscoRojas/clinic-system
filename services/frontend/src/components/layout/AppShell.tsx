@@ -560,7 +560,8 @@ export function AppShell({ children }: Props) {
 
           <TrialBanner status={user?.subscription_status} daysLeft={user?.trial_days_left} />
 
-          <main style={{ flex: 1, overflow: 'auto', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+          {/* overflowX hidden: a single too-wide element must never pan the whole app sideways on phones — wide tables scroll inside their own .table-wrap */}
+          <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
             {children}
           </main>
         </div>

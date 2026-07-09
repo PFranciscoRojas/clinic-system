@@ -1036,7 +1036,7 @@ export function AppointmentPage() {
           </div>
 
           {/* ── Workspace: registro clínico (protagonista) + apoyo lateral ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: compactLayout ? '1fr' : 'minmax(0, 1fr) 360px', gap: 20, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: compactLayout ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) 360px', gap: 20, alignItems: 'start' }}>
             {/* MAIN — el registro clínico es el foco */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
@@ -1465,7 +1465,7 @@ export function AppointmentPage() {
       {!isGuest && appt.patient_id && (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: (canWriteNote || !!draftId) && !compactLayout ? 'minmax(0, 1fr) 380px' : '1fr',
+          gridTemplateColumns: (canWriteNote || !!draftId) && !compactLayout ? 'minmax(0, 1fr) 380px' : 'minmax(0, 1fr)',
           gap: 20,
           marginBottom: 20,
           alignItems: 'start',
