@@ -11,7 +11,6 @@ import { BrandMark } from '@/components/ui/BrandMark';
 import { useAuth } from '@/context/AuthContext';
 import { useIsMobile } from '@/lib/useMediaQuery';
 import { patientsApi, type Patient } from '@/api/patients';
-import { startCheckout } from '@/api/billing';
 import { profilesApi } from '@/api/profiles';
 import { getLockConfig, onLockConfigChange } from '@/lib/screenLock';
 import { authApi } from '@/api/auth';
@@ -176,8 +175,12 @@ export function AppShell({ children }: Props) {
   };
 
   // Trial/subscription lapsed → hard-block the app behind a reactivation screen.
-  // The operator (SYSTEM_ADMIN) and entitled tenants pass through.
-  if (user && user.entitled === false) {
+  // The operator (SYSTEM_ADMIN) and entitled tenants pass through. CLINIC_ADMIN
+  // can still reach billing settings so "Activar mi plan" lands there (it needs
+  // to read the mensual/anual toggle) instead of bouncing back to this screen;
+  // other roles can't pay anyway (see SubscriptionExpired), so stay blocked.
+  const canReachBilling = location.pathname.startsWith('/settings/billing') && (user?.roles ?? []).includes('CLINIC_ADMIN');
+  if (user && user.entitled === false && !canReachBilling) {
     return <SubscriptionExpired onLogout={logout} />;
   }
 
@@ -571,6 +574,7 @@ export function AppShell({ children }: Props) {
 // the session (sessionStorage); reappears on reload so the deadline stays
 // visible. Turns urgent (amber) in the last three days.
 function TrialBanner({ status, daysLeft }: { status?: string; daysLeft?: number }) {
+  const navigate = useNavigate();
   const [hidden, setHidden] = useState(() => sessionStorage.getItem('sghcp_trial_banner_hidden') === '1');
 
   if (status !== 'trialing' || daysLeft == null || hidden) return null;
@@ -585,6 +589,10 @@ function TrialBanner({ status, daysLeft }: { status?: string; daysLeft?: number 
     : `Te quedan ${daysLeft} días de prueba`;
 
   const dismiss = () => { sessionStorage.setItem('sghcp_trial_banner_hidden', '1'); setHidden(true); };
+  // Sends the owner to the billing settings tab (mensual/anual toggle) instead of
+  // firing a blind monthly checkout — startCheckout() with no args always defaults
+  // to period "monthly", which was hiding the annual option from most users.
+  const onActivate = () => navigate('/settings/billing');
 
   return (
     <div style={{
@@ -593,7 +601,7 @@ function TrialBanner({ status, daysLeft }: { status?: string; daysLeft?: number 
     }}>
       <Clock size={15} style={{ flexShrink: 0 }} />
       <span style={{ fontWeight: 600 }}>{label}.</span>
-      <button onClick={() => { startCheckout().catch(() => {}); }} style={{ border: 'none', background: 'none', cursor: 'pointer', color: fg, fontWeight: 700, textDecoration: 'underline', fontSize: 13 }}>
+      <button onClick={onActivate} style={{ border: 'none', background: 'none', cursor: 'pointer', color: fg, fontWeight: 700, textDecoration: 'underline', fontSize: 13 }}>
         Activar mi plan
       </button>
       <button onClick={dismiss} title="Ocultar" style={{ marginLeft: 'auto', border: 'none', background: 'none', cursor: 'pointer', color: fg, display: 'flex', opacity: 0.7 }}>
@@ -605,16 +613,18 @@ function TrialBanner({ status, daysLeft }: { status?: string; daysLeft?: number 
 
 /* ── Subscription expired ───────────────────────────────────────── */
 // Full-screen block shown when the trial/subscription has lapsed. "Activar mi
-// plan" sends the owner to the MercadoPago hosted checkout; if online billing
-// isn't available yet, the operator can still activate the account manually.
+// plan" sends the owner to the billing settings tab, where they can pick
+// mensual (card, recurring) or anual (card/PSE/Efecty/Nequi, one-time) before
+// checkout — calling startCheckout() directly here would always default to
+// "monthly" and skip that choice.
 function SubscriptionExpired({ onLogout }: { onLogout: () => void }) {
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-  const go = async () => {
-    setBusy(true); setErr('');
-    try { await startCheckout(); }
-    catch { setErr('El pago en línea no está disponible. Escríbenos para activar tu cuenta.'); setBusy(false); }
-  };
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  // Only CLINIC_ADMIN can see the billing section (SettingsPage filters it out
+  // for other roles) and only CLINIC_ADMIN holds organization:configure, the
+  // permission checkout requires — other roles have to ask the admin instead.
+  const canPay = (user?.roles ?? []).includes('CLINIC_ADMIN');
+  const go = () => navigate('/settings/billing');
   return (
     <div style={{ minHeight: '100dvh', background: 'linear-gradient(135deg, #2a2769, #171533)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <div style={{ background: '#fff', borderRadius: 18, padding: '36px 34px', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', width: '100%', maxWidth: 460, textAlign: 'center' }}>
@@ -628,10 +638,15 @@ function SubscriptionExpired({ onLogout }: { onLogout: () => void }) {
           <br /><br />
           Tus historias clínicas siguen seguras y puedes exportarlas en cualquier momento.
         </div>
-        <button onClick={go} disabled={busy} style={{ width: '100%', boxSizing: 'border-box', padding: 13, borderRadius: 12, border: 'none', background: 'var(--teal)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: busy ? 'wait' : 'pointer', marginBottom: 12 }}>
-          {busy ? 'Redirigiendo…' : 'Activar mi plan'}
-        </button>
-        {err && <div style={{ fontSize: 12.5, color: 'var(--red)', marginBottom: 12, lineHeight: 1.5 }}>{err}</div>}
+        {canPay ? (
+          <button onClick={go} style={{ width: '100%', boxSizing: 'border-box', padding: 13, borderRadius: 12, border: 'none', background: 'var(--teal)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 12 }}>
+            Activar mi plan
+          </button>
+        ) : (
+          <div style={{ fontSize: 12.5, color: 'var(--s500)', marginBottom: 12, lineHeight: 1.5 }}>
+            Pide al administrador de tu consultorio que active el plan.
+          </div>
+        )}
         <button onClick={onLogout} style={{ border: 'none', background: 'none', fontSize: 13, color: 'var(--s500)', fontWeight: 600, cursor: 'pointer' }}>
           Cerrar sesión
         </button>
