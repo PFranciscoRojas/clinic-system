@@ -11,7 +11,7 @@ export function BreakGlassModal({ onConfirm, onCancel }: Props) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
          onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
-      <div style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', maxWidth: 440, width: '90vw', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
+      <div style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', maxWidth: 440, width: '90vw', boxSizing: 'border-box', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
         <div style={{ fontSize: 20, fontWeight: 700, color: '#b45309', marginBottom: 6 }}>Acceso excepcional</div>
         <p style={{ fontSize: 13.5, color: 'var(--s600)', margin: '0 0 18px' }}>
           Como administrador sin perfil clínico, tu acceso a esta historia quedará registrado en la auditoría de acuerdo con la Ley 23/1981 y la Res. 1995/1999.

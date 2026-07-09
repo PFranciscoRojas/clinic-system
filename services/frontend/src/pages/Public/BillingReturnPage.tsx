@@ -27,7 +27,7 @@ export function BillingReturnPage() {
   return (
     <div style={{ minHeight: '100dvh', background: 'linear-gradient(135deg, #2a2769, #171533)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px 12px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <style>{`@keyframes spin { from { transform:rotate(0deg);} to { transform:rotate(360deg); } }`}</style>
-      <div style={{ background: '#fff', borderRadius: 18, padding: '36px 34px', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', width: '100%', maxWidth: 440, textAlign: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: 18, padding: '36px 34px', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', width: '100%', maxWidth: 440, textAlign: 'center', boxSizing: 'border-box' }}>
         {msg.icon}
         <div style={{ fontWeight: 800, fontSize: 20, color: 'var(--s800)', marginBottom: 10 }}>{msg.title}</div>
         <div style={{ fontSize: 14, color: 'var(--s500)', lineHeight: 1.7, marginBottom: msg.btn ? 24 : 0 }}>{msg.body}</div>

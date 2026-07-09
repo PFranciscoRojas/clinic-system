@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { aiDraftsApi, type DraftMeta, type DraftStatus } from '@/api/aiDrafts';
 import { clinicalRecordsApi, type RecordMeta, type RecordStatus } from '@/api/clinicalRecords';
 import { fmtDateOnly } from '@/lib/dates';
+import { useIsMobile } from '@/lib/useMediaQuery';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -69,6 +70,7 @@ const RISK_COLOR: Record<string, string> = {
 // ── Row components ────────────────────────────────────────────────────────────
 
 function DraftRow({ d, onClick }: { d: DraftMeta; onClick: () => void }) {
+  const isMobile = useIsMobile();
   // Every state has a destination now: the draft page live-polls the
   // generating states and explains errors — this is how the professional
   // gets back to a session they navigated away from (Punto 3).
@@ -78,12 +80,21 @@ function DraftRow({ d, onClick }: { d: DraftMeta; onClick: () => void }) {
     : d.status === 'ERROR' ? { label: 'Ver error', solid: false }
     : null;
   const actionable = action !== null;
+  const actionChip = action && (
+    <span style={action.solid
+      ? { fontSize: 12, fontWeight: 600, color: '#fff', background: 'var(--teal)', borderRadius: 6, padding: '3px 10px' }
+      : { fontSize: 12, fontWeight: 600, color: 'var(--s600)', background: '#fff', border: '1px solid var(--s200)', borderRadius: 6, padding: '3px 10px' }}
+    >{action.label}</span>
+  );
   return (
     <div
       onClick={actionable ? onClick : undefined}
       style={{
-        display: 'grid', gridTemplateColumns: '110px 1fr auto auto',
-        alignItems: 'center', gap: 16,
+        ...(isMobile
+          // Two-line card: code + date on top, badge + action below.
+          ? { display: 'flex', flexWrap: 'wrap', gap: 8 }
+          : { display: 'grid', gridTemplateColumns: '110px 1fr auto auto', gap: 16 }),
+        alignItems: 'center',
         padding: '12px 16px',
         borderBottom: '1px solid var(--s100)',
         cursor: actionable ? 'pointer' : 'default',
@@ -96,26 +107,51 @@ function DraftRow({ d, onClick }: { d: DraftMeta; onClick: () => void }) {
       <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--teal)', fontFamily: "'DM Mono', monospace" }}>
         {fmtCode(d.patient_code)}
       </span>
-      <DraftBadge status={d.status} />
-      <span style={{ fontSize: 12, color: 'var(--s400)' }}>{fmtDate(d.created_at)}</span>
-      {action && (
-        <span style={action.solid
-          ? { fontSize: 12, fontWeight: 600, color: '#fff', background: 'var(--teal)', borderRadius: 6, padding: '3px 10px' }
-          : { fontSize: 12, fontWeight: 600, color: 'var(--s600)', background: '#fff', border: '1px solid var(--s200)', borderRadius: 6, padding: '3px 10px' }}
-        >{action.label}</span>
+      {isMobile ? (
+        <>
+          <span style={{ fontSize: 12, color: 'var(--s400)', marginLeft: 'auto' }}>{fmtDate(d.created_at)}</span>
+          <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <DraftBadge status={d.status} />
+            {actionChip}
+          </div>
+        </>
+      ) : (
+        <>
+          <DraftBadge status={d.status} />
+          <span style={{ fontSize: 12, color: 'var(--s400)' }}>{fmtDate(d.created_at)}</span>
+          {actionChip}
+        </>
       )}
     </div>
   );
 }
 
 function RecordRow({ m, onClick }: { m: RecordMeta; onClick: () => void }) {
+  const isMobile = useIsMobile();
   const s = RECORD_STATUS[m.status];
+  const riskChip = m.risk_level && m.risk_level !== 'NONE' && (
+    <span style={{ fontSize: 11, fontWeight: 700, color: RISK_COLOR[m.risk_level] ?? '#6b7280' }}>
+      ⚠ {m.risk_level}
+    </span>
+  );
+  const statusChip = (
+    <span style={{
+      fontSize: 12, fontWeight: 600,
+      color: s?.color ?? '#6b7280', background: s?.bg ?? '#f3f4f6',
+      borderRadius: 12, padding: '2px 8px',
+    }}>
+      {s?.label ?? m.status}
+    </span>
+  );
   return (
     <div
       onClick={onClick}
       style={{
-        display: 'grid', gridTemplateColumns: '110px 120px 1fr auto auto',
-        alignItems: 'center', gap: 16,
+        ...(isMobile
+          // Two-line card: code + date on top; type, risk and status below.
+          ? { display: 'flex', flexWrap: 'wrap', gap: 8 }
+          : { display: 'grid', gridTemplateColumns: '110px 120px 1fr auto auto', gap: 16 }),
+        alignItems: 'center',
         padding: '12px 16px',
         borderBottom: '1px solid var(--s100)',
         cursor: 'pointer',
@@ -128,22 +164,27 @@ function RecordRow({ m, onClick }: { m: RecordMeta; onClick: () => void }) {
       <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--teal)', fontFamily: "'DM Mono', monospace" }}>
         {fmtCode(m.patient_code)}
       </span>
-      <span style={{ fontSize: 13, color: 'var(--s600)' }}>
-        {RECORD_TYPE_LABEL[m.record_type] ?? m.record_type}
-      </span>
-      <span style={{ fontSize: 12, color: 'var(--s400)' }}>{fmtDateOnly(m.session_date)}</span>
-      {m.risk_level && m.risk_level !== 'NONE' && (
-        <span style={{ fontSize: 11, fontWeight: 700, color: RISK_COLOR[m.risk_level] ?? '#6b7280' }}>
-          ⚠ {m.risk_level}
-        </span>
+      {isMobile ? (
+        <>
+          <span style={{ fontSize: 12, color: 'var(--s400)', marginLeft: 'auto' }}>{fmtDateOnly(m.session_date)}</span>
+          <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 13, color: 'var(--s600)' }}>
+              {RECORD_TYPE_LABEL[m.record_type] ?? m.record_type}
+            </span>
+            {riskChip}
+            <span style={{ marginLeft: 'auto' }}>{statusChip}</span>
+          </div>
+        </>
+      ) : (
+        <>
+          <span style={{ fontSize: 13, color: 'var(--s600)' }}>
+            {RECORD_TYPE_LABEL[m.record_type] ?? m.record_type}
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--s400)' }}>{fmtDateOnly(m.session_date)}</span>
+          {riskChip}
+          {statusChip}
+        </>
       )}
-      <span style={{
-        fontSize: 12, fontWeight: 600,
-        color: s?.color ?? '#6b7280', background: s?.bg ?? '#f3f4f6',
-        borderRadius: 12, padding: '2px 8px',
-      }}>
-        {s?.label ?? m.status}
-      </span>
     </div>
   );
 }
@@ -166,6 +207,7 @@ type RecordFilter = 'DRAFT' | 'ALL';
 
 export function ClinicalPage() {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const { user } = useAuth();
   const [tab, setTab] = useState<Tab>('drafts');
   const [draftFilter, setDraftFilter] = useState<DraftFilter>('DRAFT_READY');
@@ -268,8 +310,8 @@ export function ClinicalPage() {
           )}
         </div>
 
-        {/* Column headers */}
-        {tab === 'drafts' ? (
+        {/* Column headers — hidden on mobile, where rows render as stacked cards */}
+        {isMobile ? null : tab === 'drafts' ? (
           <div style={{
             display: 'grid', gridTemplateColumns: '110px 1fr auto auto',
             gap: 16, padding: '8px 16px',
