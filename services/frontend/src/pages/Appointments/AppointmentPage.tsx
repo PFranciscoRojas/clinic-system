@@ -600,6 +600,10 @@ export function AppointmentPage() {
   // tab would show the format picker again even though the actual draft
   // content (also in localStorage) is still there.
   const setupKey = `sghcp_sess_${id}`;
+  // Sync setState here is the session-resume restore itself (localStorage →
+  // state, re-checked as appt/records queries land); the write-back effect
+  // below mirrors it. Restructuring risks the resume flow for no paint gain.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!appt) return;
     const hasFinalizedNote = (recordsData?.items ?? []).some(r => r.appointment_id === id && r.finalized !== false);
@@ -617,6 +621,7 @@ export function AppointmentPage() {
     } catch { /* corrupt entry — ignore */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appt?.status, setupKey, recordsData, id]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Write session state whenever the form/setup changes.
   useEffect(() => {
@@ -672,6 +677,10 @@ export function AppointmentPage() {
   // AI-draft review page shouldn't re-prompt for a format when nothing was
   // finalized yet — finalizedRecords.length > 0 below already excludes the
   // case where a note (manual or approved draft) already exists.
+  // Deps are deliberately narrower than the reads: this must fire only when
+  // the draft/status/records land, never when the professional closes the
+  // form (showRecordForm/setupOpen) — a render-time version would reopen it.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (appt?.status !== 'IN_PROGRESS' && appt?.status !== 'COMPLETED') return;
     if (!autosaveDraft || finalizedRecords.length > 0) return;
@@ -681,6 +690,7 @@ export function AppointmentPage() {
     setShowRecordForm(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appt?.status, autosaveDraft?.id, finalizedRecords.length]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleStatusChange = async (status: AppointmentStatus) => {
     if (!id) return;

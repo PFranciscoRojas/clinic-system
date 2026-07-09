@@ -7,8 +7,16 @@ export function GoogleCalendarCard() {
   const [connected, setConnected] = useState(false);
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [msg, setMsg] = useState('');
+  // Seeded from the OAuth return param: when Google just redirected back we
+  // start in "syncing" right away instead of flipping state inside the effect.
+  const [syncing, setSyncing] = useState(
+    () => new URLSearchParams(window.location.search).get('google') === 'connected',
+  );
+  const [msg, setMsg] = useState(() =>
+    new URLSearchParams(window.location.search).get('google') === 'error'
+      ? 'No se pudo conectar con Google. Intenta de nuevo.'
+      : '',
+  );
 
   useEffect(() => {
     gcalApi.status().then(s => {
@@ -21,7 +29,6 @@ export function GoogleCalendarCard() {
     if (result === 'connected') {
       window.history.replaceState({}, '', window.location.pathname);
       // Auto-sync existing appointments right after connecting
-      setSyncing(true);
       gcalApi.sync()
         .then(r => {
           setMsg(r.queued > 0
@@ -31,7 +38,7 @@ export function GoogleCalendarCard() {
         .catch(() => setMsg('Google Calendar conectado.'))
         .finally(() => setSyncing(false));
     } else if (result === 'error') {
-      setMsg('No se pudo conectar con Google. Intenta de nuevo.');
+      // msg was already seeded from this param at init — just clean the URL.
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);

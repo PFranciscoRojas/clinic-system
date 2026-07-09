@@ -204,7 +204,6 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
     } catch {
       setPreviewError('Markdown inválido — revisa los encabezados ##');
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name]);
 
   useEffect(() => {

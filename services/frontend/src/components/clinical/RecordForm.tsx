@@ -145,14 +145,15 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   // professional into a default custom template (and wiping customSections)
   // even though they chose the built-in format. Must check !== undefined to
   // match formatLocked's own definition below.
-  useEffect(() => {
-    if (lockedTemplateId !== undefined) return;
+  // Render-time adjust (converges: once selectedTemplateId is set, the guard
+  // goes false), replacing the previous effect — one paint less on open.
+  if (lockedTemplateId === undefined && !selectedTemplateId) {
     const def = templates.find(t => t.is_default);
-    if (def && !selectedTemplateId) {
+    if (def) {
       setSelectedTemplateId(def.id);
       setCustomSections({});
     }
-  }, [templates, selectedTemplateId, lockedTemplateId]);
+  }
 
   // Notify parent of template changes (for audio upload targeting)
   useEffect(() => {
@@ -216,6 +217,10 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   // the first place. gotContentRef is only set when there's something a
   // human actually typed, checked with the same logic the autosave tick
   // uses to decide whether there's anything worth sending.
+  // The sync setState is the one-shot localStorage restore itself; it is part
+  // of a two-effect dance with the server fallback below (shared refs decide
+  // which source wins) — heavily documented above, not worth destabilizing.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     try {
       const raw = localStorage.getItem(storageKey);
@@ -255,6 +260,7 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
     localRestoreDoneRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Effect 2 — server fallback. Depends on existingDraftId so it re-runs the
   // moment the parent's query resolves and the prop changes from undefined
@@ -293,13 +299,15 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   }, [serverDraftId, serverIdKey]);
 
   // Marks the draft as having unsynced changes — cleared after a successful
-  // autosave tick. Also fires once on mount with whatever was restored
-  // (localStorage or server), which is correct: that content may not be on
-  // the server yet, so the next tick should sync it. The autosave tick itself
-  // is a no-op while the draft is still empty (see content check below).
-  useEffect(() => {
+  // autosave tick. Render-time adjust: any content change re-renders, the
+  // tuple comparison catches it, and the very first render also marks dirty
+  // (restored content may not be on the server yet, so the next tick syncs).
+  // The autosave tick itself is a no-op while the draft is still empty.
+  const [prevContent, setPrevContent] = useState<{ u?: UIRecordType; d?: ClinicalDraft; c?: SectionsState; t?: string }>({});
+  if (prevContent.u !== uiType || prevContent.d !== draft || prevContent.c !== customSections || prevContent.t !== selectedTemplateId) {
+    setPrevContent({ u: uiType, d: draft, c: customSections, t: selectedTemplateId });
     setDirty(true);
-  }, [uiType, draft, customSections, selectedTemplateId]);
+  }
 
   // Save to localStorage 600ms after the last change. The cleanup also saves
   // immediately on SPA navigation (React Router unmounts the component, which

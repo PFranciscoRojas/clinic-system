@@ -429,7 +429,7 @@ export function PatientsPage() {
     placeholderData: prev => prev,
   });
 
-  const all     = data ?? [];
+  const all     = useMemo(() => data ?? [], [data]);
   const shown   = useMemo(() => {
     if (statusFilter === 'active')   return all.filter(p => p.is_active);
     if (statusFilter === 'inactive') return all.filter(p => !p.is_active);

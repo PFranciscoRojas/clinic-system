@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 
 // Single source of truth for responsive breakpoints. The app is built with
 // inline styles, so components branch on these hooks instead of media queries.
@@ -7,17 +7,12 @@ export const TABLET_MAX = 1023;  // tablets / narrow laptops
 export const COMPACT_MAX = 900;  // compact breakpoint: center column collapses
 
 export function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
-
-  useEffect(() => {
+  const subscribe = useCallback((onChange: () => void) => {
     const mql = window.matchMedia(query);
-    const handler = (e: MediaQueryListEvent) => setMatches(e.matches);
-    mql.addEventListener('change', handler);
-    setMatches(mql.matches);
-    return () => mql.removeEventListener('change', handler);
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
   }, [query]);
-
-  return matches;
+  return useSyncExternalStore(subscribe, () => window.matchMedia(query).matches);
 }
 
 export function useIsMobile(): boolean {

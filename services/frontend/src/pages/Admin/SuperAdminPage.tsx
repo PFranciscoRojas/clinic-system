@@ -156,8 +156,15 @@ function SistemaTab() {
     refetchInterval: REFRESH_SEC * 1000,
   });
 
-  useEffect(() => {
+  // Fresh health data restarts the visible countdown (render-time adjust);
+  // the interval itself only ticks it down.
+  const [prevH, setPrevH] = useState<SystemHealth | undefined>(undefined);
+  if (h !== prevH) {
+    setPrevH(h);
     setCountdown(REFRESH_SEC);
+  }
+
+  useEffect(() => {
     intervalRef.current = setInterval(() => {
       setCountdown(c => {
         if (c <= 1) { return REFRESH_SEC; }
@@ -693,9 +700,14 @@ function LegalEditor({ docType }: { docType: LegalDocType }) {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
 
-  useEffect(() => {
-    if (data) { setBody(data.body_md); setVersion(data.version); }
-  }, [data]);
+  // Seed the editor whenever a (re)fetched document arrives — render-time
+  // adjust instead of an effect, so there is no extra paint with stale text.
+  const [seededDoc, setSeededDoc] = useState<LegalDoc | undefined>(undefined);
+  if (data && data !== seededDoc) {
+    setSeededDoc(data);
+    setBody(data.body_md);
+    setVersion(data.version);
+  }
 
   const handlePublish = async () => {
     if (!body.trim() || !version.trim()) return;
@@ -858,13 +870,14 @@ function PlataformaTab() {
   const [saveErr, setSaveErr] = useState('');
   const [saveOk, setSaveOk] = useState(false);
 
-  useEffect(() => {
-    if (cfg) {
-      setAmount(String(cfg.plan_amount));
-      setReason(cfg.plan_reason);
-      setEnforce(cfg.webhook_enforce);
-    }
-  }, [cfg]);
+  // Seed the form from the (re)fetched config — render-time adjust, no effect.
+  const [seededCfg, setSeededCfg] = useState<PlatformMPConfig | undefined>(undefined);
+  if (cfg && cfg !== seededCfg) {
+    setSeededCfg(cfg);
+    setAmount(String(cfg.plan_amount));
+    setReason(cfg.plan_reason);
+    setEnforce(cfg.webhook_enforce);
+  }
 
   const handleUnlock = async () => {
     if (!pwd) { setPwdErr('Ingresa tu contraseña'); return; }

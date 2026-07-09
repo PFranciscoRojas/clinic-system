@@ -702,11 +702,15 @@ export function NewAppointmentPage() {
 
   // Default when the list loads: the caller themselves if they're also
   // clinical staff (dual-role admin), otherwise the first professional.
+  // Fires only when the list lands (deps deliberately narrow) — the sync set
+  // is the one-shot default materializing into the <select>'s state.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!canAssignStaff || !orgUsers.length || selectedStaffId) return;
     const self = orgUsers.find(u => u.id === user?.user_id);
     setSelectedStaffId(self?.id ?? orgUsers[0].id);
   }, [canAssignStaff, orgUsers]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Pre-load patient from URL param (e.g. coming from patient profile)
   useEffect(() => {
@@ -765,10 +769,9 @@ export function NewAppointmentPage() {
     return new Set(slots.filter(s => toMinutes(s) <= cutoffMin));
   }, [date, slots]);
 
-  // Clear selected time if it becomes past when switching to today
-  useEffect(() => {
-    if (time && pastSlots.has(time)) setTime('');
-  }, [pastSlots, time]);
+  // Clear selected time if it becomes past when switching to today —
+  // render-time adjust (converges: clearing makes the guard false).
+  if (time && pastSlots.has(time)) setTime('');
 
   // 2. Blocked slots from staff's existing appointments (± configured buffer)
   const blockedSlots = useMemo<Set<string>>(() => {

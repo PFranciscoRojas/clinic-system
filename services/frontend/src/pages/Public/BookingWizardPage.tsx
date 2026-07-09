@@ -65,6 +65,9 @@ export function BookingWizardPage() {
   const hasPicker = professionals.length > 1;
 
   // Load availability when entering the slot step or changing modality/professional.
+  // The sync sets are the fetch-cycle reset (spinner on, stale selection off)
+  // that must precede the request — the standard fetch-on-params shape.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (step !== 'slot') return;
     setLoadingSlots(true); setNotFound(false); setSelDate('');
@@ -78,7 +81,8 @@ export function BookingWizardPage() {
       })
       .catch((e) => { if (e?.status === 404) setNotFound(true); setByDate({}); })
       .finally(() => setLoadingSlots(false));
-  }, [step, modality, slug, selProf]);
+  }, [step, modality, slug, selProf, from, to]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const submit = async () => {
     setErr('');
