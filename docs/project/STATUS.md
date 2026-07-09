@@ -44,16 +44,16 @@ Plan técnico en `docs/ai/PLAN_IA_puntos_2_6_7.md` (Puntos 2, 6, 7).
 
 ### Auditoría 360° (2026-07-01) — plan de corrección en `docs/ai/PLAN_AUDIT_FIXES.md`
 
-Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; features de producto → BACKLOG. **Fases 1 y 2 completadas y desplegadas** (2026-07-02):
+Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; features de producto → BACKLOG. **Fases 1, 2, 4, 5 y 6 completadas; Fase 3 casi completa** (verificado contra código 2026-07-09 — ver `docs/ai/PLAN_AUDIT_FIXES.md` para el detalle original de cada punto):
 
 | Fase | Estado | Contenido |
 |---|---|---|
 | 1 — Seguridad crítica | ✅ prod (PR #107) | docker.sock fuera de core-api (era RCE→root); hashes PII con HMAC-SHA256 + `SEARCH_PEPPER` (antes SHA-256 sin sal, reversible); `cmd/rehash` migró hashes existentes; cap real de upload de audio (`MaxBytesReader` + UUID) |
 | 2 — Bugs de sesión/auth | ✅ prod (PR #108) | single-flight en refresh (evita logout en plena sesión); `localStorage` selectivo (borradores clínicos sobreviven); refresh relee usuario desde BD (roles revocados/inactivos ya no sobreviven el TTL); 3 fetch ad-hoc → `api.getBlob` |
-| 3 — IA guardrails | ⬜ siguiente | temperature=0.2, anonimización (email + nombres literales), anti-injection, ICD-10 validado, jobs huérfanos del worker |
-| 4 — Plataforma/perf | ⬜ | cache SubscriptionGate, staticcheck en CI |
-| 5 — Tests | ⬜ (deuda #1) | testcontainers + test de aislamiento RLS, vitest para client.ts/RecordForm |
-| 6 — Frontend refactor | ⬜ | partir SettingsPage, drafts en logout |
+| 3 — IA guardrails | 🟡 falta 1 ítem | ✅ `temperature=0.2` (`ai-service/config.py`); ✅ anonimización con nombres literales del paciente + NER + regex doc/teléfono/email (`anonymization/ner.py`); ✅ ICD-10 validado vía FK `patient_diagnoses_icd10_code_fkey` → `ErrUnknownCode`; ✅ jobs huérfanos recuperados (`worker.py`: `_sweep_stuck` + `_reclaim_stale` vía XCLAIM). ⬜ **anti-injection pendiente**: la transcripción anonimizada se inyecta al mensaje de usuario sin delimitadores ni guardas contra instrucciones embebidas (`drafts/claude.py`) |
+| 4 — Plataforma/perf | ✅ resuelto | cache `SubscriptionGate` con TTL 60s (`middleware/subscription.go`); staticcheck en CI (`build-core-api.yml`) |
+| 5 — Tests | ✅ resuelto | testcontainers + tests de aislamiento RLS (`internal/integration/{infra,rls,needtoknow}_test.go`); vitest para `client.ts` y `RecordForm` |
+| 6 — Frontend refactor | ✅ resuelto | `SettingsPage` partido en 10 secciones bajo `components/settings/` (191 líneas, solo orquesta); `logout` hace `flushClinicalDrafts()` antes de invalidar el token (`AuthContext.tsx`) |
 
 ### Últimos PRs a `main`
 
