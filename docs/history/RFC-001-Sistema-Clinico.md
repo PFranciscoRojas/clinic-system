@@ -100,7 +100,7 @@ Welcome to Claude Code v2.1.118
        █████████      *
 …………………█ █   █ █………………………………………………………………………………………………………………
 
- Logged in as franciscorojas92@gmail.com
+ Logged in as [dev-admin]
  Login successful. Press Enter to continue…
 Welcome to Claude Code v2.1.118
 …………………………………………………………………………………………………………………………………………………………
@@ -119,7 +119,7 @@ Welcome to Claude Code v2.1.118
        █████████      *
 …………………█ █   █ █………………………………………………………………………………………………………………
 
- Logged in as franciscorojas92@gmail.com
+ Logged in as [dev-admin]
  Login successful. Press Enter to continue…
 Welcome to Claude Code v2.1.118
 …………………………………………………………………………………………………………………………………………………………
@@ -138,7 +138,7 @@ Welcome to Claude Code v2.1.118
        █████████      *
 …………………█ █   █ █………………………………………………………………………………………………………………
 
- Logged in as franciscorojas92@gmail.com
+ Logged in as [dev-admin]
  Login successful. Press Enter to continue…
 ╭─── Claude Code v2.1.118 ──────────────────────────────────────────────────────────────────────────────────╮
 │                                                    │ Tips for getting started                             │

@@ -25,19 +25,19 @@ $$## Política de Tratamiento de Datos Personales
 
 ### 1. Identificación del Responsable y del Encargado del tratamiento
 
-SGHCP (en adelante "SGHCP", "nosotros" o "el Encargado") es una plataforma de software como servicio (SaaS) para la gestión de historias clínicas psicológicas. Opera bajo la legislación colombiana.
+Chapni (en adelante "Chapni", "nosotros" o "el Encargado") es una plataforma de software como servicio (SaaS) para la gestión de historias clínicas psicológicas. Opera bajo la legislación colombiana.
 
-Para efectos de la Ley 1581 de 2012, el profesional o la institución que contrata el servicio (en adelante "el Responsable") es quien determina los fines y medios del tratamiento de los datos personales de sus pacientes. SGHCP actúa como Encargado del tratamiento, procesando dichos datos únicamente por instrucción del Responsable y conforme a las condiciones pactadas.
+Para efectos de la Ley 1581 de 2012, el profesional o la institución que contrata el servicio (en adelante "el Responsable") es quien determina los fines y medios del tratamiento de los datos personales de sus pacientes. Chapni actúa como Encargado del tratamiento, procesando dichos datos únicamente por instrucción del Responsable y conforme a las condiciones pactadas.
 
-Los datos personales del Responsable y de los usuarios de la plataforma (correo, nombre, información de pago) son tratados directamente por SGHCP en su calidad de Responsable para los fines descritos en esta política.
+Los datos personales del Responsable y de los usuarios de la plataforma (correo, nombre, información de pago) son tratados directamente por Chapni en su calidad de Responsable para los fines descritos en esta política.
 
 Canal de contacto: privacidad@chapni.com
 
 ### 2. Datos que recopilamos
 
-**De los profesionales y administradores (clientes de SGHCP):** nombre completo, correo electrónico, información de facturación y pago (procesada por MercadoPago S.A.S.), historial de suscripción, registros de uso y acceso.
+**De los profesionales y administradores (clientes de Chapni):** nombre completo, correo electrónico, información de facturación y pago (procesada por MercadoPago S.A.S.), historial de suscripción, registros de uso y acceso.
 
-**De los pacientes de nuestros clientes:** estos datos (nombre, número de documento, teléfono, historia clínica, notas SOAP) son ingresados por el profesional como Responsable. SGHCP los almacena cifrados (AES-256-GCM con clave única por paciente) y los trata exclusivamente para prestar el servicio contratado.
+**De los pacientes de nuestros clientes:** estos datos (nombre, número de documento, teléfono, historia clínica, notas SOAP) son ingresados por el profesional como Responsable. Chapni los almacena cifrados (AES-256-GCM con clave única por paciente) y los trata exclusivamente para prestar el servicio contratado.
 
 **Datos técnicos:** dirección IP, agente de usuario, registros de auditoría internos (fecha/hora de acceso, acciones realizadas). Estos registros son necesarios para la seguridad del sistema y el cumplimiento de la Resolución 1995 de 1999.
 
@@ -54,7 +54,7 @@ Canal de contacto: privacidad@chapni.com
 
 Como titular de datos personales, usted tiene los siguientes derechos reconocidos por la Ley 1581 de 2012:
 
-- Conocer los datos personales que SGHCP trata sobre usted.
+- Conocer los datos personales que Chapni trata sobre usted.
 - Actualizar y rectificar sus datos cuando sean inexactos, incompletos o fraccionados.
 - Solicitar la supresión de sus datos cuando no exista deber legal de conservarlos.
 - Revocar la autorización otorgada para el tratamiento, en los términos permitidos por la ley.
@@ -68,18 +68,18 @@ El término de respuesta es de 10 días hábiles para consultas y 15 días hábi
 
 ### 6. Encargados del tratamiento (sub-encargados)
 
-Para prestar el servicio, SGHCP comparte datos con los siguientes proveedores, quienes actúan como sub-encargados bajo acuerdos de confidencialidad y protección de datos:
+Para prestar el servicio, Chapni comparte datos con los siguientes proveedores, quienes actúan como sub-encargados bajo acuerdos de confidencialidad y protección de datos:
 
 - **MercadoPago S.A.S. (Colombia):** procesamiento de pagos y suscripciones.
 - **Anthropic PBC (EE. UU.):** modelos de inteligencia artificial para generación de borradores clínicos. Solo recibe texto anonimizado; nunca recibe nombre, documento ni datos de identificación del paciente.
 - **Hetzner Online GmbH (Alemania):** infraestructura de servidores donde residen los datos.
 - **Backblaze Inc. (EE. UU.):** almacenamiento de respaldos cifrados.
 
-El audio de las sesiones es procesado por Whisper, un modelo que corre localmente en la infraestructura de SGHCP. El audio nunca sale del servidor.
+El audio de las sesiones es procesado por Whisper, un modelo que corre localmente en la infraestructura de Chapni. El audio nunca sale del servidor.
 
 ### 7. Medidas de seguridad
 
-SGHCP implementa medidas técnicas y organizativas para proteger los datos, incluyendo: cifrado AES-256-GCM con clave única por paciente para todos los datos clínicos (nombre, documento, teléfono, notas); transmisión bajo TLS/HTTPS; control de acceso basado en roles (RBAC) con aislamiento multi-tenant por organización (Row-Level Security en PostgreSQL); autenticación con bcrypt; respaldos cifrados con GPG y almacenados en Backblaze B2; registro de auditoría de todas las operaciones sobre datos clínicos.
+Chapni implementa medidas técnicas y organizativas para proteger los datos, incluyendo: cifrado AES-256-GCM con clave única por paciente para todos los datos clínicos (nombre, documento, teléfono, notas); transmisión bajo TLS/HTTPS; control de acceso basado en roles (RBAC) con aislamiento multi-tenant por organización (Row-Level Security en PostgreSQL); autenticación con bcrypt; respaldos cifrados con GPG y almacenados en Backblaze B2; registro de auditoría de todas las operaciones sobre datos clínicos.
 
 ### 8. Período de conservación
 
@@ -89,7 +89,7 @@ Los borradores de historia clínica generados por IA y no aprobados por el profe
 
 ### 9. Modificaciones a esta política
 
-SGHCP podrá modificar esta política en cualquier momento. Los cambios materiales se comunicarán por correo electrónico con al menos 10 días de anticipación. El uso continuado del servicio después de dicho período implica la aceptación de la versión actualizada.$$
+Chapni podrá modificar esta política en cualquier momento. Los cambios materiales se comunicarán por correo electrónico con al menos 10 días de anticipación. El uso continuado del servicio después de dicho período implica la aceptación de la versión actualizada.$$
 );
 
 INSERT INTO legal_documents (doc_type, version, body_md) VALUES (
@@ -101,7 +101,7 @@ $$## Términos y Condiciones del Servicio
 
 ### 1. Descripción del servicio
 
-SGHCP es una plataforma de gestión de historias clínicas psicológicas (SaaS) que permite a profesionales de la salud mental y a sus equipos llevar registros clínicos, gestionar citas, obtener borradores asistidos por inteligencia artificial y administrar su consultorio.
+Chapni es una plataforma de gestión de historias clínicas psicológicas (SaaS) que permite a profesionales de la salud mental y a sus equipos llevar registros clínicos, gestionar citas, obtener borradores asistidos por inteligencia artificial y administrar su consultorio.
 
 El servicio es de uso exclusivo para profesionales habilitados y sus organizaciones. Al contratar el servicio, el profesional declara estar legalmente autorizado para ejercer la psicología o la salud mental en Colombia conforme a la Ley 1090 de 2006.
 
@@ -109,7 +109,7 @@ El servicio es de uso exclusivo para profesionales habilitados y sus organizacio
 
 Para usar el servicio es necesario crear una cuenta y proporcionar información veraz, actualizada y completa. El usuario es responsable de mantener la confidencialidad de sus credenciales y de todas las actividades realizadas desde su cuenta.
 
-SGHCP se reserva el derecho de suspender o cancelar cuentas que incumplan estos términos, sean utilizadas de forma fraudulenta, o cuya información resulte falsa o engañosa.
+Chapni se reserva el derecho de suspender o cancelar cuentas que incumplan estos términos, sean utilizadas de forma fraudulenta, o cuya información resulte falsa o engañosa.
 
 ### 3. Planes, suscripción y renovación automática
 
@@ -137,29 +137,29 @@ Para solicitar un reembolso, contacte a legal@chapni.com con el asunto "Solicitu
 
 ### 6. Inteligencia artificial — aviso legal
 
-SGHCP incorpora herramientas de inteligencia artificial para generar borradores de notas clínicas a partir de transcripciones de audio o datos ingresados por el profesional. Estos borradores son sugerencias automáticas y **NO** constituyen diagnósticos, prescripciones ni historia clínica definitiva.
+Chapni incorpora herramientas de inteligencia artificial para generar borradores de notas clínicas a partir de transcripciones de audio o datos ingresados por el profesional. Estos borradores son sugerencias automáticas y **NO** constituyen diagnósticos, prescripciones ni historia clínica definitiva.
 
 La responsabilidad clínica, diagnóstica y terapéutica recae exclusivamente en el profesional habilitado. El profesional debe revisar, editar y aprobar explícitamente cada borrador antes de que sea incorporado a la historia clínica.
 
-Los textos procesados por los modelos de IA se anonimizan antes de ser enviados al proveedor externo (Anthropic). El audio de las sesiones se procesa localmente y nunca sale de la infraestructura de SGHCP.
+Los textos procesados por los modelos de IA se anonimizan antes de ser enviados al proveedor externo (Anthropic). El audio de las sesiones se procesa localmente y nunca sale de la infraestructura de Chapni.
 
 ### 7. Propiedad intelectual
 
-El código fuente, diseño, marca y demás elementos de SGHCP son propiedad de sus desarrolladores y están protegidos por la Ley 23 de 1982 y la Decisión Andina 351. El usuario obtiene una licencia de uso limitada, no exclusiva e intransferible.
+El código fuente, diseño, marca y demás elementos de Chapni son propiedad de sus desarrolladores y están protegidos por la Ley 23 de 1982 y la Decisión Andina 351. El usuario obtiene una licencia de uso limitada, no exclusiva e intransferible.
 
-Los datos clínicos ingresados por el profesional y sus pacientes son de titularidad del profesional y/o de la organización. SGHCP no reclama derechos sobre dichos datos y se compromete a entregarlos o eliminarlos a solicitud del usuario conforme a la política de privacidad.
+Los datos clínicos ingresados por el profesional y sus pacientes son de titularidad del profesional y/o de la organización. Chapni no reclama derechos sobre dichos datos y se compromete a entregarlos o eliminarlos a solicitud del usuario conforme a la política de privacidad.
 
 ### 8. Limitación de responsabilidad
 
-SGHCP no garantiza la disponibilidad ininterrumpida del servicio; en caso de interrupción, el objetivo de recuperación es de 24 horas. Se excluye la responsabilidad por daños indirectos, lucro cesante o pérdida de datos ocasionada por causas fuera del control de SGHCP (fuerza mayor, fallas de proveedores de infraestructura, ataques externos).
+Chapni no garantiza la disponibilidad ininterrumpida del servicio; en caso de interrupción, el objetivo de recuperación es de 24 horas. Se excluye la responsabilidad por daños indirectos, lucro cesante o pérdida de datos ocasionada por causas fuera del control de Chapni (fuerza mayor, fallas de proveedores de infraestructura, ataques externos).
 
-La responsabilidad total de SGHCP frente al usuario no podrá superar el valor pagado por el servicio en los tres meses anteriores al evento que originó el daño.
+La responsabilidad total de Chapni frente al usuario no podrá superar el valor pagado por el servicio en los tres meses anteriores al evento que originó el daño.
 
 ### 9. Terminación del servicio
 
 El usuario puede cancelar su suscripción en cualquier momento desde Configuración → Facturación. Tras la cancelación, los datos se conservan durante 90 días para permitir la exportación. Después de ese plazo, los datos se eliminan salvo que la ley exija conservarlos (Resolución 1995 de 1999).
 
-SGHCP puede suspender o terminar el servicio por incumplimiento de estos términos, previa notificación por correo electrónico con un mínimo de 5 días hábiles de antelación, excepto en casos de uso fraudulento o ilegal.
+Chapni puede suspender o terminar el servicio por incumplimiento de estos términos, previa notificación por correo electrónico con un mínimo de 5 días hábiles de antelación, excepto en casos de uso fraudulento o ilegal.
 
 ### 10. Ley aplicable y jurisdicción
 
@@ -167,7 +167,7 @@ Estos términos se rigen por las leyes de la República de Colombia. Para la res
 
 ### 11. Modificaciones
 
-SGHCP podrá modificar estos términos notificando al usuario con al menos 10 días de antelación por correo electrónico. El uso continuado del servicio después de ese plazo implica la aceptación de los términos actualizados.$$
+Chapni podrá modificar estos términos notificando al usuario con al menos 10 días de antelación por correo electrónico. El uso continuado del servicio después de ese plazo implica la aceptación de los términos actualizados.$$
 );
 
 INSERT INTO legal_documents (doc_type, version, body_md) VALUES (
@@ -179,17 +179,17 @@ $$## Contrato de Encargo de Tratamiento de Datos
 
 ### 1. Objeto
 
-El presente Acuerdo de Tratamiento de Datos (en adelante "Acuerdo") regula la relación entre el profesional o la organización que utiliza la plataforma SGHCP (en adelante "el Responsable") y SGHCP en su calidad de Encargado del tratamiento, conforme a la Ley 1581 de 2012 y el Decreto 1377 de 2013.
+El presente Acuerdo de Tratamiento de Datos (en adelante "Acuerdo") regula la relación entre el profesional o la organización que utiliza la plataforma Chapni (en adelante "el Responsable") y Chapni en su calidad de Encargado del tratamiento, conforme a la Ley 1581 de 2012 y el Decreto 1377 de 2013.
 
-Mediante la aceptación de este Acuerdo, el Responsable instruye a SGHCP para que trate los datos personales de los pacientes y usuarios de su organización estrictamente conforme a las condiciones aquí pactadas.
+Mediante la aceptación de este Acuerdo, el Responsable instruye a Chapni para que trate los datos personales de los pacientes y usuarios de su organización estrictamente conforme a las condiciones aquí pactadas.
 
 ### 2. Naturaleza y alcance del encargo
 
-SGHCP tratará datos personales de pacientes (nombre, documento, datos de contacto, datos clínicos sensibles de salud) únicamente para prestar el servicio de gestión de historias clínicas y funciones relacionadas (agenda, facturación, generación de borradores IA con texto anonimizado).
+Chapni tratará datos personales de pacientes (nombre, documento, datos de contacto, datos clínicos sensibles de salud) únicamente para prestar el servicio de gestión de historias clínicas y funciones relacionadas (agenda, facturación, generación de borradores IA con texto anonimizado).
 
-SGHCP no tratará los datos para fines propios distintos a las instrucciones del Responsable, no los cederá a terceros no autorizados y no los comercializará.
+Chapni no tratará los datos para fines propios distintos a las instrucciones del Responsable, no los cederá a terceros no autorizados y no los comercializará.
 
-### 3. Obligaciones de SGHCP como Encargado
+### 3. Obligaciones de Chapni como Encargado
 
 - Tratar los datos únicamente según las instrucciones documentadas del Responsable.
 - Implementar medidas de seguridad técnicas y organizativas apropiadas (cifrado AES-256-GCM, control de acceso, auditoría, respaldos cifrados).
@@ -200,15 +200,15 @@ SGHCP no tratará los datos para fines propios distintos a las instrucciones del
 
 ### 4. Sub-encargados
 
-SGHCP podrá contratar sub-encargados para la prestación del servicio, incluyendo los proveedores listados en la Política de Privacidad (Hetzner, Backblaze, Anthropic con datos anonimizados, MercadoPago para facturación). El Responsable acepta esta lista al suscribir este Acuerdo.
+Chapni podrá contratar sub-encargados para la prestación del servicio, incluyendo los proveedores listados en la Política de Privacidad (Hetzner, Backblaze, Anthropic con datos anonimizados, MercadoPago para facturación). El Responsable acepta esta lista al suscribir este Acuerdo.
 
-SGHCP notificará al Responsable sobre cambios en los sub-encargados con al menos 10 días de antelación.
+Chapni notificará al Responsable sobre cambios en los sub-encargados con al menos 10 días de antelación.
 
 ### 5. Derechos de los titulares (pacientes)
 
-El Responsable (profesional) es quien debe atender directamente las solicitudes de derechos de sus pacientes (acceso, corrección, supresión). SGHCP facilitará el acceso técnico a los datos para que el Responsable pueda cumplir con estas solicitudes dentro de los plazos legales.
+El Responsable (profesional) es quien debe atender directamente las solicitudes de derechos de sus pacientes (acceso, corrección, supresión). Chapni facilitará el acceso técnico a los datos para que el Responsable pueda cumplir con estas solicitudes dentro de los plazos legales.
 
 ### 6. Duración
 
-Este Acuerdo tiene la misma vigencia que la suscripción al servicio SGHCP. Al cancelar la suscripción, el encargo termina y SGHCP procederá a eliminar los datos según la política de terminación descrita en los Términos y Condiciones.$$
+Este Acuerdo tiene la misma vigencia que la suscripción al servicio Chapni. Al cancelar la suscripción, el encargo termina y Chapni procederá a eliminar los datos según la política de terminación descrita en los Términos y Condiciones.$$
 );
