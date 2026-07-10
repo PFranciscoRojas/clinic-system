@@ -24,6 +24,7 @@ type orgRow struct {
 	Name               string     `json:"name"`
 	Slug               string     `json:"slug"`
 	SubscriptionStatus string     `json:"subscription_status"`
+	IsTest             bool       `json:"is_test"`
 	TrialEndsAt        *time.Time `json:"trial_ends_at"`
 	CurrentPeriodEnd   *time.Time `json:"current_period_end"`
 	CreatedAt          time.Time  `json:"created_at"`
@@ -40,7 +41,7 @@ type orgRow struct {
 // never paying clinics and would just clutter the screen.
 func (h *Handler) listOrgs(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.pool.Query(r.Context(), `
-		SELECT o.id, o.name, o.slug, o.subscription_status, o.trial_ends_at,
+		SELECT o.id, o.name, o.slug, o.subscription_status, o.is_test, o.trial_ends_at,
 		       o.current_period_end, o.created_at,
 		       COUNT(DISTINCT u.id)::int AS total_users,
 		       COUNT(DISTINCT p.id)::int AS total_patients,
@@ -65,7 +66,7 @@ func (h *Handler) listOrgs(w http.ResponseWriter, r *http.Request) {
 	orgs := []orgRow{}
 	for rows.Next() {
 		var o orgRow
-		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.SubscriptionStatus, &o.TrialEndsAt, &o.CurrentPeriodEnd, &o.CreatedAt, &o.TotalUsers, &o.TotalPatients, &o.SignupPhone, &o.SignupSource, &o.OwnerEmail); err != nil {
+		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.SubscriptionStatus, &o.IsTest, &o.TrialEndsAt, &o.CurrentPeriodEnd, &o.CreatedAt, &o.TotalUsers, &o.TotalPatients, &o.SignupPhone, &o.SignupSource, &o.OwnerEmail); err != nil {
 			httputil.WriteError(w, http.StatusInternalServerError, "scan error")
 			return
 		}

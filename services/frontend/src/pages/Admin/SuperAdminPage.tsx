@@ -540,6 +540,16 @@ function TenantsTab() {
   const suspend     = useMutation({ mutationFn: (id: string) => adminApi.suspendOrg(id), onSettled: invalidate });
   const cancel      = useMutation({ mutationFn: (id: string) => adminApi.cancelOrg(id), onSettled: invalidate });
   const extendTrial = useMutation({ mutationFn: ({ id, days }: { id: string; days: number }) => adminApi.extendTrial(id, days), onSettled: invalidate });
+  const testFlag    = useMutation({ mutationFn: ({ id, isTest }: { id: string; isTest: boolean }) => adminApi.setOrgTestFlag(id, isTest), onSettled: invalidate });
+  const deleteOrg   = useMutation({
+    mutationFn: ({ id, confirmation }: { id: string; confirmation: string }) => adminApi.deleteOrg(id, confirmation),
+    onSuccess: (res) => {
+      const rows = Object.values(res.deleted).reduce((a, b) => a + b, 0);
+      alert(`Organización "${res.slug}" eliminada por completo (${rows} filas).`);
+    },
+    onError: (e: Error) => alert(e.message || 'No se pudo eliminar la organización.'),
+    onSettled: invalidate,
+  });
 
   const handleActivate = (o: AdminOrg) => {
     const input = window.prompt(`Activar "${o.name}" — ¿cuántos meses?`, '1');
@@ -569,6 +579,21 @@ function TenantsTab() {
     if (!Number.isInteger(days) || days < 1 || days > 365) { alert('Ingresa entre 1 y 365.'); return; }
     setBusyId(o.id); extendTrial.mutate({ id: o.id, days });
   };
+  const handleToggleTest = (o: AdminOrg) => {
+    const msg = o.is_test
+      ? `¿Marcar "${o.name}" como organización REAL? Volverá a contar en métricas y quedará protegida contra eliminación inmediata.`
+      : `¿Marcar "${o.name}" como organización de PRUEBA? Saldrá de las métricas y podrá eliminarse por completo.`;
+    if (!window.confirm(msg)) return;
+    setBusyId(o.id); testFlag.mutate({ id: o.id, isTest: !o.is_test });
+  };
+  const handleDelete = (o: AdminOrg) => {
+    const typed = window.prompt(
+      `ELIMINAR POR COMPLETO "${o.name}" — se borran usuarios, pacientes, historias, citas, facturas, llaves y audios. No hay forma de recuperar nada.\n\nEscribe el slug (${o.slug}) para confirmar:`,
+    );
+    if (typed === null) return;
+    if (typed.trim() !== o.slug) { alert('El slug no coincide — no se eliminó nada.'); return; }
+    setBusyId(o.id); deleteOrg.mutate({ id: o.id, confirmation: typed.trim() });
+  };
 
   const btnStyle = (color: string): React.CSSProperties => ({
     border: 'none', background: color, color: '#fff', fontSize: 11.5, fontWeight: 600,
@@ -597,6 +622,10 @@ function TenantsTab() {
                     <div style={{ fontSize: 11.5, color: 'var(--s400)' }}>{o.slug}</div>
                   </div>
                   {/* Badges */}
+                  {o.is_test && (
+                    <span style={{ fontWeight: 700, fontSize: 12, color: '#b45309', background: '#fef3c7',
+                      border: '1px solid #fcd34d', borderRadius: 20, padding: '2px 10px', whiteSpace: 'nowrap' }}>Prueba</span>
+                  )}
                   <span style={{ fontWeight: 700, fontSize: 12, color: st.color, background: st.color + '18',
                     borderRadius: 20, padding: '3px 10px', whiteSpace: 'nowrap' }}>{st.label}</span>
                   <div style={{ fontSize: 12, color: 'var(--s500)', whiteSpace: 'nowrap' }}>
@@ -659,6 +688,14 @@ function TenantsTab() {
                         ✕ Cancelar cuenta
                       </button>
                     )}
+
+                    <button style={btnStyle(o.is_test ? '#16a34a' : '#b45309')} disabled={busy} onClick={() => handleToggleTest(o)}>
+                      {o.is_test ? '✔ Marcar como real' : '🧪 Marcar como prueba'}
+                    </button>
+
+                    <button style={{ ...btnStyle('#7f1d1d'), marginLeft: 'auto' }} disabled={busy} onClick={() => handleDelete(o)}>
+                      🗑 Eliminar por completo
+                    </button>
 
                     {busy && <span style={{ fontSize: 12, color: 'var(--s400)' }}>Procesando…</span>}
                     </div>
