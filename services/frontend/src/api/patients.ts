@@ -55,9 +55,11 @@ export const patientsApi = {
       .then(r => r.patients ?? []);
   },
 
-  // Search by exact paternal last name or exact document number
-  search: (params: { last_name?: string; document?: string; limit?: number; offset?: number }) => {
+  // Search by name (q: any name word, accent-insensitive, matches while
+  // typing) or by exact document number
+  search: (params: { q?: string; last_name?: string; document?: string; limit?: number; offset?: number }) => {
     const q = new URLSearchParams();
+    if (params.q)         q.set('q', params.q);
     if (params.last_name) q.set('last_name', params.last_name);
     if (params.document)  q.set('document', params.document);
     if (params.limit)     q.set('limit', String(params.limit));

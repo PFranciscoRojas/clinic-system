@@ -59,7 +59,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (string, error) {
 		fullName += " " + in.MaternalLastName
 	}
 
-	return s.repo.Create(ctx, patients.CreateParams{
+	id, err := s.repo.Create(ctx, patients.CreateParams{
 		OrganizationID:       in.OrganizationID,
 		DocumentTypeCode:     in.DocumentTypeCode,
 		DEKID:                dekID,
@@ -79,4 +79,15 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (string, error) {
 		BirthDate:            in.BirthDate,
 		Gender:               in.Gender,
 	})
+	if err != nil {
+		return "", err
+	}
+
+	// Encrypted-search index: prefix hashes over every name word, so the
+	// search box finds the patient by any name, accent-free, while typing.
+	tokens := hash.SearchTokenHashes(in.FirstName, in.MiddleName, in.PaternalLastName, in.MaternalLastName)
+	if err := s.repo.ReplaceSearchTokens(ctx, in.OrganizationID, id, tokens); err != nil {
+		return "", fmt.Errorf("index search tokens: %w", err)
+	}
+	return id, nil
 }

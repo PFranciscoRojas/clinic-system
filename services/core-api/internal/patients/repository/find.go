@@ -112,6 +112,18 @@ func (r *Repository) Search(ctx context.Context, orgID string, f patients.Search
 	`
 	args := []any{orgID}
 
+	if len(f.TokenHashes) > 0 {
+		// Every typed word must prefix-match some name word: the tokens table
+		// holds one peppered hash per prefix of each name word, so a patient
+		// matches when it owns all the query hashes.
+		args = append(args, f.TokenHashes, len(f.TokenHashes))
+		query += fmt.Sprintf(` AND id IN (
+			SELECT patient_id FROM patient_search_tokens
+			WHERE organization_id = $1 AND token_hash = ANY($%d)
+			GROUP BY patient_id
+			HAVING COUNT(DISTINCT token_hash) = $%d
+		)`, len(args)-1, len(args))
+	}
 	if f.PaternalLastNameHash != "" {
 		args = append(args, f.PaternalLastNameHash)
 		query += fmt.Sprintf(" AND paternal_last_name_hash = $%d", len(args))
