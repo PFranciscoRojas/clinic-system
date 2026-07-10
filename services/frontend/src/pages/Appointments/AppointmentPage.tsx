@@ -1089,6 +1089,25 @@ export function AppointmentPage() {
               {setupOpen ? (
                 <div className="card" style={{ padding: 18 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {/* Org-configured templates first — the clinic's own formats take
+                        precedence over the built-in integrated ones below. */}
+                    {setupTemplates.filter(t => {
+                      const allowed: UIRecordType[] = hasOpenProcess === undefined ? ['INITIAL','EVOLUTION','DISCHARGE'] : hasOpenProcess ? ['EVOLUTION','DISCHARGE'] : ['INITIAL'];
+                      return allowed.includes(t.record_type as UIRecordType);
+                    }).map(t => (
+                      <button key={t.id} type="button"
+                        onClick={() => { setSetupType(t.record_type as UIRecordType); setSetupTemplateId(t.id); confirmSetup(); }}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s, background 0.15s' }}
+                        onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLButtonElement).style.background = '#f3f2fb'; }}
+                        onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--s200)'; (e.currentTarget as HTMLButtonElement).style.background = '#fff'; }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>{t.name}</div>
+                          <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>Formato configurado del consultorio</div>
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--s600)', background: 'var(--s100)', border: '1px solid var(--s200)', borderRadius: 5, padding: '2px 8px', flexShrink: 0 }}>{RECORD_TYPE_LABEL[t.record_type] ?? t.record_type}</span>
+                      </button>
+                    ))}
                     {([
                       { type: 'INITIAL' as UIRecordType, label: 'Apertura', desc: 'Historia clínica inicial del proceso' },
                       { type: 'EVOLUTION' as UIRecordType, label: 'Evolución', desc: 'Nota de sesión de seguimiento' },
@@ -1577,6 +1596,25 @@ export function AppointmentPage() {
               <button aria-label="Cancelar" onClick={() => setSetupOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)', padding: 6, minWidth: 32, minHeight: 32 }}><X size={16} /></button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {/* Org-configured templates first — the clinic's own formats take
+                  precedence over the built-in integrated ones below. */}
+              {setupTemplates.filter(t => {
+                const allowed: UIRecordType[] = hasOpenProcess === undefined ? ['INITIAL','EVOLUTION','DISCHARGE'] : hasOpenProcess ? ['EVOLUTION','DISCHARGE'] : ['INITIAL'];
+                return allowed.includes(t.record_type as UIRecordType);
+              }).map(t => (
+                <button key={t.id} type="button"
+                  onClick={() => { setSetupType(t.record_type as UIRecordType); setSetupTemplateId(t.id); confirmSetup(); }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s, background 0.15s' }}
+                  onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLButtonElement).style.background = '#f3f2fb'; }}
+                  onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--s200)'; (e.currentTarget as HTMLButtonElement).style.background = '#fff'; }}
+                >
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--s800)' }}>{t.name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 1 }}>Formato configurado del consultorio</div>
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--s600)', background: 'var(--s100)', border: '1px solid var(--s200)', borderRadius: 5, padding: '2px 7px', flexShrink: 0 }}>{RECORD_TYPE_LABEL[t.record_type] ?? t.record_type}</span>
+                </button>
+              ))}
               {/* Built-in formats — one card per type, filtered by process state */}
               {([
                 { type: 'INITIAL' as UIRecordType, label: 'Apertura', desc: 'Historia clínica inicial del proceso' },
