@@ -71,6 +71,10 @@ function FormatPickerList({ templates, loading, hasOpenProcess, onPick }: {
     ? ['INITIAL', 'EVOLUTION', 'DISCHARGE']
     : hasOpenProcess ? ['EVOLUTION', 'DISCHARGE'] : ['INITIAL'];
   const visible = templates.filter(t => allowed.includes(t.record_type as UIRecordType));
+  // For the stage-mismatch empty state: name what the org DOES have, so the
+  // professional understands the missing piece is one specific type — not
+  // that their configuration vanished.
+  const configuredTypes = [...new Set(templates.map(t => RECORD_TYPE_LABEL[t.record_type] ?? t.record_type))].join(', ');
 
   if (loading) {
     return <div style={{ display: 'flex', justifyContent: 'center', padding: '18px 0' }}><Spinner size={20} color="var(--teal)" /></div>;
@@ -83,8 +87,8 @@ function FormatPickerList({ templates, loading, hasOpenProcess, onPick }: {
           {templates.length === 0
             ? 'Tu organización aún no tiene formatos de registro configurados.'
             : hasOpenProcess
-              ? 'No hay formatos de evolución o alta configurados para continuar este proceso.'
-              : 'No hay un formato de tipo Inicial configurado para abrir un proceso.'}
+              ? `Este paciente tiene un proceso abierto y se necesita un formato de tipo Evolución o Alta. Tu organización solo tiene configurados: ${configuredTypes}.`
+              : `Este paciente aún no tiene proceso abierto y se necesita un formato de tipo Inicial (apertura). Tu organización solo tiene configurados: ${configuredTypes}.`}
         </p>
         <button type="button" onClick={() => navigate('/settings/record_templates')}
           style={{ padding: '10px 20px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 7 }}>
@@ -794,6 +798,12 @@ export function AppointmentPage() {
       }
     } else {
       setProcessingAudio(false);
+      // The patient consented to recording but the session ended with no
+      // captured audio (mic never started, or the recorder produced nothing).
+      // Say so explicitly — a silent finish reads as "the AI broke".
+      if (recordingConsent) {
+        setRecNote('La sesión finalizó sin grabación activa, así que no se generará borrador de IA. Si tienes el audio, súbelo manualmente en la sección de grabación.');
+      }
     }
   };
 
