@@ -3,9 +3,11 @@
 // unsalted SHA-256; safe to re-run (hashes are derived data, recomputed from
 // the authoritative plaintext/ciphertext columns).
 //
-// Touches: users.email_hash (from the plaintext email column) and
+// Touches: users.email_hash (from the plaintext email column),
 // patients.{paternal_last_name_hash, full_name_search_hash, doc_search_hash}
-// (decrypting the name/document ciphertexts with each patient's DEK).
+// (decrypting the name/document ciphertexts with each patient's DEK), and
+// rebuilds patient_search_tokens (the encrypted-search prefix index) — so it
+// doubles as the backfill after introducing or re-keying that index.
 //
 // Runs inside the core-api container, which already has the required env:
 //
@@ -137,7 +139,7 @@ func rehashPatients(ctx context.Context, tx pgx.Tx, km *crypto.KeyManager) (int,
 		if _, err := tx.Exec(ctx, `SELECT set_config('app.current_org', $1, true)`, orgID); err != nil {
 			return 0, err
 		}
-		n, err := rehashOrgPatients(ctx, tx, km)
+		n, err := rehashOrgPatients(ctx, tx, km, orgID)
 		if err != nil {
 			return 0, fmt.Errorf("org %s: %w", orgID, err)
 		}
@@ -146,16 +148,16 @@ func rehashPatients(ctx context.Context, tx pgx.Tx, km *crypto.KeyManager) (int,
 	return total, nil
 }
 
-func rehashOrgPatients(ctx context.Context, tx pgx.Tx, km *crypto.KeyManager) (int, error) {
+func rehashOrgPatients(ctx context.Context, tx pgx.Tx, km *crypto.KeyManager, orgID string) (int, error) {
 	type row struct {
-		id                                  string
-		firstEnc, paternalEnc, maternalEnc  []byte
-		docEnc, encryptedDEK                []byte
-		keySource                           string
+		id                                            string
+		firstEnc, middleEnc, paternalEnc, maternalEnc []byte
+		docEnc, encryptedDEK                          []byte
+		keySource                                     string
 	}
 
 	rows, err := tx.Query(ctx, `
-		SELECT p.id, p.first_name_enc, p.paternal_last_name_enc,
+		SELECT p.id, p.first_name_enc, p.middle_name_enc, p.paternal_last_name_enc,
 		       p.maternal_last_name_enc, p.document_number_enc,
 		       k.encrypted_dek, k.key_source
 		FROM patients p
@@ -167,7 +169,7 @@ func rehashOrgPatients(ctx context.Context, tx pgx.Tx, km *crypto.KeyManager) (i
 	var all []row
 	for rows.Next() {
 		var r row
-		if err := rows.Scan(&r.id, &r.firstEnc, &r.paternalEnc, &r.maternalEnc,
+		if err := rows.Scan(&r.id, &r.firstEnc, &r.middleEnc, &r.paternalEnc, &r.maternalEnc,
 			&r.docEnc, &r.encryptedDEK, &r.keySource); err != nil {
 			rows.Close()
 			return 0, err
@@ -180,8 +182,8 @@ func rehashOrgPatients(ctx context.Context, tx pgx.Tx, km *crypto.KeyManager) (i
 	}
 
 	for _, r := range all {
-		if err := rehashOnePatient(ctx, tx, km, r.id, r.keySource, r.encryptedDEK,
-			r.firstEnc, r.paternalEnc, r.maternalEnc, r.docEnc); err != nil {
+		if err := rehashOnePatient(ctx, tx, km, orgID, r.id, r.keySource, r.encryptedDEK,
+			r.firstEnc, r.middleEnc, r.paternalEnc, r.maternalEnc, r.docEnc); err != nil {
 			return 0, fmt.Errorf("patient %s: %w", r.id, err)
 		}
 	}
@@ -189,7 +191,7 @@ func rehashOrgPatients(ctx context.Context, tx pgx.Tx, km *crypto.KeyManager) (i
 }
 
 func rehashOnePatient(ctx context.Context, tx pgx.Tx, km *crypto.KeyManager,
-	id, keySource string, encryptedDEK, firstEnc, paternalEnc, maternalEnc, docEnc []byte) error {
+	orgID, id, keySource string, encryptedDEK, firstEnc, middleEnc, paternalEnc, maternalEnc, docEnc []byte) error {
 	dek, err := km.DecryptDEK(keySource, encryptedDEK)
 	if err != nil {
 		return fmt.Errorf("decrypt DEK: %w", err)
@@ -199,6 +201,10 @@ func rehashOnePatient(ctx context.Context, tx pgx.Tx, km *crypto.KeyManager,
 	first, err := openField(dek, firstEnc)
 	if err != nil {
 		return fmt.Errorf("first_name: %w", err)
+	}
+	middle, err := openField(dek, middleEnc)
+	if err != nil {
+		return fmt.Errorf("middle_name: %w", err)
 	}
 	paternal, err := openField(dek, paternalEnc)
 	if err != nil {
@@ -223,13 +229,32 @@ func rehashOnePatient(ctx context.Context, tx pgx.Tx, km *crypto.KeyManager,
 		docHash = &h
 	}
 
-	_, err = tx.Exec(ctx, `
+	if _, err := tx.Exec(ctx, `
 		UPDATE patients
 		SET paternal_last_name_hash = $2,
 		    full_name_search_hash   = $3,
 		    doc_search_hash         = $4
 		WHERE id = $1
-	`, id, hash.Normalize(paternal), hash.Normalize(fullName), docHash)
+	`, id, hash.Normalize(paternal), hash.Normalize(fullName), docHash); err != nil {
+		return err
+	}
+
+	// Rebuild the encrypted-search token index (prefix hashes per name word)
+	// exactly as patients/service.Create writes it.
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM patient_search_tokens WHERE organization_id = $1 AND patient_id = $2`,
+		orgID, id); err != nil {
+		return err
+	}
+	tokens := hash.SearchTokenHashes(first, middle, paternal, maternal)
+	if len(tokens) == 0 {
+		return nil
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO patient_search_tokens (organization_id, patient_id, token_hash)
+		SELECT $1, $2, unnest($3::text[])
+		ON CONFLICT DO NOTHING
+	`, orgID, id, tokens)
 	return err
 }
 

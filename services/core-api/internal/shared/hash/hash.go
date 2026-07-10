@@ -7,6 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
+
+	"golang.org/x/text/runes"
+	"golang.org/x/text/transform"
+	"golang.org/x/text/unicode/norm"
 )
 
 // pepper keys every Normalize digest. Set once at startup via Init; kept
@@ -48,6 +53,77 @@ func Normalize(s string) string {
 	mac := hmac.New(sha256.New, pepper)
 	mac.Write([]byte(strings.ToLower(strings.TrimSpace(s))))
 	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// deaccentTransformer strips combining marks after NFD decomposition, so
+// "Muñoz" and "Munoz", "María" and "Maria" normalize to the same bytes.
+var deaccentTransformer = transform.Chain(
+	norm.NFD,
+	runes.Remove(runes.In(unicode.Mn)),
+	norm.NFC,
+)
+
+// foldToken lowercases, trims and strips diacritics — the canonical form
+// every search token (write and read side) passes through before hashing.
+func foldToken(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if out, _, err := transform.String(deaccentTransformer, s); err == nil {
+		s = out
+	}
+	return s
+}
+
+// searchTokenMinPrefix/MaxPrefix bound the per-word prefix expansion: two
+// characters is enough for type-ahead ("ma" → María) without exploding row
+// counts, and no real name word needs more than 24.
+const (
+	searchTokenMinPrefix = 2
+	searchTokenMaxPrefix = 24
+)
+
+// SearchTokenHashes is the WRITE side of encrypted patient search: for every
+// word in the given fields it emits the peppered hash of each prefix from
+// searchTokenMinPrefix runes up to the full word. Deduplicated; empty fields
+// are skipped. Panics if Init was not called (same contract as Normalize).
+func SearchTokenHashes(fields ...string) []string {
+	seen := make(map[string]struct{})
+	var out []string
+	for _, f := range fields {
+		for _, word := range strings.Fields(foldToken(f)) {
+			r := []rune(word)
+			if len(r) > searchTokenMaxPrefix {
+				r = r[:searchTokenMaxPrefix]
+			}
+			for i := searchTokenMinPrefix; i <= len(r); i++ {
+				h := Normalize(string(r[:i]))
+				if _, dup := seen[h]; !dup {
+					seen[h] = struct{}{}
+					out = append(out, h)
+				}
+			}
+		}
+	}
+	return out
+}
+
+// SearchQueryHashes is the READ side: one peppered hash per word of the typed
+// query, folded exactly like the write side. A patient matches when its token
+// set contains every one of these hashes (each typed word is a prefix of some
+// name word). Words shorter than searchTokenMinPrefix are dropped — they have
+// no counterpart in the index.
+func SearchQueryHashes(q string) []string {
+	var out []string
+	for _, word := range strings.Fields(foldToken(q)) {
+		r := []rune(word)
+		if len(r) < searchTokenMinPrefix {
+			continue
+		}
+		if len(r) > searchTokenMaxPrefix {
+			r = r[:searchTokenMaxPrefix]
+		}
+		out = append(out, Normalize(string(r)))
+	}
+	return out
 }
 
 // Token SHA-256 hashes a high-entropy secret (password-reset link token,

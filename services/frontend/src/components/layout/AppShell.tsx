@@ -63,8 +63,9 @@ export function AppShell({ children }: Props) {
     return () => document.removeEventListener('mousedown', handle);
   }, []);
 
-  // Global patient search — the encrypted-PII backend matches by exact
-  // paternal last name or exact document number (hash search, no LIKE).
+  // Global patient search — the encrypted-PII backend matches hashed name
+  // tokens (any name word, accent-insensitive, prefix while typing) or the
+  // exact document number. Never LIKE over ciphertext.
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(search.trim()), 300);
     return () => clearTimeout(t);
@@ -74,7 +75,7 @@ export function AppShell({ children }: Props) {
     queryKey: ['global-patient-search', debouncedQ],
     queryFn: () => /^\d{4,}$/.test(debouncedQ)
       ? patientsApi.search({ document: debouncedQ, limit: 8 })
-      : patientsApi.search({ last_name: debouncedQ, limit: 8 }),
+      : patientsApi.search({ q: debouncedQ, limit: 8 }),
     enabled: debouncedQ.length >= 2,
   });
 
@@ -442,7 +443,7 @@ export function AppShell({ children }: Props) {
                   onFocus={() => { setSearchFocus(true); if (search) setSearchOpen(true); }}
                   onBlur={() => setSearchFocus(false)}
                   onKeyDown={e => { if (e.key === 'Escape') { setSearch(''); setSearchOpen(false); } }}
-                  placeholder="Buscar paciente por apellido o documento…"
+                  placeholder="Buscar por nombre, apellido o documento…"
                   style={{ border: 'none', background: 'transparent', fontSize: 13.5, color: 'var(--s700)', width: '100%' }}
                 />
                 {search && (

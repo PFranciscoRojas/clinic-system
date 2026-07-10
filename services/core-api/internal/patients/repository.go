@@ -12,6 +12,7 @@ type Repository interface {
 	List(ctx context.Context, orgID string, limit, offset int) ([]*RawPatient, error)
 	ListAll(ctx context.Context, orgID string) ([]*RawPatient, error)
 	Search(ctx context.Context, orgID string, filter SearchFilter) ([]*RawPatient, error)
+	ReplaceSearchTokens(ctx context.Context, orgID, patientID string, tokenHashes []string) error
 	Update(ctx context.Context, p UpdateParams) error
 	Deactivate(ctx context.Context, orgID, patientID string) error
 }

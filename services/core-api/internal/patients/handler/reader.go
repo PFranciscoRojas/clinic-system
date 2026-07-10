@@ -27,7 +27,9 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /api/v1/patients                      → paginated list (all active)
-// GET /api/v1/patients?last_name=García     → search by exact paternal last name
+// GET /api/v1/patients?q=mari perez         → name search: any name word,
+//	accent-insensitive, matches while typing (prefix). last_name= behaves
+//	the same (kept for compatibility).
 // GET /api/v1/patients?document=1234567890  → search by exact document number
 func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
@@ -35,6 +37,7 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 
 	limit, _ := strconv.Atoi(q.Get("limit"))
 	offset, _ := strconv.Atoi(q.Get("offset"))
+	query := q.Get("q")
 	lastName := q.Get("last_name")
 	document := q.Get("document")
 
@@ -43,7 +46,7 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 		err  error
 	)
 
-	if lastName == "" && document == "" {
+	if query == "" && lastName == "" && document == "" {
 		list, err = h.svc.List(r.Context(), patientssvc.ListInput{
 			OrganizationID: claims.OrganizationID,
 			Limit:          limit,
@@ -52,6 +55,7 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 	} else {
 		list, err = h.svc.Search(r.Context(), patientssvc.SearchInput{
 			OrganizationID:   claims.OrganizationID,
+			Query:            query,
 			PaternalLastName: lastName,
 			DocumentNumber:   document,
 			Limit:            limit,

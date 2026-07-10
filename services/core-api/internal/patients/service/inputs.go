@@ -48,8 +48,11 @@ type UpdateInput struct {
 }
 
 // SearchInput holds plain-text search terms; exactly one filter field must be set.
+// Query is the smart path: any name words, accent-insensitive, matches while
+// typing. PaternalLastName is kept for API compatibility and behaves like Query.
 type SearchInput struct {
 	OrganizationID   string
+	Query            string
 	PaternalLastName string
 	DocumentNumber   string
 	Limit            int

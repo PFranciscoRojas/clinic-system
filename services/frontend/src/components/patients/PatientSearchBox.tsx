@@ -41,7 +41,7 @@ export function PatientSearchBox({ selected, onSelect, onNewPatient }: PatientSe
   const { data: results = [], isFetching } = useQuery({
     queryKey: ['patients-search', query],
     queryFn: () => query.length >= 2
-      ? patientsApi.search({ last_name: query, limit: 8 })
+      ? patientsApi.search({ q: query, limit: 8 })
       : patientsApi.list({ limit: 8 }),
     enabled: open,
   });
@@ -94,7 +94,7 @@ export function PatientSearchBox({ selected, onSelect, onNewPatient }: PatientSe
           value={query}
           onChange={e => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
-          placeholder="Buscar paciente por apellido…"
+          placeholder="Buscar paciente por nombre o apellido…"
           style={{ border: 'none', outline: 'none', flex: 1, fontSize: 14, color: 'var(--s800)', background: 'transparent' }}
         />
         {isFetching && <Spinner size={14} color="var(--teal)" />}

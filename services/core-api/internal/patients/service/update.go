@@ -63,7 +63,7 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) error {
 		fullName += " " + in.MaternalLastName
 	}
 
-	return s.repo.Update(ctx, patients.UpdateParams{
+	if err := s.repo.Update(ctx, patients.UpdateParams{
 		PatientID:            in.PatientID,
 		OrganizationID:       in.OrganizationID,
 		FirstNameEnc:         sealed.FirstNameEnc,
@@ -82,7 +82,16 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) error {
 		DocumentNumberEnc:    docEnc,
 		DocSearchHash:        docHash,
 		BirthDate:            in.BirthDate,
-	})
+	}); err != nil {
+		return err
+	}
+
+	// Names may have changed — rebuild the encrypted-search index to match.
+	tokens := hash.SearchTokenHashes(in.FirstName, in.MiddleName, in.PaternalLastName, in.MaternalLastName)
+	if err := s.repo.ReplaceSearchTokens(ctx, in.OrganizationID, in.PatientID, tokens); err != nil {
+		return fmt.Errorf("index search tokens: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) Deactivate(ctx context.Context, orgID, patientID string) error {

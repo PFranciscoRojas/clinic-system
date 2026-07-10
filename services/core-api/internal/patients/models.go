@@ -107,8 +107,10 @@ type EncKeyRow struct {
 }
 
 // SearchFilter holds the hashed query values used for indexed lookups.
-// Search by paternal last name hash OR document hash — not both simultaneously.
+// TokenHashes (name search: every typed word must prefix-match some name
+// word via patient_search_tokens) OR DocSearchHash — not both simultaneously.
 type SearchFilter struct {
+	TokenHashes          []string
 	PaternalLastNameHash string
 	DocSearchHash        string
 	Limit                int

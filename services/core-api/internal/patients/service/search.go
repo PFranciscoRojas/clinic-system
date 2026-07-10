@@ -9,19 +9,25 @@ import (
 )
 
 func (s *Service) Search(ctx context.Context, in SearchInput) ([]*patients.Patient, error) {
-	if in.PaternalLastName == "" && in.DocumentNumber == "" {
-		return nil, fmt.Errorf("%w: provide paternal_last_name or document_number", patients.ErrInvalidInput)
+	if in.Query == "" && in.PaternalLastName == "" && in.DocumentNumber == "" {
+		return nil, fmt.Errorf("%w: provide q, paternal_last_name or document_number", patients.ErrInvalidInput)
 	}
 	if in.Limit <= 0 || in.Limit > 100 {
 		in.Limit = 20
 	}
 
 	filter := patients.SearchFilter{Limit: in.Limit, Offset: in.Offset}
-	if in.PaternalLastName != "" {
-		filter.PaternalLastNameHash = hash.Normalize(in.PaternalLastName)
-	}
 	if in.DocumentNumber != "" {
 		filter.DocSearchHash = hash.Normalize(in.DocumentNumber)
+	} else {
+		// Name search goes through the token index: accent-insensitive, any
+		// name word, prefix matching. last_name rides the same path — its old
+		// exact-hash behavior was the "only finds the exact surname" complaint.
+		filter.TokenHashes = hash.SearchQueryHashes(in.Query + " " + in.PaternalLastName)
+		if len(filter.TokenHashes) == 0 {
+			// Too short to index (single character) — nothing can match.
+			return []*patients.Patient{}, nil
+		}
 	}
 
 	rows, err := s.repo.Search(ctx, in.OrganizationID, filter)
