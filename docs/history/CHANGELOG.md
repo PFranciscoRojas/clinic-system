@@ -11,6 +11,8 @@
 - refactor(frontend): reglas react-hooks `set-state-in-effect`/`exhaustive-deps` a `error` (PR #164) — 32 findings refactorizados, 7 disables justificados. Smoke de navegador real contra prod OK.
 - ops: branch protection activa en `main` (require PR, enforce_admins, 0 approvals) · password del demo `consultorio-aurora` reseteada a la del seed para diagnóstico.
 - feat(marketing): hub `chapni.com/recursos` construido y desplegado (`b9c6fd7` en `../chapni`) — 4 guías/plantillas con schema Article+FAQPage, el multiplicador SEO/GEO pendiente del plan.
+- feat(marketing): sistema de content-ops social completo — skill `chapni-social` con auditoría de estado, ritual dominical en batch, log con confirmación de publicación en el repo chapni, sinergia con `/recursos` y política de slots perdidos; rutina cloud dominical (8am Bogotá) que audita el log y reporta a Gmail, probada end-to-end (requirió instalar la GitHub App).
+- chore(marketing): perfiles sociales terminados — FB `chapniapp` con NAP completo, LinkedIn corregido (tipo, lema con keywords, About con "la IA sugiere, tú firmas"), banners oficiales generados (`render_banner.py`) y subidos. Posts reales: jueves LinkedIn publicado, viernes IG+FB programado (estreno del perfil de IG).
 
 ---
 
