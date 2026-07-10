@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { authApi, type Me } from '@/api/auth';
 import { flushClinicalDrafts, clearClinicalDrafts } from '@/lib/clinicalDrafts';
 
@@ -14,6 +15,7 @@ interface AuthState {
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser]       = useState<Me | null>(null);
   // Only start in "loading" when there is actually a session to restore — the
   // no-token case is decidable synchronously at init, not inside the effect.
@@ -42,6 +44,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string): Promise<Me> => {
     const tokens = await authApi.login(email, password);
+    // Every cached query (templates, patients, agenda…) is tenant data and
+    // the query keys don't carry the org id — a login into a different
+    // organization in the same tab would otherwise keep serving the previous
+    // org's cached responses until each query refetches.
+    queryClient.clear();
     localStorage.setItem('access_token', tokens.access_token);
     localStorage.setItem('refresh_token', tokens.refresh_token);
     const me = await fetchMe();
@@ -66,6 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     clearClinicalDrafts();
+    queryClient.clear();
     setUser(null);
   };
 
