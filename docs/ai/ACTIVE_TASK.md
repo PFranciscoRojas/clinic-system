@@ -1,17 +1,16 @@
 ## Sin tarea pendiente
 
-Sesión 2026-07-09 (día completo, dos bloques, cierre limpio):
+Sesión 2026-07-10 cerrada limpia (PRs #167–#176, todo mergeado, desplegado y verificado):
 
-Bloque técnico (PRs #159-#165, todo desplegado y verificado): responsive móvil de punta a punta (causa raíz `1fr`→min-content hallada con Playwright contra prod), auditoría 360° cerrada al 100% (anti prompt-injection + visor de borrador bloqueado con plantillas custom), reglas react-hooks a `error` (32 findings refactorizados), branch protection en `main`, hub `chapni.com/recursos` con 4 guías desplegado, limpieza (seed Chapni, legal muerto, RFC-001).
+- **Formatos org-only de punta a punta**: el picker de sesión ofrece solo los formatos que configuró la organización (sin "integrado"); `TemplatedSectionsForm` reescrito con los estilos reales de la app (estaba en Tailwind, que este frontend no tiene); el `record_type` se deriva de la etapa del proceso (la plantilla solo define campos — una org con un solo formato SOAP abre historia y evoluciona con él); selector de tipo en el editor de plantillas (antes clavado a EVOLUTION); caché React Query limpiada en login/logout (fuga entre tenants); "Cambiar formato" con modal in-app (PWA móvil suprimía `window.confirm`); aprobar borrador IA con plantilla reparado (faltaba `WithTemplateRepo` en el handler de aidrafts).
+- **Admin de tenants**: `organizations.is_test` (migración 000062) + eliminación total transaccional de orgs de prueba (30+ tablas, usuarios, DEKs, audios); las reales NUNCA son eliminables (Res. 1995/1999); métricas excluyen orgs de prueba.
+- **Búsqueda inteligente de pacientes** (migración 000063): índice `patient_search_tokens` con hashes peppered por prefijo de palabra sin tildes; `?q=` encuentra por cualquier parte del nombre mientras se escribe; backfill con `rehash` corrido en prod (7 pacientes).
 
-Bloque content-ops (commits `4515d7b..5e58930` en `../chapni` + skill `chapni-social`): sistema completo de operación social — auditoría de estado en la skill (`estado`/`semana`), log con confirmación de publicación en el repo chapni, sinergia Educativo↔`/recursos`, política de slots perdidos, ritual dominical en batch, rutina cloud `trig_01Brer4kRkziJPdUesVNnQ9k` (domingos 8am Bogotá → reporte a Gmail, probada end-to-end). Perfiles sociales terminados (FB `chapniapp` NAP completo, LinkedIn corregido, banners oficiales subidos). Jueves LinkedIn publicado ✅, viernes IG+FB programado.
-
-Notas operativas: demo `consultorio-aurora` = `franciscorojas92+aurora@gmail.com` / `Marketing1234!`. GitHub App de Claude instalada en chapni+clinic-system. La PWA puede servir bundle viejo en el teléfono hasta recargar. Contenedor huérfano `clinic-system-core-api-run-*` en el VPS pendiente de matar.
+**Acción manual pendiente del usuario (no de código):** Superadmin → Tenants → marcar `marcelachapues` y `consultorio-aurora` como prueba y eliminarlas escribiendo su slug. `marcela-chapues` es la real y queda protegida.
 
 ## Sugerencia de siguiente paso
 
 Basándome en STATUS.md (bloqueantes + roadmap) y BACKLOG.md, lo más valioso a atacar ahora es:
 
-1. **Beta de diseño con 2-3 psicólogas externas** — el bloqueante más antiguo del go-live 1.0.0, ya sin excusa técnica (auditoría cerrada, app responsive, perfiles sociales presentables). Mensaje de reclutamiento aprobado en BACKLOG → Validación. Acción del founder.
-2. **Entrevistas de validación B2B (5 IPS/clínicas)** — guion en `PLAN_B2B_COMERCIAL.md`; van antes del precio por tramo.
-3. Rutina establecida que corre sola: domingo 8am llega el reporte → correr `/chapni-social semana` (próxima guía del hub: Ley 1090, domingo 20 de julio). Si toca código: runbook de backup/DR pre go-live, o WhatsApp Meta (verificar desbloqueo del cargo pagado).
+1. **Cierre (DISCHARGE) con plantilla personalizada** (BACKLOG → Plantillas Fase 2, 2026-07-10) — el backend exige `discharge_reason` válido incluso con `template_id`, y el flujo templado de `RecordForm`/`AIDraftPage` no parece pedirlo. La org real de Marcela usa plantilla para los 4 formatos: su primer cierre real fallaría con "datos inválidos". Fix corto que desbloquea a la única usuaria real.
+2. **Beta de diseño con 2-3 psicólogas externas** (bloqueante 🔴 más antiguo del 1.0.0) — ya sin excusa técnica: formatos configurables funcionando end-to-end, buscador decente, responsive. Acción del founder. Alternativa técnica: verificar desbloqueo de WhatsApp Meta (🟡) y configurar `tpl_reminder_24h`/`tpl_reminder_2h`.

@@ -100,6 +100,8 @@
 
 ## Plantillas de registro — Fase 2 (post sesión 15)
 
+- **Alta (DISCHARGE) con plantilla personalizada: capturar `discharge_reason` (2026-07-10)** — el backend exige un `discharge_reason` válido para todo registro DISCHARGE (incluso con `template_id`), pero el camino templado de `RecordForm`/`AIDraftPage` no parece pedirlo (el formulario integrado sí tiene los radios de motivo de cierre). Verificar con la plantilla "Informe de Cierre" de marcela-chapues y, si falta, añadir el selector de motivo al flujo templado — hoy probablemente falla con "datos inválidos" al guardar un cierre con plantilla.
+
 - **Autodetección de plantilla por IA (2026-06-28)** — cuando el profesional no elige plantilla, que el LLM detecte el tipo de registro y sugiera la plantilla más adecuada basándose en el contenido transcrito. Complejidad alta; requiere umbral de confianza y confirmación explícita del profesional.
 - **Importación de plantillas entre clínicas (2026-06-28)** — exportar plantillas como `.md` y permitir subir el mismo archivo en otra organización. Útil para cadenas de clínicas o consultores que configuran múltiples tenants.
 - **Versionado estricto de plantillas para registros firmados (2026-06-28)** — actualmente `template_id` apunta a la plantilla viva (incluso si fue actualizada). Para mayor integridad legal: guardar snapshot del schema en el momento de la aprobación directamente en `clinical_records.sections_enc` o en una columna `template_schema_snapshot JSONB`. Requiere decisión de producto (complejidad vs. espacio).

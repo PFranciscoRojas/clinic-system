@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-07-10
+
+- fix(clinical): ola de formatos org-only (PRs #167–#171, #175) — picker de sesión ofrece solo formatos configurados por la org (sin "integrado"); `TemplatedSectionsForm` reescrito con los estilos reales de la app (estaba en Tailwind inexistente); el `record_type` se deriva de la etapa del proceso y la plantilla solo pone los campos; selector de tipo en el editor (antes clavado a EVOLUTION); caché React Query limpiada en login/logout (fuga entre tenants); "Cambiar formato" con modal in-app (PWA móvil); aprobar borrador IA con plantilla reparado (faltaba `WithTemplateRepo` en aidrafts).
+- feat(admin): orgs de prueba + eliminación total de tenants (PRs #172–#174, migración 000062) — chip/toggle "Prueba" en Tenants, DELETE transaccional de las 30+ tablas + usuarios + DEKs + audios; las orgs reales nunca son eliminables (retención legal Res. 1995/1999); métricas excluyen orgs de prueba.
+- feat(patients): búsqueda inteligente sobre PII cifrada (PR #176, migración 000063) — índice `patient_search_tokens` de hashes peppered por prefijo de palabra, sin tildes; `?q=` matchea cualquier palabra del nombre mientras se escribe; backfill vía `rehash` corrido en prod. Todo desplegado (CI + rebuild manual frontend).
+
+---
+
 ## 2026-07-09
 
 - fix(frontend): scroll horizontal de página en móvil eliminado (PRs #159, #161) — causa raíz hallada con Playwright contra prod (grids `1fr` creciendo a min-content + tabs sin wrap); `minmax(0,1fr)` en los layouts, `overflowX:hidden` en el `<main>` como respaldo, filas clínicas como tarjetas apiladas en móvil. Verificado post-deploy en las 7 rutas.
