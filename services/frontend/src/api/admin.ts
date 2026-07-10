@@ -14,6 +14,7 @@ export interface AdminOrg {
   name: string;
   slug: string;
   subscription_status: string;
+  is_test: boolean;
   trial_ends_at: string | null;
   current_period_end: string | null;
   created_at: string;
@@ -90,6 +91,17 @@ export const adminApi = {
     api.post<{ subscription_status: string; trial_ends_at: string }>(
       `/admin/orgs/${id}/extend-trial`,
       { days },
+    ),
+
+  setOrgTestFlag: (id: string, isTest: boolean) =>
+    api.patch<{ is_test: boolean }>(`/admin/orgs/${id}/test-flag`, { is_test: isTest }),
+
+  /** Hard-deletes the entire organization — every table, users, keys, audio.
+   *  confirmation must be the org's exact slug. */
+  deleteOrg: (id: string, confirmation: string) =>
+    api.delete<{ status: string; slug: string; deleted: Record<string, number> }>(
+      `/admin/orgs/${id}`,
+      { confirmation },
     ),
 
   listOrgUsers: (id: string) =>
