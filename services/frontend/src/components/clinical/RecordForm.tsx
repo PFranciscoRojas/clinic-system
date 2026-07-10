@@ -121,9 +121,14 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(lockedTemplateId ?? '');
   const [customSections, setCustomSections] = useState<SectionsState>({});
 
+  // Unfiltered: the template only defines the note's fields — the session
+  // picker may lock e.g. an EVOLUTION-shaped format onto an INITIAL record
+  // (org with a single format opening a process), so filtering by apiType
+  // here would lose the locked template and silently fall back to the
+  // integrated form.
   const { data: templates = [] } = useQuery({
-    queryKey: ['record-templates', apiType],
-    queryFn: () => recordTemplatesApi.list(apiType),
+    queryKey: ['record-templates', 'all'],
+    queryFn: () => recordTemplatesApi.list(),
   });
 
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
@@ -148,7 +153,9 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   // Render-time adjust (converges: once selectedTemplateId is set, the guard
   // goes false), replacing the previous effect — one paint less on open.
   if (lockedTemplateId === undefined && !selectedTemplateId) {
-    const def = templates.find(t => t.is_default);
+    // Prefer the default of the current record type; with the unfiltered
+    // list there can be one default per type.
+    const def = templates.find(t => t.is_default && t.record_type === apiType) ?? templates.find(t => t.is_default);
     if (def) {
       setSelectedTemplateId(def.id);
       setCustomSections({});

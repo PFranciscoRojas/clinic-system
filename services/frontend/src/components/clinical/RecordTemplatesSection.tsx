@@ -1,13 +1,12 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Archive, Eye, EyeOff, ChevronDown, ChevronUp, Pencil, Check } from 'lucide-react';
+import { Plus, Archive, Eye, EyeOff, ChevronDown, ChevronUp, Pencil } from 'lucide-react';
 import {
   recordTemplatesApi,
   RecordTemplate,
   SectionDef,
 } from '../../api/recordTemplates';
 import { RecordType } from '../../api/clinicalRecords';
-import { TEMPLATE_PRESETS, TemplatePreset } from './templatePresets';
 
 const RECORD_TYPE_LABEL: Record<string, string> = {
   INITIAL: 'Inicial (apertura)', EVOLUTION: 'Evolución',
@@ -616,67 +615,6 @@ function TemplateCard({ tpl }: { tpl: RecordTemplate }) {
   );
 }
 
-// ── Preset gallery ───────────────────────────────────────────────────────────
-// The standard Chapni formats, added with one click — no markdown authoring
-// needed. Creating one produces a normal org-owned template (editable after).
-function PresetCard({ preset, alreadyAdded, hasDefaultOfType }: {
-  preset: TemplatePreset;
-  alreadyAdded: boolean;
-  hasDefaultOfType: boolean;
-}) {
-  const qc = useQueryClient();
-  const addMutation = useMutation({
-    mutationFn: () => recordTemplatesApi.create({
-      name: preset.name,
-      record_type: preset.recordType,
-      markdown: preset.markdown,
-      // First template of its type becomes the org default automatically.
-      is_default: !hasDefaultOfType,
-    }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['record-templates'] }),
-  });
-
-  return (
-    <div className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 6px' }}>
-        <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--s800)', lineHeight: 1.3 }}>{preset.name}</span>
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', fontSize: 11, background: 'var(--teal-l)',
-          color: 'var(--teal-dark)', border: '1px solid var(--teal-100)', borderRadius: 99,
-          padding: '1px 8px', fontWeight: 600,
-        }}>
-          {RECORD_TYPE_LABEL[preset.recordType] ?? preset.recordType}
-        </span>
-      </div>
-      <p style={{ margin: 0, fontSize: 12, color: 'var(--s500)', lineHeight: 1.5, flex: 1 }}>{preset.description}</p>
-      {addMutation.isError && (
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--red)' }}>No se pudo agregar — intenta de nuevo.</p>
-      )}
-      {alreadyAdded ? (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, color: '#065f46' }}>
-          <Check size={14} /> Agregado
-        </span>
-      ) : (
-        <button
-          onClick={() => addMutation.mutate()}
-          disabled={addMutation.isPending}
-          style={{
-            ...S.btnPrimary,
-            height: 34,
-            fontSize: 13,
-            alignSelf: 'flex-start',
-            opacity: addMutation.isPending ? 0.7 : 1,
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--teal-dark)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--teal)'; }}
-        >
-          {addMutation.isPending ? 'Agregando…' : 'Usar este formato'}
-        </button>
-      )}
-    </div>
-  );
-}
-
 // ── Main component ──────────────────────────────────────────────────────────
 export default function RecordTemplatesSection() {
   const [creating, setCreating] = useState(false);
@@ -685,9 +623,6 @@ export default function RecordTemplatesSection() {
     queryKey: ['record-templates'],
     queryFn: () => recordTemplatesApi.list(),
   });
-
-  const activeNames = new Set(templates.map(t => t.name.trim().toLowerCase()));
-  const defaultTypes = new Set(templates.filter(t => t.is_default).map(t => t.record_type));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -723,28 +658,6 @@ export default function RecordTemplatesSection() {
         </div>
       )}
 
-      {/* Standard format gallery — one click, no markdown needed */}
-      {!isLoading && (
-        <div>
-          <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>
-            Formatos estándar
-          </p>
-          <p style={{ fontSize: 13, color: 'var(--s500)', margin: '0 0 12px' }}>
-            Escoge con un clic los formatos que usará tu consultorio. Después puedes editarlos o crear los tuyos.
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 10 }}>
-            {TEMPLATE_PRESETS.map(p => (
-              <PresetCard
-                key={p.name}
-                preset={p}
-                alreadyAdded={activeNames.has(p.name.trim().toLowerCase())}
-                hasDefaultOfType={defaultTypes.has(p.recordType)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* List */}
       {isLoading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -775,7 +688,7 @@ export default function RecordTemplatesSection() {
             Tu consultorio aún no tiene formatos
           </p>
           <p style={{ fontSize: 13, color: 'var(--s400)', margin: 0 }}>
-            Escoge un formato estándar arriba o crea uno propio con "Nueva plantilla".
+            Crea uno con "Nueva plantilla" para definir los campos de tus registros clínicos.
           </p>
         </div>
       ) : (
