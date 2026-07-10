@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-07-09
+
+- fix(frontend): scroll horizontal de página en móvil eliminado (PRs #159, #161) — causa raíz hallada con Playwright contra prod (grids `1fr` creciendo a min-content + tabs sin wrap); `minmax(0,1fr)` en los layouts, `overflowX:hidden` en el `<main>` como respaldo, filas clínicas como tarjetas apiladas en móvil. Verificado post-deploy en las 7 rutas.
+- fix(clinical): auditoría 360° **cerrada al 100%** — guarda estructural anti prompt-injection en el pipeline de IA (PR #162, `prompt_guard.py` + tests) y visor de borrador bloqueado cubriendo plantillas personalizadas (PR #163). Limpieza: seed 000040 rebrandeado a Chapni, legal muerto eliminado, correo personal fuera de RFC-001.
+- refactor(frontend): reglas react-hooks `set-state-in-effect`/`exhaustive-deps` a `error` (PR #164) — 32 findings refactorizados, 7 disables justificados. Smoke de navegador real contra prod OK.
+- ops: branch protection activa en `main` (require PR, enforce_admins, 0 approvals) · password del demo `consultorio-aurora` reseteada a la del seed para diagnóstico.
+- feat(marketing): hub `chapni.com/recursos` construido y desplegado (`b9c6fd7` en `../chapni`) — 4 guías/plantillas con schema Article+FAQPage, el multiplicador SEO/GEO pendiente del plan.
+
+---
+
 ## 2026-07-07
 
 - chore(legal): remoción del correo personal `franciscorojas92@gmail.com` de todo el contenido legal/consentimientos — reemplazado por `legal@chapni.com` (términos, reembolsos, pie de página genérico) y `privacidad@chapni.com` (política de privacidad, ejercicio de derechos habeas data) en `content.ts`, `LegalDoc.tsx`, `TermsPage.tsx`, `PrivacyPage.tsx` y seed `000040_legal_documents.up.sql`. Publicado directo en la BD de producción (nueva versión `2026-07-07` de `privacy` y `terms` en `legal_documents`, replicando a mano el patrón atómico `is_current=false`→`INSERT is_current=true` del endpoint admin, ya que no había JWT de admin a mano) — versiones anteriores quedan archivadas para trazabilidad. Verificado sin ocurrencias del correo en el repo `../chapni`. **Nada de esto está commiteado aún** en `clinic-system`; el footer hardcoded de `TermsPage.tsx`/`PrivacyPage.tsx` sigue pendiente de rebuild manual en el VPS (la BD ya está corregida, el footer visible en vivo todavía no).
