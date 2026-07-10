@@ -56,39 +56,36 @@ const RECORD_TYPE_LABEL: Record<string, string> = {
   DISCHARGE: 'Alta', INTERCONSULTATION: 'Interconsulta',
 };
 
-// Session format picker: only the formats the organization configured in
-// Configuración → Formatos de registro are offered — no built-in fallback.
-// An org without a configured format for the current process stage is sent
-// to set one up before it can write the note.
+// Session format picker: every format the organization configured in
+// Configuración → Formatos de registro is offered — which formats exist is
+// the professional's decision, no built-in fallback and no per-stage gate.
+// The template only defines the FIELDS of the note; the record type (what
+// opens/closes the patient's process) is derived from the process stage,
+// because the server enforces INITIAL-first/DISCHARGE-last regardless of
+// which form layout the professional prefers to write in.
+export function stageRecordType(t: RecordTemplate, hasOpenProcess: boolean | undefined): UIRecordType {
+  if (hasOpenProcess === undefined) return t.record_type as UIRecordType;
+  if (!hasOpenProcess) return 'INITIAL';
+  return t.record_type === 'DISCHARGE' ? 'DISCHARGE' : 'EVOLUTION';
+}
+
 function FormatPickerList({ templates, loading, hasOpenProcess, onPick }: {
   templates: RecordTemplate[];
   loading: boolean;
   hasOpenProcess: boolean | undefined;
-  onPick: (t: RecordTemplate) => void;
+  onPick: (t: RecordTemplate, stageType: UIRecordType) => void;
 }) {
   const navigate = useNavigate();
-  const allowed: UIRecordType[] = hasOpenProcess === undefined
-    ? ['INITIAL', 'EVOLUTION', 'DISCHARGE']
-    : hasOpenProcess ? ['EVOLUTION', 'DISCHARGE'] : ['INITIAL'];
-  const visible = templates.filter(t => allowed.includes(t.record_type as UIRecordType));
-  // For the stage-mismatch empty state: name what the org DOES have, so the
-  // professional understands the missing piece is one specific type — not
-  // that their configuration vanished.
-  const configuredTypes = [...new Set(templates.map(t => RECORD_TYPE_LABEL[t.record_type] ?? t.record_type))].join(', ');
 
   if (loading) {
     return <div style={{ display: 'flex', justifyContent: 'center', padding: '18px 0' }}><Spinner size={20} color="var(--teal)" /></div>;
   }
 
-  if (visible.length === 0) {
+  if (templates.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '10px 4px 4px' }}>
         <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--s500)', lineHeight: 1.6 }}>
-          {templates.length === 0
-            ? 'Tu organización aún no tiene formatos de registro configurados.'
-            : hasOpenProcess
-              ? `Este paciente tiene un proceso abierto y se necesita un formato de tipo Evolución o Alta. Tu organización solo tiene configurados: ${configuredTypes}.`
-              : `Este paciente aún no tiene proceso abierto y se necesita un formato de tipo Inicial (apertura). Tu organización solo tiene configurados: ${configuredTypes}.`}
+          Tu organización aún no tiene formatos de registro configurados.
         </p>
         <button type="button" onClick={() => navigate('/settings/record_templates')}
           style={{ padding: '10px 20px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 7 }}>
@@ -100,19 +97,27 @@ function FormatPickerList({ templates, loading, hasOpenProcess, onPick }: {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {visible.map(t => (
-        <button key={t.id} type="button" onClick={() => onPick(t)}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s, background 0.15s' }}
-          onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLButtonElement).style.background = '#f3f2fb'; }}
-          onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--s200)'; (e.currentTarget as HTMLButtonElement).style.background = '#fff'; }}
-        >
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>{t.name}</div>
-            <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>Formato configurado del consultorio</div>
-          </div>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--s600)', background: 'var(--s100)', border: '1px solid var(--s200)', borderRadius: 5, padding: '2px 8px', flexShrink: 0 }}>{RECORD_TYPE_LABEL[t.record_type] ?? t.record_type}</span>
-        </button>
-      ))}
+      {templates.map(t => {
+        const stageType = stageRecordType(t, hasOpenProcess);
+        const note = stageType === 'INITIAL'
+          ? 'Abrirá la historia del paciente con este formato'
+          : stageType === 'DISCHARGE'
+            ? 'Cerrará el proceso del paciente'
+            : 'Se registrará como evolución del proceso';
+        return (
+          <button key={t.id} type="button" onClick={() => onPick(t, stageType)}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s, background 0.15s' }}
+            onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLButtonElement).style.background = '#f3f2fb'; }}
+            onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--s200)'; (e.currentTarget as HTMLButtonElement).style.background = '#fff'; }}
+          >
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>{t.name}</div>
+              <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>{note}</div>
+            </div>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--s600)', background: 'var(--s100)', border: '1px solid var(--s200)', borderRadius: 5, padding: '2px 8px', flexShrink: 0 }}>{RECORD_TYPE_LABEL[t.record_type] ?? t.record_type}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -1171,7 +1176,7 @@ export function AppointmentPage() {
                     templates={setupTemplates}
                     loading={setupTemplatesLoading}
                     hasOpenProcess={hasOpenProcess}
-                    onPick={t => { setSetupType(t.record_type as UIRecordType); setSetupTemplateId(t.id); confirmSetup(); }}
+                    onPick={(t, stageType) => { setSetupType(stageType); setSetupTemplateId(t.id); confirmSetup(); }}
                   />
                 </div>
               ) : showRecordForm ? (
@@ -1641,7 +1646,7 @@ export function AppointmentPage() {
               templates={setupTemplates}
               loading={setupTemplatesLoading}
               hasOpenProcess={hasOpenProcess}
-              onPick={t => { setSetupType(t.record_type as UIRecordType); setSetupTemplateId(t.id); confirmSetup(); }}
+              onPick={(t, stageType) => { setSetupType(stageType); setSetupTemplateId(t.id); confirmSetup(); }}
             />
           </div>
         ) : showRecordForm ? (
