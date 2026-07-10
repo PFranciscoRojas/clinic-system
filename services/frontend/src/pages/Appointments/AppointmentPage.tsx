@@ -18,7 +18,7 @@ import { recordingStore } from '@/lib/recordingStore';
 import { useIsCompact } from '@/lib/useMediaQuery';
 import { CLR_DANGER, CLR_WARN, CLR_SUCCESS, CLR_INFO, CLR_PROC, CLR_NEUTRAL } from '@/lib/tokens';
 import { clinicalRecordsApi, consentsApi, type RecordMeta, type RecordType } from '@/api/clinicalRecords';
-import { recordTemplatesApi } from '@/api/recordTemplates';
+import { recordTemplatesApi, type RecordTemplate } from '@/api/recordTemplates';
 import { ConsentViewModal } from '@/components/consents/ConsentViewModal';
 import { UnifiedConsentSignModal } from '@/components/consents/UnifiedConsentSignModal';
 import { RecordForm } from '@/components/clinical/RecordForm';
@@ -55,6 +55,63 @@ const RECORD_TYPE_LABEL: Record<string, string> = {
   INITIAL: 'Inicial', EVOLUTION: 'Evolución',
   DISCHARGE: 'Alta', INTERCONSULTATION: 'Interconsulta',
 };
+
+// Session format picker: only the formats the organization configured in
+// Configuración → Formatos de registro are offered — no built-in fallback.
+// An org without a configured format for the current process stage is sent
+// to set one up before it can write the note.
+function FormatPickerList({ templates, loading, hasOpenProcess, onPick }: {
+  templates: RecordTemplate[];
+  loading: boolean;
+  hasOpenProcess: boolean | undefined;
+  onPick: (t: RecordTemplate) => void;
+}) {
+  const navigate = useNavigate();
+  const allowed: UIRecordType[] = hasOpenProcess === undefined
+    ? ['INITIAL', 'EVOLUTION', 'DISCHARGE']
+    : hasOpenProcess ? ['EVOLUTION', 'DISCHARGE'] : ['INITIAL'];
+  const visible = templates.filter(t => allowed.includes(t.record_type as UIRecordType));
+
+  if (loading) {
+    return <div style={{ display: 'flex', justifyContent: 'center', padding: '18px 0' }}><Spinner size={20} color="var(--teal)" /></div>;
+  }
+
+  if (visible.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: '10px 4px 4px' }}>
+        <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--s500)', lineHeight: 1.6 }}>
+          {templates.length === 0
+            ? 'Tu organización aún no tiene formatos de registro configurados.'
+            : hasOpenProcess
+              ? 'No hay formatos de evolución o alta configurados para continuar este proceso.'
+              : 'No hay un formato de tipo Inicial configurado para abrir un proceso.'}
+        </p>
+        <button type="button" onClick={() => navigate('/settings/record_templates')}
+          style={{ padding: '10px 20px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+          <FileText size={14} /> Configurar formatos
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {visible.map(t => (
+        <button key={t.id} type="button" onClick={() => onPick(t)}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s, background 0.15s' }}
+          onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLButtonElement).style.background = '#f3f2fb'; }}
+          onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--s200)'; (e.currentTarget as HTMLButtonElement).style.background = '#fff'; }}
+        >
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>{t.name}</div>
+            <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>Formato configurado del consultorio</div>
+          </div>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--s600)', background: 'var(--s100)', border: '1px solid var(--s200)', borderRadius: 5, padding: '2px 8px', flexShrink: 0 }}>{RECORD_TYPE_LABEL[t.record_type] ?? t.record_type}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const CONSENT_SHORT: Record<string, string> = {
   TREATMENT: 'Tratamiento', DATA_PROCESSING: 'Datos',
@@ -583,7 +640,7 @@ export function AppointmentPage() {
   });
 
   // All templates fetched once when setup opens — unified format picker
-  const { data: setupTemplates = [] } = useQuery({
+  const { data: setupTemplates = [], isLoading: setupTemplatesLoading } = useQuery({
     queryKey: ['record-templates-all'],
     queryFn: () => recordTemplatesApi.list(),
     enabled: setupOpen,
@@ -819,6 +876,23 @@ export function AppointmentPage() {
   const confirmSetup = () => {
     setSetupOpen(false);
     setShowRecordForm(true);
+  };
+
+  // "Cambiar formato" — window.confirm is unreliable in standalone PWAs
+  // (mobile can suppress the dialog and return false, leaving the button
+  // dead), so the are-you-sure warning is an in-app modal instead.
+  const [repickConfirmOpen, setRepickConfirmOpen] = useState(false);
+  const doFormatRepick = () => {
+    setRepickConfirmOpen(false);
+    try { localStorage.removeItem(`clinical-draft-${id}`); } catch { /* ignore */ }
+    setShowRecordForm(false);
+    setSetupOpen(true);
+  };
+  const requestFormatRepick = () => {
+    let hasDraft = false;
+    try { hasDraft = !!localStorage.getItem(`clinical-draft-${id}`); } catch { /* ignore */ }
+    if (hasDraft) setRepickConfirmOpen(true);
+    else doFormatRepick();
   };
 
   const handleRecordSaved = async () => {
@@ -1064,14 +1138,7 @@ export function AppointmentPage() {
                 {showRecordForm && (
                   <button
                     type="button"
-                    onClick={() => {
-                      const draftKey = `clinical-draft-${id}`;
-                      const hasDraft = (() => { try { return !!localStorage.getItem(draftKey); } catch { return false; } })();
-                      if (hasDraft && !confirm('¿Cambiar formato? El contenido que hayas escrito se perderá.')) return;
-                      try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
-                      setShowRecordForm(false);
-                      setSetupOpen(true);
-                    }}
+                    onClick={requestFormatRepick}
                     style={{ fontSize: 12, fontWeight: 600, color: 'var(--teal)', background: '#f3f2fb', border: '1px solid #cbc7ee', borderRadius: 7, padding: '6px 12px', cursor: 'pointer', whiteSpace: 'nowrap' }}
                   >
                     Cambiar formato
@@ -1088,49 +1155,12 @@ export function AppointmentPage() {
               {/* Format picker — shown on first session start or when changing format */}
               {setupOpen ? (
                 <div className="card" style={{ padding: 18 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {/* Org-configured templates first — the clinic's own formats take
-                        precedence over the built-in integrated ones below. */}
-                    {setupTemplates.filter(t => {
-                      const allowed: UIRecordType[] = hasOpenProcess === undefined ? ['INITIAL','EVOLUTION','DISCHARGE'] : hasOpenProcess ? ['EVOLUTION','DISCHARGE'] : ['INITIAL'];
-                      return allowed.includes(t.record_type as UIRecordType);
-                    }).map(t => (
-                      <button key={t.id} type="button"
-                        onClick={() => { setSetupType(t.record_type as UIRecordType); setSetupTemplateId(t.id); confirmSetup(); }}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s, background 0.15s' }}
-                        onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLButtonElement).style.background = '#f3f2fb'; }}
-                        onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--s200)'; (e.currentTarget as HTMLButtonElement).style.background = '#fff'; }}
-                      >
-                        <div>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>{t.name}</div>
-                          <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>Formato configurado del consultorio</div>
-                        </div>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--s600)', background: 'var(--s100)', border: '1px solid var(--s200)', borderRadius: 5, padding: '2px 8px', flexShrink: 0 }}>{RECORD_TYPE_LABEL[t.record_type] ?? t.record_type}</span>
-                      </button>
-                    ))}
-                    {([
-                      { type: 'INITIAL' as UIRecordType, label: 'Apertura', desc: 'Historia clínica inicial del proceso' },
-                      { type: 'EVOLUTION' as UIRecordType, label: 'Evolución', desc: 'Nota de sesión de seguimiento' },
-                      { type: 'PLAN' as UIRecordType, label: 'Plan TCC', desc: 'Plan terapéutico estructurado' },
-                      { type: 'DISCHARGE' as UIRecordType, label: 'Alta', desc: 'Cierre y egreso del proceso' },
-                    ].filter(f => {
-                      const allowed: UIRecordType[] = hasOpenProcess === undefined ? ['INITIAL','PLAN','EVOLUTION','DISCHARGE'] : hasOpenProcess ? ['PLAN','EVOLUTION','DISCHARGE'] : ['INITIAL'];
-                      return allowed.includes(f.type);
-                    })).map(f => (
-                      <button key={f.type} type="button"
-                        onClick={() => { setSetupType(f.type); setSetupTemplateId(''); confirmSetup(); }}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s, background 0.15s' }}
-                        onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLButtonElement).style.background = '#f3f2fb'; }}
-                        onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--s200)'; (e.currentTarget as HTMLButtonElement).style.background = '#fff'; }}
-                      >
-                        <div>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>{f.label}</div>
-                          <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 2 }}>{f.desc}</div>
-                        </div>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal-d, var(--teal))', background: '#f3f2fb', border: '1px solid #cbc7ee', borderRadius: 5, padding: '2px 8px', flexShrink: 0 }}>integrado</span>
-                      </button>
-                    ))}
-                  </div>
+                  <FormatPickerList
+                    templates={setupTemplates}
+                    loading={setupTemplatesLoading}
+                    hasOpenProcess={hasOpenProcess}
+                    onPick={t => { setSetupType(t.record_type as UIRecordType); setSetupTemplateId(t.id); confirmSetup(); }}
+                  />
                 </div>
               ) : showRecordForm ? (
                 <RecordForm patientId={appt.patient_id} appointmentId={id!} defaultType={setupType ? (setupType === 'PLAN' ? 'EVOLUTION' : setupType as RecordType) : defaultRecordType} lockedTemplateId={setupType !== null ? setupTemplateId : undefined} sessionDate={apptDate} lateEntryReason={lateReason || undefined} treatmentConsentSigned={!!treatmentConsent} hasOpenProcess={hasOpenProcess} existingDraftId={autosaveDraft?.id} onTypeChange={setSelectedRecordType} onTemplateChange={setSelectedTemplateId} onSaved={handleRecordSaved} />
@@ -1595,50 +1625,12 @@ export function AppointmentPage() {
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s600)' }}>¿Qué formato vas a registrar?</span>
               <button aria-label="Cancelar" onClick={() => setSetupOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--s400)', padding: 6, minWidth: 32, minHeight: 32 }}><X size={16} /></button>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {/* Org-configured templates first — the clinic's own formats take
-                  precedence over the built-in integrated ones below. */}
-              {setupTemplates.filter(t => {
-                const allowed: UIRecordType[] = hasOpenProcess === undefined ? ['INITIAL','EVOLUTION','DISCHARGE'] : hasOpenProcess ? ['EVOLUTION','DISCHARGE'] : ['INITIAL'];
-                return allowed.includes(t.record_type as UIRecordType);
-              }).map(t => (
-                <button key={t.id} type="button"
-                  onClick={() => { setSetupType(t.record_type as UIRecordType); setSetupTemplateId(t.id); confirmSetup(); }}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s, background 0.15s' }}
-                  onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLButtonElement).style.background = '#f3f2fb'; }}
-                  onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--s200)'; (e.currentTarget as HTMLButtonElement).style.background = '#fff'; }}
-                >
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--s800)' }}>{t.name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 1 }}>Formato configurado del consultorio</div>
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--s600)', background: 'var(--s100)', border: '1px solid var(--s200)', borderRadius: 5, padding: '2px 7px', flexShrink: 0 }}>{RECORD_TYPE_LABEL[t.record_type] ?? t.record_type}</span>
-                </button>
-              ))}
-              {/* Built-in formats — one card per type, filtered by process state */}
-              {([
-                { type: 'INITIAL' as UIRecordType, label: 'Apertura', desc: 'Historia clínica inicial del proceso' },
-                { type: 'EVOLUTION' as UIRecordType, label: 'Evolución', desc: 'Nota de sesión de seguimiento' },
-                { type: 'PLAN' as UIRecordType, label: 'Plan TCC', desc: 'Plan terapéutico estructurado' },
-                { type: 'DISCHARGE' as UIRecordType, label: 'Alta', desc: 'Cierre y egreso del proceso' },
-              ].filter(f => {
-                const allowed: UIRecordType[] = hasOpenProcess === undefined ? ['INITIAL','PLAN','EVOLUTION','DISCHARGE'] : hasOpenProcess ? ['PLAN','EVOLUTION','DISCHARGE'] : ['INITIAL'];
-                return allowed.includes(f.type);
-              })).map(f => (
-                <button key={f.type} type="button"
-                  onClick={() => { setSetupType(f.type); setSetupTemplateId(''); confirmSetup(); }}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 9, border: '1.5px solid var(--s200)', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s, background 0.15s' }}
-                  onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLButtonElement).style.background = '#f3f2fb'; }}
-                  onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--s200)'; (e.currentTarget as HTMLButtonElement).style.background = '#fff'; }}
-                >
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--s800)' }}>{f.label}</div>
-                    <div style={{ fontSize: 12, color: 'var(--s400)', marginTop: 1 }}>{f.desc}</div>
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal-d)', background: '#f3f2fb', border: '1px solid #cbc7ee', borderRadius: 5, padding: '2px 7px', flexShrink: 0 }}>integrado</span>
-                </button>
-              ))}
-            </div>
+            <FormatPickerList
+              templates={setupTemplates}
+              loading={setupTemplatesLoading}
+              hasOpenProcess={hasOpenProcess}
+              onPick={t => { setSetupType(t.record_type as UIRecordType); setSetupTemplateId(t.id); confirmSetup(); }}
+            />
           </div>
         ) : showRecordForm ? (
           <div>
@@ -1652,14 +1644,7 @@ export function AppointmentPage() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => {
-                    const draftKey = `clinical-draft-${id}`;
-                    const hasDraft = (() => { try { return !!localStorage.getItem(draftKey); } catch { return false; } })();
-                    if (hasDraft && !confirm('¿Cambiar formato? El contenido que hayas escrito se perderá.')) return;
-                    try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
-                    setShowRecordForm(false);
-                    setSetupOpen(true);
-                  }}
+                  onClick={requestFormatRepick}
                   style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal-d, var(--teal))', background: '#f3f2fb', border: '1px solid #cbc7ee', borderRadius: 6, padding: '3px 9px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
                 >
                   Cambiar formato
@@ -1734,6 +1719,39 @@ export function AppointmentPage() {
             openSetup();
           }}
         />
+      )}
+
+      {/* "Cambiar formato" confirmation — in-app replacement for window.confirm */}
+      {repickConfirmOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15,23,42,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div className="card" style={{ maxWidth: 420, width: '100%', padding: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <AlertTriangle size={18} color="#d97706" />
+              </div>
+              <div>
+                <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--s800)' }}>¿Cambiar formato?</p>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--s500)', lineHeight: 1.6 }}>
+                  El contenido que hayas escrito en esta nota se perderá.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setRepickConfirmOpen(false)}
+                style={{ flex: 1, padding: '10px 0', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
+              >
+                Seguir escribiendo
+              </button>
+              <button
+                onClick={doFormatRepick}
+                style={{ flex: 1, padding: '10px 0', background: '#d97706', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
+              >
+                Cambiar formato
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Navigation blocker while recording */}
