@@ -581,8 +581,8 @@ function TenantsTab() {
   };
   const handleToggleTest = (o: AdminOrg) => {
     const msg = o.is_test
-      ? `¿Marcar "${o.name}" como organización REAL? Volverá a contar en métricas y quedará protegida contra eliminación inmediata.`
-      : `¿Marcar "${o.name}" como organización de PRUEBA? Saldrá de las métricas y podrá eliminarse por completo.`;
+      ? `¿Marcar "${o.name}" como organización REAL? Volverá a contar en métricas y quedará protegida: las organizaciones reales nunca se pueden eliminar.`
+      : `¿Marcar "${o.name}" como organización de PRUEBA? Saldrá de las métricas y podrá eliminarse por completo. Hazlo solo si nunca fue un consultorio real.`;
     if (!window.confirm(msg)) return;
     setBusyId(o.id); testFlag.mutate({ id: o.id, isTest: !o.is_test });
   };
@@ -693,9 +693,14 @@ function TenantsTab() {
                       {o.is_test ? '✔ Marcar como real' : '🧪 Marcar como prueba'}
                     </button>
 
-                    <button style={{ ...btnStyle('#7f1d1d'), marginLeft: 'auto' }} disabled={busy} onClick={() => handleDelete(o)}>
-                      🗑 Eliminar por completo
-                    </button>
+                    {/* Real orgs are never deletable — clinical records carry
+                        a legal retention obligation. The server enforces the
+                        same rule; hiding the button just makes it honest. */}
+                    {o.is_test && (
+                      <button style={{ ...btnStyle('#7f1d1d'), marginLeft: 'auto' }} disabled={busy} onClick={() => handleDelete(o)}>
+                        🗑 Eliminar por completo
+                      </button>
+                    )}
 
                     {busy && <span style={{ fontSize: 12, color: 'var(--s400)' }}>Procesando…</span>}
                     </div>

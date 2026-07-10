@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -61,9 +60,11 @@ func (h *Handler) setOrgTestFlag(w http.ResponseWriter, r *http.Request) {
 // trace left. Guards, all mandatory:
 //   - SYSTEM_ADMIN role (route middleware)
 //   - never an internal fixture, never the caller's own org
+//   - only orgs flagged is_test — real clinics are NEVER deletable, no
+//     override: clinical records carry a legal retention obligation
+//     (Res. 1995/1999), so destroying a real tenant can't be one API call.
+//     Flagging as test first is the deliberate two-step.
 //   - the request body must repeat the org's exact slug
-//   - a real (non-test) org with any activity in the last 7 days is refused;
-//     test-flagged orgs can be deleted immediately
 //
 // DELETE /api/v1/admin/orgs/{id}  body: {"confirmation": "<slug>"}
 func (h *Handler) deleteOrg(w http.ResponseWriter, r *http.Request) {
@@ -99,35 +100,14 @@ func (h *Handler) deleteOrg(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusForbidden, "las organizaciones internas no se pueden eliminar")
 		return
 	}
+	if !isTest {
+		httputil.WriteError(w, http.StatusForbidden,
+			"las organizaciones reales no se pueden eliminar: la historia clínica tiene retención legal obligatoria. Solo las marcadas como prueba son eliminables")
+		return
+	}
 	if body.Confirmation != slug {
 		httputil.WriteError(w, http.StatusUnprocessableEntity, "escribe el slug exacto de la organización para confirmar")
 		return
-	}
-
-	// Real orgs get a 7-day activity brake: any recent appointment, note,
-	// patient, invoice, audit entry or login means someone may be using it.
-	if !isTest {
-		var lastActivity *time.Time
-		err := h.pool.QueryRow(r.Context(), `
-			SELECT GREATEST(
-				(SELECT max(created_at)    FROM appointments     WHERE organization_id = $1),
-				(SELECT max(created_at)    FROM clinical_records WHERE organization_id = $1),
-				(SELECT max(created_at)    FROM patients         WHERE organization_id = $1),
-				(SELECT max(created_at)    FROM invoices         WHERE organization_id = $1),
-				(SELECT max(created_at)    FROM audit_log        WHERE organization_id = $1),
-				(SELECT max(last_login_at) FROM users            WHERE organization_id = $1)
-			)
-		`, orgID).Scan(&lastActivity)
-		if err != nil {
-			slog.Error("admin.delete-org activity check", "org_id", orgID, "err", err)
-			httputil.WriteError(w, http.StatusInternalServerError, "no se pudo verificar la actividad reciente")
-			return
-		}
-		if lastActivity != nil && time.Since(*lastActivity) < 7*24*time.Hour {
-			httputil.WriteError(w, http.StatusConflict,
-				"la organización tuvo movimientos en los últimos 7 días — márcala como prueba si aun así quieres eliminarla")
-			return
-		}
 	}
 
 	deleted, err := h.deleteOrgCascade(r.Context(), orgID)
