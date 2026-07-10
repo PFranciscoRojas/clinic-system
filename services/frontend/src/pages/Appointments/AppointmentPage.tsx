@@ -643,9 +643,11 @@ export function AppointmentPage() {
     staleTime: 10_000,
   });
 
-  // All templates fetched once when setup opens — unified format picker
+  // All templates fetched once when setup opens — unified format picker.
+  // Shares the ['record-templates', …] prefix so the settings section's
+  // invalidations (adding/archiving a format) reach this picker too.
   const { data: setupTemplates = [], isLoading: setupTemplatesLoading } = useQuery({
-    queryKey: ['record-templates-all'],
+    queryKey: ['record-templates', 'all'],
     queryFn: () => recordTemplatesApi.list(),
     enabled: setupOpen,
     staleTime: 60_000,
