@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-07-11
+
+- fix(clinical): **grabaciones de 1 hora funcionan de punta a punta — validado en prod** (PRs #178–#181). Tres bugs mortales encontrados por una prueba E2E real (audio TTS de 57,7 min / 61 MB, subido throttled a 500 KB/s con clon del formato de Marcela): el upload moría a los 15 s (`ReadTimeout` global → deadline de 20 min solo en la ruta de audio, #178), el contexto del request expiraba a los 30 s durante la subida (middleware exento + contexto propio, #179), y el guard anti-alucinación descartaba transcripciones largas reales por frases repetidas legítimas (ahora solo dispara con loop consecutivo o ≥50% duplicadas, #180). Bonus #180: el volumen de audio estaba `:ro` — el borrado post-transcripción nunca había funcionado (PHI acumulado); ya es rw y verificado. Resultado final: Whisper `base` transcribe 58 min en 8m39s y Claude prellena los 7 campos del template custom con shapes de widget válidos. Runbook repetible en `scripts/e2e_audio/` (#181).
+
+---
+
 ## 2026-07-10
 
 - fix(clinical): ola de formatos org-only (PRs #167–#171, #175) — picker de sesión ofrece solo formatos configurados por la org (sin "integrado"); `TemplatedSectionsForm` reescrito con los estilos reales de la app (estaba en Tailwind inexistente); el `record_type` se deriva de la etapa del proceso y la plantilla solo pone los campos; selector de tipo en el editor (antes clavado a EVOLUTION); caché React Query limpiada en login/logout (fuga entre tenants); "Cambiar formato" con modal in-app (PWA móvil); aprobar borrador IA con plantilla reparado (faltaba `WithTemplateRepo` en aidrafts).

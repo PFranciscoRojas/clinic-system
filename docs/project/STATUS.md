@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-07-10)
+## Estado actual (2026-07-11)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -55,15 +55,14 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 | 5 — Tests | ✅ resuelto | testcontainers + tests de aislamiento RLS (`internal/integration/{infra,rls,needtoknow}_test.go`); vitest para `client.ts` y `RecordForm` |
 | 6 — Frontend refactor | ✅ resuelto | `SettingsPage` partido en 10 secciones bajo `components/settings/` (191 líneas, solo orquesta); `logout` hace `flushClinicalDrafts()` antes de invalidar el token (`AuthContext.tsx`) |
 
-### Últimos PRs a `main` (sesión 2026-07-10, todos desplegados)
+### Últimos PRs a `main` (sesión 2026-07-11, todos desplegados)
 
-- `#176` feat(patients): **búsqueda inteligente de pacientes sobre PII cifrada** — tabla `patient_search_tokens` (migración 000063, RLS): un HMAC con pepper por cada prefijo (≥2 chars) de cada palabra de los 4 campos del nombre, minúsculas y sin tildes (NFD − Mn). `GET /patients?q=` matchea cualquier palabra del nombre, sin tildes, mientras se escribe; `document=` sigue exacto. Create/update reconstruyen el índice; `cmd/rehash` hace el backfill (corrido en prod: 7 pacientes, 64 tokens). Ambos buscadores del UI (shell global + selector de cita) usan `q`. Tests unitarios de tildes/ñ/prefijos.
-- `#175` fix(clinical): **aprobar borrador IA con plantilla fallaba como "datos inválidos"** — el handler de aidrafts construía su servicio de registros clínicos sin `WithTemplateRepo`; cualquier Create con `template_id` moría en la rama fail-closed de repo nulo. Una línea de wiring.
-- `#172`–`#174` feat(admin): **marcar orgs como prueba + eliminación total de tenants** — `organizations.is_test` (migración 000062; la 000052 original colisionó y se renumeró en #173). Tenants UI: chip "Prueba", toggle real/prueba, "Eliminar por completo" (escribe el slug). El DELETE borra en una transacción las 30+ tablas org-scoped, usuarios, DEKs (por registro + firma), audit propio y audios en disco (`set_config` para RLS); deja entrada `ORG_DELETED` en el audit del operador. **Las orgs reales NUNCA son eliminables** (#174, retención legal Res. 1995/1999) — solo las marcadas prueba; nunca internas ni la propia. Métricas de system-health excluyen orgs de prueba.
-- `#171` fix(clinical): **el formato es decisión del profesional** — galería de "formatos estándar" eliminada (#170 la introdujo copiando las plantillas de la org de Marcela: revertido); el picker de sesión ofrece TODOS los formatos configurados de la org sin filtro por etapa, y el `record_type` (apertura/evolución/cierre, regla del servidor) se deriva de la etapa del proceso, no de la plantilla — una org con un solo formato SOAP abre historia y evoluciona con él. `RecordForm` consulta plantillas sin filtrar por tipo (clave compartida `['record-templates','all']`).
-- `#170` feat(clinical): selector de tipo de registro en el editor de plantillas (antes hardcodeado a EVOLUTION — era imposible crear un formato Inicial desde la UI) + chips de tipo/predeterminado en las tarjetas. (La galería de presets de este PR se revirtió en #171.)
-- `#169` fix(clinical): **`TemplatedSectionsForm` reescrito con el sistema de estilos real** — estaba escrito con clases Tailwind en una app sin Tailwind (formularios de plantilla salían con estilo crudo de navegador). Ahora cards + variables `--s*`/`--teal` espejando el formato integrado; widgets self-contained sin doble card. Además: mensaje del picker nombra los tipos configurados, y finalizar sesión con consentimiento de grabación pero sin audio capturado ya avisa en vez de callar.
-- `#167`–`#168` fix(clinical): picker de formatos solo-org (sin "integrado"), `queryClient.clear()` en login/logout (fuga de caché entre tenants en la misma pestaña), y "Cambiar formato" con modal in-app (window.confirm suprimido en PWA móvil lo dejaba muerto).
+**Validación E2E "¿aguanta una grabación de 1 hora?" — respondida con evidencia en prod.** Audio sintético de sesión de 57,7 min / 61 MB (TTS piper, guion de 10.300 palabras mapeado a los campos de la "Nota de Evolución" de Marcela), subido throttled a 500 KB/s contra la org demo con un clon del template real: upload OK en 2 min, Whisper `base` transcribió en 8m39s (RTF ≈ 0,15), Claude prellenó **los 7 campos con shapes de widget válidos** (malestar 6/10, adherencia 3/4, riesgo NONE, 3 tareas exactas, CIE-10 F41.1) y el audio se borró del disco. La prueba destapó y motivó los 4 fixes:
+
+- `#178` fix(clinical): **el upload de audio moría a los 15 s** — `ReadTimeout` global cortaba cualquier body que tardara >15 s en llegar (1 h ≈ 50-60 MB ≈ minutos en uplink de consultorio): toda grabación real de sesión se perdía en el upload. La ruta de audio extiende su deadline de socket a 20 min vía `http.ResponseController`; el resto de rutas mantiene los 15 s. + CI hornea `WHISPER_MODEL=base` en la imagen (horneaba `tiny` y prod re-descargaba 140 MB en runtime tras cada recreate).
+- `#179` fix(clinical): **segundo timeout oculto** — el middleware global `chi.Timeout(30s)` cancelaba el contexto del request durante la subida (el handler moría en el primer query con "context deadline exceeded"). La ruta de upload quedó exenta (`exceptAudioUpload` en routes.go) y acota su propio contexto a 20 min.
+- `#180` fix(clinical): **el guard anti-alucinación descartaba transcripciones reales de 1 hora** — botaba la transcripción entera si CUALQUIER frase se repetía verbatim (en 1 h de habla real siempre se repiten "okey", "no sé"…). Ahora solo dispara con el patrón real de loop de silencio: 3+ consecutivas idénticas o ≥50% duplicadas. 8 tests. **Además:** el volumen de audio estaba montado `:ro` en ai-service — el borrado post-transcripción fallaba en silencio desde siempre y el audio con PHI se acumulaba en disco; ya es rw y el borrado quedó verificado (los audios viejos previos al fix pueden seguir en el volumen).
+- `#181` test(clinical): **runbook E2E repetible en `scripts/e2e_audio/`** — generador de guion (frases únicas para no disparar el guard), verificador de shape por widget, y procedimiento completo (usuario efímero + clon de template + upload throttled + limpieza). Números de referencia documentados.
 
 > Flujo actual: rama `fix/*` → PR → squash-merge → CI deploy. ✅ Branch protection activa desde 2026-07-09.
 > **CI/CD:** `test → build → smoke`. `go test ./...` bloquea el build; `tsc --noEmit` corre en cada PR de frontend; smoke test de 8 pasos HTTP corre tras cada deploy al VPS.
@@ -110,8 +109,8 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción — CI deploy (último: PR #176, 2026-07-10). Migraciones 000062 (`org_is_test`) y 000063 (`patient_search_tokens`) aplicadas; `./rehash` corrido (9 users, 7 patients + backfill del índice de búsqueda). |
-| `ai-service` | ✅ producción — CI deploy (PR #162, 2026-07-09, guarda anti prompt-injection; worker verificado arriba y sano) |
+| `core-api:8080` | ✅ producción — CI deploy (último: PR #179, 2026-07-11, upload de audio sin timeouts de 15s/30s). Migraciones al día (000063); sin migraciones nuevas esta sesión. |
+| `ai-service` | ✅ producción — CI deploy (PR #180, 2026-07-11): heurístico anti-alucinación corregido, `base` horneado en la imagen, volumen de audio rw (borrado post-transcripción funcionando por primera vez). Pipeline validado E2E con audio de 58 min. |
 | `frontend` (Caddy :80/:443) | ✅ producción — rebuild manual desde `a87865d` (PR #176, 2026-07-10). **Dominio:** `https://app.chapni.com` (principal, `CADDY_APP_DOMAIN`); `api.marcelachapues.com` legacy (mantiene `/api` para webhooks, redirige 308 el resto). `APP_BASE_URL` = `https://app.chapni.com`. Cert Let's Encrypt emitido. Google OAuth redirect URI actualizado en Cloud Console. |
 | Backups | `pg_dump` cifrado GPG → Backblaze B2 |
 | **Disco** | ~40% (15/38 GB) — cron semanal en el **host** (ya no en el admin UI): `0 4 * * 0 docker system prune -af` → `/var/log/docker-prune.log`. Alerta email si >80% |
