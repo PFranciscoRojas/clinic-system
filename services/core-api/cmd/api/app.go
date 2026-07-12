@@ -77,6 +77,8 @@ func newApp(cfg config.Config) (*app, error) {
 		Addr:    ":" + cfg.Port,
 		Handler: a.buildRouter(),
 		// Timeouts prevent slow clients from holding connections open indefinitely.
+		// Routes that legitimately read large bodies (session audio upload)
+		// extend their own deadline via http.ResponseController.
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,

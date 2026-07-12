@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -17,6 +18,11 @@ import (
 )
 
 const maxAudioSize = 200 << 20 // 200 MB
+
+// A whole-session recording (up to maxAudioSize) arriving over a slow clinic
+// uplink (~2 Mbps) needs ~14 min of wall time to upload — far beyond the
+// server-wide 15 s ReadTimeout that protects every other route.
+const audioUploadDeadline = 20 * time.Minute
 
 var allowedAudioExtensions = map[string]bool{
 	".mp3": true, ".mp4": true, ".m4a": true,
@@ -34,6 +40,15 @@ func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusUnprocessableEntity, "invalid appointment id")
 		return
 	}
+
+	// Extend this connection's deadlines before touching the body: the
+	// server-wide 15 s ReadTimeout would otherwise cut a session-length
+	// upload mid-body. Best-effort — a ResponseWriter that doesn't support
+	// per-request deadlines (e.g. httptest) just keeps the server defaults.
+	rc := http.NewResponseController(w)
+	deadline := time.Now().Add(audioUploadDeadline)
+	_ = rc.SetReadDeadline(deadline)
+	_ = rc.SetWriteDeadline(deadline)
 
 	// MaxBytesReader is the real size cap: ParseMultipartForm's argument only
 	// bounds the in-memory portion — without this, an oversized body would

@@ -31,7 +31,9 @@ jobs:
           context: ./services/ai-service
           push: true
           tags: ghcr.io/pfranciscorojas/clinic-system-ai-service:latest
-          build-args: WHISPER_MODEL=tiny
+          # Must match WHISPER_MODEL in the prod .env — a mismatch means the
+          # container re-downloads the model at runtime after every recreate.
+          build-args: WHISPER_MODEL=base
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
