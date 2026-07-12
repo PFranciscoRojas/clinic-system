@@ -67,7 +67,10 @@ services:
       DB_HOST: postgres
       DB_PORT: "5432"
     volumes:
-      - audio_data:/data/audio:ro
+      # rw: the worker deletes each audio file after transcription (privacy —
+      # the encrypted transcript is the only copy that should persist). With
+      # :ro that delete failed silently and PHI audio accumulated on disk.
+      - audio_data:/data/audio
     networks:
       - sghcp_net
     depends_on:

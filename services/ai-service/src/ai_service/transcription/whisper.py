@@ -10,10 +10,10 @@ logger = logging.getLogger(__name__)
 
 # Whisper's classic failure mode on silent/near-silent audio: instead of
 # returning empty text, it "continues" from initial_prompt and loops,
-# repeating the same (fabricated) sentence verbatim. A transcription that
-# repeats one of its own sentences essentially never happens in real speech —
-# treat it as a hallucination rather than feed it to Claude as a clinical
-# draft below (worker.py already renders an empty transcription as an empty,
+# repeating the same (fabricated) sentence verbatim, usually consecutively
+# and usually until it fills the window. Treat that pattern as a
+# hallucination rather than feed it to Claude as a clinical draft
+# (worker.py already renders an empty transcription as an empty,
 # fill-it-yourself draft — this makes a hallucinated one behave the same way).
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
@@ -22,7 +22,19 @@ def _looks_hallucinated(text: str) -> bool:
     sentences = [s.strip().lower() for s in _SENTENCE_SPLIT_RE.split(text) if s.strip()]
     if len(sentences) < 2:
         return False
-    return len(set(sentences)) < len(sentences)
+    # A silence loop repeats one sentence over and over. But real speech in a
+    # session-length recording also repeats the odd sentence verbatim ("okey",
+    # "no sé", closing formulas), so any-duplicate-anywhere would throw away a
+    # whole hour of legitimate transcription. Flag only when repetition
+    # dominates the transcript, or the same sentence loops back to back.
+    if len(set(sentences)) <= len(sentences) / 2:
+        return True
+    run = 1
+    for prev, cur in zip(sentences, sentences[1:]):
+        run = run + 1 if cur == prev else 1
+        if run >= 3:
+            return True
+    return False
 
 
 @lru_cache(maxsize=1)
