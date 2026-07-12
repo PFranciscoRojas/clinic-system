@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,6 +50,12 @@ func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 	deadline := time.Now().Add(audioUploadDeadline)
 	_ = rc.SetReadDeadline(deadline)
 	_ = rc.SetWriteDeadline(deadline)
+
+	// This route is exempt from the router's 30 s context timeout (it would
+	// expire while the body is still arriving) — bound it here instead.
+	ctx, cancel := context.WithDeadline(r.Context(), deadline)
+	defer cancel()
+	r = r.WithContext(ctx)
 
 	// MaxBytesReader is the real size cap: ParseMultipartForm's argument only
 	// bounds the in-memory portion — without this, an oversized body would
