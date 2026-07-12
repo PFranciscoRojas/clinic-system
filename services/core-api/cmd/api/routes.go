@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -54,7 +55,10 @@ func (a *app) buildRouter() http.Handler {
 	r.Use(chimiddleware.RealIP)
 	r.Use(middleware.StructuredLogger(slog.Default()))
 	r.Use(chimiddleware.Recoverer)
-	r.Use(chimiddleware.Timeout(30 * time.Second))
+	// 30 s request-context timeout for every route except the session-audio
+	// upload, whose body alone can legitimately take minutes to arrive over a
+	// slow clinic uplink (the handler bounds its own context instead).
+	r.Use(exceptAudioUpload(chimiddleware.Timeout(30 * time.Second)))
 
 	// ── Infrastructure ────────────────────────────────────────────────────────
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -186,4 +190,22 @@ func (a *app) buildRouter() http.Handler {
 	})
 
 	return r
+}
+
+// exceptAudioUpload applies mw to every request except the session-audio
+// upload (POST /api/v1/appointments/{id}/audio), which is exempt because its
+// multipart body can legitimately take minutes to transfer.
+func exceptAudioUpload(mw func(http.Handler) http.Handler) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		wrapped := mw(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			p := r.URL.Path
+			if r.Method == http.MethodPost &&
+				strings.HasPrefix(p, "/api/v1/appointments/") && strings.HasSuffix(p, "/audio") {
+				next.ServeHTTP(w, r)
+				return
+			}
+			wrapped.ServeHTTP(w, r)
+		})
+	}
 }
