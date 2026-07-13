@@ -152,10 +152,21 @@ interface AudioSectionProps {
   sessionDate: string;
   processing?: boolean;
   linkedRecordId?: string;
+  /** A live recording is running — uploading a second audio would get merged
+   *  with it into one draft, so the dropzone is disabled meanwhile. */
+  recording?: boolean;
+  /** Org has custom formats but none is chosen yet — uploading now would
+   *  silently generate the draft in the integrated fallback format. */
+  needsFormat?: boolean;
+  /** Name of the custom format the draft will be generated with. */
+  formatName?: string;
+  onChooseFormat?: () => void;
   onDraftCreated: (draftId: string) => void;
+  /** Mirrors the in-flight upload to the parent's navigation guards. */
+  onUploadingChange?: (uploading: boolean) => void;
 }
 
-function AudioSection({ appointmentId, patientId, draftId, recordType, templateId, sessionDate, processing, linkedRecordId, onDraftCreated }: AudioSectionProps) {
+function AudioSection({ appointmentId, patientId, draftId, recordType, templateId, sessionDate, processing, linkedRecordId, recording, needsFormat, formatName, onChooseFormat, onDraftCreated, onUploadingChange }: AudioSectionProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState('');
@@ -185,14 +196,14 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
   }
 
   const handleFile = async (file: File) => {
-    setUploading(true); setUploadErr('');
+    setUploading(true); onUploadingChange?.(true); setUploadErr('');
     try {
       const res = await appointmentsApi.uploadAudio(appointmentId, patientId, file, recordType, templateId);
       onDraftCreated(res.draft_id);
     } catch {
       setUploadErr('Error al subir el audio. Verifica el formato (mp3, wav, m4a).');
     } finally {
-      setUploading(false);
+      setUploading(false); onUploadingChange?.(false);
     }
   };
 
@@ -244,6 +255,18 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
     );
   }
 
+  // A live recording already targets this session: a second, parallel audio
+  // would be folded into the same draft by the worker's take-consolidation —
+  // designed for retakes after a crash, not for mixing two different audios.
+  if (recording) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '13px 15px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, fontSize: 12.5, color: '#78350f', lineHeight: 1.55 }}>
+        <Mic size={15} style={{ flexShrink: 0, marginTop: 2 }} />
+        <span>Estás grabando esta sesión — al finalizar, el audio se procesa automáticamente. Si prefieres subir un archivo, detén la grabación primero.</span>
+      </div>
+    );
+  }
+
   return (
     <div>
       <input
@@ -251,10 +274,10 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
         type="file"
         accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm"
         style={{ display: 'none' }}
-        onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }}
       />
       <div
-        onClick={() => !uploading && fileRef.current?.click()}
+        onClick={() => { if (uploading) return; if (needsFormat) { onChooseFormat?.(); return; } fileRef.current?.click(); }}
         style={{
           border: '2px dashed var(--s200)', borderRadius: 12, padding: '28px 20px',
           textAlign: 'center', cursor: uploading ? 'not-allowed' : 'pointer',
@@ -266,7 +289,23 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
         {uploading ? (
           <>
             <Spinner size={28} color="var(--teal)" />
-            <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--s500)' }}>Subiendo audio…</p>
+            <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--s500)' }}>Subiendo audio… no salgas de esta página.</p>
+          </>
+        ) : needsFormat ? (
+          // Uploading without a chosen format would silently generate the
+          // draft in the generic integrated format instead of the org's own.
+          <>
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+              <FileText size={22} color="#d97706" />
+            </div>
+            <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 600, color: 'var(--s700)' }}>Primero elige el formato de la nota</p>
+            <p style={{ margin: 0, fontSize: 12, color: 'var(--s400)' }}>Así el borrador de IA sale en el formato de tu consultorio.</p>
+            <button
+              onClick={e => { e.stopPropagation(); onChooseFormat?.(); }}
+              style={{ marginTop: 14, padding: '8px 20px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              <FileText size={14} /> Elegir formato
+            </button>
           </>
         ) : (
           <>
@@ -275,6 +314,9 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
             </div>
             <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 600, color: 'var(--s700)' }}>Subir grabación de la sesión</p>
             <p style={{ margin: 0, fontSize: 12, color: 'var(--s400)' }}>MP3, WAV, M4A · El audio no sale de tu servidor</p>
+            <p style={{ margin: '6px 0 0', fontSize: 11.5, color: 'var(--s500)' }}>
+              El borrador se generará con: <b>{formatName ?? 'formato integrado'}</b>
+            </p>
             <button
               onClick={e => { e.stopPropagation(); fileRef.current?.click(); }}
               style={{ marginTop: 14, padding: '8px 20px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}
@@ -473,6 +515,9 @@ export function AppointmentPage() {
   // Chunks recovered from IndexedDB after a page refresh mid-recording
   const [recoveredChunks, setRecoveredChunks] = useState<Blob[]>([]);
   const [uploadingRecovery, setUploadingRecovery] = useState(false);
+  // File upload in flight inside AudioSection — lifted here so the exit
+  // guards below cover uploads the same way they cover an active recording.
+  const [audioUploading, setAudioUploading] = useState(false);
 
   const teardownAudio = () => {
     audioCtxRef.current?.close().catch(() => {});
@@ -555,16 +600,22 @@ export function AppointmentPage() {
     rec.stop();
   });
 
+  // An in-flight audio upload blocks navigation like a live recording does:
+  // leaving mid-upload gives zero feedback about the draft being created, and
+  // reloading/closing the tab kills the upload outright.
+  const uploadInFlight = audioUploading || uploadingRecovery || processingAudio;
+  const exitGuardActive = recording || uploadInFlight;
+
   const navigate = (to: string | number, opts?: NavigateOptions) => {
     const path = typeof to === 'string' ? to : '';
-    if (recording && !path.startsWith('/clinical-records/')) { setBlockTarget(to); return; }
+    if (exitGuardActive && !path.startsWith('/clinical-records/')) { setBlockTarget(to); return; }
     if (typeof to === 'number') rawNavigate(to);
     else rawNavigate(to, opts);
   };
 
-  // Intercept browser back/forward and <Link>/<a> clicks while recording
+  // Intercept browser back/forward and <Link>/<a> clicks while recording or uploading
   useEffect(() => {
-    if (!recording) return;
+    if (!exitGuardActive) return;
     window.history.pushState(null, '', window.location.href);
     const onPop = () => {
       if (exitingRef.current) return; // confirmed exit unwinding — let it through
@@ -586,7 +637,7 @@ export function AppointmentPage() {
       window.removeEventListener('popstate', onPop);
       document.removeEventListener('click', onClick, { capture: true });
     };
-  }, [recording]);
+  }, [exitGuardActive]);
 
   // Releases the mic if the user navigates away mid-recording
   useEffect(() => () => {
@@ -607,13 +658,13 @@ export function AppointmentPage() {
     }).catch(() => {});
   }, [id]);
 
-  // Warn the user before reloading while a recording is in progress.
+  // Warn the user before reloading while a recording or an upload is in progress.
   useEffect(() => {
-    if (!recording) return;
+    if (!exitGuardActive) return;
     const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
-  }, [recording]);
+  }, [exitGuardActive]);
 
   const { data: patient } = useQuery({
     queryKey: ['patient', appt?.patient_id],
@@ -648,13 +699,15 @@ export function AppointmentPage() {
     staleTime: 10_000,
   });
 
-  // All templates fetched once when setup opens — unified format picker.
+  // All templates, fetched eagerly: the format picker needs them when setup
+  // opens, and the audio-upload card needs to know BEFORE any upload whether
+  // the org has custom formats (an upload without one falls back to the
+  // integrated format silently — see needsFormatForAudio below).
   // Shares the ['record-templates', …] prefix so the settings section's
   // invalidations (adding/archiving a format) reach this picker too.
   const { data: setupTemplates = [], isLoading: setupTemplatesLoading } = useQuery({
     queryKey: ['record-templates', 'all'],
     queryFn: () => recordTemplatesApi.list(),
-    enabled: setupOpen,
     staleTime: 60_000,
   });
 
@@ -721,6 +774,15 @@ export function AppointmentPage() {
   // the form, and losing the template here would make the AI generate (and
   // the review page render) the wrong format.
   const aiTemplateId = selectedTemplateId ?? (setupTemplateId || undefined);
+  // An org with custom formats should never generate an AI draft in the
+  // integrated fallback just because no format was picked yet: the upload
+  // card asks to choose one first instead of silently defaulting.
+  const needsFormatForAudio = setupTemplates.length > 0 && !aiTemplateId;
+  const aiFormatName = setupTemplates.find(t => t.id === aiTemplateId)?.name;
+  const linkedDraftBusy = linkedDraft?.status === 'PENDING' || linkedDraft?.status === 'PROCESSING';
+  // The format traveled with the audio at upload time — changing it while the
+  // draft is uploading/generating wouldn't affect that draft and only misleads.
+  const aiDraftInFlight = uploadInFlight || linkedDraftBusy;
 
   // Records linked to this appointment
   const linkedRecords: RecordMeta[] = (recordsData?.items ?? []).filter(r => r.appointment_id === id);
@@ -788,6 +850,19 @@ export function AppointmentPage() {
     if (wasRecording) setProcessingAudio(true);
     const audio = await stopRecording();
     await handleStatusChange('COMPLETED');
+    // Recorded without ever picking a format in an org that has its own:
+    // don't silently generate the draft in the integrated fallback. The
+    // chunks stay in IndexedDB (cleared only on upload success), so the
+    // recovery banner offers the upload once a format is chosen.
+    if (audio && needsFormatForAudio) {
+      setProcessingAudio(false);
+      openSetup();
+      setRecNote('La sesión finalizó y la grabación quedó guardada. Elige el formato de la nota y pulsa "Subir grabación" para generar el borrador en tu formato.');
+      recordingStore.load(id!).then(chunks => {
+        if (chunks.length > 0) setRecoveredChunks(chunks);
+      }).catch(() => {});
+      return;
+    }
     if (audio && appt?.patient_id) {
       try {
         const res = await appointmentsApi.uploadAudio(id!, appt.patient_id, audio, aiRecordType, aiTemplateId);
@@ -816,6 +891,13 @@ export function AppointmentPage() {
 
   const handleUploadRecovery = async () => {
     if (!appt?.patient_id || recoveredChunks.length === 0) return;
+    // Same rule as the upload dropzone: never generate silently in the
+    // integrated fallback when the org works with its own formats.
+    if (needsFormatForAudio) {
+      openSetup();
+      setRecNote('Elige primero el formato de la nota y vuelve a pulsar "Subir grabación".');
+      return;
+    }
     setUploadingRecovery(true);
     try {
       const blob = new Blob(recoveredChunks, { type: 'audio/webm' });
@@ -1068,13 +1150,20 @@ export function AppointmentPage() {
             {recoveredChunks.length > 0 && !recording && !pureAdmin && (
               <div role="alert" style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', background: '#fefce8', border: '1px solid #fde047', borderRadius: 9, fontSize: 13, color: '#713f12' }}>
                 <Mic size={15} style={{ flexShrink: 0 }} />
-                <span style={{ flex: 1 }}>Hay una grabación sin finalizar de esta sesión (interrumpida por recarga).</span>
+                <span style={{ flex: 1 }}>
+                  Hay una grabación sin finalizar de esta sesión (interrumpida por recarga).
+                  {draftId && ' Al subirla se combinará con el borrador ya existente de esta sesión en uno solo.'}
+                </span>
                 <button
                   onClick={handleUploadRecovery}
-                  disabled={uploadingRecovery}
-                  style={{ padding: '5px 12px', background: '#ca8a04', color: '#fff', border: 'none', borderRadius: 6, cursor: uploadingRecovery ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}
+                  // While the existing draft is still transcribing, a second
+                  // take couldn't be folded into it yet and would end up as a
+                  // separate draft — wait for DRAFT_READY before allowing it.
+                  disabled={uploadingRecovery || linkedDraftBusy}
+                  title={linkedDraftBusy ? 'Espera a que termine el borrador en proceso' : undefined}
+                  style={{ padding: '5px 12px', background: '#ca8a04', color: '#fff', border: 'none', borderRadius: 6, cursor: (uploadingRecovery || linkedDraftBusy) ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', opacity: linkedDraftBusy ? 0.5 : 1 }}
                 >
-                  {uploadingRecovery ? 'Subiendo…' : 'Subir grabación'}
+                  {uploadingRecovery ? 'Subiendo…' : linkedDraftBusy ? 'Borrador en proceso…' : 'Subir grabación'}
                 </button>
                 <button
                   onClick={handleDiscardRecovery}
@@ -1156,7 +1245,9 @@ export function AppointmentPage() {
                   <button
                     type="button"
                     onClick={requestFormatRepick}
-                    style={{ fontSize: 12, fontWeight: 600, color: 'var(--teal)', background: '#f3f2fb', border: '1px solid #cbc7ee', borderRadius: 7, padding: '6px 12px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    disabled={aiDraftInFlight}
+                    title={aiDraftInFlight ? 'El borrador de esta sesión ya se está generando con el formato elegido' : undefined}
+                    style={{ fontSize: 12, fontWeight: 600, color: 'var(--teal)', background: '#f3f2fb', border: '1px solid #cbc7ee', borderRadius: 7, padding: '6px 12px', cursor: aiDraftInFlight ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', opacity: aiDraftInFlight ? 0.5 : 1 }}
                   >
                     Cambiar formato
                   </button>
@@ -1220,11 +1311,16 @@ export function AppointmentPage() {
                       templateId={aiTemplateId}
                       sessionDate={apptDate}
                       processing={processingAudio}
+                      recording={recording}
+                      needsFormat={needsFormatForAudio}
+                      formatName={aiFormatName}
+                      onChooseFormat={openSetup}
                       // The comparison view finalizes THIS record, so it must be
                       // the in-progress autosave draft (status DRAFT) — finalizing
                       // an already-finalized note is rejected by the backend.
                       linkedRecordId={autosaveDraft?.id}
                       onDraftCreated={handleDraftCreated}
+                      onUploadingChange={setAudioUploading}
                     />
                   )}
                 </div>
@@ -1662,7 +1758,9 @@ export function AppointmentPage() {
                 <button
                   type="button"
                   onClick={requestFormatRepick}
-                  style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal-d, var(--teal))', background: '#f3f2fb', border: '1px solid #cbc7ee', borderRadius: 6, padding: '3px 9px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                  disabled={aiDraftInFlight}
+                  title={aiDraftInFlight ? 'El borrador de esta sesión ya se está generando con el formato elegido' : undefined}
+                  style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal-d, var(--teal))', background: '#f3f2fb', border: '1px solid #cbc7ee', borderRadius: 6, padding: '3px 9px', cursor: aiDraftInFlight ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0, opacity: aiDraftInFlight ? 0.5 : 1 }}
                 >
                   Cambiar formato
                 </button>
@@ -1782,7 +1880,9 @@ export function AppointmentPage() {
               <div>
                 <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--s800)' }}>¿Salir de la sesión?</p>
                 <p style={{ margin: 0, fontSize: 13, color: 'var(--s500)', lineHeight: 1.6 }}>
-                  Hay una grabación en curso. Si sales ahora, el audio se guardará en el dispositivo y podrás subirlo al volver.
+                  {recording
+                    ? 'Hay una grabación en curso. Si sales ahora, el audio se guardará en el dispositivo y podrás subirlo al volver.'
+                    : 'El audio de la sesión aún se está subiendo. Espera unos segundos a que termine — si sales ahora la subida puede interrumpirse.'}
                 </p>
               </div>
             </div>
@@ -1791,7 +1891,7 @@ export function AppointmentPage() {
                 onClick={() => setBlockTarget(null)}
                 style={{ flex: 1, padding: '10px 0', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
               >
-                Continuar grabando
+                {recording ? 'Continuar grabando' : 'Esperar aquí'}
               </button>
               <button
                 onClick={() => {
