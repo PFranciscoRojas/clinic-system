@@ -6,6 +6,7 @@ import anthropic
 
 from ai_service.approaches import wording_instruction
 from ai_service.config import settings
+from ai_service.drafts.widgets import validate_widget_value
 from ai_service.prompt_guard import TRANSCRIPT_TAG, wrap_untrusted
 
 logger = logging.getLogger(__name__)
@@ -145,6 +146,29 @@ def _build_schema_from_template(sections: list[dict[str, Any]]) -> dict[str, str
     return result
 
 
+def _validate_typed_value(sec: dict[str, Any], val: Any) -> Any | None:
+    """Validate a custom-template section value against its field type.
+    Returns the value (lightly coerced) or None when it must be dropped —
+    a dropped section renders as fill-it-yourself instead of a broken widget."""
+    field_type = sec.get("type", "text")
+    if field_type == "widget":
+        return validate_widget_value(sec.get("widget", ""), val)
+    if field_type == "scale":
+        if isinstance(val, bool) or not isinstance(val, (int, float)):
+            return None
+        mn, mx = sec.get("scale_min", 0), sec.get("scale_max", 10)
+        return val if mn <= val <= mx else None
+    if field_type == "select":
+        return val if val in (sec.get("options") or []) else None
+    if field_type == "checklist":
+        if isinstance(val, list):
+            items = [x for x in val if isinstance(x, str) and x.strip()]
+            return items or None
+        return None
+    # text (and unknown types rendered as text)
+    return val if isinstance(val, str) and val.strip() else None
+
+
 def _filter_sections(
     parsed: dict[str, Any],
     schema: dict[str, str],
@@ -152,13 +176,24 @@ def _filter_sections(
 ) -> dict[str, Any]:
     """Keep only keys that belong to the schema; preserve the right value type."""
     if template_sections is not None:
-        # Custom template: preserve value as-is (AI may return objects, arrays, numbers)
-        valid_keys = {sec["key"] for sec in template_sections if "key" in sec}
+        # Custom template: values are typed (objects, arrays, numbers) —
+        # validate each against its field/widget contract before sealing.
         result: dict[str, Any] = {}
-        for key in valid_keys:
-            val = parsed.get(key)
-            if val is not None:
-                result[key] = val
+        for sec in template_sections:
+            key = sec.get("key")
+            if not key:
+                continue
+            raw = parsed.get(key)
+            if raw is None:
+                continue
+            val = _validate_typed_value(sec, raw)
+            if val is None:
+                logger.warning(
+                    "dropping malformed section value",
+                    extra={"key": key, "field_type": sec.get("type"), "widget": sec.get("widget", "")},
+                )
+                continue
+            result[key] = val
         return result
     else:
         # Integrated format: values are always strings

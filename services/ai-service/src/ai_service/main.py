@@ -8,7 +8,28 @@ from fastapi.responses import JSONResponse
 from ai_service.config import settings
 from ai_service.worker import AIWorker
 
-logging.basicConfig(level=settings.log_level.upper(), format="%(asctime)s %(levelname)s %(name)s %(message)s")
+# Standard LogRecord attributes — anything beyond these came in via `extra=`.
+_STD_LOGRECORD_KEYS = frozenset(vars(logging.makeLogRecord({}))) | {"message", "asctime", "taskName"}
+
+
+class ExtraFormatter(logging.Formatter):
+    """Append `extra={...}` fields as key=value pairs.
+
+    The default formatter silently drops them, which left prod logs without
+    the chars/timings/ids every log call in this service actually carries.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        base = super().format(record)
+        extras = {k: v for k, v in record.__dict__.items() if k not in _STD_LOGRECORD_KEYS}
+        if extras:
+            base += " | " + " ".join(f"{k}={v}" for k, v in sorted(extras.items()))
+        return base
+
+
+logging.basicConfig(level=settings.log_level.upper())
+for _handler in logging.getLogger().handlers:
+    _handler.setFormatter(ExtraFormatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
 logger = logging.getLogger(__name__)
 
 

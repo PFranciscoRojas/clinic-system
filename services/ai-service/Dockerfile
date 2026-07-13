@@ -17,9 +17,10 @@ COPY pyproject.toml .
 RUN python -c "import tomllib; print('\n'.join(tomllib.load(open('pyproject.toml','rb'))['project']['dependencies']))" > /tmp/requirements.txt \
     && pip install --no-cache-dir -r /tmp/requirements.txt
 
-# Download spaCy Spanish model — sm (12 MB) vs lg (541 MB): sm is sufficient for
-# PII detection (PERSON/ORG/LOC) in clinical Spanish; regex handles docs/phones.
-RUN python -m spacy download es_core_news_sm
+# Download spaCy Spanish models — md (~40 MB) is the runtime default (better
+# PERSON/ORG/LOC recall than sm); sm stays as the in-code fallback so a
+# missing model can never be the reason the worker fails to boot.
+RUN python -m spacy download es_core_news_md && python -m spacy download es_core_news_sm
 
 # Pre-download Whisper model so it's baked into the image (avoids slow first-run download)
 # Model size: tiny=39M, base=74M, small=244M, medium=769M
