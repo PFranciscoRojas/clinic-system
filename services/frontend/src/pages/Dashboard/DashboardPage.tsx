@@ -14,6 +14,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
 import { useIsCompact } from '@/lib/useMediaQuery';
 import { AgendaCalendar } from './AgendaCalendar';
+import { PendingNotesCard } from './PendingNotesCard';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -547,6 +548,9 @@ export function DashboardPage() {
                 </button>
               </div>
             </div>
+
+            {/* Sesiones completadas que aún no tienen nota — no olvidar cerrarlas */}
+            <PendingNotesCard />
 
             {/* Agenda del día */}
             <div>

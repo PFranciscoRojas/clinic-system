@@ -5,7 +5,7 @@ import {
   ArrowLeft, Calendar, Clock, MapPin, Video, User,
   Play, CheckCircle2, AlertTriangle, Brain, FileText,
   Mic, MicOff, Upload, X, Phone, CreditCard, Cake, UserPlus, Wallet,
-  CalendarClock, Pause, RotateCcw,
+  CalendarClock, Pause, RotateCcw, Square,
 } from 'lucide-react';
 import { appointmentsApi, type AppointmentStatus } from '@/api/appointments';
 import { ApiError } from '@/api/client';
@@ -158,15 +158,21 @@ interface AudioSectionProps {
   /** Org has custom formats but none is chosen yet — uploading now would
    *  silently generate the draft in the integrated fallback format. */
   needsFormat?: boolean;
-  /** Name of the custom format the draft will be generated with. */
+  /** Name of the custom format the NEXT upload will be generated with. */
   formatName?: string;
+  /** Name of the format the in-flight/existing draft was generated with
+   *  (from the draft's own template_id — the source of truth once uploaded). */
+  draftFormatName?: string;
+  /** The session already has a finalized note: approving the draft links it
+   *  to that record instead of creating a second one. */
+  hasFinalizedNote?: boolean;
   onChooseFormat?: () => void;
   onDraftCreated: (draftId: string) => void;
   /** Mirrors the in-flight upload to the parent's navigation guards. */
   onUploadingChange?: (uploading: boolean) => void;
 }
 
-function AudioSection({ appointmentId, patientId, draftId, recordType, templateId, sessionDate, processing, linkedRecordId, recording, needsFormat, formatName, onChooseFormat, onDraftCreated, onUploadingChange }: AudioSectionProps) {
+function AudioSection({ appointmentId, patientId, draftId, recordType, templateId, sessionDate, processing, linkedRecordId, recording, needsFormat, formatName, draftFormatName, hasFinalizedNote, onChooseFormat, onDraftCreated, onUploadingChange }: AudioSectionProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState('');
@@ -189,7 +195,9 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
         <Spinner size={18} color="#0369a1" />
         <div>
           <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--s800)' }}>Procesando la grabación…</p>
-          <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--s500)' }}>Transcribiendo el audio y preparando el borrador. Puede tardar unos minutos.</p>
+          <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--s500)' }}>
+            Transcribiendo el audio y preparando el borrador con: <b>{formatName ?? 'formato integrado'}</b>. Puede tardar unos minutos.
+          </p>
         </div>
       </div>
     );
@@ -239,9 +247,18 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
             <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 6, background: cfg.bg, color: cfg.color }}>
               {cfg.label}
             </span>
-            {isProcessing && <span style={{ fontSize: 11, color: 'var(--s400)' }}>Actualizando cada 3s…</span>}
+            {isProcessing && (
+              <span style={{ fontSize: 11, color: 'var(--s400)' }}>
+                Generándose con: <b>{draftFormatName ?? 'formato integrado'}</b>
+              </span>
+            )}
             {isEmptyDraft && <span style={{ fontSize: 11, color: 'var(--s400)' }}>La IA no encontró nada que estructurar — redacta manualmente.</span>}
           </div>
+          {hasFinalizedNote && draft.status === 'DRAFT_READY' && (
+            <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--s500)', lineHeight: 1.5 }}>
+              Esta sesión ya tiene un registro guardado — al aprobar, el borrador se vinculará a ese registro (no se creará otro).
+            </p>
+          )}
         </div>
         {(draft.status === 'DRAFT_READY' || draft.status === 'APPROVED') && (
           <a
@@ -290,6 +307,9 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
           <>
             <Spinner size={28} color="var(--teal)" />
             <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--s500)' }}>Subiendo audio… no salgas de esta página.</p>
+            <p style={{ margin: '4px 0 0', fontSize: 11.5, color: 'var(--s400)' }}>
+              El borrador se generará con: <b>{formatName ?? 'formato integrado'}</b>
+            </p>
           </>
         ) : needsFormat ? (
           // Uploading without a chosen format would silently generate the
@@ -777,7 +797,9 @@ export function AppointmentPage() {
   // An org with custom formats should never generate an AI draft in the
   // integrated fallback just because no format was picked yet: the upload
   // card asks to choose one first instead of silently defaulting.
-  const needsFormatForAudio = setupTemplates.length > 0 && !aiTemplateId;
+  // With the picker open the previous choice is being abandoned — treat the
+  // format as not-chosen until the professional picks again.
+  const needsFormatForAudio = setupTemplates.length > 0 && (!aiTemplateId || setupOpen);
   const aiFormatName = setupTemplates.find(t => t.id === aiTemplateId)?.name;
   const linkedDraftBusy = linkedDraft?.status === 'PENDING' || linkedDraft?.status === 'PROCESSING';
   // The format traveled with the audio at upload time — changing it while the
@@ -889,6 +911,17 @@ export function AppointmentPage() {
     }
   };
 
+  // Stop the recorder WITHOUT finishing the session or uploading anything.
+  // The chunks were persisted to IndexedDB as they were produced, so the
+  // recovery banner takes over: the professional decides to upload or discard
+  // (e.g. to upload an external file instead).
+  const handleStopRecording = async () => {
+    await stopRecording();
+    recordingStore.load(id!).then(chunks => {
+      if (chunks.length > 0) setRecoveredChunks(chunks);
+    }).catch(() => {});
+  };
+
   const handleUploadRecovery = async () => {
     if (!appt?.patient_id || recoveredChunks.length === 0) return;
     // Same rule as the upload dropzone: never generate silently in the
@@ -984,13 +1017,20 @@ export function AppointmentPage() {
   const doFormatRepick = () => {
     setRepickConfirmOpen(false);
     try { localStorage.removeItem(`clinical-draft-${id}`); } catch { /* ignore */ }
+    // The abandoned choice must stop driving the audio/AI target while the
+    // picker is open — otherwise the upload card keeps offering to generate
+    // with the format being changed.
+    setSelectedTemplateId(undefined);
+    setSetupTemplateId('');
     setShowRecordForm(false);
     setSetupOpen(true);
   };
   const requestFormatRepick = () => {
     let hasDraft = false;
     try { hasDraft = !!localStorage.getItem(`clinical-draft-${id}`); } catch { /* ignore */ }
-    if (hasDraft) setRepickConfirmOpen(true);
+    // A generated AI draft is also worth a warning: it was produced with the
+    // current format and won't match the new one.
+    if (hasDraft || linkedDraft?.status === 'DRAFT_READY') setRepickConfirmOpen(true);
     else doFormatRepick();
   };
 
@@ -1091,6 +1131,15 @@ export function AppointmentPage() {
                     <Mic size={13} /> Reanudar
                   </button>
                 )}
+                {isInProgress && !pureAdmin && recordingConsent && recording && (
+                  <button
+                    onClick={handleStopRecording}
+                    title="Detiene la grabación sin finalizar la sesión — el audio queda guardado en este dispositivo para subirlo o descartarlo"
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: 'var(--s600)', border: '1.5px solid var(--s200)', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                  >
+                    <Square size={12} /> Detener
+                  </button>
+                )}
                 {isInProgress && !pureAdmin && recordingConsent && !recording && (
                   <button onClick={startRecording} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
                     {micError ? <RotateCcw size={13} /> : <Mic size={13} />}
@@ -1151,7 +1200,7 @@ export function AppointmentPage() {
               <div role="alert" style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', background: '#fefce8', border: '1px solid #fde047', borderRadius: 9, fontSize: 13, color: '#713f12' }}>
                 <Mic size={15} style={{ flexShrink: 0 }} />
                 <span style={{ flex: 1 }}>
-                  Hay una grabación sin finalizar de esta sesión (interrumpida por recarga).
+                  Hay una grabación de esta sesión pendiente de subir (detenida o interrumpida).
                   {draftId && ' Al subirla se combinará con el borrador ya existente de esta sesión en uno solo.'}
                 </span>
                 <button
@@ -1314,6 +1363,8 @@ export function AppointmentPage() {
                       recording={recording}
                       needsFormat={needsFormatForAudio}
                       formatName={aiFormatName}
+                      draftFormatName={linkedDraft?.template_id ? setupTemplates.find(t => t.id === linkedDraft.template_id)?.name : undefined}
+                      hasFinalizedNote={finalizedRecords.length > 0}
                       onChooseFormat={openSetup}
                       // The comparison view finalizes THIS record, so it must be
                       // the in-progress autosave draft (status DRAFT) — finalizing
@@ -1848,6 +1899,9 @@ export function AppointmentPage() {
                 <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--s800)' }}>¿Cambiar formato?</p>
                 <p style={{ margin: 0, fontSize: 13, color: 'var(--s500)', lineHeight: 1.6 }}>
                   El contenido que hayas escrito en esta nota se perderá.
+                  {linkedDraft?.status === 'DRAFT_READY' && (
+                    <> Además, el borrador de IA de esta sesión ya se generó con el formato actual — <b>no cuadrará</b> con el formato nuevo.</>
+                  )}
                 </p>
               </div>
             </div>

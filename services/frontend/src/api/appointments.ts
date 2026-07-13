@@ -37,7 +37,19 @@ export interface CreateAppointmentBody {
   notes?: string;
 }
 
+/** COMPLETED session still missing its finalized clinical record. */
+export interface PendingNote {
+  appointment_id: string;
+  patient_id: string;
+  scheduled_at: string;
+  /** Latest active AI draft for the session ('' = none). */
+  draft_status: '' | 'PENDING' | 'PROCESSING' | 'DRAFT_READY';
+}
+
 export const appointmentsApi = {
+  pendingNotes: () =>
+    api.get<{ items: PendingNote[] }>('/appointments/pending-notes').then(r => r.items ?? []),
+
   list: (params?: {
     patient_id?: string; staff_id?: string; status?: string;
     date_from?: string; date_to?: string; limit?: number; offset?: number;

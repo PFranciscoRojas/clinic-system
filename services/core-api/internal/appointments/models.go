@@ -2,6 +2,17 @@ package appointments
 
 import "time"
 
+// PendingNote is a COMPLETED session that still has no finalized clinical
+// record — surfaced so the professional doesn't forget to close it.
+type PendingNote struct {
+	AppointmentID string    `json:"appointment_id"`
+	PatientID     string    `json:"patient_id"`
+	ScheduledAt   time.Time `json:"scheduled_at"`
+	// Latest active AI draft status for the session ('' = none):
+	// PENDING/PROCESSING/DRAFT_READY.
+	DraftStatus string `json:"draft_status"`
+}
+
 type Appointment struct {
 	ID             string
 	OrganizationID string
