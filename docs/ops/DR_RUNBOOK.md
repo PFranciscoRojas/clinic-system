@@ -17,7 +17,8 @@ descifrarlos. Un atacante con acceso total al VPS no puede leer los backups.
 
 | Artefacto | Dónde vive | Sin él |
 |---|---|---|
-| Llave GPG **privada** `backups@marcelachapues.com` (rsa4096, `E4FD1A7A`) | Keyring de la máquina del operador. **Recomendado:** copia adicional en frío (`gpg --export-secret-keys --armor` impresa o en USB cifrado) | Backups ilegibles. Pérdida = pérdida total |
+| Llave GPG **privada** `backups@chapni.com` (rsa4096, `413B0C877EB5D795`, activa desde 2026-07-13) | Keyring de la máquina del operador + nota segura en el gestor de contraseñas del operador | Backups ilegibles. Pérdida = pérdida total |
+| Llave GPG **privada** anterior `backups@marcelachapues.com` (`E4FD1A7A`) — solo para dumps ≤ 2026-07-13 | Ídem (NO borrarla: los backups históricos en B2 siguen cifrados con ella) | Backups históricos ilegibles |
 | Credenciales B2 (rclone) | VPS (`~/.config/rclone`) + consola web de Backblaze (login del operador) | Sin acceso al offsite; quedan las copias locales si el disco sobrevive |
 | `.env` (MASTER_KEY, SEARCH_PEPPER…) | VPS + snapshot cifrado diario en B2 (`env/`) | PII indescifrable aunque restaures la BD |
 | Repo `clinic-system` + imágenes | GitHub + ghcr.io | Reconstruible con `docker compose` |
@@ -72,6 +73,7 @@ volumen real de postgres + DNS.
 | Fecha | Resultado | Notas |
 |---|---|---|
 | 2026-07-13 | ✅ | Desde B2 en máquina del operador. 45 tablas, 0 errores, PII descifrada con MASTER_KEY. Datos: 5 orgs / 9 users / 7 patients / 19 records. Hallazgo: el `.env` vivía solo en el VPS → se añadió el snapshot cifrado diario a B2 en esta misma fecha. |
+| 2026-07-13 (2) | ✅ rotación de llave | La privada anterior quedó expuesta fuera del keyring → rotada a `backups@chapni.com` (`413B0C877EB5D795`): pública importada en el VPS, `GPG_RECIPIENT` actualizado, backup + snapshot del día re-cifrados y round-trip de descifrado verificado con la nueva. La anterior se conserva solo para dumps históricos. |
 
 > Repetir el simulacro tras cambios grandes de esquema o al menos cada 6 meses;
 > registrar aquí cada corrida.
