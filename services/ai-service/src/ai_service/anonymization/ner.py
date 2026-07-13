@@ -29,10 +29,23 @@ _ACCENT_CLASSES = {
 }
 
 
+# md has measurably better PERSON/ORG/LOC recall than sm on Spanish clinical
+# text (word vectors); the literal known-names pass and the doc/phone/email
+# regexes still run on top of whatever NER misses.
+SPACY_MODEL = "es_core_news_md"
+
+
 @lru_cache(maxsize=1)
 def _load_model() -> Language:
-    logger.info("loading spacy model es_core_news_sm")
-    return spacy.load("es_core_news_sm")
+    try:
+        logger.info("loading spacy model", extra={"model": SPACY_MODEL})
+        return spacy.load(SPACY_MODEL)
+    except OSError:
+        # Image built without md (stale local build) — degrade to sm instead
+        # of taking the whole worker down: anonymization must never be the
+        # reason a draft job dies.
+        logger.warning("spacy model missing, falling back to es_core_news_sm", extra={"wanted": SPACY_MODEL})
+        return spacy.load("es_core_news_sm")
 
 
 def _name_pattern(name: str) -> re.Pattern[str] | None:
