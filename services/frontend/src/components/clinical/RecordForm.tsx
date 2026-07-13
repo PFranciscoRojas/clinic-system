@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { AlertTriangle, Save, Copy } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { clinicalRecordsApi, type RecordType, type RiskLevel } from '@/api/clinicalRecords';
+import { clinicalRecordsApi, type RecordType, type RiskLevel, type DischargeReason } from '@/api/clinicalRecords';
 import { ApiError } from '@/api/client';
 import { recordTemplatesApi } from '@/api/recordTemplates';
 import { registerDraftFlush } from '@/lib/clinicalDrafts';
@@ -9,6 +9,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { RecordSectionsForm, emptyDraft, draftToPayload, recordToDraft, validateDraft, toUIRecordType, draftHasContent, mergeSavedDraft, type ClinicalDraft, type UIRecordType } from './RecordSectionsForm';
 import { RECORD_TYPE_LABELS } from './constants';
 import TemplatedSectionsForm, { type SectionsState } from './TemplatedSectionsForm';
+import DischargeReasonCard from './DischargeReasonCard';
 
 // ─── Clinical record form (template v2) ──────────────────────────────────────
 
@@ -120,6 +121,9 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   // Custom template selection — overridden by lockedTemplateId from parent
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(lockedTemplateId ?? '');
   const [customSections, setCustomSections] = useState<SectionsState>({});
+  // Required by the backend for every DISCHARGE record regardless of format —
+  // custom templates don't carry the integrated form's reason radios.
+  const [customDischargeReason, setCustomDischargeReason] = useState<DischargeReason | ''>('');
 
   // Unfiltered: the template only defines the note's fields — the session
   // picker may lock e.g. an EVOLUTION-shaped format onto an INITIAL record
@@ -250,6 +254,7 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
         } else {
           if (saved.uiType) setUIType(saved.uiType);
           if (saved.selectedTemplateId) setSelectedTemplateId(saved.selectedTemplateId);
+          if (typeof saved.customDischargeReason === 'string') setCustomDischargeReason(saved.customDischargeReason as DischargeReason | '');
           if (hasTemplateContent) {
             setCustomSections(savedCustomSections);
             setRestored(true);
@@ -331,7 +336,7 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
       try {
         // customSections/selectedTemplateId must travel with uiType/draft —
         // a custom-template record's real content lives there, not in draft.
-        localStorage.setItem(storageKey, JSON.stringify({ uiType, draft, customSections, selectedTemplateId }));
+        localStorage.setItem(storageKey, JSON.stringify({ uiType, draft, customSections, selectedTemplateId, customDischargeReason }));
         if (draftHasContent(draft) || Object.keys(customSections).length > 0) setLastSavedAt(Date.now());
       } catch { /* storage full */ }
     };
@@ -345,7 +350,7 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
       window.removeEventListener('pagehide', onHide);
       document.removeEventListener('visibilitychange', onHide);
     };
-  }, [storageKey, uiType, draft, customSections, selectedTemplateId]);
+  }, [storageKey, uiType, draft, customSections, selectedTemplateId, customDischargeReason]);
 
   // Fase 2 — server-side autosave. A ref mirrors the latest content-bearing
   // state so the 25s interval (created once, stable) never reads stale
@@ -467,6 +472,11 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
           setSaving(false);
           return;
         }
+        if (apiType === 'DISCHARGE' && !customDischargeReason) {
+          setErr('El motivo de egreso es obligatorio.');
+          setSaving(false);
+          return;
+        }
         createBody = {
           ...(appointmentId ? { appointment_id: appointmentId } : {}),
           record_type: apiType,
@@ -474,6 +484,7 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
           template_id: selectedTemplate.id,
           sections: customSections,
           risk_level: ((customSections.risk as string) || 'NONE') as RiskLevel,
+          ...(apiType === 'DISCHARGE' && customDischargeReason ? { discharge_reason: customDischargeReason } : {}),
         };
       } else {
         // Integrated format path
@@ -702,11 +713,18 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
 
       <div style={{ marginBottom: 16 }}>
         {selectedTemplate ? (
-          <TemplatedSectionsForm
-            schema={selectedTemplate.schema}
-            value={customSections}
-            onChange={setCustomSections}
-          />
+          <>
+            <TemplatedSectionsForm
+              schema={selectedTemplate.schema}
+              value={customSections}
+              onChange={setCustomSections}
+            />
+            {apiType === 'DISCHARGE' && (
+              <div style={{ marginTop: 16 }}>
+                <DischargeReasonCard value={customDischargeReason} onChange={setCustomDischargeReason} />
+              </div>
+            )}
+          </>
         ) : (
           <RecordSectionsForm recordType={uiType} value={draft} onChange={setDraft} />
         )}

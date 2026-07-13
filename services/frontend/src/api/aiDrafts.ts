@@ -33,6 +33,8 @@ export interface ApproveDraftInput {
   appointment_id?: string;
   risk_level?: string;
   template_id?: string;
+  /** Required by the backend when record_type is DISCHARGE, any format. */
+  discharge_reason?: string;
 }
 
 export interface DraftMeta {
