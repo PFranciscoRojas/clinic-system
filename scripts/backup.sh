@@ -57,12 +57,23 @@ MARKER_DIR="/var/lib/sghcp"
 mkdir -p "$MARKER_DIR"
 printf '%s|%s\n' "$(date +%s)" "$SIZE" > "${MARKER_DIR}/last_backup_ok"
 
+# Snapshot the runtime secrets next to the dump: a database backup is
+# undecryptable without MASTER_KEY (and unusable without SEARCH_PEPPER,
+# JWT_SECRET…), and those otherwise live ONLY on this host. Encrypted with
+# the same recipient whose private key is held offline — the snapshot is as
+# safe offsite as the dump itself. (DR drill 2026-07-13 flagged this gap.)
+ENV_SNAPSHOT="${BACKUP_DIR}/sghcp-env-${DATE}.gpg"
+gpg --batch --yes --trust-model always --recipient "$GPG_RECIPIENT" \
+    --encrypt --output "$ENV_SNAPSHOT" "$ENV_FILE"
+echo "[backup] Env snapshot written: ${ENV_SNAPSHOT}"
+
 # Sync to Backblaze B2 — only when an rclone remote named "b2" is configured.
 # Until then the encrypted backup stays local; the warning keeps the gap visible.
 if command -v rclone > /dev/null && rclone listremotes 2>/dev/null | grep -q '^b2:'; then
     : "${B2_BUCKET_NAME:?B2_BUCKET_NAME not set}"
     echo "[backup] Uploading to B2 bucket ${B2_BUCKET_NAME}..."
     rclone copy "$DEST" "b2:${B2_BUCKET_NAME}/daily/"
+    rclone copy "$ENV_SNAPSHOT" "b2:${B2_BUCKET_NAME}/env/"
     echo "[backup] Upload complete at $(date -u +%T) UTC"
 else
     echo "[backup] WARNING: rclone remote 'b2' not configured — backup is LOCAL ONLY" >&2
