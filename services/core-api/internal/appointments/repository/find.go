@@ -25,6 +25,48 @@ func (r *Repository) FindByID(ctx context.Context, orgID, appointmentID string) 
 	return scanAppointment(row)
 }
 
+// PendingNotes returns the professional's COMPLETED sessions of the last 30
+// days that still have no finalized clinical record — the ones at risk of
+// being forgotten. draft_status carries the latest AI draft's state (empty
+// when the session has no draft at all).
+func (r *Repository) PendingNotes(ctx context.Context, orgID, staffID string) ([]appointments.PendingNote, error) {
+	rows, err := r.q(ctx).Query(ctx, `
+		SELECT a.id::text, a.patient_id::text, a.scheduled_at,
+		       COALESCE(d.status::text, '') AS draft_status
+		FROM appointments a
+		LEFT JOIN LATERAL (
+			SELECT status FROM ai_drafts
+			WHERE appointment_id = a.id AND status IN ('PENDING','PROCESSING','DRAFT_READY')
+			ORDER BY created_at DESC LIMIT 1
+		) d ON TRUE
+		WHERE a.organization_id = $1
+		  AND a.staff_id = $2
+		  AND a.status = 'COMPLETED'
+		  AND a.patient_id IS NOT NULL
+		  AND a.scheduled_at > NOW() - INTERVAL '30 days'
+		  AND NOT EXISTS (
+			SELECT 1 FROM clinical_records cr
+			WHERE cr.appointment_id = a.id AND cr.finalized_at IS NOT NULL
+		  )
+		ORDER BY a.scheduled_at DESC
+		LIMIT 20
+	`, orgID, staffID)
+	if err != nil {
+		return nil, fmt.Errorf("query pending notes: %w", err)
+	}
+	defer rows.Close()
+
+	var out []appointments.PendingNote
+	for rows.Next() {
+		var n appointments.PendingNote
+		if err := rows.Scan(&n.AppointmentID, &n.PatientID, &n.ScheduledAt, &n.DraftStatus); err != nil {
+			return nil, fmt.Errorf("scan pending note: %w", err)
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
 func (r *Repository) List(ctx context.Context, orgID string, f appointments.ListFilter) ([]*appointments.Appointment, error) {
 	if f.Limit <= 0 || f.Limit > 100 {
 		f.Limit = 20

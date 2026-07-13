@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 
 	"sghcp/core-api/internal/clinicalrecords"
 	crrsvc "sghcp/core-api/internal/clinicalrecords/service"
@@ -116,6 +117,37 @@ func (h *Handler) approveDraft(w http.ResponseWriter, r *http.Request) {
 	appointmentID := body.AppointmentID
 	if appointmentID == "" {
 		appointmentID = draft.AppointmentID // reuse existing link if present
+	}
+
+	// A note may already exist for this session (written manually while the
+	// AI draft was processing). Approving must never mint a SECOND clinical
+	// record for the same appointment — consume the draft by linking it to
+	// the existing record instead; the AI content stays readable on the
+	// immutable draft.
+	if appointmentID != "" {
+		var existingID string
+		err := h.db.QueryRow(r.Context(), `
+			SELECT id FROM clinical_records
+			WHERE appointment_id = $1 AND finalized_at IS NOT NULL
+			ORDER BY created_at DESC LIMIT 1
+		`, appointmentID).Scan(&existingID)
+		switch {
+		case err == nil && existingID != "":
+			if err := h.svc.ResolveDraft(r.Context(), claims.OrganizationID, draftID, existingID, claims.UserID); err != nil {
+				writeErr(w, err)
+				return
+			}
+			httputil.WriteJSON(w, http.StatusOK, map[string]string{
+				"clinical_record_id": existingID,
+				"linked_existing":    "true",
+			})
+			return
+		case errors.Is(err, pgx.ErrNoRows):
+			// no note yet — create one from the draft below
+		default:
+			httputil.WriteError(w, http.StatusInternalServerError, "error al verificar el registro de la sesión")
+			return
+		}
 	}
 
 	// The template the recording was initiated with wins when the client
