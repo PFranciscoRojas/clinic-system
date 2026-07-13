@@ -10,7 +10,8 @@ import { ApiError } from '@/api/client';
 import { useIsMobile } from '@/lib/useMediaQuery';
 import { diagnosesApi, type ICD10Code } from '@/api/diagnoses';
 import { recordTemplatesApi } from '@/api/recordTemplates';
-import { clinicalRecordsApi, type RecordSections, type ClinicalRecord } from '@/api/clinicalRecords';
+import { clinicalRecordsApi, type RecordSections, type ClinicalRecord, type DischargeReason } from '@/api/clinicalRecords';
+import DischargeReasonCard from '@/components/clinical/DischargeReasonCard';
 import { TEMPLATE_SECTIONS, RECORD_TYPE_LABELS, type SectionDef } from '@/components/clinical/constants';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
@@ -65,6 +66,9 @@ export function AIDraftPage() {
   const [approveErr, setApproveErr] = useState('');
   const [createdRecordId, setCreatedRecordId] = useState('');
   const [riskLevel, setRiskLevel] = useState('NONE');
+  // Required by the backend for a DISCHARGE approval in any format; the
+  // comparison view captures it inside the integrated form instead.
+  const [dischargeReason, setDischargeReason] = useState<DischargeReason | ''>('');
   // Mental exam (INITIAL, integrated format): a required section the AI does
   // not generate — the professional fills the checklist here, mirroring the
   // manual record form. Defaulted so approval is never blocked by a section
@@ -289,6 +293,10 @@ export function AIDraftPage() {
     // A record was already created from this draft — never create a second one,
     // even if the draft's status refetch hasn't landed yet.
     if (!id || approving || createdRecordId) return;
+    if (recordType === 'DISCHARGE' && !dischargeReason) {
+      setApproveErr('El motivo de egreso es obligatorio.');
+      return;
+    }
     setApproving(true);
     setApproveErr('');
     try {
@@ -302,6 +310,7 @@ export function AIDraftPage() {
           appointment_id: qsAppointmentId || undefined,
           template_id: customTemplate.id,
           risk_level: riskLevel,
+          ...(recordType === 'DISCHARGE' ? { discharge_reason: dischargeReason } : {}),
         };
       } else {
         // Integrated format path: text sections plus, for an INITIAL record,
@@ -324,6 +333,7 @@ export function AIDraftPage() {
           session_date: qsSessionDate || todayLocalISO(),
           appointment_id: qsAppointmentId || undefined,
           risk_level: riskLevel,
+          ...(recordType === 'DISCHARGE' ? { discharge_reason: dischargeReason } : {}),
         };
       }
       const res = await aiDraftsApi.approve(id, approveBody);
@@ -391,6 +401,9 @@ export function AIDraftPage() {
           record_type: rt,
           session_date: qsSessionDate || todayLocalISO(),
           appointment_id: qsAppointmentId || draft?.appointment_id || undefined,
+          // draftToPayload carries the reason the professional picked in the
+          // integrated form — dropping it here made DISCHARGE approvals fail.
+          discharge_reason: payload.discharge_reason,
         });
         recordId = res.clinical_record_id;
         setCreatedRecordId(recordId);
@@ -892,6 +905,10 @@ export function AIDraftPage() {
 
           {isReady && recordType === 'INITIAL' && !useCustomTemplate && (
             <MentalExamCard value={mentalExam} onChange={setMentalExam} />
+          )}
+
+          {isReady && recordType === 'DISCHARGE' && (
+            <DischargeReasonCard value={dischargeReason} onChange={setDischargeReason} />
           )}
 
           {isReady && <RiskLevelSelector value={riskLevel} onChange={setRiskLevel} />}

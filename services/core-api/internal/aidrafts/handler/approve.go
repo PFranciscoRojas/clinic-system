@@ -85,6 +85,9 @@ func (h *Handler) approveDraft(w http.ResponseWriter, r *http.Request) {
 		// TemplateID propagates the custom template used during recording so
 		// the resulting clinical_record is validated and stored with it.
 		TemplateID string `json:"template_id"`
+		// Required when the record type is DISCHARGE (any format) — without
+		// it the create is rejected and the approval fails.
+		DischargeReason string `json:"discharge_reason"`
 	}
 	// Body is optional — silently ignore decode errors.
 	_ = httputil.DecodeJSON(r, &body)
@@ -135,6 +138,9 @@ func (h *Handler) approveDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.RiskLevel != "" {
 		in.RiskLevel = clinicalrecords.RiskLevel(body.RiskLevel)
+	}
+	if body.DischargeReason != "" {
+		in.DischargeReason = clinicalrecords.DischargeReason(body.DischargeReason)
 	}
 
 	if len(sections) > 0 {
