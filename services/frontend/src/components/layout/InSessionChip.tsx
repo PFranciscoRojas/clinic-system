@@ -21,18 +21,20 @@ export function InSessionChip() {
     staleTime: 30_000,
   });
 
-  // Re-render each 30 s so the remaining-minutes label stays honest.
-  const [, tick] = useState(0);
+  // `now` is read from state (set in an effect, never called mid-render) so
+  // the remaining-minutes label stays honest without the render body calling
+  // the impure Date.now() itself.
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!current) return;
-    const t = setInterval(() => tick(n => n + 1), 30_000);
+    const t = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(t);
   }, [current]);
 
   if (!current) return null;
 
   const start = new Date(current.started_at ?? current.scheduled_at).getTime();
-  const remainMin = Math.ceil((start + current.duration_min * 60_000 - Date.now()) / 60_000);
+  const remainMin = Math.ceil((start + current.duration_min * 60_000 - now) / 60_000);
   const over = remainMin <= 0;
 
   return (

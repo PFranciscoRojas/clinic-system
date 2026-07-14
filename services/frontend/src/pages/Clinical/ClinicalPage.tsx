@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Brain, FileText, Clock, CheckCircle2, AlertTriangle, Loader2, XCircle } from 'lucide-react';
+import { Brain, FileText, FileWarning, Clock, CheckCircle2, AlertTriangle, Loader2, XCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { aiDraftsApi, type DraftMeta, type DraftStatus } from '@/api/aiDrafts';
 import { clinicalRecordsApi, type RecordMeta, type RecordStatus } from '@/api/clinicalRecords';
 import { fmtDateOnly } from '@/lib/dates';
 import { useIsMobile } from '@/lib/useMediaQuery';
-import { PendingNotesCard } from '@/pages/Dashboard/PendingNotesCard';
+import { PendingNotesList, usePendingNotes } from '@/pages/Dashboard/PendingNotesCard';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -204,7 +204,7 @@ function Empty({ msg }: { msg: string }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-type Tab = 'drafts' | 'records';
+type Tab = 'drafts' | 'records' | 'pending';
 type DraftFilter = 'DRAFT_READY' | 'ALL';
 type RecordFilter = 'DRAFT' | 'ALL';
 
@@ -213,6 +213,7 @@ export function ClinicalPage() {
   const isMobile = useIsMobile();
   const { user } = useAuth();
   const [tab, setTab] = useState<Tab>('drafts');
+  const { data: pendingNotes = [] } = usePendingNotes();
   const [draftFilter, setDraftFilter] = useState<DraftFilter>('DRAFT_READY');
   const [recordFilter, setRecordFilter] = useState<RecordFilter>('DRAFT');
 
@@ -265,9 +266,6 @@ export function ClinicalPage() {
         </p>
       </div>
 
-      {/* Sesiones finalizadas que aún no tienen nota — la deuda clínica primero */}
-      <PendingNotesCard />
-
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--s200)', marginBottom: 0 }}>
         <button style={tabStyle(tab === 'drafts')} onClick={() => setTab('drafts')}>
@@ -284,6 +282,17 @@ export function ClinicalPage() {
         <button style={tabStyle(tab === 'records')} onClick={() => setTab('records')}>
           <FileText size={15} />
           Registros clínicos
+        </button>
+        <button style={tabStyle(tab === 'pending')} onClick={() => setTab('pending')}>
+          <FileWarning size={15} />
+          Sin nota
+          {pendingNotes.length > 0 && (
+            <span style={{
+              background: '#dc2626', color: '#fff',
+              borderRadius: 10, fontSize: 11, fontWeight: 700,
+              padding: '0 6px', minWidth: 18, textAlign: 'center',
+            }}>{pendingNotes.length}</span>
+          )}
         </button>
       </div>
 
@@ -304,7 +313,7 @@ export function ClinicalPage() {
                 Todos
               </button>
             </>
-          ) : (
+          ) : tab === 'records' ? (
             <>
               <button style={chipStyle(recordFilter === 'DRAFT')} onClick={() => setRecordFilter('DRAFT')}>
                 Borradores
@@ -313,11 +322,15 @@ export function ClinicalPage() {
                 Todos
               </button>
             </>
+          ) : (
+            <span style={{ fontSize: 12, color: 'var(--s400)' }}>
+              Sesiones finalizadas sin nota ni borrador de IA (últimos 30 días)
+            </span>
           )}
         </div>
 
         {/* Column headers — hidden on mobile, where rows render as stacked cards */}
-        {isMobile ? null : tab === 'drafts' ? (
+        {isMobile || tab === 'pending' ? null : tab === 'drafts' ? (
           <div style={{
             display: 'grid', gridTemplateColumns: '110px 1fr auto auto',
             gap: 16, padding: '8px 16px',
@@ -358,6 +371,12 @@ export function ClinicalPage() {
               : records.map(m => (
                   <RecordRow key={m.id} m={m} onClick={() => navigate(`/clinical-records/${m.id}`)} />
                 ))
+        )}
+
+        {tab === 'pending' && (
+          pendingNotes.length === 0
+            ? <Empty msg="Todas tus sesiones finalizadas tienen nota o borrador. Nada pendiente." />
+            : <div style={{ padding: '12px 16px' }}><PendingNotesList /></div>
         )}
       </div>
     </div>

@@ -37,13 +37,11 @@ export interface CreateAppointmentBody {
   notes?: string;
 }
 
-/** COMPLETED session still missing its finalized clinical record. */
+/** COMPLETED session with neither a finalized record nor an active AI draft. */
 export interface PendingNote {
   appointment_id: string;
   patient_id: string;
   scheduled_at: string;
-  /** Latest active AI draft for the session ('' = none). */
-  draft_status: '' | 'PENDING' | 'PROCESSING' | 'DRAFT_READY';
 }
 
 export const appointmentsApi = {
