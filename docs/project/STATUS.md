@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-07-11)
+## Estado actual (2026-07-13)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -55,18 +55,22 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 | 5 — Tests | ✅ resuelto | testcontainers + tests de aislamiento RLS (`internal/integration/{infra,rls,needtoknow}_test.go`); vitest para `client.ts` y `RecordForm` |
 | 6 — Frontend refactor | ✅ resuelto | `SettingsPage` partido en 10 secciones bajo `components/settings/` (191 líneas, solo orquesta); `logout` hace `flushClinicalDrafts()` antes de invalidar el token (`AuthContext.tsx`) |
 
-### Últimos PRs a `main` (sesión 2026-07-11, todos desplegados)
+### Últimos PRs a `main` (sesión 2026-07-13, todos desplegados)
 
-**Validación E2E "¿aguanta una grabación de 1 hora?" — respondida con evidencia en prod.** Audio sintético de sesión de 57,7 min / 61 MB (TTS piper, guion de 10.300 palabras mapeado a los campos de la "Nota de Evolución" de Marcela), subido throttled a 500 KB/s contra la org demo con un clon del template real: upload OK en 2 min, Whisper `base` transcribió en 8m39s (RTF ≈ 0,15), Claude prellenó **los 7 campos con shapes de widget válidos** (malestar 6/10, adherencia 3/4, riesgo NONE, 3 tareas exactas, CIE-10 F41.1) y el audio se borró del disco. La prueba destapó y motivó los 4 fixes:
+**Sesión "todos los pendientes técnicos y mejoras del sistema" + 2 rondas de pruebas de UX del flujo de audio hechas por el usuario en vivo:**
 
-- `#178` fix(clinical): **el upload de audio moría a los 15 s** — `ReadTimeout` global cortaba cualquier body que tardara >15 s en llegar (1 h ≈ 50-60 MB ≈ minutos en uplink de consultorio): toda grabación real de sesión se perdía en el upload. La ruta de audio extiende su deadline de socket a 20 min vía `http.ResponseController`; el resto de rutas mantiene los 15 s. + CI hornea `WHISPER_MODEL=base` en la imagen (horneaba `tiny` y prod re-descargaba 140 MB en runtime tras cada recreate).
-- `#179` fix(clinical): **segundo timeout oculto** — el middleware global `chi.Timeout(30s)` cancelaba el contexto del request durante la subida (el handler moría en el primer query con "context deadline exceeded"). La ruta de upload quedó exenta (`exceptAudioUpload` en routes.go) y acota su propio contexto a 20 min.
-- `#180` fix(clinical): **el guard anti-alucinación descartaba transcripciones reales de 1 hora** — botaba la transcripción entera si CUALQUIER frase se repetía verbatim (en 1 h de habla real siempre se repiten "okey", "no sé"…). Ahora solo dispara con el patrón real de loop de silencio: 3+ consecutivas idénticas o ≥50% duplicadas. 8 tests. **Además:** el volumen de audio estaba montado `:ro` en ai-service — el borrado post-transcripción fallaba en silencio desde siempre y el audio con PHI se acumulaba en disco; ya es rw y el borrado quedó verificado (los audios viejos previos al fix pueden seguir en el volumen).
-- `#181` test(clinical): **runbook E2E repetible en `scripts/e2e_audio/`** — generador de guion (frases únicas para no disparar el guard), verificador de shape por widget, y procedimiento completo (usuario efímero + clon de template + upload throttled + limpieza). Números de referencia documentados.
+- `#183` fix(clinical): **cierre (DISCHARGE) con plantilla custom reparado** — el flujo templado nunca pedía `discharge_reason` (obligatorio en backend para todo cierre): `DischargeReasonCard` en RecordForm y AIDraftPage, validación cliente, y el approve de aidrafts ahora decodifica y propaga el motivo (lo descartaba en TODOS los formatos, incluida la vista de comparación).
+- `#184` enhancement(clinical): **ai-service endurecido** — validación de shape por widget antes de sellar drafts custom (`drafts/widgets.py`: valor malformado se descarta y el campo queda para llenar a mano); `ExtraFormatter` imprime los campos `extra` de los logs (antes prod era ciego); NER a `es_core_news_md` con fallback a `sm`; job de pytest gatea el build de la imagen (29 tests, whisper stubbeado).
+- `#185` enhancement(ci): **frontend con CI de deploy** — `build-frontend.yml` compila el bundle en Actions y lo publica por rsync in-place al bind mount del VPS (fin del build manual); smoke extraído a `smoke.yml` reutilizable (workflow_call + dispatch manual); favicon modo oscuro del brand kit.
+- `#186` enhancement(ops): **DR probado de verdad** — simulacro real desde B2 en máquina distinta al VPS (45 tablas, 0 errores, PII descifrada con MASTER_KEY, **RTO datos ~15 s**); el drill destapó que el `.env` vivía solo en el VPS → `backup.sh` sube snapshot cifrado diario del `.env` a B2. Runbook en `docs/ops/DR_RUNBOOK.md`.
+- `#187` chore(ops): **rotación de la llave GPG de backups** — la privada quedó expuesta fuera del keyring: nueva `backups@chapni.com` (`413B0C877EB5D795`), pública en el VPS, round-trip verificado; la vieja se conserva solo para dumps históricos. Ambas guardadas en LastPass del operador.
+- `#188` fix(clinical): **1ª ronda de pruebas de usuario — 5 huecos de UX del upload de audio**: formato obligatorio antes de subir/grabar en orgs con formatos (adiós borradores silenciosos en formato genérico — la causa probable de que los drafts reales no llevaran template_id); dropzone deshabilitada mientras se graba; "Cambiar formato" bloqueado con draft en vuelo; banner de recuperación consciente del draft existente; guardas de salida (nav/back/reload) cubren también subidas en curso.
+- `#189` enhancement(clinical): **2ª ronda — botón "Detener" grabación** (sin finalizar sesión, chunks a IndexedDB → banner subir/descartar); repick de formato limpia la elección abandonada + advertencia si el draft ya se generó con el formato viejo; **aprobar draft con nota manual ya guardada VINCULA en vez de duplicar historia** (guard server-side); formato visible en todos los estados de proceso; **`GET /appointments/pending-notes` + tarjeta "Sesiones sin registro clínico" en el Dashboard** (últimos 30 días, con estado IA por sesión).
+
+**Ops de la sesión (sin PR):** barrido de 53 audios con PHI (128 MB) que el mount `:ro` nunca dejó borrar (verificado que ningún draft los necesitaba); contenedor huérfano `core-api-run-*` eliminado; **Resend con dominio chapni.com verificado por el usuario** (remitente ya no es `@marcelachapues.com`).
 
 > Flujo actual: rama `fix/*` → PR → squash-merge → CI deploy. ✅ Branch protection activa desde 2026-07-09.
-> **CI/CD:** `test → build → smoke`. `go test ./...` bloquea el build; `tsc --noEmit` corre en cada PR de frontend; smoke test de 8 pasos HTTP corre tras cada deploy al VPS.
-> **Frontend:** se construye **manualmente** en el VPS (`docker run node:20-alpine npm run build`). El CI no tiene workflow de deploy para frontend.
+> **CI/CD:** core-api `test → build → smoke`; ai-service `pytest → build → deploy`; **frontend `build → rsync al VPS → smoke` (automatizado desde #185)**; `smoke.yml` también corre por `workflow_dispatch` tras cambios manuales.
 
 ---
 
@@ -109,11 +113,11 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción — CI deploy (último: PR #179, 2026-07-11, upload de audio sin timeouts de 15s/30s). Migraciones al día (000063); sin migraciones nuevas esta sesión. |
-| `ai-service` | ✅ producción — CI deploy (PR #180, 2026-07-11): heurístico anti-alucinación corregido, `base` horneado en la imagen, volumen de audio rw (borrado post-transcripción funcionando por primera vez). Pipeline validado E2E con audio de 58 min. |
-| `frontend` (Caddy :80/:443) | ✅ producción — rebuild manual desde `a87865d` (PR #176, 2026-07-10). **Dominio:** `https://app.chapni.com` (principal, `CADDY_APP_DOMAIN`); `api.marcelachapues.com` legacy (mantiene `/api` para webhooks, redirige 308 el resto). `APP_BASE_URL` = `https://app.chapni.com`. Cert Let's Encrypt emitido. Google OAuth redirect URI actualizado en Cloud Console. |
-| Backups | `pg_dump` cifrado GPG → Backblaze B2 |
-| **Disco** | ~40% (15/38 GB) — cron semanal en el **host** (ya no en el admin UI): `0 4 * * 0 docker system prune -af` → `/var/log/docker-prune.log`. Alerta email si >80% |
+| `core-api:8080` | ✅ producción — CI deploy (último: PR #189, 2026-07-13, endpoint pending-notes + approve sin duplicados). Migraciones al día (000063); sin migraciones nuevas. |
+| `ai-service` | ✅ producción — CI deploy (PR #184, 2026-07-13): validación de widgets, logs con extras, NER `md`, pytest en CI. Pipeline validado E2E con audio de 58 min (2026-07-11). |
+| `frontend` (Caddy :80/:443) | ✅ producción — **CI deploy automático desde PR #185** (`build-frontend.yml`: build en Actions + rsync in-place al bind mount, sin restart de Caddy). Último: PR #189 (2026-07-13). **Dominio:** `https://app.chapni.com`; `api.marcelachapues.com` legacy (mantiene `/api` para webhooks, redirige 308 el resto). |
+| Backups | `pg_dump` diario cifrado GPG → Backblaze B2 + **snapshot cifrado del `.env`** (desde 2026-07-13). Llave GPG rotada 2026-07-13: `backups@chapni.com` (privada en máquina del operador + LastPass; la vieja solo lee dumps ≤ 2026-07-13). **Restore probado**: RTO datos ~15 s — runbook en `docs/ops/DR_RUNBOOK.md`. |
+| **Disco** | ~27% (9,4/38 GB tras el barrido de audios PHI 2026-07-13) — cron semanal en el **host**: `0 4 * * 0 docker system prune -af` → `/var/log/docker-prune.log`. Alerta email si >80% |
 
 **Env crítico en VPS:**
 - `MASTER_KEY` — clave maestra de cifrado PII
