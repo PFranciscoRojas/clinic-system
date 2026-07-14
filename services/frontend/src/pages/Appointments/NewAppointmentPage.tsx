@@ -32,10 +32,13 @@ interface SessionType {
   color: string;
 }
 
-const SESSION_TYPES: SessionType[] = [
-  { id: 'initial',   label: 'Sesión inicial', icon: UserPlus,  duration: 60, color: '#2a2769' },
-  { id: 'followup',  label: 'Seguimiento',    icon: RefreshCw, duration: 50, color: '#2a2769' },
-  { id: 'discharge', label: 'Sesión de alta', icon: Award,     duration: 50, color: '#2a2769' },
+// Duration comes from Horario y Agenda (per-type override, falling back to the
+// general default) — these are only the icon/label/color, and the 50min
+// fallback used before that config has loaded at all.
+const SESSION_TYPE_META: Omit<SessionType, 'duration'>[] = [
+  { id: 'initial',   label: 'Sesión inicial', icon: UserPlus,  color: '#2a2769' },
+  { id: 'followup',  label: 'Seguimiento',    icon: RefreshCw, color: '#2a2769' },
+  { id: 'discharge', label: 'Sesión de alta', icon: Award,     color: '#2a2769' },
 ];
 
 const SLOT_STEP = 30;
@@ -673,8 +676,10 @@ export function NewAppointmentPage() {
   const [guestName,        setGuestName]       = useState<string>('');
   const [date,             setDate]            = useState<string>(initialDate);
   const [time,             setTime]            = useState<string>(initialTime);
-  const [sessionType,      setSessionType]     = useState<SessionType | null>(SESSION_TYPES[1]);
-  const [duration,         setDuration]        = useState<number>(50);
+  const [sessionType,      setSessionType]     = useState<SessionType | null>(
+    { ...SESSION_TYPE_META[1], duration: DEFAULT_SCHEDULE.sessionLen },
+  );
+  const [duration,         setDuration]        = useState<number>(DEFAULT_SCHEDULE.sessionLen);
   const [modality,         setModality]        = useState<Modality>('presencial');
   const [recurrence,       setRecurrence]      = useState<Recurrence>('none');
   const [notes,            setNotes]           = useState<string>('');
@@ -734,6 +739,29 @@ export function NewAppointmentPage() {
     return ownSchedule;
   }, [effectiveStaffId, orgUsers, ownSchedule, user?.user_id]);
   const slots = useMemo(() => generateSlots(schedule), [schedule]);
+
+  // Per-type duration comes from Horario y Agenda (falls back to the general
+  // "Duración por defecto de sesión" when the type has no override configured).
+  const sessionTypes = useMemo<SessionType[]>(() => [
+    { ...SESSION_TYPE_META[0], duration: schedule.sessionLenInitial   ?? schedule.sessionLen },
+    { ...SESSION_TYPE_META[1], duration: schedule.sessionLenFollowup  ?? schedule.sessionLen },
+    { ...SESSION_TYPE_META[2], duration: schedule.sessionLenDischarge ?? schedule.sessionLen },
+  ], [schedule]);
+
+  // The state above starts from a static fallback (schedule loads async) —
+  // once the real config lands, or the assigned staff changes, resync the
+  // selected type's duration instead of leaving the stale fallback in place.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setSessionType(prev => {
+      if (!prev) return prev;
+      return sessionTypes.find(st => st.id === prev.id) ?? prev;
+    });
+  }, [sessionTypes]);
+  useEffect(() => {
+    if (sessionType) setDuration(sessionType.duration);
+  }, [sessionType]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ── Staff appointments for the selected day (slot blocking + workload) ────────
   const { data: dayAppointments = [] } = useQuery<Appointment[]>({
@@ -855,8 +883,8 @@ export function NewAppointmentPage() {
   });
 
   function handleSelectSessionType(st: SessionType) {
+    // duration follows via the sessionType-sync effect above.
     setSessionType(st);
-    setDuration(st.duration);
   }
 
   function handleSubmit() {
@@ -1041,7 +1069,7 @@ export function NewAppointmentPage() {
         {/* Session types */}
         <Section icon={CalendarPlus} title="Tipo de sesión">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-            {SESSION_TYPES.map(st => {
+            {sessionTypes.map(st => {
               const SIcon = st.icon;
               const isSel = sessionType?.id === st.id;
               return (

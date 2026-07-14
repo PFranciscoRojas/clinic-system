@@ -14,6 +14,9 @@ export function ScheduleSection() {
   const [startHour,   setStartHour]   = useState(init.startHour);
   const [endHour,     setEndHour]     = useState(init.endHour);
   const [sessionDur,  setSessionDur]  = useState(init.sessionLen);
+  const [durInitial,   setDurInitial]   = useState<number | null>(init.sessionLenInitial ?? null);
+  const [durFollowup,  setDurFollowup]  = useState<number | null>(init.sessionLenFollowup ?? null);
+  const [durDischarge, setDurDischarge] = useState<number | null>(init.sessionLenDischarge ?? null);
   const [breakStart,  setBreakStart]  = useState(init.breakStart ?? '13:00');
   const [breakEnd,    setBreakEnd]    = useState(init.breakEnd ?? '14:00');
   const [buffer,      setBuffer]      = useState(init.buffer ?? 10);
@@ -29,6 +32,9 @@ export function ScheduleSection() {
         setStartHour(cfg.startHour);
         setEndHour(cfg.endHour);
         setSessionDur(cfg.sessionLen);
+        setDurInitial(cfg.sessionLenInitial ?? null);
+        setDurFollowup(cfg.sessionLenFollowup ?? null);
+        setDurDischarge(cfg.sessionLenDischarge ?? null);
         setBreakStart(cfg.breakStart ?? '13:00');
         setBreakEnd(cfg.breakEnd ?? '14:00');
         setBuffer(cfg.buffer ?? 10);
@@ -41,13 +47,19 @@ export function ScheduleSection() {
   useEffect(() => {
     if (!hydrated) return; // don't overwrite the server copy with stale cache on mount
     const t = setTimeout(() => {
-      persistSchedule({ activeDays, startHour, endHour, sessionLen: sessionDur, breakStart, breakEnd, buffer, maxPerDay })
+      persistSchedule({
+        activeDays, startHour, endHour, sessionLen: sessionDur,
+        ...(durInitial   != null ? { sessionLenInitial: durInitial }     : {}),
+        ...(durFollowup  != null ? { sessionLenFollowup: durFollowup }   : {}),
+        ...(durDischarge != null ? { sessionLenDischarge: durDischarge } : {}),
+        breakStart, breakEnd, buffer, maxPerDay,
+      })
         // Refresh the scheduler's cached copy so the agenda reflects the new
         // hours without a manual reload.
         .then(() => queryClient.invalidateQueries({ queryKey: ['my-schedule'] }));
     }, 600);
     return () => clearTimeout(t);
-  }, [hydrated, activeDays, startHour, endHour, sessionDur, breakStart, breakEnd, buffer, maxPerDay, queryClient]);
+  }, [hydrated, activeDays, startHour, endHour, sessionDur, durInitial, durFollowup, durDischarge, breakStart, breakEnd, buffer, maxPerDay, queryClient]);
 
   const toggleDay = (d: string) => {
     setActiveDays(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d]);
@@ -89,7 +101,7 @@ export function ScheduleSection() {
             {HOURS.map(h => <option key={h}>{h}</option>)}
           </FSelect>
         </FieldRow>
-        <FieldRow label="Duración por defecto de sesión" sub="Se aplica al crear nueva cita">
+        <FieldRow label="Duración por defecto de sesión" sub="Se aplica al crear nueva cita salvo que el tipo de sesión tenga su propia duración abajo">
           <div style={{ display: 'flex', gap: 7 }}>
             {[30, 45, 50, 60, 90].map(d => (
               <ChipBtn key={d} active={sessionDur === d} onClick={() => setSessionDur(d)}>
@@ -98,6 +110,24 @@ export function ScheduleSection() {
             ))}
           </div>
         </FieldRow>
+        {([
+          { label: 'Sesión inicial', value: durInitial,   set: setDurInitial },
+          { label: 'Seguimiento',    value: durFollowup,  set: setDurFollowup },
+          { label: 'Sesión de alta', value: durDischarge, set: setDurDischarge },
+        ] as const).map(({ label, value, set }) => (
+          <FieldRow key={label} label={`Duración — ${label}`} sub="Opcional: anula la duración por defecto para este tipo de sesión">
+            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+              <ChipBtn active={value === null} onClick={() => set(null)}>
+                Por defecto
+              </ChipBtn>
+              {[30, 45, 50, 60, 90].map(d => (
+                <ChipBtn key={d} active={value === d} onClick={() => set(d)}>
+                  {d}m
+                </ChipBtn>
+              ))}
+            </div>
+          </FieldRow>
+        ))}
         <FieldRow label="Pausa del mediodía" sub="No se ofrecen horarios dentro de la pausa">
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <FSelect value={breakStart} onChange={setBreakStart}>
