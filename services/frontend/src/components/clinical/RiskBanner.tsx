@@ -15,9 +15,14 @@ const LEVEL_CFG: Record<RiskLevel, { label: string; color: string; bg: string; b
 // signals to review, never clears a patient and never replaces clinical
 // judgment. Refreshed automatically when a record is approved; can also be run
 // on demand. Compact for none/low, prominent for moderate/high.
-export function RiskBanner({ patientId }: { patientId: string }) {
+//
+// `concealed`: the result stays behind a neutral toggle until the professional
+// reveals it — for screens a patient may be looking at during the session,
+// where even the banner's color would leak the assessment.
+export function RiskBanner({ patientId, concealed = false }: { patientId: string; concealed?: boolean }) {
   const [requesting, setRequesting] = useState(false);
   const [reqErr, setReqErr] = useState('');
+  const [revealed, setRevealed] = useState(false);
 
   const { data, refetch, isLoading } = useQuery({
     queryKey: ['ai-risk', patientId],
@@ -84,6 +89,21 @@ export function RiskBanner({ patientId }: { patientId: string }) {
       >
         <ShieldAlert size={14} color="#5b52ad" /> Analizar riesgo con IA
       </button>
+    );
+  }
+
+  if (concealed) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <button
+          onClick={() => setRevealed(r => !r)}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', background: '#faf6f1', border: '1px solid var(--s200)', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--s600)' }}
+        >
+          <ShieldAlert size={14} color="var(--s400)" />
+          {revealed ? 'Ocultar evaluación de riesgo' : 'Evaluación de riesgo IA — mostrar'}
+        </button>
+        {revealed && <RiskBody content={data.content} createdAt={data.created_at} onReanalyze={handleAnalyze} />}
+      </div>
     );
   }
 
