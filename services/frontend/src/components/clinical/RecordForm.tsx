@@ -253,9 +253,17 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
           if (hasTemplateContent || saved.draft) gotContentRef.current = true; // a blocked restore still counts — don't also fetch the server
         } else {
           if (saved.uiType) setUIType(saved.uiType);
-          if (saved.selectedTemplateId) setSelectedTemplateId(saved.selectedTemplateId);
+          // A parent-locked template (the session picker's choice) always wins
+          // over what localStorage remembers: the unmounting form's cleanup
+          // re-saves its old selectedTemplateId AFTER a format repick removed
+          // the key, so restoring it here would silently revert the new choice.
+          if (saved.selectedTemplateId && lockedTemplateId === undefined) setSelectedTemplateId(saved.selectedTemplateId);
           if (typeof saved.customDischargeReason === 'string') setCustomDischargeReason(saved.customDischargeReason as DischargeReason | '');
-          if (hasTemplateContent) {
+          // Saved custom content belongs to the template it was written with —
+          // restoring it under a different locked template would render orphan
+          // keys and make the save fail server-side ("datos inválidos").
+          const savedMatchesLock = lockedTemplateId === undefined || (saved.selectedTemplateId ?? '') === lockedTemplateId;
+          if (hasTemplateContent && savedMatchesLock) {
             setCustomSections(savedCustomSections);
             setRestored(true);
             setLastSavedAt(Date.now());

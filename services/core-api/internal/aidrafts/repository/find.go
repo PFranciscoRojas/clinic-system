@@ -67,6 +67,8 @@ func (r *Repository) ListByOrg(ctx context.Context, orgID, status string) ([]*ai
 		  AND ($2 = '' OR d.status::text = $2)
 		  -- takes folded into a later consolidated draft never show on their own
 		  AND d.status <> 'SUPERSEDED'
+		  -- recordings that transcribed to nothing are not reviewable drafts
+		  AND d.status <> 'EMPTY'
 		  -- hide orphan drafts superseded by an approved record or draft on the same appointment
 		  AND NOT (
 		    d.appointment_id IS NOT NULL

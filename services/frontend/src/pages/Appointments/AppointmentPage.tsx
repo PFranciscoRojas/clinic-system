@@ -168,11 +168,14 @@ interface AudioSectionProps {
   hasFinalizedNote?: boolean;
   onChooseFormat?: () => void;
   onDraftCreated: (draftId: string) => void;
+  /** Clears the session's draft pointer so the dropzone comes back —
+   *  used when the draft turned out EMPTY and a new audio should be tried. */
+  onDraftReset?: () => void;
   /** Mirrors the in-flight upload to the parent's navigation guards. */
   onUploadingChange?: (uploading: boolean) => void;
 }
 
-function AudioSection({ appointmentId, patientId, draftId, recordType, templateId, sessionDate, processing, linkedRecordId, recording, needsFormat, formatName, draftFormatName, hasFinalizedNote, onChooseFormat, onDraftCreated, onUploadingChange }: AudioSectionProps) {
+function AudioSection({ appointmentId, patientId, draftId, recordType, templateId, sessionDate, processing, linkedRecordId, recording, needsFormat, formatName, draftFormatName, hasFinalizedNote, onChooseFormat, onDraftCreated, onDraftReset, onUploadingChange }: AudioSectionProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState('');
@@ -220,9 +223,35 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
     // about whether the AI actually found clinical content to structure. Check
     // the same way the draft page itself decides whether to show its "empty"
     // state, so the badge here never promises a draft that isn't there.
+    // (New EMPTY drafts are marked by the worker; the sections check covers
+    // legacy empty DRAFT_READY rows from before that status existed.)
     const sections = (draft.draft_content_plain as Record<string, unknown> | null)?.sections as Record<string, string> | undefined;
-    const isEmptyDraft = draft.status === 'DRAFT_READY'
-      && (!sections || Object.values(sections).every(v => !(v ?? '').toString().trim()));
+    const isEmptyDraft = draft.status === 'EMPTY' || (draft.status === 'DRAFT_READY'
+      && (!sections || Object.values(sections).every(v => !(v ?? '').toString().trim())));
+
+    // No usable draft: say so, offer to try another audio (the note form is
+    // right beside this card — no need to send anyone to the draft page).
+    if (isEmptyDraft) {
+      return (
+        <div style={{ padding: '13px 15px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <AlertTriangle size={15} color="#d97706" style={{ flexShrink: 0, marginTop: 2 }} />
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--s800)' }}>La IA no encontró contenido clínico en el audio</p>
+              <p style={{ margin: '3px 0 0', fontSize: 11.5, color: 'var(--s500)', lineHeight: 1.5 }}>
+                No se generó borrador. Sube otro audio, o redacta la nota directamente en el formulario de esta página.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onDraftReset}
+            style={{ marginTop: 10, padding: '7px 16px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            <Upload size={13} /> Subir otro audio
+          </button>
+        </div>
+      );
+    }
 
     const statusCfg: Record<string, { label: string; color: string; bg: string; pulse?: boolean }> = {
       PENDING:     { label: 'En cola',             color: CLR_NEUTRAL.icon, bg: CLR_NEUTRAL.bg },
@@ -231,9 +260,7 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
       APPROVED:    { label: 'Aprobado',             color: '#fff',           bg: CLR_SUCCESS.icon },
       ERROR:       { label: 'Error',                color: CLR_DANGER.text,  bg: CLR_DANGER.bg },
     };
-    const cfg = isEmptyDraft
-      ? { label: 'Sin contenido clínico', color: CLR_WARN.text, bg: CLR_WARN.bg }
-      : (statusCfg[draft.status] ?? statusCfg.PENDING);
+    const cfg = statusCfg[draft.status] ?? statusCfg.PENDING;
     const isProcessing = draft.status === 'PENDING' || draft.status === 'PROCESSING';
 
     return (
@@ -252,7 +279,6 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
                 Generándose con: <b>{draftFormatName ?? 'formato integrado'}</b>
               </span>
             )}
-            {isEmptyDraft && <span style={{ fontSize: 11, color: 'var(--s400)' }}>La IA no encontró nada que estructurar — redacta manualmente.</span>}
           </div>
           {hasFinalizedNote && draft.status === 'DRAFT_READY' && (
             <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--s500)', lineHeight: 1.5 }}>
@@ -263,9 +289,9 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
         {(draft.status === 'DRAFT_READY' || draft.status === 'APPROVED') && (
           <a
             href={`/ai-drafts/${draftId}?appointment_id=${appointmentId}&session_date=${sessionDate}&record_type=${recordType}${linkedRecordId ? `&record_id=${linkedRecordId}` : ''}`}
-            style={{ padding: '7px 14px', background: linkedRecordId ? 'var(--teal)' : isEmptyDraft ? 'var(--s400)' : '#f59e0b', color: '#fff', borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
+            style={{ padding: '7px 14px', background: linkedRecordId ? 'var(--teal)' : '#f59e0b', color: '#fff', borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
           >
-            <Brain size={13} /> {linkedRecordId ? 'Comparar con IA' : isEmptyDraft ? 'Redactar manualmente' : 'Revisar borrador'}
+            <Brain size={13} /> {linkedRecordId ? 'Comparar con IA' : 'Revisar borrador'}
           </a>
         )}
       </div>
@@ -970,6 +996,13 @@ export function AppointmentPage() {
     queryClient.invalidateQueries({ queryKey: ['ai-drafts-indicator'] });
   };
 
+  // An EMPTY draft is a dead end — drop the session's pointer to it so the
+  // upload dropzone comes back and a fresh audio can be tried.
+  const handleDraftReset = () => {
+    localStorage.removeItem(draftKey);
+    setDraftId('');
+  };
+
   const tzOffset = () => {
     const off = new Date().getTimezoneOffset();
     const sign = off <= 0 ? '+' : '-';
@@ -1371,6 +1404,7 @@ export function AppointmentPage() {
                       // an already-finalized note is rejected by the backend.
                       linkedRecordId={autosaveDraft?.id}
                       onDraftCreated={handleDraftCreated}
+                      onDraftReset={handleDraftReset}
                       onUploadingChange={setAudioUploading}
                     />
                   )}
@@ -1721,7 +1755,16 @@ export function AppointmentPage() {
                   templateId={aiTemplateId}
                   sessionDate={apptDate}
                   processing={processingAudio}
+                  recording={recording}
+                  needsFormat={needsFormatForAudio}
+                  formatName={aiFormatName}
+                  draftFormatName={linkedDraft?.template_id ? setupTemplates.find(t => t.id === linkedDraft.template_id)?.name : undefined}
+                  hasFinalizedNote={finalizedRecords.length > 0}
+                  onChooseFormat={openSetup}
+                  linkedRecordId={autosaveDraft?.id}
                   onDraftCreated={handleDraftCreated}
+                  onDraftReset={handleDraftReset}
+                  onUploadingChange={setAudioUploading}
                 />
               )}
             </div>

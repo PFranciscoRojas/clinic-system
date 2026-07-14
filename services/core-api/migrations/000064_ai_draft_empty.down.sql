@@ -1,0 +1,2 @@
+-- No-op: PostgreSQL cannot remove a value from an enum type; rolling back
+-- would require recreating ai_draft_status and rewriting ai_drafts.
