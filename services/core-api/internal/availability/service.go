@@ -186,7 +186,13 @@ func overlapsBusy(start, end time.Time, busy []Busy, buffer time.Duration) bool 
 }
 
 // toMinutes parses "HH:MM" into minutes since midnight; -1 on empty/invalid.
+// "24:00" (end-of-day, offered by the schedule settings) is not a valid
+// time.Parse value — special-cased so a midnight-to-midnight schedule doesn't
+// silently fall back to the 19:00 default.
 func toMinutes(hhmm string) int {
+	if hhmm == "24:00" {
+		return 24 * 60
+	}
 	t, err := time.Parse("15:04", hhmm)
 	if err != nil {
 		return -1

@@ -14,7 +14,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
 import { useIsCompact, useIsMobile } from '@/lib/useMediaQuery';
 import { SlotPicker } from '@/components/appointments/SlotPicker';
-import { loadSchedule, timeSlotsFor, DEFAULT_SCHEDULE, SLOT_STEP_MIN, type ScheduleConfig } from '@/lib/schedule';
+import { loadSchedule, fetchScheduleFromServer, timeSlotsFor, DEFAULT_SCHEDULE, SLOT_STEP_MIN, type ScheduleConfig } from '@/lib/schedule';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -863,13 +863,21 @@ export function AgendaCalendar({ initialDate }: { initialDate?: string }) {
   // ── Visible day range: configured schedule, expanded to fit any appointment ──
   // When the filter points at a colleague, use that professional's configured
   // hours (quick-booking must offer THEIR slots, not the viewer's).
+  // Own schedule: server copy wins (it follows the professional across
+  // devices — localStorage alone showed a stale/default range on any browser
+  // that never opened Settings after a change); cache covers offline.
+  const { data: serverSchedule } = useQuery({
+    queryKey: ['my-schedule'],
+    queryFn: fetchScheduleFromServer,
+    staleTime: 5 * 60_000,
+  });
   const schedule = useMemo<ScheduleConfig>(() => {
     if (staffFilter && staffFilter !== user?.user_id) {
       const target = professionals.find(p => p.id === staffFilter);
       if (target) return { ...DEFAULT_SCHEDULE, ...(target.working_hours as Partial<ScheduleConfig>) };
     }
-    return loadSchedule();
-  }, [staffFilter, professionals, user?.user_id]);
+    return serverSchedule ?? loadSchedule();
+  }, [staffFilter, professionals, user?.user_id, serverSchedule]);
   const { startH, endH } = useMemo(() => {
     let s = hhmmToHour(schedule.startHour, DEFAULT_START_H);
     let e = hhmmToHour(schedule.endHour, DEFAULT_END_H);
