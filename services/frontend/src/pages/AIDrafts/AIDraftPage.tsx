@@ -66,6 +66,9 @@ export function AIDraftPage() {
   const [approving, setApproving] = useState(false);
   const [approveErr, setApproveErr] = useState('');
   const [createdRecordId, setCreatedRecordId] = useState('');
+  // Which approve handler to run once the are-you-sure modal is confirmed —
+  // approval is irreversible (no edits after), so it always needs a step.
+  const [confirmApproveAction, setConfirmApproveAction] = useState<'approve' | 'compare' | null>(null);
   const [riskLevel, setRiskLevel] = useState('NONE');
   // Required by the backend for a DISCHARGE approval in any format; the
   // comparison view captures it inside the integrated form instead.
@@ -91,6 +94,7 @@ export function AIDraftPage() {
   // ICD-10 to assign on approve — seeded from the AI suggestion, confirmable.
   // undefined = not yet initialised from the draft; null = explicitly removed.
   const [icd10, setIcd10] = useState<ICD10Code | null | undefined>(undefined);
+  const [aiRiskNote, setAiRiskNote] = useState<string | null | undefined>(undefined);
 
   const { data: draft, isLoading, isError, refetch } = useQuery({
     queryKey: ['ai-draft', id],
@@ -344,6 +348,26 @@ export function AIDraftPage() {
     }
   }
 
+  // Seed the risk note the same way — an informational flag only. It never
+  // pre-marks Ideación Suicida / Antecedente de intento previo; the professional
+  // still has to click those by hand (compliance rule: la IA sugiere, el humano decide).
+  if (aiRiskNote === undefined) {
+    const note = (draft?.draft_content_plain as Record<string, unknown> | null)?.risk_note as
+      | string | null | undefined;
+    setAiRiskNote(typeof note === 'string' && note.trim() ? note.trim() : null);
+  }
+
+  // A freshly approved draft/record must stop showing as pending everywhere
+  // else in the app — the drafts and records lists on /clinical, plus the
+  // dashboard's pending-notes card, only refetch on their own after 30s
+  // (or a manual F5) otherwise, which reads as "stuck" entries.
+  const invalidateClinicalLists = () => {
+    queryClient.invalidateQueries({ queryKey: ['ai-draft', id] });
+    queryClient.invalidateQueries({ queryKey: ['ai-drafts-list'] });
+    queryClient.invalidateQueries({ queryKey: ['clinical-records-all'] });
+    queryClient.invalidateQueries({ queryKey: ['pending-notes'] });
+  };
+
   const handleApprove = async () => {
     // A record was already created from this draft — never create a second one,
     // even if the draft's status refetch hasn't landed yet.
@@ -382,7 +406,8 @@ export function AIDraftPage() {
           if (draftStorageKey) localStorage.removeItem(draftStorageKey);
           if (usedStorageKey) localStorage.removeItem(usedStorageKey);
         } catch { /* ignore */ }
-        queryClient.invalidateQueries({ queryKey: ['ai-draft', id] });
+        invalidateClinicalLists();
+        navigate(`/clinical-records/${compareRecordId}`);
         return;
       }
       let approveBody: Parameters<typeof aiDraftsApi.approve>[1];
@@ -436,7 +461,8 @@ export function AIDraftPage() {
           });
         } catch { /* record is approved; diagnosis can be added later from the profile */ }
       }
-      queryClient.invalidateQueries({ queryKey: ['ai-draft', id] });
+      invalidateClinicalLists();
+      navigate(`/clinical-records/${res.clinical_record_id}`);
     } catch (e) {
       // Surface the server's specific reason (e.g. "nivel de riesgo es
       // obligatorio", "una sección requerida está vacía") instead of a generic
@@ -511,7 +537,8 @@ export function AIDraftPage() {
         if (usedStorageKey) localStorage.removeItem(usedStorageKey);
         localStorage.removeItem(`${draftStorageKey}-serverid`);
       } catch { /* ignore */ }
-      queryClient.invalidateQueries({ queryKey: ['ai-draft', id] });
+      invalidateClinicalLists();
+      navigate(`/clinical-records/${recordId}`);
     } catch (e) {
       setRecordErr(e instanceof ApiError && e.message ? e.message : 'No se pudo aprobar el registro.');
       // Same race as handleApprove: the draft may have been superseded since
@@ -857,7 +884,7 @@ export function AIDraftPage() {
           {/* Approve action — one button, finalizes the record on the left */}
           <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
             <button
-              onClick={handleApproveComparison}
+              onClick={() => setConfirmApproveAction('compare')}
               disabled={recordSaving || !leftDraft}
               style={{ flex: 1, padding: 13, borderRadius: 11, background: 'var(--teal)', color: '#fff', border: 'none', cursor: (recordSaving || !leftDraft) ? 'not-allowed' : 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (recordSaving || !leftDraft) ? 0.7 : 1 }}
             >
@@ -953,7 +980,7 @@ export function AIDraftPage() {
 
           <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
             <button
-              onClick={handleApprove}
+              onClick={() => setConfirmApproveAction('approve')}
               disabled={approving}
               style={{ flex: 1, padding: 13, borderRadius: 11, background: 'var(--teal)', color: '#fff', border: 'none', cursor: approving ? 'not-allowed' : 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: approving ? 0.7 : 1 }}
             >
@@ -1167,7 +1194,7 @@ export function AIDraftPage() {
           )}
 
           {isReady && recordType === 'INITIAL' && !useCustomTemplate && (
-            <MentalExamCard value={mentalExam} onChange={setMentalExam} />
+            <MentalExamCard value={mentalExam} onChange={setMentalExam} aiNote={aiRiskNote} />
           )}
 
           {isReady && recordType === 'DISCHARGE' && (
@@ -1203,7 +1230,7 @@ export function AIDraftPage() {
                     <Edit3 size={16} /> Editar borrador
                   </button>
                   <button
-                    onClick={handleApprove}
+                    onClick={() => setConfirmApproveAction('approve')}
                     disabled={approving || !!createdRecordId}
                     style={{ flex: 2, padding: 13, borderRadius: 11, background: 'var(--teal)', color: '#fff', border: 'none', cursor: (approving || createdRecordId) ? 'not-allowed' : 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (approving || createdRecordId) ? 0.7 : 1 }}
                   >
@@ -1241,6 +1268,45 @@ export function AIDraftPage() {
           </>
           )}
         </>
+      )}
+
+      {/* Approve confirmation — in-app replacement for window.confirm (also
+          unreliable in standalone PWAs); approval is a one-way door, so this
+          gate applies to every "Aprobar" button above regardless of flow. */}
+      {confirmApproveAction && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15,23,42,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div className="card" style={{ maxWidth: 420, width: '100%', padding: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <AlertTriangle size={18} color="#dc2626" />
+              </div>
+              <div>
+                <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--s800)' }}>¿Aprobar historia clínica?</p>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--s500)', lineHeight: 1.6 }}>
+                  Una vez aprobada queda firmada — ya no podrás hacer modificaciones posteriormente.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setConfirmApproveAction(null)}
+                style={{ flex: 1, padding: '10px 0', background: 'var(--s100)', color: 'var(--s700)', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
+              >
+                Seguir editando
+              </button>
+              <button
+                onClick={() => {
+                  const action = confirmApproveAction;
+                  setConfirmApproveAction(null);
+                  if (action === 'compare') handleApproveComparison(); else handleApprove();
+                }}
+                style={{ flex: 1, padding: '10px 0', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
+              >
+                Aprobar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1350,7 +1416,9 @@ function Icd10Suggestion({ value, editable, onChange }: {
 // page. The mental exam is a required INITIAL section the AI never generates,
 // so it must be filled here before approving (the manual record form does the
 // same). Defaulted, so a blank exam never blocks approval.
-function MentalExamCard({ value, onChange }: { value: MentalExam; onChange: (v: MentalExam) => void }) {
+function MentalExamCard({ value, onChange, aiNote }: {
+  value: MentalExam; onChange: (v: MentalExam) => void; aiNote?: string | null;
+}) {
   return (
     <div className="card" style={{ padding: '18px 20px', marginBottom: 16 }}>
       <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: 'var(--s800)' }}>
@@ -1359,6 +1427,15 @@ function MentalExamCard({ value, onChange }: { value: MentalExam; onChange: (v: 
       <p style={{ margin: '0 0 14px', fontSize: 12.5, color: 'var(--s500)', lineHeight: 1.6 }}>
         La IA no completa esta sección — regístrala antes de aprobar.
       </p>
+      {aiNote && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a', marginBottom: 14 }}>
+          <AlertTriangle size={14} color="#d97706" style={{ flexShrink: 0, marginTop: 1 }} />
+          <p style={{ margin: 0, fontSize: 12.5, color: '#92400e', lineHeight: 1.6 }}>
+            <strong>La IA detectó en la transcripción:</strong> {aiNote} Revisa y marca manualmente
+            lo que corresponda en Indicadores de Riesgo — la IA no selecciona por ti.
+          </p>
+        </div>
+      )}
       <MentalExamChecklist value={value} onChange={onChange} />
     </div>
   );

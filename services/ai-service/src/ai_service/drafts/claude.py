@@ -104,8 +104,15 @@ REGLAS ESTRICTAS:
    {{"code": "F41.1", "description": "Trastorno de ansiedad generalizada"}}.
    Usa códigos de salud mental (capítulo F). Si no hay base suficiente, usa null.
    El profesional confirmará o cambiará esta sugerencia antes de aprobar.
+9. Añade también la clave "risk_note": una alerta SOLO si la transcripción contiene
+   menciones EXPLÍCITAS de ideación suicida, autolesión o un intento de suicidio previo
+   (palabras del paciente o del profesional, nunca una inferencia tuya). Resume en una
+   frase corta y factual qué se dijo, por ejemplo "El paciente menciona haber pensado en
+   quitarse la vida la semana pasada, sin plan concreto". Si no hay ninguna mención
+   explícita de este tipo, usa null. Nunca marques ni sugieras una opción específica del
+   examen mental — solo describe lo dicho; el profesional decide qué marcar manualmente.
 
-Formato de respuesta — un objeto JSON con las claves de secciones y "suggested_icd10":
+Formato de respuesta — un objeto JSON con las claves de secciones, "suggested_icd10" y "risk_note":
 {schema}"""
 
 
@@ -226,7 +233,9 @@ async def generate_clinical_draft(
         rt, schema = _schema_for(record_type)
 
     if not anonymized_transcription.strip():
-        return json.dumps({"record_type": rt, "sections": {}, "suggested_icd10": None}, ensure_ascii=False)
+        return json.dumps(
+            {"record_type": rt, "sections": {}, "suggested_icd10": None, "risk_note": None}, ensure_ascii=False
+        )
 
     tone_instr  = _TONE_INSTRUCTIONS.get(tone, _TONE_INSTRUCTIONS["formal"])
     style_instr = _STYLE_INSTRUCTIONS.get(note_style, _STYLE_INSTRUCTIONS["structured"])
@@ -301,12 +310,21 @@ async def generate_clinical_draft(
             "description": str(raw_icd.get("description") or "").strip(),
         }
 
+    # Risk note — an informational flag only; the professional still has to
+    # click the actual Ideación Suicida / Antecedente de intento option by hand.
+    raw_risk_note = parsed.get("risk_note")
+    risk_note = raw_risk_note.strip() if isinstance(raw_risk_note, str) and raw_risk_note.strip() else None
+
     logger.info(
         "clinical draft generated",
         extra={
             "input_tokens": message.usage.input_tokens,
             "sections": len(sections),
             "icd10": bool(suggested),
+            "risk_note": bool(risk_note),
         },
     )
-    return json.dumps({"record_type": rt, "sections": sections, "suggested_icd10": suggested}, ensure_ascii=False)
+    return json.dumps(
+        {"record_type": rt, "sections": sections, "suggested_icd10": suggested, "risk_note": risk_note},
+        ensure_ascii=False,
+    )
