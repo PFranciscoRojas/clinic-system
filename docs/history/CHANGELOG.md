@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-07-13
+
+- enhancement: **batch "todos los pendientes técnicos + mejoras del sistema"** (PRs #183–#186): cierre DISCHARGE con plantilla custom reparado (motivo de egreso en el flujo templado + approve que lo descartaba en todos los formatos); ai-service endurecido (validación de shape por widget, logs con `extra` visibles, NER `md` con fallback, pytest gateando el build); **frontend con CI de deploy** (build en Actions + rsync in-place, smoke reutilizable/dispatch, favicon modo oscuro); **DR probado de verdad** (restore real desde B2, RTO datos ~15 s, snapshot cifrado diario del `.env` a B2, runbook en `docs/ops/DR_RUNBOOK.md`).
+- fix(clinical): **2 rondas de pruebas de usuario del flujo de audio** (PRs #188–#189): formato obligatorio antes de subir/grabar (causa raíz de drafts sin template_id), dropzone bloqueada al grabar, botón "Detener" sin finalizar sesión, guardas de salida cubren subidas, aprobar draft con nota ya guardada vincula en vez de duplicar historia, formato visible en todos los estados, y tarjeta "Sesiones sin registro clínico" en el Dashboard (`GET /appointments/pending-notes`).
+- ops: rotación de la llave GPG de backups (#187, expuesta fuera del keyring → `backups@chapni.com`, ambas en LastPass); barrido de 53 audios PHI (128 MB) que el mount `:ro` nunca dejó borrar; contenedor huérfano eliminado; Resend con dominio chapni.com verificado (usuario); audio de prueba de 60 min regenerado y entregado en Descargas.
+
+---
+
 ## 2026-07-11
 
 - fix(clinical): **grabaciones de 1 hora funcionan de punta a punta — validado en prod** (PRs #178–#181). Tres bugs mortales encontrados por una prueba E2E real (audio TTS de 57,7 min / 61 MB, subido throttled a 500 KB/s con clon del formato de Marcela): el upload moría a los 15 s (`ReadTimeout` global → deadline de 20 min solo en la ruta de audio, #178), el contexto del request expiraba a los 30 s durante la subida (middleware exento + contexto propio, #179), y el guard anti-alucinación descartaba transcripciones largas reales por frases repetidas legítimas (ahora solo dispara con loop consecutivo o ≥50% duplicadas, #180). Bonus #180: el volumen de audio estaba `:ro` — el borrado post-transcripción nunca había funcionado (PHI acumulado); ya es rw y verificado. Resultado final: Whisper `base` transcribe 58 min en 8m39s y Claude prellena los 7 campos del template custom con shapes de widget válidos. Runbook repetible en `scripts/e2e_audio/` (#181).
