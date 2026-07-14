@@ -10,7 +10,7 @@ import { ApiError } from '@/api/client';
 import { useIsMobile } from '@/lib/useMediaQuery';
 import { diagnosesApi, type ICD10Code } from '@/api/diagnoses';
 import { recordTemplatesApi } from '@/api/recordTemplates';
-import { clinicalRecordsApi, type RecordSections, type ClinicalRecord, type DischargeReason } from '@/api/clinicalRecords';
+import { clinicalRecordsApi, type ClinicalRecord, type DischargeReason, type RiskLevel } from '@/api/clinicalRecords';
 import DischargeReasonCard from '@/components/clinical/DischargeReasonCard';
 import { TEMPLATE_SECTIONS, RECORD_TYPE_LABELS, type SectionDef } from '@/components/clinical/constants';
 import { Badge } from '@/components/ui/Badge';
@@ -154,24 +154,26 @@ export function AIDraftPage() {
   const restoreAttemptedRef = useRef(false);
 
   // Restore the left draft + pulled-section markers from localStorage on mount.
-  // Only for integrated-format drafts — custom-template drafts use the old
-  // single-pane editor and their content lives under different storage.
+  // The pulled-section markers apply to BOTH formats; the leftDraft itself is
+  // integrated-only (custom templates keep their content in customEdit).
   // The sync setState here is a one-shot restore gated by restoreAttemptedRef;
   // it shares that ref with the server-seed effect below, so restructuring
   // either alone would break the "local edits win over server seed" contract.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (!draftStorageKey || draft?.template_id || restoreAttemptedRef.current) return;
+    if (!draftStorageKey || restoreAttemptedRef.current || !draft) return;
     restoreAttemptedRef.current = true;
     try {
-      const raw = localStorage.getItem(draftStorageKey);
-      if (raw) {
-        const saved = JSON.parse(raw);
-        if (saved.draft) {
-          const merged = mergeSavedDraft(saved.draft as Partial<ClinicalDraft>);
-          if (draftHasContent(merged)) {
-            setLeftDraft(merged);
-            localRestoredRef.current = true;
+      if (!draft.template_id) {
+        const raw = localStorage.getItem(draftStorageKey);
+        if (raw) {
+          const saved = JSON.parse(raw);
+          if (saved.draft) {
+            const merged = mergeSavedDraft(saved.draft as Partial<ClinicalDraft>);
+            if (draftHasContent(merged)) {
+              setLeftDraft(merged);
+              localRestoredRef.current = true;
+            }
           }
         }
       }
@@ -183,7 +185,7 @@ export function AIDraftPage() {
         }
       }
     } catch { /* corrupt draft — start clean */ }
-  }, [draftStorageKey, usedStorageKey, draft?.template_id]);
+  }, [draftStorageKey, usedStorageKey, draft]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Save 600ms after the last change; also on tab hide / SPA navigation, since
@@ -236,16 +238,68 @@ export function AIDraftPage() {
     }
   }, [draft?.status, draft?.superseded_by, params, navigate]);
 
-  // Seed customEdit / the mental exam from the draft content — render-time
-  // adjust replacing two effects (no extra paint with unseeded forms). The
-  // customEdit seed waits for BOTH the draft and its template, whichever
-  // query resolves last; refetches of either re-seed exactly as before.
-  const [seededCustom, setSeededCustom] = useState<{ d?: typeof draft; t?: typeof customTemplate }>({});
-  if (customTemplate && draft && (seededCustom.d !== draft || seededCustom.t !== customTemplate)) {
-    setSeededCustom({ d: draft, t: customTemplate });
-    const raw = draft.draft_content_plain as Record<string, unknown> | null;
-    setCustomEdit((raw?.sections ?? {}) as RecordSections);
-  }
+  // Seed the custom-template LEFT pane (the professional's record). The AI
+  // content is never auto-poured in — it stays on the right until pulled,
+  // mirroring the integrated comparison view. Order: saved local edits (same
+  // clinical-draft-* contract as RecordForm) > the in-progress record's
+  // sections (same template only) > blank.
+  const customSeededRef = useRef(false);
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!customTemplate || !draft?.template_id || customSeededRef.current) return;
+    if (!resolutionSettled || (compareRecordId && !manualRecord)) return; // wait for the record lookup
+    customSeededRef.current = true;
+    try {
+      const raw = draftStorageKey ? localStorage.getItem(draftStorageKey) : null;
+      if (raw) {
+        const saved = JSON.parse(raw);
+        const savedSections = (saved.customSections ?? {}) as SectionsState;
+        if ((saved.selectedTemplateId ?? '') === draft.template_id && Object.keys(savedSections).length > 0) {
+          setCustomEdit(savedSections);
+          if (typeof saved.customDischargeReason === 'string' && saved.customDischargeReason) {
+            setDischargeReason(saved.customDischargeReason as DischargeReason);
+          }
+          return;
+        }
+      }
+    } catch { /* corrupt — fall through */ }
+    if (manualRecord && (manualRecord.template_id ?? '') === draft.template_id) {
+      setCustomEdit((manualRecord.sections ?? {}) as SectionsState);
+      if (manualRecord.risk_level) setRiskLevel(manualRecord.risk_level);
+      if (manualRecord.discharge_reason) setDischargeReason(manualRecord.discharge_reason);
+      return;
+    }
+    setCustomEdit({});
+  }, [customTemplate, draft, resolutionSettled, manualRecord, compareRecordId, draftStorageKey]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Persist the custom left pane + pulled markers (same key RecordForm uses,
+  // so the appointment page and this page stay one draft).
+  useEffect(() => {
+    if (!draftStorageKey || !draft?.template_id || !customSeededRef.current) return;
+    const save = () => {
+      try {
+        if (Object.keys(customEdit).length > 0) {
+          localStorage.setItem(draftStorageKey, JSON.stringify({
+            customSections: customEdit,
+            selectedTemplateId: draft.template_id,
+            customDischargeReason: dischargeReason,
+          }));
+        }
+        if (usedStorageKey) localStorage.setItem(usedStorageKey, JSON.stringify([...usedKeys]));
+      } catch { /* storage full */ }
+    };
+    const t = setTimeout(save, 600);
+    const onHide = () => save();
+    window.addEventListener('pagehide', onHide);
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      clearTimeout(t);
+      save();
+      window.removeEventListener('pagehide', onHide);
+      document.removeEventListener('visibilitychange', onHide);
+    };
+  }, [draftStorageKey, usedStorageKey, customEdit, usedKeys, dischargeReason, draft?.template_id]);
   const [seededExamDraft, setSeededExamDraft] = useState<typeof draft>(undefined);
   if (draft && draft !== seededExamDraft) {
     setSeededExamDraft(draft);
@@ -301,6 +355,36 @@ export function AIDraftPage() {
     setApproving(true);
     setApproveErr('');
     try {
+      // Custom comparison with an in-progress record: finalize THAT record
+      // (no duplicate) and mark the draft consumed — mirror of the
+      // integrated comparison's approve path.
+      if (customTemplate && compareRecordId) {
+        // The record's type/template/date are already fixed from when it was
+        // created as an autosave DRAFT — finalize only fills sections/risk/reason.
+        await clinicalRecordsApi.finalize(compareRecordId, {
+          sections: customEdit,
+          risk_level: riskLevel as RiskLevel,
+          ...(recordType === 'DISCHARGE' ? { discharge_reason: dischargeReason as DischargeReason } : {}),
+        });
+        try { await aiDraftsApi.link(id, compareRecordId); } catch { /* best-effort */ }
+        setCreatedRecordId(compareRecordId);
+        if (icd10?.code && draft?.patient_id) {
+          try {
+            await diagnosesApi.create(draft.patient_id, {
+              icd10_code: icd10.code,
+              clinical_record_id: compareRecordId,
+              diagnosis_type: 'PRINCIPAL',
+              diagnosed_at: qsSessionDate || todayLocalISO(),
+            });
+          } catch { /* record approved; diagnosis can be added later */ }
+        }
+        try {
+          if (draftStorageKey) localStorage.removeItem(draftStorageKey);
+          if (usedStorageKey) localStorage.removeItem(usedStorageKey);
+        } catch { /* ignore */ }
+        queryClient.invalidateQueries({ queryKey: ['ai-draft', id] });
+        return;
+      }
       let approveBody: Parameters<typeof aiDraftsApi.approve>[1];
       if (customTemplate) {
         // Custom template path: send typed sections as-is
@@ -491,6 +575,12 @@ export function AIDraftPage() {
   const isEmptyDraft = isReady && !editing && !useCustomTemplate
     && sectionDefs.every(({ key }) => !getDraftField(key).trim());
 
+  // True while a ready draft is still waiting on the appointment's
+  // in-progress-record lookup — both formats seed their left pane from it, so
+  // both must hold off rendering until it settles (else a custom-template
+  // draft flashes an empty single-pane form before flipping into compare mode).
+  const resolving = isReady && !templateLoading && !resolutionSettled;
+
   // Comparison mode is the default for a ready integrated-format draft, whatever
   // the entry point (appointment button, drafts list, or an audio upload with no
   // manual record yet): the professional's clinical record on the left, the AI
@@ -519,8 +609,48 @@ export function AIDraftPage() {
   const undoAiSection = (key: string) =>
     setUsedKeys(prev => { const next = new Set(prev); next.delete(key); return next; });
 
+  // ── Custom-template comparison — same pull-based UX as the integrated one:
+  // the professional's templated record on the left, the AI's typed sections
+  // (widgets included) on the right, per-section "usar" buttons.
+  const customCompareMode = isReady && useCustomTemplate && resolutionSettled;
+  const baseTyped = (contentRaw?.sections ?? {}) as SectionsState;
+  // treatment_plan / diagnoses are self-contained widgets: they ignore
+  // whatever is stored in sections[key] and always render the patient's live
+  // plan/diagnoses via patientId (see WidgetField in TemplatedSectionsForm).
+  // Offering them as "pull from AI" would be a no-op the professional can
+  // click with zero visible effect, so they never enter the AI list.
+  const SELF_CONTAINED_WIDGETS = new Set(['treatment_plan', 'diagnoses']);
+  const aiCustomSections = customCompareMode && customTemplate
+    ? customTemplate.schema.filter(sec => {
+        if (sec.type === 'widget' && SELF_CONTAINED_WIDGETS.has(sec.widget ?? '')) return false;
+        const v = baseTyped[sec.key];
+        if (v === null || v === undefined) return false;
+        if (typeof v === 'string') return v.trim() !== '';
+        if (Array.isArray(v)) return v.length > 0;
+        return true;
+      })
+    : [];
+  const customUsedCount = aiCustomSections.filter(s => usedKeys.has(s.key)).length;
+  const pullCustomSection = (key: string) => {
+    setCustomEdit(prev => ({ ...prev, [key]: baseTyped[key] }));
+    setUsedKeys(prev => new Set(prev).add(key));
+  };
+  const pullAllCustom = () => {
+    setCustomEdit(prev => {
+      const next = { ...prev };
+      for (const sec of aiCustomSections) next[sec.key] = baseTyped[sec.key];
+      return next;
+    });
+    setUsedKeys(prev => {
+      const next = new Set(prev);
+      for (const sec of aiCustomSections) next.add(sec.key);
+      return next;
+    });
+  };
+  const anyCompare = compareMode || customCompareMode;
+
   return (
-    <div style={{ maxWidth: compareMode ? 1200 : 760, margin: '0 auto', padding: isMobile ? '0 12px 32px' : 0 }}>
+    <div style={{ maxWidth: anyCompare ? 1200 : 760, margin: '0 auto', padding: isMobile ? '0 12px 32px' : 0 }}>
       {/* Back — plus a direct way to the session this draft belongs to, so
           arriving from the topbar indicator or the drafts list never leaves
           the professional stranded */}
@@ -549,7 +679,7 @@ export function AIDraftPage() {
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-              <h1 style={{ fontSize: 18, fontWeight: 700, color: 'var(--s800)', margin: 0 }}>{compareMode ? 'Comparación: Manual vs IA' : 'Borrador IA'}</h1>
+              <h1 style={{ fontSize: 18, fontWeight: 700, color: 'var(--s800)', margin: 0 }}>{anyCompare ? 'Comparación: Manual vs IA' : 'Borrador IA'}</h1>
               <Badge label={statusCfg.label} color={statusCfg.color} bg={statusCfg.bg} />
             </div>
             <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -626,8 +756,10 @@ export function AIDraftPage() {
 
       {/* Resolving which clinical record to compare against (looking up the
           appointment's in-progress record) — hold the comparison view until we
-          know whether to seed the left pane from it or start blank. */}
-      {isReady && !useCustomTemplate && !templateLoading && !resolutionSettled && (
+          know whether to seed the left pane from it or start blank. Applies to
+          both formats: a custom-template draft seeds customEdit from the same
+          lookup, and would otherwise flash an empty single-pane form. */}
+      {resolving && (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
           <Spinner size={24} color="var(--teal)" />
         </div>
@@ -742,6 +874,118 @@ export function AIDraftPage() {
         </>
       )}
 
+      {/* ── Custom-template comparison: templated record left, AI right ── */}
+      {customCompareMode && customTemplate && !recordDone && !createdRecordId && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)', gap: 18, marginBottom: 20, alignItems: 'start' }}>
+            {/* LEFT — the professional's record in their own format */}
+            <div>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--s600)', letterSpacing: 0.3, marginBottom: 10 }}>✍ TU REGISTRO CLÍNICO — {customTemplate.name}</div>
+              <TemplatedSectionsForm schema={customTemplate.schema} value={customEdit} onChange={setCustomEdit} patientId={draft.patient_id} />
+              {recordType === 'DISCHARGE' && (
+                <div style={{ marginTop: 14 }}>
+                  <DischargeReasonCard value={dischargeReason} onChange={setDischargeReason} />
+                </div>
+              )}
+            </div>
+
+            {/* RIGHT — the AI draft, read-only, pull sections into the record */}
+            <div style={{ position: isMobile ? 'static' : 'sticky', top: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#92400e', letterSpacing: 0.3 }}>🤖 BORRADOR IA (del audio)</div>
+                {aiCustomSections.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: customUsedCount === aiCustomSections.length ? '#059669' : 'var(--s400)' }}>
+                      {customUsedCount}/{aiCustomSections.length} usadas
+                    </span>
+                    {customUsedCount < aiCustomSections.length && (
+                      <button
+                        onClick={pullAllCustom}
+                        style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 6, border: '1px solid #fcd34d', background: '#fffbeb', color: '#92400e', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        ← Usar todo
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              {aiCustomSections.length === 0 ? (
+                <div className="card" style={{ padding: '16px 18px', fontSize: 13, color: 'var(--s400)' }}>La IA no generó contenido para los campos de este formato.</div>
+              ) : aiCustomSections.map(sec => usedKeys.has(sec.key) ? (
+                <button
+                  key={sec.key}
+                  onClick={() => undoAiSection(sec.key)}
+                  title="Pasada al registro — clic para volver a mostrarla"
+                  style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 14px', marginBottom: 10, borderRadius: 10, border: '1.5px solid #6ee7b7', background: '#f0fdf4', cursor: 'pointer' }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 700, color: '#065f46', minWidth: 0 }}>
+                    <CheckCircle2 size={14} color="#059669" style={{ flexShrink: 0 }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sec.label}</span>
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: '#059669', whiteSpace: 'nowrap' }}>
+                    Usada <ChevronDown size={13} color="#059669" />
+                  </span>
+                </button>
+              ) : (
+                <div key={sec.key} className="card" style={{ padding: '14px 16px', marginBottom: 12, border: '1.5px solid #fde68a', background: '#fffdf7' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: '#92400e' }}>{sec.label}</span>
+                    <button
+                      onClick={() => pullCustomSection(sec.key)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 6, border: '1px solid #fcd34d', background: '#fffbeb', color: '#92400e', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    >
+                      ← Usar en el registro
+                    </button>
+                  </div>
+                  {/* Single-section render reuses the real widget, read-only */}
+                  <TemplatedSectionsForm schema={[sec]} value={baseTyped} onChange={() => {}} disabled />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ICD-10 suggestion */}
+          <Icd10Suggestion value={icd10 ?? null} editable={true} onChange={setIcd10} />
+
+          <div style={{ margin: '12px 0' }}>
+            <RiskLevelSelector value={riskLevel} onChange={setRiskLevel} />
+          </div>
+
+          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+            <button
+              onClick={handleApprove}
+              disabled={approving}
+              style={{ flex: 1, padding: 13, borderRadius: 11, background: 'var(--teal)', color: '#fff', border: 'none', cursor: approving ? 'not-allowed' : 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: approving ? 0.7 : 1 }}
+            >
+              {approving ? <Spinner size={16} color="#fff" /> : <CheckCircle2 size={16} />}
+              {approving ? 'Aprobando…' : 'Aprobar registro'}
+            </button>
+          </div>
+          {approveErr && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', background: '#fee2e2', borderRadius: 10, border: '1.5px solid #fca5a5', marginTop: 8 }}>
+              <AlertTriangle size={15} color="#dc2626" />
+              <span style={{ fontSize: 13, color: '#991b1b' }}>{approveErr}</span>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Custom comparison — approved confirmation */}
+      {customCompareMode && createdRecordId && (
+        <div style={{ padding: '16px 20px', background: '#d1fae5', borderRadius: 12, border: '1.5px solid #6ee7b7', marginTop: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <CheckCircle2 size={18} color="#059669" />
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#065f46' }}>Historia clínica aprobada y firmada</span>
+          </div>
+          <button
+            onClick={() => navigate(`/clinical-records/${createdRecordId}`)}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 14px', background: '#059669', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+          >
+            <FileText size={14} /> Ver registro clínico
+          </button>
+        </div>
+      )}
+
       {/* Comparison mode — approved confirmation (survives the status refetch
           that flips compareMode off once the draft becomes APPROVED). */}
       {recordDone && (
@@ -760,7 +1004,7 @@ export function AIDraftPage() {
       )}
 
       {/* Draft content (normal mode — no manual record to compare) */}
-      {!compareMode && !recordDone && (isReady || draft.status === 'APPROVED') && !templateLoading && (
+      {!compareMode && !customCompareMode && !resolving && !recordDone && (isReady || draft.status === 'APPROVED') && !templateLoading && (
         <>
           {/* Empty draft with no user edits: skip the form entirely, show a clean state */}
           {isEmptyDraft ? (

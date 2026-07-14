@@ -26,19 +26,14 @@ func (r *Repository) FindByID(ctx context.Context, orgID, appointmentID string) 
 }
 
 // PendingNotes returns the professional's COMPLETED sessions of the last 30
-// days that still have no finalized clinical record — the ones at risk of
-// being forgotten. draft_status carries the latest AI draft's state (empty
-// when the session has no draft at all).
+// days that have neither a finalized clinical record nor an active AI draft —
+// the truly note-less ones at risk of being forgotten. Sessions with a live
+// draft are deliberately excluded: they already surface in the Borradores IA
+// tab and the topbar indicator, and listing them twice reads as duplicates.
 func (r *Repository) PendingNotes(ctx context.Context, orgID, staffID string) ([]appointments.PendingNote, error) {
 	rows, err := r.q(ctx).Query(ctx, `
-		SELECT a.id::text, a.patient_id::text, a.scheduled_at,
-		       COALESCE(d.status::text, '') AS draft_status
+		SELECT a.id::text, a.patient_id::text, a.scheduled_at
 		FROM appointments a
-		LEFT JOIN LATERAL (
-			SELECT status FROM ai_drafts
-			WHERE appointment_id = a.id AND status IN ('PENDING','PROCESSING','DRAFT_READY')
-			ORDER BY created_at DESC LIMIT 1
-		) d ON TRUE
 		WHERE a.organization_id = $1
 		  AND a.staff_id = $2
 		  AND a.status = 'COMPLETED'
@@ -47,6 +42,11 @@ func (r *Repository) PendingNotes(ctx context.Context, orgID, staffID string) ([
 		  AND NOT EXISTS (
 			SELECT 1 FROM clinical_records cr
 			WHERE cr.appointment_id = a.id AND cr.finalized_at IS NOT NULL
+		  )
+		  AND NOT EXISTS (
+			SELECT 1 FROM ai_drafts d
+			WHERE d.appointment_id = a.id
+			  AND d.status IN ('PENDING','PROCESSING','DRAFT_READY')
 		  )
 		ORDER BY a.scheduled_at DESC
 		LIMIT 20
@@ -59,7 +59,7 @@ func (r *Repository) PendingNotes(ctx context.Context, orgID, staffID string) ([
 	var out []appointments.PendingNote
 	for rows.Next() {
 		var n appointments.PendingNote
-		if err := rows.Scan(&n.AppointmentID, &n.PatientID, &n.ScheduledAt, &n.DraftStatus); err != nil {
+		if err := rows.Scan(&n.AppointmentID, &n.PatientID, &n.ScheduledAt); err != nil {
 			return nil, fmt.Errorf("scan pending note: %w", err)
 		}
 		out = append(out, n)
