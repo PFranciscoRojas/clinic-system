@@ -7,7 +7,10 @@ export interface ScheduleConfig {
   activeDays: string[];   // 'Lun'…'Dom' — same labels the pickers render
   startHour: string;      // 'HH:MM'
   endHour: string;        // 'HH:MM'
-  sessionLen: number;     // default session duration in minutes
+  sessionLen: number;     // default session duration in minutes — fallback for the three below
+  sessionLenInitial?: number;   // 'Sesión inicial' override — falls back to sessionLen when unset
+  sessionLenFollowup?: number;  // 'Seguimiento' override — falls back to sessionLen when unset
+  sessionLenDischarge?: number; // 'Sesión de alta' override — falls back to sessionLen when unset
   breakStart?: string;    // 'HH:MM' — midday break (no slots offered)
   breakEnd?: string;
   buffer?: number;        // free minutes required between sessions
