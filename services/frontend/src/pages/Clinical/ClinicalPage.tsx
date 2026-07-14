@@ -7,6 +7,7 @@ import { aiDraftsApi, type DraftMeta, type DraftStatus } from '@/api/aiDrafts';
 import { clinicalRecordsApi, type RecordMeta, type RecordStatus } from '@/api/clinicalRecords';
 import { fmtDateOnly } from '@/lib/dates';
 import { useIsMobile } from '@/lib/useMediaQuery';
+import { PendingNotesCard } from '@/pages/Dashboard/PendingNotesCard';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -263,6 +264,9 @@ export function ClinicalPage() {
           Borradores IA y registros clínicos de todos tus pacientes
         </p>
       </div>
+
+      {/* Sesiones finalizadas que aún no tienen nota — la deuda clínica primero */}
+      <PendingNotesCard />
 
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--s200)', marginBottom: 0 }}>

@@ -1367,7 +1367,7 @@ export function AppointmentPage() {
 
             {/* ASIDE — recap + borrador IA como apoyo (sticky en desktop) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, position: compactLayout ? 'static' : 'sticky', top: 84 }}>
-              <RiskBanner patientId={appt.patient_id} />
+              <RiskBanner patientId={appt.patient_id} concealed />
               <RecapCard patientId={appt.patient_id} />
               {(canWriteNote || !!draftId) && (
                 <div className="card" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -1728,7 +1728,7 @@ export function AppointmentPage() {
           alignItems: 'start',
         }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <RiskBanner patientId={appt.patient_id} />
+            <RiskBanner patientId={appt.patient_id} concealed />
             <RecapCard patientId={appt.patient_id} />
           </div>
           {(canWriteNote || !!draftId) && (

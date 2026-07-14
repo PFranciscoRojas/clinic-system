@@ -19,6 +19,7 @@ import { Markdown } from '@/components/common/Markdown';
 import { hasPendingUpdate, onSwUpdate, reloadNow } from '@/lib/swUpdate';
 import { AIDraftIndicator } from '@/components/clinical/AIDraftIndicator';
 import { NotificationBell } from '@/components/layout/NotificationBell';
+import { InSessionChip } from '@/components/layout/InSessionChip';
 
 // Facturación is shown to CLINIC_ADMIN (billing:reports) — see the conditional
 // nav entry below.
@@ -481,6 +482,9 @@ export function AppShell({ children }: Props) {
             </div>
 
             <div style={{ flex: 1 }} />
+
+            {/* One-click way back to the session in progress */}
+            <InSessionChip />
 
             {/* Way back to an AI draft still generating (or failed) — Punto 3 */}
             <AIDraftIndicator />
