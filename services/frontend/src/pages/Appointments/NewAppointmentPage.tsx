@@ -761,12 +761,16 @@ export function NewAppointmentPage() {
 
   // ── Derived validations ────────────────────────────────────────────────────────
 
-  // 1. Past slots: today → block slots ≤ now + 30 min buffer
+  // 1. Past slots: today → block only slots whose start time already passed.
+  // No anticipation buffer here: this is the professional booking their own
+  // agenda (a patient can walk in at 22:50 for a 23:00 session) — the 30-min
+  // anticipation only makes sense on the PUBLIC booking page, where the
+  // patient books unattended.
   const pastSlots = useMemo<Set<string>>(() => {
     if (date !== todayISO()) return new Set<string>();
     const now = new Date();
-    const cutoffMin = now.getHours() * 60 + now.getMinutes() + 30;
-    return new Set(slots.filter(s => toMinutes(s) <= cutoffMin));
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    return new Set(slots.filter(s => toMinutes(s) < nowMin));
   }, [date, slots]);
 
   // Clear selected time if it becomes past when switching to today —
