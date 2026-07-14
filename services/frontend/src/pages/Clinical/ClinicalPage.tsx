@@ -29,6 +29,8 @@ const DRAFT_STATUS: Record<DraftStatus, { label: string; color: string; bg: stri
   ERROR:      { label: 'Error',      color: '#dc2626', bg: '#fee2e2', Icon: AlertTriangle },
   // Folded into a later consolidated take — hidden from the list, listed here only for type completeness.
   SUPERSEDED: { label: 'Consolidado', color: '#6b7280', bg: '#f3f4f6', Icon: Loader2 },
+  // Recording transcribed to nothing — hidden from the list, here for type completeness.
+  EMPTY:      { label: 'Sin contenido', color: '#92400e', bg: '#fef3c7', Icon: AlertTriangle },
 };
 
 function DraftBadge({ status }: { status: DraftStatus }) {

@@ -308,6 +308,36 @@ class AIWorker:
                 )
                 superseded_ids = []
 
+        # 2c. Nothing transcribable (silence, dead mic): a DRAFT_READY with no
+        #     content is a phantom draft the professional gets pushed to
+        #     "review". Mark it EMPTY (terminal, hidden from the review list)
+        #     and tell them to re-upload or write the note by hand.
+        if not transcription.strip():
+            await self._db.execute(
+                """
+                UPDATE ai_drafts
+                SET status = 'EMPTY', processed_at = NOW()
+                WHERE id = $1
+                """,
+                draft_id,
+            )
+            try:
+                await self._notify(
+                    str(row["organization_id"]),
+                    str(row["requested_by"]),
+                    "La grabación no tenía contenido clínico",
+                    "No se generó borrador de IA. Sube el audio de nuevo o redacta la nota manualmente.",
+                    f"/appointments/{appointment_id}" if appointment_id else f"/ai-drafts/{draft_id}",
+                )
+            except Exception as exc:  # noqa: BLE001 — best-effort, never break the job
+                logger.warning("empty-draft notification failed", extra={"draft_id": draft_id, "err": str(exc)})
+            try:
+                pathlib.Path(audio_path).unlink(missing_ok=True)
+            except OSError as exc:
+                logger.warning("could not delete audio file", extra={"audio_path": audio_path, "err": str(exc)})
+            logger.info("draft marked EMPTY — no transcribable content", extra={"draft_id": draft_id})
+            return
+
         # 3. Anonymize — the patient's real name parts (decrypted here) are
         #    replaced literally, then NER/regex strip everything else
         known_names = await self._patient_known_names(row["patient_id"])
@@ -368,10 +398,12 @@ class AIWorker:
         # the copy stays generic — the clinical detail loads under RLS via the
         # link. Wrapped so a notification failure never fails the draft job.
         try:
-            await self._notify_draft_ready(
+            await self._notify(
                 str(row["organization_id"]),
                 str(row["requested_by"]),
-                draft_id,
+                "Borrador de IA listo",
+                "El sistema generó un borrador clínico. Revísalo y apruébalo.",
+                f"/ai-drafts/{draft_id}",
             )
         except Exception as exc:  # noqa: BLE001 — best-effort, never break the job
             logger.warning("draft-ready notification failed", extra={"draft_id": draft_id, "err": str(exc)})
@@ -385,9 +417,9 @@ class AIWorker:
         except OSError as exc:
             logger.warning("could not delete audio file", extra={"audio_path": audio_path, "err": str(exc)})
 
-    async def _notify_draft_ready(self, org_id: str, recipient_user_id: str, draft_id: str) -> None:
-        """Insert an in-app notification (topbar bell) telling the requesting
-        professional their AI draft is ready to review. Runs in a transaction
+    async def _notify(self, org_id: str, recipient_user_id: str, title: str, body: str, link: str) -> None:
+        """Insert an in-app notification (topbar bell) for the requesting
+        professional — draft ready, or draft empty. Runs in a transaction
         that pins the org's RLS scope, so the INSERT satisfies the
         notifications tenant_isolation policy regardless of the DB role."""
         assert self._db is not None
@@ -401,14 +433,13 @@ class AIWorker:
                     """
                     INSERT INTO notifications
                         (organization_id, recipient_user_id, kind, title, body, link)
-                    VALUES ($1, $2, 'AI_DRAFT_READY',
-                            'Borrador de IA listo',
-                            'El sistema generó un borrador clínico. Revísalo y apruébalo.',
-                            $3)
+                    VALUES ($1, $2, 'AI_DRAFT_READY', $3, $4, $5)
                     """,
                     org_id,
                     recipient_user_id,
-                    f"/ai-drafts/{draft_id}",
+                    title,
+                    body,
+                    link,
                 )
 
     async def _process_suggestion(self, suggestion_id: str, org_id: str, patient_id: str, kind: str, approach: str = "") -> None:

@@ -41,6 +41,7 @@ const STATUS_CONFIG: Record<DraftStatus, { label: string; color: string; bg: str
   REJECTED:     { label: 'Rechazado',      color: '#92400e', bg: '#fef3c7', Icon: AlertTriangle },
   ERROR:        { label: 'Error',          color: '#991b1b', bg: '#fee2e2', Icon: AlertTriangle },
   SUPERSEDED:   { label: 'Consolidado',    color: '#6b7280', bg: '#f3f4f6', Icon: RefreshCw    },
+  EMPTY:        { label: 'Sin contenido',  color: '#92400e', bg: '#fef3c7', Icon: AlertTriangle },
 };
 
 
@@ -595,6 +596,24 @@ export function AIDraftPage() {
           <AlertTriangle size={40} color="#ef4444" style={{ marginBottom: 12 }} />
           <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--s800)', margin: '0 0 8px' }}>Error en el procesamiento</h2>
           <p style={{ color: 'var(--s400)', fontSize: 14, margin: '0 0 20px' }}>El pipeline de IA encontró un error. Contacta al administrador con el Draft ID.</p>
+        </div>
+      )}
+
+      {draft.status === 'EMPTY' && (
+        <div className="card" style={{ padding: 32, textAlign: 'center', border: '1.5px solid #fde68a' }}>
+          <AlertTriangle size={40} color="#d97706" style={{ marginBottom: 12 }} />
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--s800)', margin: '0 0 8px' }}>La grabación no tenía contenido clínico</h2>
+          <p style={{ color: 'var(--s400)', fontSize: 14, margin: '0 0 20px' }}>
+            No se generó borrador. Vuelve a la sesión para subir otro audio o redactar la nota manualmente.
+          </p>
+          {(qsAppointmentId || draft.appointment_id) && (
+            <button
+              onClick={() => navigate(`/appointments/${qsAppointmentId || draft.appointment_id}`)}
+              style={{ padding: '10px 22px', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
+            >
+              Ir a la sesión
+            </button>
+          )}
         </div>
       )}
 

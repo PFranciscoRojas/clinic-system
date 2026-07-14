@@ -1,6 +1,6 @@
 import { api } from './client';
 
-export type DraftStatus = 'PENDING' | 'PROCESSING' | 'DRAFT_READY' | 'APPROVED' | 'REJECTED' | 'ERROR' | 'SUPERSEDED';
+export type DraftStatus = 'PENDING' | 'PROCESSING' | 'DRAFT_READY' | 'APPROVED' | 'REJECTED' | 'ERROR' | 'SUPERSEDED' | 'EMPTY';
 
 export interface AIDraft {
   id: string;
