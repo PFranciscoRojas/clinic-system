@@ -1,7 +1,7 @@
 import { api } from './client';
 import { RecordType } from './clinicalRecords';
 
-export type FieldType = 'text' | 'select' | 'scale' | 'checklist' | 'widget';
+export type FieldType = 'text' | 'select' | 'multiselect' | 'scale' | 'checklist' | 'widget';
 export type TemplateStatus = 'ACTIVE' | 'ARCHIVED';
 
 /** One section parsed from the markdown template. */
@@ -12,7 +12,9 @@ export interface SectionDef {
   required: boolean;
   collapsed: boolean; // starts hidden behind an accordion
   type: FieldType;
-  options?: string[];    // for type=select
+  options?: string[];    // for type=select|multiselect
+  display?: 'pills';     // for type=select|multiselect: render as toggle pill buttons
+  allow_other?: boolean; // for type=multiselect: lets the professional add a free-text value
   scale_min?: number;    // for type=scale
   scale_max?: number;    // for type=scale
   widget?: string;       // for type=widget (name from field-widgets.json)

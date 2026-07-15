@@ -73,6 +73,47 @@ func TestParseMarkdown_Select(t *testing.T) {
 	}
 }
 
+func TestParseMarkdown_Multiselect(t *testing.T) {
+	src := "## Barreras {multiselect:Tardanza|Cambios de tema|Otra} {allow_other}\n"
+	sections, _, err := recordtemplates.ParseMarkdown(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := sections[0]
+	if s.Type != recordtemplates.FieldMultiselect {
+		t.Errorf("type = %q, want multiselect", s.Type)
+	}
+	if len(s.Options) != 3 {
+		t.Errorf("options = %v", s.Options)
+	}
+	if !s.AllowOther {
+		t.Errorf("AllowOther = false, want true")
+	}
+}
+
+func TestParseMarkdown_MultiselectRequiresTwoOptions(t *testing.T) {
+	src := "## Barreras {multiselect:Sola}\n"
+	_, _, err := recordtemplates.ParseMarkdown(src)
+	if err == nil {
+		t.Fatal("expected error when multiselect has < 2 options")
+	}
+}
+
+func TestParseMarkdown_SelectPills(t *testing.T) {
+	src := "## Insight {select:Alto|Medio|Bajo} {pills}\n"
+	sections, _, err := recordtemplates.ParseMarkdown(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := sections[0]
+	if s.Type != recordtemplates.FieldSelect {
+		t.Errorf("type = %q, want select", s.Type)
+	}
+	if s.Display != "pills" {
+		t.Errorf("Display = %q, want pills", s.Display)
+	}
+}
+
 func TestParseMarkdown_Widget(t *testing.T) {
 	src := "## Examen mental {widget:mental_exam}\n"
 	sections, _, err := recordtemplates.ParseMarkdown(src)

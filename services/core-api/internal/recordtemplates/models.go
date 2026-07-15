@@ -17,26 +17,29 @@ const (
 type FieldType string
 
 const (
-	FieldText      FieldType = "text"
-	FieldSelect    FieldType = "select"
-	FieldScale     FieldType = "scale"
-	FieldChecklist FieldType = "checklist"
-	FieldWidget    FieldType = "widget"
+	FieldText        FieldType = "text"
+	FieldSelect      FieldType = "select"
+	FieldMultiselect FieldType = "multiselect"
+	FieldScale       FieldType = "scale"
+	FieldChecklist   FieldType = "checklist"
+	FieldWidget      FieldType = "widget"
 )
 
 // SectionDef is one parsed section from the template markdown.
 // It mirrors the JSON rows stored in clinical_record_templates.schema.
 type SectionDef struct {
-	Key       string    `json:"key"`
-	Label     string    `json:"label"`
-	Hint      string    `json:"hint,omitempty"`
-	Required  bool      `json:"required"`
-	Collapsed bool      `json:"collapsed"` // starts hidden behind an accordion; the professional expands it on demand
-	Type      FieldType `json:"type"`
-	Options   []string  `json:"options,omitempty"`    // for type=select
-	ScaleMin  *int      `json:"scale_min,omitempty"`  // for type=scale
-	ScaleMax  *int      `json:"scale_max,omitempty"`  // for type=scale
-	Widget    string    `json:"widget,omitempty"`     // for type=widget (name in field-widgets.json)
+	Key        string    `json:"key"`
+	Label      string    `json:"label"`
+	Hint       string    `json:"hint,omitempty"`
+	Required   bool      `json:"required"`
+	Collapsed  bool      `json:"collapsed"` // starts hidden behind an accordion; the professional expands it on demand
+	Type       FieldType `json:"type"`
+	Options    []string  `json:"options,omitempty"`     // for type=select|multiselect
+	Display    string    `json:"display,omitempty"`     // "pills" for select|multiselect rendered as toggle buttons instead of dropdown/checkboxes
+	AllowOther bool      `json:"allow_other,omitempty"` // for type=multiselect: lets the professional add a free-text value beyond Options
+	ScaleMin   *int      `json:"scale_min,omitempty"`   // for type=scale
+	ScaleMax   *int      `json:"scale_max,omitempty"`   // for type=scale
+	Widget     string    `json:"widget,omitempty"`      // for type=widget (name in field-widgets.json)
 }
 
 // Template is the domain entity for a clinical-record template.

@@ -138,6 +138,10 @@ def _build_schema_from_template(sections: list[dict[str, Any]]) -> dict[str, str
         elif field_type == "select":
             opts = " | ".join(sec.get("options") or [])
             result[key] = f"one of: {opts} — {hint}"
+        elif field_type == "multiselect":
+            opts = " | ".join(sec.get("options") or [])
+            other_note = " Puedes incluir valores fuera de la lista si aplica." if sec.get("allow_other") else ""
+            result[key] = f"array with zero or more of: {opts}.{other_note} — {hint}"
         elif field_type == "scale":
             mn = sec.get("scale_min", 0)
             mx = sec.get("scale_max", 10)
@@ -167,6 +171,16 @@ def _validate_typed_value(sec: dict[str, Any], val: Any) -> Any | None:
         return val if mn <= val <= mx else None
     if field_type == "select":
         return val if val in (sec.get("options") or []) else None
+    if field_type == "multiselect":
+        if not isinstance(val, list):
+            return None
+        options = sec.get("options") or []
+        allow_other = sec.get("allow_other", False)
+        items = [
+            x for x in val
+            if isinstance(x, str) and x.strip() and (allow_other or x in options)
+        ]
+        return items or None
     if field_type == "checklist":
         if isinstance(val, list):
             items = [x for x in val if isinstance(x, str) and x.strip()]

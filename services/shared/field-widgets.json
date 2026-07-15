@@ -1,6 +1,10 @@
 {
-  "_comment": "Canonical registry of field types and widget names understood by all three stacks (Go, Python, TypeScript). A record template section references one of these 'type' values. Widget names match component identifiers in the frontend.",
-  "types": ["text", "select", "scale", "checklist", "widget"],
+  "_comment": "Canonical registry of field types and widget names understood by all three stacks (Go, Python, TypeScript). A record template section references one of these 'type' values. Widget names match component identifiers in the frontend. Prefer select/multiselect (optionally with display=pills or allow_other) over a new bespoke widget — their AI schema is derived generically from `options`, no Go/Python/React changes needed per new field.",
+  "types": ["text", "select", "multiselect", "scale", "checklist", "widget"],
+  "type_modifiers": {
+    "display": "\"pills\" (select|multiselect only) — render as toggle pill buttons instead of a dropdown/checkboxes",
+    "allow_other": "bool (multiselect only) — lets the professional add a free-text value beyond the fixed options; the AI may also emit values outside the option list"
+  },
   "widgets": {
     "mental_exam": {
       "description": "10-domain mental-status checklist; each domain has {status: NORMAL|ALTERED, note: string}",

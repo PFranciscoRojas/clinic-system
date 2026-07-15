@@ -189,6 +189,18 @@ function FieldInput({ def, value, onChange, disabled, patientId, canAddDiagnosis
       );
 
     case 'select':
+      if (def.display === 'pills') {
+        const current = typeof value === 'string' && value ? [value] : [];
+        return (
+          <PillGroup
+            options={def.options ?? []}
+            value={current}
+            multi={false}
+            onChange={(v) => onChange(v[0] ?? '')}
+            disabled={disabled}
+          />
+        );
+      }
       return (
         <select
           value={typeof value === 'string' ? value : ''}
@@ -205,6 +217,16 @@ function FieldInput({ def, value, onChange, disabled, patientId, canAddDiagnosis
             <option key={opt} value={opt}>{opt}</option>
           ))}
         </select>
+      );
+
+    case 'multiselect':
+      return (
+        <MultiselectField
+          def={def}
+          value={Array.isArray(value) ? (value as string[]) : []}
+          onChange={onChange}
+          disabled={disabled}
+        />
       );
 
     case 'scale': {
@@ -257,6 +279,146 @@ function FieldInput({ def, value, onChange, disabled, patientId, canAddDiagnosis
     default:
       return null;
   }
+}
+
+/** Toggle-pill single- or multi-select, used by select{pills} and multiselect{pills}. */
+function PillGroup({
+  options,
+  value,
+  multi,
+  onChange,
+  disabled,
+}: {
+  options: string[];
+  value: string[];
+  multi: boolean;
+  onChange: (v: string[]) => void;
+  disabled?: boolean;
+}) {
+  const toggle = (opt: string) => {
+    if (multi) {
+      onChange(value.includes(opt) ? value.filter((v) => v !== opt) : [...value, opt]);
+    } else {
+      onChange(value.includes(opt) ? [] : [opt]);
+    }
+  };
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {options.map((opt) => {
+        const active = value.includes(opt);
+        return (
+          <button
+            key={opt} type="button" disabled={disabled}
+            onClick={() => toggle(opt)}
+            style={{
+              padding: '5px 14px', borderRadius: 16, fontSize: 12, fontWeight: 600,
+              cursor: disabled ? 'default' : 'pointer',
+              border: `1.5px solid ${active ? 'transparent' : 'var(--s200)'}`,
+              background: active ? 'var(--teal)' : '#fff',
+              color: active ? '#fff' : 'var(--s600)',
+            }}
+          >{opt}</button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Fixed-option multiselect: checkboxes (or pills), plus an optional free-text "other" row. */
+function MultiselectField({
+  def,
+  value,
+  onChange,
+  disabled,
+}: {
+  def: SectionDef;
+  value: string[];
+  onChange: (v: string[]) => void;
+  disabled?: boolean;
+}) {
+  const options = def.options ?? [];
+  const [draft, setDraft] = useState('');
+
+  if (def.display === 'pills') {
+    return <PillGroup options={options} value={value} multi onChange={onChange} disabled={disabled} />;
+  }
+
+  const toggle = (opt: string) => onChange(value.includes(opt) ? value.filter((v) => v !== opt) : [...value, opt]);
+  const customValues = value.filter((v) => !options.includes(v));
+
+  const addOther = () => {
+    const t = draft.trim();
+    if (t) {
+      onChange([...value, t]);
+      setDraft('');
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+        {options.map((opt) => (
+          <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: disabled ? 'default' : 'pointer' }}>
+            <input
+              type="checkbox" checked={value.includes(opt)} disabled={disabled}
+              onChange={() => toggle(opt)}
+              style={{ cursor: disabled ? 'default' : 'pointer' }}
+            />
+            <span style={{ fontSize: 13, color: 'var(--s700)' }}>{opt}</span>
+          </label>
+        ))}
+      </div>
+      {def.allow_other && (
+        <>
+          {customValues.length > 0 && (
+            <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {customValues.map((item, i) => (
+                <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', background: 'var(--s50, #faf7ef)', border: '1px solid var(--s100)', borderRadius: 8 }}>
+                  <span style={{ flex: 1, fontSize: 13, color: 'var(--s700)' }}>{item}</span>
+                  {!disabled && (
+                    <button
+                      type="button"
+                      onClick={() => onChange(value.filter((v) => v !== item))}
+                      aria-label={`Quitar ${item}`}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 13, padding: '0 2px', lineHeight: 1 }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {!disabled && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="text"
+                value={draft}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDraft(e.target.value)}
+                onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && (e.preventDefault(), addOther())}
+                placeholder="Otra (especificar)…"
+                style={{
+                  flex: 1, minWidth: 0, padding: '7px 10px', borderRadius: 8, fontSize: 13,
+                  border: '1.5px solid var(--s200)', color: 'var(--s700)', background: '#fff',
+                }}
+              />
+              <button
+                type="button"
+                onClick={addOther}
+                aria-label="Agregar otra"
+                style={{
+                  padding: '7px 16px', background: 'var(--teal)', color: '#fff', border: 'none',
+                  borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 700, flexShrink: 0,
+                }}
+              >
+                +
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
 }
 
 function ChecklistField({
