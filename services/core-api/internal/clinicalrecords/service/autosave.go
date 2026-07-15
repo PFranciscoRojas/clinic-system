@@ -21,7 +21,7 @@ func (s *Service) CreateDraft(ctx context.Context, in CreateInput) (string, erro
 	}
 
 	if in.TemplateID != "" {
-		if err := s.validateCustomTemplateLenient(ctx, in.OrganizationID, in.TemplateID, in.Sections); err != nil {
+		if err := s.validateCustomTemplateLenient(ctx, in.OrganizationID, in.TemplateID, in.Sections, true); err != nil {
 			return "", err
 		}
 	} else if err := clinicalrecords.ValidateTemplateV2Lenient(in.RecordType, in.Sections); err != nil {
@@ -104,7 +104,7 @@ func (s *Service) UpdateDraft(ctx context.Context, in UpdateInput) error {
 	}
 
 	if raw.TemplateID != "" {
-		if err := s.validateCustomTemplateLenient(ctx, in.OrganizationID, raw.TemplateID, in.Sections); err != nil {
+		if err := s.validateCustomTemplateLenient(ctx, in.OrganizationID, raw.TemplateID, in.Sections, false); err != nil {
 			return err
 		}
 	} else if err := clinicalrecords.ValidateTemplateV2Lenient(raw.RecordType, in.Sections); err != nil {
@@ -167,7 +167,7 @@ func (s *Service) Finalize(ctx context.Context, in UpdateInput) error {
 			Sections:        in.Sections,
 			RiskLevel:       in.RiskLevel,
 			DischargeReason: in.DischargeReason,
-		}); err != nil {
+		}, false); err != nil {
 			return err
 		}
 	} else if err := clinicalrecords.ValidateTemplateV2(raw.RecordType, in.Sections, in.RiskLevel, in.DischargeReason); err != nil {

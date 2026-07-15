@@ -23,7 +23,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (string, error) {
 func (s *Service) createV2(ctx context.Context, in CreateInput) (string, error) {
 	if in.TemplateID != "" {
 		// Custom template path: validate sections against the template schema.
-		if err := s.validateCustomTemplate(ctx, in); err != nil {
+		if err := s.validateCustomTemplate(ctx, in, true); err != nil {
 			return "", err
 		}
 	} else {
@@ -83,9 +83,15 @@ func (s *Service) createV2(ctx context.Context, in CreateInput) (string, error) 
 	return s.repo.Create(ctx, params)
 }
 
-// loadActiveCustomTemplate fetches and validates a custom template is usable,
-// shared by both the strict and lenient validation paths below.
-func (s *Service) loadActiveCustomTemplate(ctx context.Context, orgID, templateID string) (*recordtemplates.Template, error) {
+// loadCustomTemplate fetches a custom template. When requireActive is true
+// (starting a brand-new record/draft) it also enforces the template is still
+// ACTIVE — a professional must pick from what's currently on offer. When
+// false (continuing a draft, or finalizing/re-validating one that already
+// exists) an ARCHIVED template is accepted: the record is pinned to this
+// exact template_id and must keep validating against the schema it was
+// created with, even after the template was later edited (which archives the
+// old row — see recordtemplates/repository.Update).
+func (s *Service) loadCustomTemplate(ctx context.Context, orgID, templateID string, requireActive bool) (*recordtemplates.Template, error) {
 	if s.tmplRepo == nil {
 		return nil, clinicalrecords.ErrInvalidInput
 	}
@@ -93,7 +99,7 @@ func (s *Service) loadActiveCustomTemplate(ctx context.Context, orgID, templateI
 	if err != nil {
 		return nil, clinicalrecords.ErrInvalidInput
 	}
-	if tpl.Status != recordtemplates.StatusActive {
+	if requireActive && tpl.Status != recordtemplates.StatusActive {
 		return nil, clinicalrecords.ErrInvalidInput
 	}
 	return tpl, nil
@@ -111,9 +117,12 @@ func allowedCustomKeys(tpl *recordtemplates.Template) map[string]recordtemplates
 
 // validateCustomTemplate checks the section payload against the custom
 // template schema. It still enforces the system-level risk-level rules.
-// Used by the strict create/finalize paths only.
-func (s *Service) validateCustomTemplate(ctx context.Context, in CreateInput) error {
-	tpl, err := s.loadActiveCustomTemplate(ctx, in.OrganizationID, in.TemplateID)
+// Used by the strict create/finalize paths; requireActive is true only for a
+// brand-new record (Create) — Finalize passes false since the record is
+// already pinned to its template_id and must keep validating against it even
+// if that template version has since been archived.
+func (s *Service) validateCustomTemplate(ctx context.Context, in CreateInput, requireActive bool) error {
+	tpl, err := s.loadCustomTemplate(ctx, in.OrganizationID, in.TemplateID, requireActive)
 	if err != nil {
 		return err
 	}
@@ -145,12 +154,16 @@ func (s *Service) validateCustomTemplate(ctx context.Context, in CreateInput) er
 	return nil
 }
 
-// validateCustomTemplateLenient only checks the template is active and that
-// every section key actually belongs to its schema — no required-field or
-// risk-level enforcement. Used by autosave (CreateDraft/UpdateDraft) so a
-// mid-thought custom-template draft never gets rejected for being incomplete.
-func (s *Service) validateCustomTemplateLenient(ctx context.Context, orgID, templateID string, sections map[string]any) error {
-	tpl, err := s.loadActiveCustomTemplate(ctx, orgID, templateID)
+// validateCustomTemplateLenient only checks the template (active, when
+// requireActive) and that every section key actually belongs to its schema —
+// no required-field or risk-level enforcement. Used by autosave: CreateDraft
+// passes true (fresh draft, must start from a currently-active template),
+// UpdateDraft passes false (continuing a draft already pinned to its
+// template_id, even if that version has since been archived) so a mid-thought
+// custom-template draft never gets rejected for being incomplete — or for the
+// template having moved on since the draft was opened.
+func (s *Service) validateCustomTemplateLenient(ctx context.Context, orgID, templateID string, sections map[string]any, requireActive bool) error {
+	tpl, err := s.loadCustomTemplate(ctx, orgID, templateID, requireActive)
 	if err != nil {
 		return err
 	}

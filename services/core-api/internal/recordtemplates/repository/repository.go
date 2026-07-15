@@ -134,28 +134,70 @@ func (r *Repository) Get(ctx context.Context, orgID, id string) (*recordtemplate
 	return &t, nil
 }
 
+// Update creates a new, immutable version of the template and archives the
+// prior one — it never mutates the old row in place. Records reference a
+// template by id, and that id must keep rendering with the exact schema it
+// had at the time (PDF export, in-progress drafts): archiving the old row
+// instead of overwriting it is what makes that guarantee hold.
 func (r *Repository) Update(ctx context.Context, id, orgID, name, markdown string, schema []recordtemplates.SectionDef) (*recordtemplates.Template, error) {
 	schemaJSON, err := json.Marshal(schema)
 	if err != nil {
 		return nil, fmt.Errorf("marshal schema: %w", err)
 	}
-	var t recordtemplates.Template
-	var schemaRaw []byte
-	err = r.q(ctx).QueryRow(ctx, `
-		UPDATE clinical_record_templates
-		SET name = $3, source_markdown = $4, schema = $5, version = version + 1, updated_at = now()
+
+	tx, err := r.q(ctx).Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Read the fields the new row inherits, and lock it against concurrent
+	// edits, before archiving — the idx_crt_one_default partial unique index
+	// would reject the new row if it were inserted while the old one still
+	// held is_default=true/status=ACTIVE, so the old row must be archived
+	// first and its pre-archive values captured here.
+	var recordType, createdBy string
+	var wasDefault bool
+	var oldVersion int
+	err = tx.QueryRow(ctx, `
+		SELECT record_type, is_default, created_by, version
+		FROM clinical_record_templates
 		WHERE id = $1 AND organization_id = $2 AND status = 'ACTIVE'
-		RETURNING id, organization_id, name, record_type, source_markdown, schema,
-		          version, status, is_default, created_by, created_at, updated_at
-	`, id, orgID, name, markdown, schemaJSON).Scan(
-		&t.ID, &t.OrganizationID, &t.Name, &t.RecordType, &t.SourceMarkdown, &schemaRaw,
-		&t.Version, &t.Status, &t.IsDefault, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt,
-	)
+		FOR UPDATE
+	`, id, orgID).Scan(&recordType, &wasDefault, &createdBy, &oldVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, recordtemplates.ErrNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("update record_template: %w", err)
+		return nil, fmt.Errorf("lookup template for update: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE clinical_record_templates
+		SET status = 'ARCHIVED', is_default = false, updated_at = now()
+		WHERE id = $1
+	`, id); err != nil {
+		return nil, fmt.Errorf("archive prior template version: %w", err)
+	}
+
+	var t recordtemplates.Template
+	var schemaRaw []byte
+	err = tx.QueryRow(ctx, `
+		INSERT INTO clinical_record_templates
+			(organization_id, name, record_type, source_markdown, schema, version, status, is_default, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', $7, $8)
+		RETURNING id, organization_id, name, record_type, source_markdown, schema,
+		          version, status, is_default, created_by, created_at, updated_at
+	`, orgID, name, recordType, markdown, schemaJSON, oldVersion+1, wasDefault, createdBy).Scan(
+		&t.ID, &t.OrganizationID, &t.Name, &t.RecordType, &t.SourceMarkdown, &schemaRaw,
+		&t.Version, &t.Status, &t.IsDefault, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("insert new template version: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit template version update: %w", err)
 	}
 	if err := json.Unmarshal(schemaRaw, &t.Schema); err != nil {
 		return nil, fmt.Errorf("unmarshal schema: %w", err)
