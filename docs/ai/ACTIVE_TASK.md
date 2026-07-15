@@ -1,17 +1,18 @@
 ## Sin tarea pendiente
 
-Sesión 2026-07-13 cerrada limpia (PRs #183–#189, todo mergeado, desplegado por CI y verificado en prod):
+Sesión 2026-07-15 cerrada limpia (PRs #199–#200, mergeados, desplegados por CI y verificados con smoke test):
 
-- **Batch completo de pendientes técnicos y mejoras**: cierre DISCHARGE con plantilla custom (#183), ai-service endurecido — widgets validados, logs visibles, NER md, pytest en CI (#184), frontend con CI de deploy + smoke reutilizable + favicon oscuro (#185), simulacro DR real con RTO de datos ~15 s + snapshot cifrado del `.env` a B2 (#186), rotación de la llave GPG de backups tras exposición (#187 — nueva `backups@chapni.com`, ambas en LastPass del operador).
-- **Dos rondas de pruebas de usuario del flujo de audio** (#188, #189): formato obligatorio antes de subir/grabar (causa raíz de los drafts sin template_id), dropzone bloqueada al grabar, botón "Detener" sin finalizar sesión, guardas de salida sobre subidas en curso, aprobar draft con nota manual ya guardada **vincula** en vez de duplicar historia, formato visible en todos los estados, y tarjeta "Sesiones sin registro clínico" en el Dashboard.
-- **Ops**: barrido de 53 audios PHI (128 MB, disco al 27%), contenedor huérfano fuera, Resend con dominio chapni.com verificado por el usuario. Audio de prueba de 60 min en `~/Downloads/sesion-prueba-60min.webm` (regenerable con `scripts/e2e_audio/`).
-- **11 ítems del BACKLOG marcados resueltos**; sigue vivo: worker IA secuencial (para 5-10 orgs), subida resumible (idea nueva), metadata de tiempos en `ai_drafts`.
-
-**Pendiente de validación humana (no de código):** 3ª ronda de pruebas del usuario sobre los fixes de #189 (Detener, repick de formato, vinculación sin duplicados, tarjeta de sesiones sin nota).
+- **Disparador**: el usuario subió el audio de prueba de 1h y ningún campo de "Evaluación del cierre de sesión" se llenó en la Nota de Evolución real de Marcela.
+- **Diagnóstico**: no era un bug de mapeo — el `ai_schema` de 6 widgets (`session_evaluation`, `task_adherence`, `functionality`, `formulation_5f`, `spa_history`, `functional_analysis`) estaba desincronizado del componente React real desde que se construyeron, así que la IA nunca los llenó bien en ningún formato.
+- **Fix estructural (#199)**: nuevos tipos genéricos `multiselect` + modificadores `{pills}`/`{allow_other}` en el sistema de plantillas (Go parser, React render, prompt Python, PDF export) — el ai_schema se deriva de `options` automáticamente, sin construir un widget bespoke por cada checklist/radio-button nuevo. Los 4 formatos de Marcela (Apertura, Plan Terapéutico, Nota de Evolución, Informe de Cierre) reescritos con la sintaxis nueva vía Settings; `mental_exam`/`task_checklist`/`risk` se mantienen como widget por valor de UX/legal genuino.
+- **Bug de fondo destapado y arreglado (#200)**: al editar los 4 templates en vivo, `recordtemplates.Update` mutaba la misma fila en sitio — rompía borradores en curso (422 en autosave/finalize) y habría dejado que un PDF de un registro ya **firmado** se re-renderizara con el schema de hoy en vez del vigente al aprobarse (violaba Res. 1995/1999). Ahora cada edición archiva la fila vieja y crea una versión nueva activa.
+- **Ops**: borrador de prueba huérfano (roto por el bug de #200, sin filas dependientes) eliminado directo en BD del VPS.
+- **2 ideas nuevas en BACKLOG** (sección "Plantillas de registro — Fase 2"): visibilidad condicional de campos (perdida al aplanar task_adherence/functionality/spa_history — evaluar `{show_if:...}` si la beta se queja), y verificar que `mental_exam`/`treatment_plan`/`diagnoses` no tengan el mismo bug de ai_schema desincronizado (no se revisaron hoy).
 
 ## Sugerencia de siguiente paso
 
 Basándome en STATUS.md (bloqueantes + roadmap) y BACKLOG.md, lo más valioso a atacar ahora es:
 
-1. **Lanzar la beta con 2-3 psicólogas externas** (bloqueante 🔴 más antiguo del 1.0.0) — se acabaron las excusas técnicas: pipeline de 1 h validado, UX del flujo de audio pulida con dos rondas de pruebas reales, DR probado, formatos custom end-to-end. El mensaje de reclutamiento ya está aprobado en BACKLOG → Validación. Es acción del founder, no de código.
-2. **Verificar el desbloqueo de WhatsApp Meta** (🟡) y configurar `tpl_reminder_24h`/`tpl_reminder_2h` — 15 minutos de ops si Meta ya liberó tras el pago. Alternativa técnica: seed del tenant de marketing + capturas para chapni.com (BACKLOG → Marketing), que además alimenta la beta.
+1. **Lanzar la beta con 2-3 psicólogas externas** (bloqueante 🔴 más antiguo del 1.0.0) — sigue siendo la acción de mayor apalancamiento: pipeline de audio validado, UX pulida, DR probado, y ahora el sistema de plantillas custom es genérico y sin el bug de versionado. Es acción del founder (mensaje de reclutamiento ya aprobado en BACKLOG → Validación), no de código.
+2. **Verificar el ai_schema de `mental_exam`/`treatment_plan`/`diagnoses`** (idea nueva de hoy) — mismo patrón de bug que ya costó una sesión completa en `session_evaluation` y 5 widgets más; barato de confirmar ahora que el método de diagnóstico ya está probado (leer el componente React real y compararlo contra `field-widgets.json`/`claude.py`).
+3. **Verificar desbloqueo de WhatsApp Meta** (🟡) y configurar `tpl_reminder_24h`/`tpl_reminder_2h` — 15 minutos de ops si Meta ya liberó tras el pago.

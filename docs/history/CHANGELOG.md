@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-07-15
+
+- enhancement(clinical): **tipos genéricos `multiselect`/`{pills}`/`{allow_other}` para plantillas custom** (PR #199) — disparado por que la IA no llenaba "Evaluación del cierre de sesión" en la Nota de Evolución real de Marcela; se encontró que el `ai_schema` de varios widgets (`session_evaluation`, `task_adherence`, `functionality`, `formulation_5f`, `spa_history`, `functional_analysis`) llevaba desincronizado del componente React desde que se construyeron. En vez de reparar 6 contratos bespoke uno a uno, se agregaron tipos genéricos al parser (Go) + render (React) + prompt (Python) + PDF, cuyo ai_schema se deriva de `options` automáticamente; los 4 formatos de Marcela se reescribieron con la sintaxis nueva (`mental_exam`/`task_checklist`/`risk` se mantienen como widget).
+- fix(clinical): **plantillas: editar ya no muta en sitio** (PR #200) — al editar los 4 templates en vivo se destapó que `recordtemplates.Update` sobrescribía la misma fila (bug preexistente): rompía borradores en curso (422 en autosave/finalize) y habría dejado que un PDF de un registro ya firmado se re-renderizara con el schema de hoy en vez del vigente al aprobarse (violaba Res. 1995/1999). Ahora cada edición archiva la fila vieja y crea una versión nueva activa; validar "continuar" un registro/borrador acepta plantilla archivada, "crear nuevo" exige activa.
+- ops: borrador de prueba huérfano (roto por el bug de #200) eliminado directo en BD del VPS tras confirmar 0 filas dependientes.
+
+---
+
 ## 2026-07-13
 
 - enhancement: **batch "todos los pendientes técnicos + mejoras del sistema"** (PRs #183–#186): cierre DISCHARGE con plantilla custom reparado (motivo de egreso en el flujo templado + approve que lo descartaba en todos los formatos); ai-service endurecido (validación de shape por widget, logs con `extra` visibles, NER `md` con fallback, pytest gateando el build); **frontend con CI de deploy** (build en Actions + rsync in-place, smoke reutilizable/dispatch, favicon modo oscuro); **DR probado de verdad** (restore real desde B2, RTO datos ~15 s, snapshot cifrado diario del `.env` a B2, runbook en `docs/ops/DR_RUNBOOK.md`).
