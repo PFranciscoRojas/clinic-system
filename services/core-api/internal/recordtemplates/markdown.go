@@ -11,25 +11,26 @@ import (
 // knownWidgets is the set of widget names registered in services/shared/field-widgets.json.
 // Keep in sync manually when adding new widgets.
 var knownWidgets = map[string]bool{
-	"mental_exam":        true,
-	"formulation_5f":     true,
+	"mental_exam":         true,
+	"formulation_5f":      true,
 	"functional_analysis": true,
-	"distress_scale":     true,
-	"task_checklist":     true,
-	"task_adherence":     true,
-	"session_evaluation": true,
-	"functionality":      true,
-	"spa_history":        true,
-	"risk":               true,
-	"treatment_plan":     true,
-	"diagnoses":          true,
+	"distress_scale":      true,
+	"task_checklist":      true,
+	"task_adherence":      true,
+	"session_evaluation":  true,
+	"functionality":       true,
+	"spa_history":         true,
+	"risk":                true,
+	"treatment_plan":      true,
+	"diagnoses":           true,
 }
 
 var (
-	reAnnotation = regexp.MustCompile(`\{([^}]+)\}`)
-	reScale      = regexp.MustCompile(`(?i)^scale:(\d+)-(\d+)$`)
-	reSelect     = regexp.MustCompile(`(?i)^select:(.+)$`)
-	reWidget     = regexp.MustCompile(`(?i)^widget:(\S+)$`)
+	reAnnotation  = regexp.MustCompile(`\{([^}]+)\}`)
+	reScale       = regexp.MustCompile(`(?i)^scale:(\d+)-(\d+)$`)
+	reSelect      = regexp.MustCompile(`(?i)^select:(.+)$`)
+	reMultiselect = regexp.MustCompile(`(?i)^multiselect:(.+)$`)
+	reWidget      = regexp.MustCompile(`(?i)^widget:(\S+)$`)
 )
 
 // ParseMarkdown converts markdown written by a professional into a slice of
@@ -37,14 +38,20 @@ var (
 //   - Lines starting with "##" are section headings. The heading text (minus
 //     annotations) becomes the label; slugify(label) becomes the key.
 //   - Annotations inside {…} on the heading line control the field type:
-//       {text}          → text (default)
-//       {select:a|b|c} → select with those options
-//       {scale:0-10}   → scale from 0 to 10
-//       {checklist}    → checklist (string[])
-//       {widget:name}  → named widget from the registry
-//       {required}     → marks the section as required
-//       {collapsed}    → starts hidden behind an accordion (e.g. an optional,
-//                        rarely-needed section the form shouldn't lead with)
+//     {text}               → text (default)
+//     {select:a|b|c}       → select with those options
+//     {multiselect:a|b|c}  → multiselect (string[]) with those options
+//     {scale:0-10}         → scale from 0 to 10
+//     {checklist}          → checklist (string[], free text)
+//     {widget:name}        → named widget from the registry
+//     {required}           → marks the section as required
+//     {collapsed}          → starts hidden behind an accordion (e.g. an
+//                            optional, rarely-needed section the form
+//                            shouldn't lead with)
+//     {pills}              → for select|multiselect: render as toggle pill
+//                            buttons instead of a dropdown/checkboxes
+//     {allow_other}        → for multiselect: lets the professional add a
+//                            free-text value beyond the fixed options
 //   - Non-heading text following a heading (until the next "##" or "##") is
 //     the hint/placeholder for that section.
 //   - The first "# " line (single hash) is the template name if the caller
@@ -122,6 +129,12 @@ func parseHeading(raw string) (*SectionDef, error) {
 		case lower == "collapsed":
 			def.Collapsed = true
 
+		case lower == "pills":
+			def.Display = "pills"
+
+		case lower == "allow_other":
+			def.AllowOther = true
+
 		case lower == "text":
 			def.Type = FieldText
 
@@ -149,6 +162,18 @@ func parseHeading(raw string) (*SectionDef, error) {
 				return nil, fmt.Errorf("record_template: select must have at least 2 options in %q", raw)
 			}
 			def.Type = FieldSelect
+			def.Options = opts
+
+		case reMultiselect.MatchString(inner):
+			m := reMultiselect.FindStringSubmatch(inner)
+			opts := strings.Split(m[1], "|")
+			for i := range opts {
+				opts[i] = strings.TrimSpace(opts[i])
+			}
+			if len(opts) < 2 {
+				return nil, fmt.Errorf("record_template: multiselect must have at least 2 options in %q", raw)
+			}
+			def.Type = FieldMultiselect
 			def.Options = opts
 
 		case reWidget.MatchString(lower):

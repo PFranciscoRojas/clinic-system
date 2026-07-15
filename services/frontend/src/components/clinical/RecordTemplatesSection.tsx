@@ -35,12 +35,18 @@ const PALETTE = `
 | Anotación | Render | Ejemplo |
 |-----------|--------|---------|
 | \`{text}\` | Área de texto libre (por defecto) | \`## Desarrollo {text}\` |
-| \`{select:a|b|c}\` | Desplegable | \`## Eje {select:Cognitivo|Emocional|Conductual}\` |
+| \`{select:a|b|c}\` | Desplegable (una opción) | \`## Eje {select:Cognitivo|Emocional|Conductual}\` |
+| \`{select:a|b|c} {pills}\` | Botones tipo pill (una opción) | \`## Insight {select:Alto|Medio|Bajo} {pills}\` |
+| \`{multiselect:a|b|c}\` | Checkboxes (varias opciones) | \`## Barreras {multiselect:Tardanza|Silencios|Otra}\` |
+| \`{multiselect:a|b|c} {pills}\` | Botones tipo pill (varias opciones) | \`## Eje {multiselect:Emocional|Conductual|Técnico} {pills}\` |
+| \`{multiselect:...} {allow_other}\` | Permite agregar un valor libre además de las opciones | \`## Barreras {multiselect:Tardanza|Otra} {allow_other}\` |
 | \`{scale:0-10}\` | Deslizador numérico | \`## Malestar {scale:0-10}\` |
-| \`{checklist}\` | Lista de ítems | \`## Tareas {checklist}\` |
+| \`{checklist}\` | Lista de ítems de texto libre | \`## Tareas {checklist}\` |
 | \`{widget:nombre}\` | Componente clínico integrado | \`## Riesgo {widget:risk}\` |
 | \`{required}\` | Marca campo como obligatorio | \`## Motivo {text} {required}\` |
 | \`{collapsed}\` | Inicia oculto tras un acordeón | \`## Tareas para casa {checklist} {collapsed}\` |
+
+Antes de crear un widget nuevo, evalúa si el formulario se puede armar combinando \`select\`/\`multiselect\` con \`{pills}\` y \`{allow_other}\` — la IA los completa automáticamente sin necesitar código nuevo en ningún stack.
 
 **Widgets disponibles:**
 ${Object.entries(WIDGET_LABELS).map(([k, v]) => `- \`{widget:${k}}\` — ${v}`).join('\n')}

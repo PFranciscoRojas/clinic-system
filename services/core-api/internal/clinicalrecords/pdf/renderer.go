@@ -770,7 +770,7 @@ func renderFieldValue(sec TemplateSectionDef, val any) string {
 		}
 		return fmt.Sprintf("%v / %d", val, max)
 
-	case "checklist":
+	case "checklist", "multiselect":
 		items, ok := toStringSlice(val)
 		if !ok || len(items) == 0 {
 			return ""
