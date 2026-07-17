@@ -16,6 +16,8 @@ type svcPort interface {
 	DecryptDraftContent(ctx context.Context, orgID, draftID string) (*aidrafts.AIDraft, string, error)
 	DecryptForReview(ctx context.Context, orgID, draftID string) (*aidrafts.AIDraft, string, string, error)
 	ResolveDraft(ctx context.Context, orgID, draftID, clinicalRecordID, resolvedBy string) error
+	SaveFeedback(ctx context.Context, fb aidrafts.DraftFeedback) error
+	FeedbackStats(ctx context.Context, orgID string, rng aidrafts.StatsRange) (*aidrafts.FeedbackStats, error)
 }
 
 type crrPort interface {

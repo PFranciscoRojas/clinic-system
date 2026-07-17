@@ -15,6 +15,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useIsCompact } from '@/lib/useMediaQuery';
 import { AgendaCalendar } from './AgendaCalendar';
 import { PendingNotesCard } from './PendingNotesCard';
+import { AIFeedbackCard } from './AIFeedbackCard';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -692,6 +693,9 @@ export function DashboardPage() {
                 </button>
               ))}
             </div>
+
+            {/* Métricas de edición de borradores IA (fase 1 del feedback loop) */}
+            <AIFeedbackCard />
           </div>
         </div>
       )}
