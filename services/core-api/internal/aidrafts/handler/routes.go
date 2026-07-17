@@ -12,6 +12,7 @@ import (
 func (h *Handler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.With(middleware.RequirePermission("ai_drafts:review")).Get("/", h.listDrafts)
+	r.With(middleware.RequirePermission("ai_drafts:review")).Get("/feedback/stats", h.feedbackStats)
 	r.With(middleware.RequirePermission("ai_drafts:review")).Get("/{id}", h.getDraft)
 	r.With(middleware.RequirePermission("clinical_records:approve")).Post("/{id}/approve", h.approveDraft)
 	r.With(middleware.RequirePermission("clinical_records:approve")).Post("/{id}/link", h.linkDraft)

@@ -47,6 +47,29 @@ export interface DraftMeta {
   created_at: string;
 }
 
+export interface FieldEditStat {
+  key: string;
+  rewritten: number;
+  minor: number;
+}
+
+export interface ProfessionalEditStats {
+  professional_id: string;
+  drafts: number;
+  avg_unchanged_ratio: number;
+}
+
+/** Aggregate of how much professionals edit AI drafts before approving. */
+export interface DraftFeedbackStats {
+  drafts_approved: number;
+  drafts_rejected: number;
+  feedback_count: number;
+  clean_approvals: number;
+  avg_unchanged_ratio: number;
+  top_edited_fields: FieldEditStat[];
+  by_professional: ProfessionalEditStats[];
+}
+
 export const aiDraftsApi = {
   list:    (status?: DraftStatus) => {
     const q = status ? `?status=${status}` : '';
@@ -59,4 +82,11 @@ export const aiDraftsApi = {
   // record (the comparison view finalizes the manual record separately).
   link: (id: string, clinical_record_id: string) =>
     api.post<void>(`/ai-drafts/${id}/link`, { clinical_record_id }),
+  feedbackStats: (params?: { from?: string; to?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.from) q.set('from', params.from);
+    if (params?.to) q.set('to', params.to);
+    const qs = q.toString();
+    return api.get<DraftFeedbackStats>(`/ai-drafts/feedback/stats${qs ? `?${qs}` : ''}`);
+  },
 };

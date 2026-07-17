@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 
+	aidraftssvc "sghcp/core-api/internal/aidrafts/service"
 	"sghcp/core-api/internal/clinicalrecords"
 	crrsvc "sghcp/core-api/internal/clinicalrecords/service"
 	"sghcp/core-api/internal/shared/httputil"
@@ -214,6 +215,20 @@ func (h *Handler) approveDraft(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+
+	// Edit-feedback metrics: the AI's sections and the professional's final
+	// version coexist in plaintext only here. Compared pre-whitelist so keys a
+	// legacy draft loses to AllowedSectionKeys don't count as human removals.
+	// Note: when the body carried no sections, sections == stored.Sections and
+	// everything counts as unchanged — an approve-as-is, which is the point.
+	fb := aidraftssvc.ComputeFeedback(stored.Sections, sections)
+	fb.OrganizationID = claims.OrganizationID
+	fb.DraftID = draftID
+	fb.ClinicalRecordID = recordID
+	fb.ProfessionalID = claims.UserID
+	fb.TemplateID = templateID
+	fb.RecordType = string(recordType)
+	h.recordFeedback(r.Context(), fb)
 
 	if err := h.svc.ResolveDraft(r.Context(), claims.OrganizationID, draftID, recordID, claims.UserID); err != nil {
 		// Record was created; log but don't fail the request.

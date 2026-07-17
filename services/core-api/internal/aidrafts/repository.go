@@ -9,4 +9,6 @@ type Repository interface {
 	FindEncKey(ctx context.Context, dekID string) (*EncKeyRow, error)
 	Resolve(ctx context.Context, orgID, draftID, clinicalRecordID, resolvedBy string) error
 	ListByOrg(ctx context.Context, orgID, status string) ([]*DraftMeta, error)
+	InsertFeedback(ctx context.Context, fb DraftFeedback) error
+	FeedbackStats(ctx context.Context, orgID string, rng StatsRange) (*FeedbackStats, error)
 }
