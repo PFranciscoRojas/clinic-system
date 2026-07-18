@@ -181,6 +181,7 @@ func (h *Handler) deleteOrgCascade(ctx context.Context, orgID string) (map[strin
 		table string
 		sql   string
 	}{
+		{"draft_feedback", `DELETE FROM draft_feedback WHERE organization_id = $1`},
 		{"clinical_record_addenda", `DELETE FROM clinical_record_addenda WHERE organization_id = $1`},
 		{"patient_assessments", `DELETE FROM patient_assessments WHERE organization_id = $1`},
 		{"patient_diagnoses", `DELETE FROM patient_diagnoses WHERE organization_id = $1`},
@@ -200,6 +201,8 @@ func (h *Handler) deleteOrgCascade(ctx context.Context, orgID string) (map[strin
 		// Null out the self-referential rescheduled_to before deleting appointments.
 		{"appointments_unlink", `UPDATE appointments SET rescheduled_to = NULL WHERE organization_id = $1`},
 		{"appointments", `DELETE FROM appointments WHERE organization_id = $1`},
+		// Cascades from patients too; explicit for the deleted-rows report.
+		{"patient_search_tokens", `DELETE FROM patient_search_tokens WHERE organization_id = $1`},
 		{"patients", `DELETE FROM patients WHERE organization_id = $1`},
 		{"notifications", `DELETE FROM notifications WHERE organization_id = $1`},
 		{"domain_events", `DELETE FROM domain_events WHERE organization_id = $1`},
@@ -215,12 +218,24 @@ func (h *Handler) deleteOrgCascade(ctx context.Context, orgID string) (map[strin
 		{"user_roles", `DELETE FROM user_roles WHERE organization_id = $1`},
 		{"users", `DELETE FROM users WHERE organization_id = $1`},
 		{"roles", `DELETE FROM roles WHERE organization_id = $1`},
-		{"audit_log", `DELETE FROM audit_log WHERE organization_id = $1`},
+		// audit_log is append-only for sghcp_app (no DELETE grant). The purge
+		// goes through a SECURITY DEFINER function that itself refuses any org
+		// not flagged is_test — so this must run BEFORE the organizations row
+		// disappears, or the guard can't see the flag.
+		{"audit_log", `SELECT admin_purge_org_audit($1)`},
 		{"organizations", `DELETE FROM organizations WHERE id = $1`},
 	}
 
 	deleted := make(map[string]int64, len(steps))
 	for _, s := range steps {
+		if s.table == "audit_log" { // function call: scan the purged-row count
+			var n int64
+			if err := tx.QueryRow(ctx, s.sql, orgID).Scan(&n); err != nil {
+				return nil, err
+			}
+			deleted[s.table] = n
+			continue
+		}
 		args := []any{orgID}
 		if s.table == "encryption_keys" { // reads only the temp table
 			args = nil
