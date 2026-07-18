@@ -13,13 +13,20 @@ function toggle(arr: string[], key: string): string[] {
 }
 
 // Task checklist — 6 areas with ~24 therapeutic techniques.
-// Shared between EVOLUTION (Formato 3) and plan-session EVOLUTION (Formato 2).
+// Shared between EVOLUTION (Formato 3) and plan-session EVOLUTION (Formato 2),
+// plus records/drafts pinned to archived template versions that still use the
+// retired widget:task_checklist (new templates use a generic multiselect).
 // Starts collapsed: it's a long, rarely-touched checklist most sessions don't
 // need — the count badge stays visible so a filled-in checklist is never
 // invisible, but the professional isn't forced to scroll past it every time.
 export function TaskChecklist({ selected, onChange, disabled }: Props) {
   const count = selected.length;
   const [open, setOpen] = useState(false);
+  // Values outside the fixed technique keys (e.g. free text an AI draft
+  // extracted). They must stay visible: the badge counts them, so hiding
+  // them would make the card look empty while claiming content.
+  const knownKeys = new Set(TASK_CHECKLIST_AREAS.flatMap(a => a.tasks.map(t => t.key)));
+  const customValues = selected.filter(v => !knownKeys.has(v));
 
   return (
     <div className="card" style={{ padding: '16px 20px' }}>
@@ -47,6 +54,31 @@ export function TaskChecklist({ selected, onChange, disabled }: Props) {
       <p style={{ margin: '0 0 14px', fontSize: 12, color: 'var(--s400)' }}>
         Marca las técnicas asignadas para casa. Las seleccionadas quedan en la historia clínica.
       </p>
+
+      {customValues.length > 0 && (
+        <div style={{ marginBottom: 12, borderRadius: 10, border: '1px solid var(--teal)', background: '#f0fafa', padding: '10px 12px' }}>
+          <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, color: 'var(--teal)' }}>
+            Otras tareas (texto libre)
+          </p>
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {customValues.map(item => (
+              <li key={item} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ flex: 1, fontSize: 13, color: 'var(--s700)' }}>{item}</span>
+                {!disabled && (
+                  <button
+                    type="button"
+                    onClick={() => onChange(selected.filter(v => v !== item))}
+                    aria-label={`Quitar ${item}`}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 13, padding: '0 2px', lineHeight: 1 }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {TASK_CHECKLIST_AREAS.map(area => {

@@ -10,19 +10,19 @@ import (
 
 // knownWidgets is the set of widget names registered in services/shared/field-widgets.json.
 // Keep in sync manually when adding new widgets.
+//
+// Only widgets whose structure a generic field type can't express are
+// accepted in new template saves. The retired bespoke widgets
+// (task_checklist, session_evaluation, task_adherence, functionality,
+// formulation_5f, spa_history, functional_analysis, distress_scale) kept
+// drifting out of sync with the AI schema — they are select/multiselect/
+// scale template fields now. Archived template versions that still
+// reference them keep rendering (this list only gates parsing on save).
 var knownWidgets = map[string]bool{
-	"mental_exam":         true,
-	"formulation_5f":      true,
-	"functional_analysis": true,
-	"distress_scale":      true,
-	"task_checklist":      true,
-	"task_adherence":      true,
-	"session_evaluation":  true,
-	"functionality":       true,
-	"spa_history":         true,
-	"risk":                true,
-	"treatment_plan":      true,
-	"diagnoses":           true,
+	"mental_exam":    true,
+	"risk":           true,
+	"treatment_plan": true,
+	"diagnoses":      true,
 }
 
 var (

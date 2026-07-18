@@ -657,6 +657,17 @@ export function AIDraftPage() {
         return true;
       })
     : [];
+  // Fields the AI left empty: the transcription had no content for them.
+  // Named explicitly so an empty checklist reads as "nothing found in the
+  // audio", never as a silent failure. Widgets the AI never fills by design
+  // (mental exam is manual by compliance rule; treatment plan and diagnoses
+  // are self-contained panels) don't belong in this list.
+  const AI_MANUAL_WIDGETS = new Set(['mental_exam', 'treatment_plan', 'diagnoses']);
+  const aiEmptySections = customCompareMode && customTemplate
+    ? customTemplate.schema.filter(sec =>
+        !(sec.type === 'widget' && AI_MANUAL_WIDGETS.has(sec.widget ?? ''))
+        && !aiCustomSections.some(s => s.key === sec.key))
+    : [];
   const customUsedCount = aiCustomSections.filter(s => usedKeys.has(s.key)).length;
   const pullCustomSection = (key: string) => {
     setCustomEdit(prev => ({ ...prev, [key]: baseTyped[key] }));
@@ -968,6 +979,23 @@ export function AIDraftPage() {
                   <TemplatedSectionsForm schema={[sec]} value={baseTyped} onChange={() => {}} disabled />
                 </div>
               ))}
+              {/* Fields the transcription had nothing for: say it explicitly,
+                  so an empty checklist never reads as a silent failure. */}
+              {aiEmptySections.length > 0 && (
+                <div className="card" style={{ padding: '14px 16px', border: '1px dashed var(--s200)', background: '#fafafa' }}>
+                  <p style={{ margin: '0 0 8px', fontSize: 12.5, fontWeight: 700, color: 'var(--s500)' }}>
+                    La transcripción no aportó contenido para:
+                  </p>
+                  <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {aiEmptySections.map(sec => (
+                      <li key={sec.key} style={{ fontSize: 12.5, color: 'var(--s500)' }}>{sec.label}</li>
+                    ))}
+                  </ul>
+                  <p style={{ margin: '10px 0 0', fontSize: 11.5, color: 'var(--s400)' }}>
+                    Si algo de esto sí ocurrió en sesión, complétalo a mano en tu registro.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
