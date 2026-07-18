@@ -14,16 +14,11 @@ const RECORD_TYPE_LABEL: Record<string, string> = {
 };
 
 
+// Only the widgets whose estructura no se puede armar con campos genéricos.
+// Los antiguos (task_checklist, session_evaluation, etc.) hoy son campos
+// select/multiselect/scale de la propia plantilla.
 const WIDGET_LABELS: Record<string, string> = {
-  mental_exam: 'Examen mental',
-  formulation_5f: 'Formulación 5F',
-  functional_analysis: 'Análisis funcional',
-  distress_scale: 'Escala de malestar (0-10)',
-  task_checklist: 'Lista de tareas',
-  task_adherence: 'Adherencia a tareas',
-  session_evaluation: 'Evaluación de sesión',
-  functionality: 'Funcionalidad',
-  spa_history: 'Historia SPA',
+  mental_exam: 'Examen mental (lo llena el profesional, la IA nunca lo marca)',
   risk: 'Nivel de riesgo (campo de sistema)',
   treatment_plan: 'Plan de tratamiento',
   diagnoses: 'Diagnósticos CIE-10',
@@ -46,7 +41,7 @@ const PALETTE = `
 | \`{required}\` | Marca campo como obligatorio | \`## Motivo {text} {required}\` |
 | \`{collapsed}\` | Inicia oculto tras un acordeón | \`## Tareas para casa {checklist} {collapsed}\` |
 
-Antes de crear un widget nuevo, evalúa si el formulario se puede armar combinando \`select\`/\`multiselect\` con \`{pills}\` y \`{allow_other}\` — la IA los completa automáticamente sin necesitar código nuevo en ningún stack.
+Arma los formularios combinando \`select\`/\`multiselect\` con \`{pills}\` y \`{allow_other}\`: la IA los completa automáticamente sin necesitar código nuevo en ningún stack. Los widgets quedan reservados para lo que un campo genérico no puede expresar.
 
 **Widgets disponibles:**
 ${Object.entries(WIDGET_LABELS).map(([k, v]) => `- \`{widget:${k}}\` — ${v}`).join('\n')}

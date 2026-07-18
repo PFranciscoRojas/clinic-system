@@ -1,5 +1,6 @@
 import json
 import logging
+import unicodedata
 from typing import Any
 
 import anthropic
@@ -44,34 +45,15 @@ _SECTION_SCHEMAS: dict[str, dict[str, str]] = {
 
 # Widget AI schemas — kept in sync with services/shared/field-widgets.json.
 # These describe the JSON value shape the AI should emit for each widget key.
+# Only `risk` is AI-fillable: mental_exam is manual by compliance rule (the
+# system prompt forbids the AI from marking exam options — the professional
+# decides), and treatment_plan/diagnoses are self-contained panels whose
+# renderers ignore section values (diagnosis suggestions travel separately
+# via suggested_icd10). Everything else (checklists, radio groups, string
+# dicts) is a template-level select/multiselect/scale whose schema derives
+# from the template itself.
 _WIDGET_AI_SCHEMAS: dict[str, str] = {
-    "mental_exam": (
-        'object with keys: appearance, consciousness_orientation, attention, memory, '
-        'language, thought, affect, perception, judgment, insight — '
-        'each {"status": "NORMAL" or "ALTERED", "note": string | null}'
-    ),
-    "formulation_5f": (
-        'object {"presenting": string|null, "predisposing": string|null, '
-        '"precipitating": string|null, "perpetuating": string|null, "protective": string|null}'
-    ),
-    "functional_analysis": (
-        'object {"antecedents": string|null, "behavior": string|null, "consequences": string|null}'
-    ),
-    "distress_scale": "number 0-10 or null",
-    "task_checklist": "array of strings or null",
-    "task_adherence": 'object {"adherence": number 0-4, "notes": string|null} or null',
-    "session_evaluation": 'object {"axis": string|null, "quality": string|null, "notes": string|null} or null',
-    "functionality": (
-        'object {"work": string|null, "social": string|null, "personal": string|null, "global_level": string|null} or null'
-    ),
-    "spa_history": (
-        'object {"substances": string|null, "frequency": string|null, "last_use": string|null, "impact": string|null} or null'
-    ),
     "risk": 'one of "NONE", "IDEATION", "PLAN", "ATTEMPT"',
-    "treatment_plan": (
-        'object {"goals": [{"description": string, "target_weeks": number}], "techniques": [string]} or null'
-    ),
-    "diagnoses": 'array of {"code": string, "description": string} or null',
 }
 
 _TONE_INSTRUCTIONS: dict[str, str] = {
@@ -149,12 +131,29 @@ def _build_schema_from_template(sections: list[dict[str, Any]]) -> dict[str, str
         elif field_type == "checklist":
             result[key] = f"array of strings | null — {hint}"
         elif field_type == "widget":
+            # Widgets without an AI schema are manual-only — leave them out of
+            # the prompt entirely so the model is never invited to fill them.
             widget_name = sec.get("widget", "")
-            ai_schema = _WIDGET_AI_SCHEMAS.get(widget_name, "any | null")
+            ai_schema = _WIDGET_AI_SCHEMAS.get(widget_name)
+            if ai_schema is None:
+                continue
             result[key] = f"{ai_schema} — {hint}"
         else:
             result[key] = f"string | null — {hint}"
     return result
+
+
+def _canon(s: str) -> str:
+    """Accent- and case-insensitive form for matching AI output to options."""
+    nfkd = unicodedata.normalize("NFKD", s)
+    return "".join(c for c in nfkd if not unicodedata.combining(c)).casefold().strip()
+
+
+def _is_empty(val: Any) -> bool:
+    """True when the AI explicitly said "nothing here": null, "", or [].
+    Distinct from malformed — an empty field renders as fill-it-yourself
+    without a warning, and the review UI can say so to the professional."""
+    return val is None or val == "" or (isinstance(val, list) and len(val) == 0)
 
 
 def _validate_typed_value(sec: dict[str, Any], val: Any) -> Any | None:
@@ -170,16 +169,30 @@ def _validate_typed_value(sec: dict[str, Any], val: Any) -> Any | None:
         mn, mx = sec.get("scale_min", 0), sec.get("scale_max", 10)
         return val if mn <= val <= mx else None
     if field_type == "select":
-        return val if val in (sec.get("options") or []) else None
+        if not isinstance(val, str):
+            return None
+        canonical = {_canon(o): o for o in (sec.get("options") or [])}
+        return canonical.get(_canon(val))
     if field_type == "multiselect":
+        # A bare string is a one-item list — Claude sometimes answers that way
+        # for a single finding.
+        if isinstance(val, str):
+            val = [val]
         if not isinstance(val, list):
             return None
         options = sec.get("options") or []
         allow_other = sec.get("allow_other", False)
-        items = [
-            x for x in val
-            if isinstance(x, str) and x.strip() and (allow_other or x in options)
-        ]
+        canonical = {_canon(o): o for o in options}
+        items: list[str] = []
+        for x in val:
+            if not isinstance(x, str) or not x.strip():
+                continue
+            matched = canonical.get(_canon(x))
+            if matched is not None:
+                if matched not in items:
+                    items.append(matched)
+            elif allow_other:
+                items.append(x.strip())
         return items or None
     if field_type == "checklist":
         if isinstance(val, list):
@@ -205,7 +218,10 @@ def _filter_sections(
             if not key:
                 continue
             raw = parsed.get(key)
-            if raw is None:
+            if _is_empty(raw):
+                # The AI found nothing for this field — not an error. The
+                # review UI lists these keys so the professional knows the
+                # transcription had no content for them.
                 continue
             val = _validate_typed_value(sec, raw)
             if val is None:

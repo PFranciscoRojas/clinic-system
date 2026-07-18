@@ -130,7 +130,7 @@ func TestParseMarkdown_Widget(t *testing.T) {
 }
 
 func TestParseMarkdown_Collapsed(t *testing.T) {
-	src := "## Compromisos y tareas extra-consulta {widget:task_checklist} {collapsed}\n"
+	src := "## Compromisos y tareas extra-consulta {multiselect:Autorregistro ABC|Exposición gradual} {allow_other} {collapsed}\n"
 	sections, _, err := recordtemplates.ParseMarkdown(src)
 	if err != nil {
 		t.Fatal(err)
@@ -139,8 +139,18 @@ func TestParseMarkdown_Collapsed(t *testing.T) {
 	if !s.Collapsed {
 		t.Errorf("Collapsed = false, want true")
 	}
-	if s.Type != recordtemplates.FieldWidget || s.Widget != "task_checklist" {
-		t.Errorf("type/widget = %q/%q, want widget/task_checklist", s.Type, s.Widget)
+	if s.Type != recordtemplates.FieldMultiselect || !s.AllowOther {
+		t.Errorf("type/allow_other = %q/%v, want multiselect/true", s.Type, s.AllowOther)
+	}
+}
+
+func TestParseMarkdown_RetiredWidgetRejected(t *testing.T) {
+	// task_checklist (and the other retired bespoke widgets) can no longer be
+	// used in new template saves — they are generic template fields now.
+	src := "## Tareas {widget:task_checklist}\n"
+	_, _, err := recordtemplates.ParseMarkdown(src)
+	if err == nil {
+		t.Fatal("expected error for retired widget, got nil")
 	}
 }
 

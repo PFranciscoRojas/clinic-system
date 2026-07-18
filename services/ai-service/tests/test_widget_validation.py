@@ -1,20 +1,11 @@
 """Widget values from Claude must match the frontend widget contracts —
 malformed ones are dropped (rendered as fill-it-yourself) instead of sealed
-into the draft where they'd break or blank the review UI."""
+into the draft where they'd break or blank the review UI. Empty answers
+(null, "", []) are not malformed: they mean the transcription had no content
+for that field and are skipped without a warning."""
 
-from ai_service.drafts.claude import _filter_sections
+from ai_service.drafts.claude import _filter_sections, _validate_typed_value
 from ai_service.drafts.widgets import validate_widget_value
-
-
-def test_distress_scale_accepts_number_in_range() -> None:
-    assert validate_widget_value("distress_scale", 6) == 6
-    assert validate_widget_value("distress_scale", 0.5) == 0.5
-
-
-def test_distress_scale_rejects_strings_bools_and_out_of_range() -> None:
-    assert validate_widget_value("distress_scale", "6") is None
-    assert validate_widget_value("distress_scale", True) is None
-    assert validate_widget_value("distress_scale", 11) is None
 
 
 def test_risk_enum() -> None:
@@ -23,72 +14,81 @@ def test_risk_enum() -> None:
     assert validate_widget_value("risk", 3) is None
 
 
-def test_task_adherence_shape() -> None:
-    ok = validate_widget_value("task_adherence", {"adherence": 3, "notes": "buena semana"})
-    assert ok == {"adherence": 3, "notes": "buena semana"}
-    assert validate_widget_value("task_adherence", {"adherence": "3"}) is None
-    assert validate_widget_value("task_adherence", {"adherence": 9}) is None
-    assert validate_widget_value("task_adherence", "3 de 4") is None
-
-
-def test_task_checklist_filters_non_strings() -> None:
-    assert validate_widget_value("task_checklist", ["a", 2, "b", "  "]) == ["a", "b"]
-    assert validate_widget_value("task_checklist", []) is None
-    assert validate_widget_value("task_checklist", "una tarea") is None
-
-
-def test_string_dict_widgets_keep_known_keys_only() -> None:
-    val = {"axis": "ansiedad", "quality": None, "notes": "", "extra": "x"}
-    assert validate_widget_value("session_evaluation", val) == {
-        "axis": "ansiedad", "quality": None, "notes": None,
-    }
-    assert validate_widget_value("session_evaluation", {"axis": ""}) is None
-
-
-def test_mental_exam_drops_invalid_domains() -> None:
-    val = {
-        "appearance": {"status": "NORMAL", "note": None},
-        "memory": {"status": "WEIRD", "note": "x"},
-        "attention": "normal",
-    }
-    assert validate_widget_value("mental_exam", val) == {
-        "appearance": {"status": "NORMAL", "note": None},
-    }
-
-
-def test_treatment_plan_keeps_valid_goals() -> None:
-    val = {
-        "goals": [
-            {"description": "reducir rumiación", "target_weeks": 6},
-            {"description": "", "target_weeks": 2},
-            "no soy un objeto",
-        ],
-        "techniques": ["TCC", 42],
-    }
-    assert validate_widget_value("treatment_plan", val) == {
-        "goals": [{"description": "reducir rumiación", "target_weeks": 6}],
-        "techniques": ["TCC"],
-    }
+def test_manual_only_widgets_never_prefill() -> None:
+    # mental_exam is manual by compliance rule; treatment_plan/diagnoses are
+    # self-contained panels. Whatever the model volunteers is dropped.
+    assert validate_widget_value("mental_exam", {"porte": ["adecuado"]}) is None
+    assert validate_widget_value("treatment_plan", {"goals": []}) is None
+    assert validate_widget_value("diagnoses", [{"code": "F41.1"}]) is None
 
 
 def test_unknown_widget_passes_through() -> None:
+    # Includes the retired bespoke widgets still referenced by archived
+    # template versions (task_checklist, session_evaluation, …).
     assert validate_widget_value("mi_widget_nuevo", {"anything": 1}) == {"anything": 1}
+    assert validate_widget_value("task_checklist", ["tarea libre"]) == ["tarea libre"]
+
+
+def test_multiselect_matches_options_ignoring_case_and_accents() -> None:
+    sec = {
+        "type": "multiselect",
+        "options": ["Exposición gradual", "Autorregistro ABC"],
+        "allow_other": False,
+    }
+    assert _validate_typed_value(sec, ["exposicion gradual", "AUTORREGISTRO abc"]) == [
+        "Exposición gradual", "Autorregistro ABC",
+    ]
+    # Unmatched values without allow_other are filtered out.
+    assert _validate_typed_value(sec, ["otra cosa"]) is None
+
+
+def test_multiselect_allow_other_keeps_free_text_and_dedupes() -> None:
+    sec = {"type": "multiselect", "options": ["Tardanza"], "allow_other": True}
+    assert _validate_typed_value(sec, ["tardanza", "Tardanza", "Llanto al cierre"]) == [
+        "Tardanza", "Llanto al cierre",
+    ]
+
+
+def test_multiselect_coerces_bare_string() -> None:
+    sec = {"type": "multiselect", "options": ["Tardanza", "Silencios"], "allow_other": False}
+    assert _validate_typed_value(sec, "silencios") == ["Silencios"]
+
+
+def test_select_matches_option_ignoring_case_and_accents() -> None:
+    sec = {"type": "select", "options": ["Sí", "No"]}
+    assert _validate_typed_value(sec, "si") == "Sí"
+    assert _validate_typed_value(sec, "tal vez") is None
+
+
+def test_filter_sections_skips_empty_answers_without_dropping() -> None:
+    template = [
+        {"key": "barreras", "type": "multiselect", "options": ["Tardanza", "Silencios"], "allow_other": True},
+        {"key": "notas", "type": "text"},
+        {"key": "eje", "type": "multiselect", "options": ["A", "B"]},
+    ]
+    parsed = {
+        "barreras": [],     # AI found nothing — empty, not malformed
+        "notas": "",        # same for text
+        "eje": None,        # same for null
+    }
+    out = _filter_sections(parsed, {}, template)
+    assert out == {}
 
 
 def test_filter_sections_drops_malformed_and_keeps_valid() -> None:
     template = [
-        {"key": "malestar", "type": "widget", "widget": "distress_scale"},
         {"key": "estado", "type": "text"},
         {"key": "riesgo", "type": "widget", "widget": "risk"},
         {"key": "animo", "type": "scale", "scale_min": 1, "scale_max": 5},
         {"key": "modalidad", "type": "select", "options": ["presencial", "virtual"]},
+        {"key": "barreras", "type": "multiselect", "options": ["Tardanza"], "allow_other": False},
     ]
     parsed = {
-        "malestar": "seis",          # malformed → dropped
         "estado": "Llega tranquila",  # valid text
         "riesgo": "NONE",             # valid enum
         "animo": 7,                   # out of template range → dropped
         "modalidad": "telefónica",    # not an option → dropped
+        "barreras": {"si": True},     # wrong shape → dropped
         "fuera_de_schema": "x",       # unknown key → dropped
     }
     out = _filter_sections(parsed, {}, template)
