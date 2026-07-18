@@ -1,12 +1,19 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Archive, Eye, EyeOff, ChevronDown, ChevronUp, Pencil } from 'lucide-react';
+import { Plus, Archive, Eye, EyeOff, ChevronDown, ChevronUp, Pencil, Code, Blocks, FileText, Sparkles } from 'lucide-react';
 import {
   recordTemplatesApi,
   RecordTemplate,
   SectionDef,
 } from '../../api/recordTemplates';
 import { RecordType } from '../../api/clinicalRecords';
+import TemplateBuilder from './TemplateBuilder';
+import TemplatedSectionsForm, { SectionsState } from './TemplatedSectionsForm';
+import {
+  BuilderSection, fromSectionDefs, sectionsToMarkdown, sectionsMatch,
+  hasBuilderErrors, toPreviewSchema,
+} from '../../lib/templateMarkdown';
+import { TEMPLATE_EXAMPLES, TemplateExample } from '../../lib/templateExamples';
 
 const RECORD_TYPE_LABEL: Record<string, string> = {
   INITIAL: 'Inicial (apertura)', EVOLUTION: 'Evolución',
@@ -187,17 +194,40 @@ interface EditorProps {
   onClose: () => void;
 }
 
+const pickCard: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+  padding: '14px 16px',
+  border: '1px solid var(--s200)',
+  borderRadius: 10,
+  background: '#fff',
+  cursor: 'pointer',
+  textAlign: 'left',
+  fontFamily: "'DM Sans', sans-serif",
+  transition: 'border-color .15s',
+};
+
 function TemplateEditor({ initial, onClose }: EditorProps) {
   const qc = useQueryClient();
+  // Creation starts at the gallery step; editing jumps straight to the fields.
+  const [stage, setStage] = useState<'pick' | 'edit'>(initial ? 'edit' : 'pick');
+  // The visual builder is the default; raw markdown is the advanced mode.
+  const [mode, setMode] = useState<'visual' | 'markdown'>('visual');
   const [name, setName] = useState(initial?.name ?? '');
   // Editable only on creation — the backend keeps record_type immutable on
   // update (existing records already reference the template under that type).
   const [recordType, setRecordType] = useState<RecordType>((initial?.record_type as RecordType) ?? 'INITIAL');
+  // The stored schema (already parsed server-side) seeds the builder.
+  const [sections, setSections] = useState<BuilderSection[]>(() => (initial ? fromSectionDefs(initial.schema) : []));
   const [markdown, setMarkdown] = useState(initial?.source_markdown ?? '');
   const [isDefault, setIsDefault] = useState(initial?.is_default ?? false);
   const [preview, setPreview] = useState<SectionDef[]>(initial?.schema ?? []);
   const [showPalette, setShowPalette] = useState(false);
   const [previewError, setPreviewError] = useState('');
+  const [editorError, setEditorError] = useState('');
+  const [previewValues, setPreviewValues] = useState<SectionsState>({});
+  const [busy, setBusy] = useState(false);
 
   const nameFocus = useFocus();
   const mdFocus = useFocus();
@@ -215,22 +245,82 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
   }, [name]);
 
   useEffect(() => {
+    if (mode !== 'markdown') return;
     const t = setTimeout(() => parsePreview(markdown), 500);
     return () => clearTimeout(t);
-  }, [markdown, parsePreview]);
+  }, [mode, markdown, parsePreview]);
+
+  const switchMode = async () => {
+    setEditorError('');
+    if (mode === 'visual') {
+      setMarkdown(sectionsToMarkdown(sections));
+      setMode('markdown');
+      return;
+    }
+    // markdown → visual: the server parse is authoritative.
+    if (!markdown.trim()) { setSections([]); setMode('visual'); return; }
+    setBusy(true);
+    try {
+      const r = await recordTemplatesApi.parse(markdown);
+      setSections(fromSectionDefs(r.sections));
+      if (!name && r.suggested_name) setName(r.suggested_name);
+      setMode('visual');
+    } catch {
+      setEditorError('El markdown tiene errores — corrígelos antes de volver al modo visual.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pickExample = async (ex: TemplateExample) => {
+    setBusy(true);
+    setEditorError('');
+    try {
+      const r = await recordTemplatesApi.parse(ex.markdown);
+      setSections(fromSectionDefs(r.sections));
+      setMarkdown(ex.markdown);
+      setName(ex.title);
+      setRecordType(ex.record_type);
+      setStage('edit');
+    } catch {
+      setEditorError('No se pudo cargar el ejemplo. Intenta de nuevo.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const saveMutation = useMutation({
-    mutationFn: () =>
-      initial
-        ? recordTemplatesApi.update(initial.id, { name, markdown })
-        : recordTemplatesApi.create({ name, record_type: recordType, markdown, is_default: isDefault }),
+    mutationFn: async () => {
+      let md = markdown;
+      if (mode === 'visual') {
+        md = sectionsToMarkdown(sections);
+        // Fail-closed round-trip: the markdown about to be saved must parse
+        // back to exactly what the builder shows, or nothing is persisted.
+        const r = await recordTemplatesApi.parse(md);
+        if (!sectionsMatch(sections, r.sections)) throw new Error('roundtrip_mismatch');
+      }
+      return initial
+        ? recordTemplatesApi.update(initial.id, { name, markdown: md })
+        : recordTemplatesApi.create({ name, record_type: recordType, markdown: md, is_default: isDefault });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['record-templates'] });
       onClose();
     },
+    onError: (e) => {
+      setEditorError(
+        e instanceof Error && e.message === 'roundtrip_mismatch'
+          ? 'La plantilla generada no coincide con lo que muestra el editor. Revisa los campos o usa el modo avanzado.'
+          : 'No se pudo guardar la plantilla. Revisa los campos e intenta de nuevo.',
+      );
+    },
   });
 
-  const canSave = !saveMutation.isPending && name.trim() && markdown.trim() && preview.length > 0;
+  const canSave = !saveMutation.isPending && !busy && !!name.trim() && (
+    mode === 'visual'
+      ? sections.length > 0 && !hasBuilderErrors(sections)
+      : !!markdown.trim() && preview.length > 0
+  );
 
   return (
     <div
@@ -252,7 +342,7 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
         background: 'var(--teal-l)',
       }}>
         <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--teal-dark)' }}>
-          {initial ? 'Editar plantilla' : 'Nueva plantilla'}
+          {stage === 'pick' ? '¿Cómo quieres empezar?' : initial ? 'Editar plantilla' : 'Nueva plantilla'}
         </span>
         <button
           onClick={onClose}
@@ -266,6 +356,52 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
       </div>
 
       {/* Body */}
+      {stage === 'pick' ? (
+        <div style={{ padding: 18 }}>
+          <p style={{ fontSize: 13, color: 'var(--s500)', margin: '0 0 14px' }}>
+            Empieza desde cero o toma un formato de ejemplo y ajústalo a tu práctica.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
+            <button
+              type="button"
+              onClick={() => { setSections([]); setMarkdown(''); setStage('edit'); }}
+              style={pickCard}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--teal)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--s200)'; }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 13, color: 'var(--s800)' }}>
+                <Sparkles size={16} color="var(--teal)" /> Empezar desde cero
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--s400)' }}>
+                Arma tu formato campo por campo con el editor visual.
+              </span>
+            </button>
+            {TEMPLATE_EXAMPLES.map(ex => (
+              <button
+                key={ex.title}
+                type="button"
+                disabled={busy}
+                onClick={() => pickExample(ex)}
+                style={{ ...pickCard, opacity: busy ? 0.6 : 1 }}
+                onMouseEnter={e => { if (!busy) e.currentTarget.style.borderColor = 'var(--teal)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--s200)'; }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 13, color: 'var(--s800)' }}>
+                  <FileText size={16} color="var(--teal)" /> {ex.title}
+                </span>
+                <span style={{
+                  alignSelf: 'flex-start', fontSize: 11, background: 'var(--teal-l)', color: 'var(--teal-dark)',
+                  border: '1px solid var(--teal-100)', borderRadius: 99, padding: '1px 8px', fontWeight: 600,
+                }}>
+                  {RECORD_TYPE_LABEL[ex.record_type] ?? ex.record_type}
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--s400)' }}>{ex.description}</span>
+              </button>
+            ))}
+          </div>
+          {editorError && <p style={{ fontSize: 12, color: 'var(--red)', margin: '12px 0 0' }}>{editorError}</p>}
+        </div>
+      ) : (
       <div style={{ padding: '18px 18px 0' }}>
 
         {/* Name + record type */}
@@ -301,80 +437,143 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
           </div>
         </div>
 
-        {/* Markdown editor */}
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-            <label style={{ ...S.label, margin: 0 }}>Formato en markdown</label>
+        {/* Editor header: label + mode toggle (+ palette in markdown mode) */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+          <label style={{ ...S.label, margin: 0 }}>
+            {mode === 'visual' ? 'Campos del formato' : 'Formato en markdown'}
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            {mode === 'markdown' && (
+              <button
+                type="button"
+                onClick={() => setShowPalette(p => !p)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  fontSize: 12,
+                  color: 'var(--teal-dark)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '2px 0',
+                  fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                {showPalette ? <EyeOff size={13} /> : <Eye size={13} />}
+                {showPalette ? 'Ocultar referencia' : 'Ver referencia'}
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => setShowPalette(p => !p)}
+              onClick={switchMode}
+              disabled={busy}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 4,
+                gap: 5,
                 fontSize: 12,
+                fontWeight: 600,
                 color: 'var(--teal-dark)',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '2px 0',
+                background: 'var(--teal-l)',
+                border: '1px solid var(--teal-100)',
+                borderRadius: 8,
+                cursor: busy ? 'wait' : 'pointer',
+                padding: '5px 10px',
                 fontFamily: "'DM Sans', sans-serif",
               }}
             >
-              {showPalette ? <EyeOff size={13} /> : <Eye size={13} />}
-              {showPalette ? 'Ocultar referencia' : 'Ver referencia'}
+              {mode === 'visual'
+                ? <><Code size={13} /> Modo avanzado (Markdown)</>
+                : <><Blocks size={13} /> Modo visual</>}
             </button>
           </div>
-          {showPalette && (
-            <pre style={{
-              fontSize: 12,
-              background: 'var(--s50)',
-              border: '1px solid var(--s200)',
-              borderRadius: 8,
-              padding: '10px 12px',
-              whiteSpace: 'pre-wrap',
-              marginBottom: 8,
-              maxHeight: 200,
-              overflowY: 'auto',
-              lineHeight: 1.6,
-              fontFamily: "'DM Mono', monospace",
-              color: 'var(--s700)',
-            }}>
-              {PALETTE}
-            </pre>
-          )}
-          <textarea
-            value={markdown}
-            onChange={e => setMarkdown(e.target.value)}
-            rows={14}
-            placeholder={`# Nombre de la plantilla (opcional)\n\n## Motivo de consulta {text} {required}\nQué trajo el paciente a la sesión.\n\n## Nivel de malestar {scale:0-10}\n\n## Examen mental {widget:mental_exam}\n\n## Tareas para casa {checklist}`}
-            style={{
-              ...S.textarea,
-              ...(mdFocus.focused ? { boxShadow: '0 0 0 2px var(--teal-10)', border: '1px solid var(--teal)' } : {}),
-            }}
-            onFocus={mdFocus.onFocus}
-            onBlur={mdFocus.onBlur}
-          />
         </div>
 
-        {/* Live preview */}
-        {(preview.length > 0 || previewError) && (
-          <div style={{
-            background: 'var(--s50)',
-            border: '1px solid var(--s100)',
-            borderRadius: 8,
-            padding: '10px 14px',
-            marginBottom: 16,
-          }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-              Vista previa
-            </p>
-            {previewError ? (
-              <p style={{ fontSize: 12, color: 'var(--red)' }}>{previewError}</p>
-            ) : (
-              <SectionPreview sections={preview} />
+        {mode === 'visual' ? (
+          /* Visual builder + live form preview */
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start', marginBottom: 16 }}>
+            <div style={{ flex: '1 1 380px', minWidth: 0 }}>
+              <TemplateBuilder sections={sections} onChange={setSections} />
+            </div>
+            {sections.length > 0 && (
+              <div style={{
+                flex: '1 1 340px',
+                minWidth: 0,
+                background: 'var(--s50)',
+                border: '1px solid var(--s100)',
+                borderRadius: 10,
+                padding: 14,
+                maxHeight: 560,
+                overflowY: 'auto',
+              }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>
+                  Vista previa — así lo verá el profesional
+                </p>
+                <TemplatedSectionsForm
+                  schema={toPreviewSchema(sections)}
+                  value={previewValues}
+                  onChange={setPreviewValues}
+                />
+              </div>
             )}
           </div>
+        ) : (
+          /* Advanced markdown mode */
+          <div style={{ marginBottom: 16 }}>
+            {showPalette && (
+              <pre style={{
+                fontSize: 12,
+                background: 'var(--s50)',
+                border: '1px solid var(--s200)',
+                borderRadius: 8,
+                padding: '10px 12px',
+                whiteSpace: 'pre-wrap',
+                marginBottom: 8,
+                maxHeight: 200,
+                overflowY: 'auto',
+                lineHeight: 1.6,
+                fontFamily: "'DM Mono', monospace",
+                color: 'var(--s700)',
+              }}>
+                {PALETTE}
+              </pre>
+            )}
+            <textarea
+              value={markdown}
+              onChange={e => setMarkdown(e.target.value)}
+              rows={14}
+              placeholder={`# Nombre de la plantilla (opcional)\n\n## Motivo de consulta {text} {required}\nQué trajo el paciente a la sesión.\n\n## Nivel de malestar {scale:0-10}\n\n## Examen mental {widget:mental_exam}\n\n## Tareas para casa {checklist}`}
+              style={{
+                ...S.textarea,
+                ...(mdFocus.focused ? { boxShadow: '0 0 0 2px var(--teal-10)', border: '1px solid var(--teal)' } : {}),
+              }}
+              onFocus={mdFocus.onFocus}
+              onBlur={mdFocus.onBlur}
+            />
+            {(preview.length > 0 || previewError) && (
+              <div style={{
+                background: 'var(--s50)',
+                border: '1px solid var(--s100)',
+                borderRadius: 8,
+                padding: '10px 14px',
+                marginTop: 8,
+              }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                  Vista previa
+                </p>
+                {previewError ? (
+                  <p style={{ fontSize: 12, color: 'var(--red)' }}>{previewError}</p>
+                ) : (
+                  <SectionPreview sections={preview} />
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {editorError && (
+          <p style={{ fontSize: 12, color: 'var(--red)', margin: '0 0 14px' }}>{editorError}</p>
         )}
 
         {/* Default checkbox (new only) */}
@@ -398,8 +597,10 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
           </label>
         )}
       </div>
+      )}
 
       {/* Footer */}
+      {stage === 'edit' && (
       <div style={{
         display: 'flex',
         justifyContent: 'flex-end',
@@ -431,6 +632,7 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
           {saveMutation.isPending ? 'Guardando…' : (initial ? 'Guardar cambios' : 'Crear plantilla')}
         </button>
       </div>
+      )}
     </div>
   );
 }
