@@ -70,6 +70,7 @@ export function AIDraftPage() {
   // approval is irreversible (no edits after), so it always needs a step.
   const [confirmApproveAction, setConfirmApproveAction] = useState<'approve' | 'compare' | null>(null);
   const [riskLevel, setRiskLevel] = useState('NONE');
+  const [riskSeeded, setRiskSeeded] = useState(false);
   // Required by the backend for a DISCHARGE approval in any format; the
   // comparison view captures it inside the integrated form instead.
   const [dischargeReason, setDischargeReason] = useState<DischargeReason | ''>('');
@@ -355,6 +356,20 @@ export function AIDraftPage() {
     const note = (draft?.draft_content_plain as Record<string, unknown> | null)?.risk_note as
       | string | null | undefined;
     setAiRiskNote(typeof note === 'string' && note.trim() ? note.trim() : null);
+  }
+
+  // Seed the risk selector from the AI's top-level risk_level suggestion
+  // (drafts since migration 000067; legacy drafts carried it as the `risk`
+  // widget section). One-shot: a later change by the professional — or the
+  // manual record's own risk_level, fetched after — is never clobbered.
+  if (!riskSeeded && draft) {
+    const dc = draft.draft_content_plain as Record<string, unknown> | null;
+    const suggested = (dc?.risk_level
+      ?? (dc?.sections as Record<string, unknown> | undefined)?.risk) as string | undefined;
+    if (typeof suggested === 'string' && ['NONE', 'IDEATION', 'PLAN', 'ATTEMPT'].includes(suggested)) {
+      setRiskLevel(suggested);
+    }
+    setRiskSeeded(true);
   }
 
   // A freshly approved draft/record must stop showing as pending everywhere

@@ -1,10 +1,9 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Archive, Eye, EyeOff, ChevronDown, ChevronUp, Pencil, Code, Blocks, FileText, Sparkles } from 'lucide-react';
+import { Plus, Archive, ChevronDown, ChevronUp, Pencil, FileText, Sparkles } from 'lucide-react';
 import {
   recordTemplatesApi,
   RecordTemplate,
-  SectionDef,
 } from '../../api/recordTemplates';
 import { RecordType } from '../../api/clinicalRecords';
 import TemplateBuilder from './TemplateBuilder';
@@ -19,42 +18,6 @@ const RECORD_TYPE_LABEL: Record<string, string> = {
   INITIAL: 'Inicial (apertura)', EVOLUTION: 'Evolución',
   DISCHARGE: 'Alta (cierre)', INTERCONSULTATION: 'Interconsulta',
 };
-
-
-// Only the widgets whose estructura no se puede armar con campos genéricos.
-// Los antiguos (task_checklist, session_evaluation, etc.) hoy son campos
-// select/multiselect/scale de la propia plantilla.
-const WIDGET_LABELS: Record<string, string> = {
-  mental_exam: 'Examen mental (lo llena el profesional, la IA nunca lo marca)',
-  risk: 'Nivel de riesgo (campo de sistema)',
-  treatment_plan: 'Plan de tratamiento',
-  diagnoses: 'Diagnósticos CIE-10',
-};
-
-const PALETTE = `
-**Tipos de campo disponibles para anotar en los encabezados ##:**
-
-| Anotación | Render | Ejemplo |
-|-----------|--------|---------|
-| \`{text}\` | Área de texto libre (por defecto) | \`## Desarrollo {text}\` |
-| \`{select:a|b|c}\` | Desplegable (una opción) | \`## Eje {select:Cognitivo|Emocional|Conductual}\` |
-| \`{select:a|b|c} {pills}\` | Botones tipo pill (una opción) | \`## Insight {select:Alto|Medio|Bajo} {pills}\` |
-| \`{multiselect:a|b|c}\` | Checkboxes (varias opciones) | \`## Barreras {multiselect:Tardanza|Silencios|Otra}\` |
-| \`{multiselect:a|b|c} {pills}\` | Botones tipo pill (varias opciones) | \`## Eje {multiselect:Emocional|Conductual|Técnico} {pills}\` |
-| \`{multiselect:...} {allow_other}\` | Permite agregar un valor libre además de las opciones | \`## Barreras {multiselect:Tardanza|Otra} {allow_other}\` |
-| \`{scale:0-10}\` | Deslizador numérico | \`## Malestar {scale:0-10}\` |
-| \`{checklist}\` | Lista de ítems de texto libre | \`## Tareas {checklist}\` |
-| \`{widget:nombre}\` | Componente clínico integrado | \`## Riesgo {widget:risk}\` |
-| \`{required}\` | Marca campo como obligatorio | \`## Motivo {text} {required}\` |
-| \`{collapsed}\` | Inicia oculto tras un acordeón | \`## Tareas para casa {checklist} {collapsed}\` |
-
-Arma los formularios combinando \`select\`/\`multiselect\` con \`{pills}\` y \`{allow_other}\`: la IA los completa automáticamente sin necesitar código nuevo en ningún stack. Los widgets quedan reservados para lo que un campo genérico no puede expresar.
-
-**Widgets disponibles:**
-${Object.entries(WIDGET_LABELS).map(([k, v]) => `- \`{widget:${k}}\` — ${v}`).join('\n')}
-
-**Nombre de plantilla:** línea que comienza con \`# \` (un solo hash).
-`.trim();
 
 // ── Shared style tokens (inline, following app convention) ──────────────────
 const S = {
@@ -167,27 +130,6 @@ function useFocus() {
   };
 }
 
-// ── SectionPreview ──────────────────────────────────────────────────────────
-function SectionPreview({ sections }: { sections: SectionDef[] }) {
-  if (sections.length === 0) return null;
-  return (
-    <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {sections.map((s) => (
-        <li key={s.key} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '4px 8px' }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--s700)' }}>{s.label}</span>
-          <span style={{ fontSize: 12, color: 'var(--s400)' }}>
-            {s.type === 'widget' ? `widget:${s.widget}` : s.type}
-            {s.type === 'select' ? ` [${(s.options ?? []).join(' | ')}]` : ''}
-            {s.type === 'scale' ? ` [${s.scale_min ?? 0}–${s.scale_max ?? 10}]` : ''}
-            {s.required ? ' *' : ''}
-            {s.collapsed ? ' ⌄ oculto por defecto' : ''}
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 // ── TemplateEditor (inline panel, no modal) ─────────────────────────────────
 interface EditorProps {
   initial?: RecordTemplate;
@@ -212,65 +154,20 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
   const qc = useQueryClient();
   // Creation starts at the gallery step; editing jumps straight to the fields.
   const [stage, setStage] = useState<'pick' | 'edit'>(initial ? 'edit' : 'pick');
-  // The visual builder is the default; raw markdown is the advanced mode.
-  const [mode, setMode] = useState<'visual' | 'markdown'>('visual');
   const [name, setName] = useState(initial?.name ?? '');
   // Editable only on creation — the backend keeps record_type immutable on
   // update (existing records already reference the template under that type).
   const [recordType, setRecordType] = useState<RecordType>((initial?.record_type as RecordType) ?? 'INITIAL');
-  // The stored schema (already parsed server-side) seeds the builder.
+  // The stored schema (already parsed server-side) seeds the builder. The
+  // markdown source is an internal storage format — the professional only
+  // ever sees the visual builder and the rendered preview.
   const [sections, setSections] = useState<BuilderSection[]>(() => (initial ? fromSectionDefs(initial.schema) : []));
-  const [markdown, setMarkdown] = useState(initial?.source_markdown ?? '');
   const [isDefault, setIsDefault] = useState(initial?.is_default ?? false);
-  const [preview, setPreview] = useState<SectionDef[]>(initial?.schema ?? []);
-  const [showPalette, setShowPalette] = useState(false);
-  const [previewError, setPreviewError] = useState('');
   const [editorError, setEditorError] = useState('');
   const [previewValues, setPreviewValues] = useState<SectionsState>({});
   const [busy, setBusy] = useState(false);
 
   const nameFocus = useFocus();
-  const mdFocus = useFocus();
-
-  const parsePreview = useCallback(async (md: string) => {
-    if (!md.trim()) { setPreview([]); setPreviewError(''); return; }
-    try {
-      const r = await recordTemplatesApi.parse(md);
-      setPreview(r.sections);
-      setPreviewError('');
-      if (!name && r.suggested_name) setName(r.suggested_name);
-    } catch {
-      setPreviewError('Markdown inválido — revisa los encabezados ##');
-    }
-  }, [name]);
-
-  useEffect(() => {
-    if (mode !== 'markdown') return;
-    const t = setTimeout(() => parsePreview(markdown), 500);
-    return () => clearTimeout(t);
-  }, [mode, markdown, parsePreview]);
-
-  const switchMode = async () => {
-    setEditorError('');
-    if (mode === 'visual') {
-      setMarkdown(sectionsToMarkdown(sections));
-      setMode('markdown');
-      return;
-    }
-    // markdown → visual: the server parse is authoritative.
-    if (!markdown.trim()) { setSections([]); setMode('visual'); return; }
-    setBusy(true);
-    try {
-      const r = await recordTemplatesApi.parse(markdown);
-      setSections(fromSectionDefs(r.sections));
-      if (!name && r.suggested_name) setName(r.suggested_name);
-      setMode('visual');
-    } catch {
-      setEditorError('El markdown tiene errores — corrígelos antes de volver al modo visual.');
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const pickExample = async (ex: TemplateExample) => {
     setBusy(true);
@@ -278,7 +175,6 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
     try {
       const r = await recordTemplatesApi.parse(ex.markdown);
       setSections(fromSectionDefs(r.sections));
-      setMarkdown(ex.markdown);
       setName(ex.title);
       setRecordType(ex.record_type);
       setStage('edit');
@@ -291,14 +187,11 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      let md = markdown;
-      if (mode === 'visual') {
-        md = sectionsToMarkdown(sections);
-        // Fail-closed round-trip: the markdown about to be saved must parse
-        // back to exactly what the builder shows, or nothing is persisted.
-        const r = await recordTemplatesApi.parse(md);
-        if (!sectionsMatch(sections, r.sections)) throw new Error('roundtrip_mismatch');
-      }
+      const md = sectionsToMarkdown(sections);
+      // Fail-closed round-trip: the markdown about to be saved must parse
+      // back to exactly what the builder shows, or nothing is persisted.
+      const r = await recordTemplatesApi.parse(md);
+      if (!sectionsMatch(sections, r.sections)) throw new Error('roundtrip_mismatch');
       return initial
         ? recordTemplatesApi.update(initial.id, { name, markdown: md })
         : recordTemplatesApi.create({ name, record_type: recordType, markdown: md, is_default: isDefault });
@@ -310,17 +203,14 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
     onError: (e) => {
       setEditorError(
         e instanceof Error && e.message === 'roundtrip_mismatch'
-          ? 'La plantilla generada no coincide con lo que muestra el editor. Revisa los campos o usa el modo avanzado.'
+          ? 'La plantilla generada no coincide con lo que muestra el editor. Revisa los campos e intenta de nuevo.'
           : 'No se pudo guardar la plantilla. Revisa los campos e intenta de nuevo.',
       );
     },
   });
 
-  const canSave = !saveMutation.isPending && !busy && !!name.trim() && (
-    mode === 'visual'
-      ? sections.length > 0 && !hasBuilderErrors(sections)
-      : !!markdown.trim() && preview.length > 0
-  );
+  const canSave = !saveMutation.isPending && !busy && !!name.trim()
+    && sections.length > 0 && !hasBuilderErrors(sections);
 
   return (
     <div
@@ -364,7 +254,7 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
             <button
               type="button"
-              onClick={() => { setSections([]); setMarkdown(''); setStage('edit'); }}
+              onClick={() => { setSections([]); setStage('edit'); }}
               style={pickCard}
               onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--teal)'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--s200)'; }}
@@ -437,140 +327,45 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
           </div>
         </div>
 
-        {/* Editor header: label + mode toggle (+ palette in markdown mode) */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
-          <label style={{ ...S.label, margin: 0 }}>
-            {mode === 'visual' ? 'Campos del formato' : 'Formato en markdown'}
-          </label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            {mode === 'markdown' && (
-              <button
-                type="button"
-                onClick={() => setShowPalette(p => !p)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  fontSize: 12,
-                  color: 'var(--teal-dark)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '2px 0',
-                  fontFamily: "'DM Sans', sans-serif",
-                }}
-              >
-                {showPalette ? <EyeOff size={13} /> : <Eye size={13} />}
-                {showPalette ? 'Ocultar referencia' : 'Ver referencia'}
-              </button>
+        {/* Visual builder (left) + live form preview (right; stacks on mobile) */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))',
+          gap: 16,
+          alignItems: 'start',
+          marginBottom: 16,
+        }}>
+          <div style={{ minWidth: 0 }}>
+            <label style={{ ...S.label, marginBottom: 8 }}>Campos del formato</label>
+            <TemplateBuilder sections={sections} onChange={setSections} />
+          </div>
+          <div style={{
+            minWidth: 0,
+            background: 'var(--s50)',
+            border: '1px solid var(--s100)',
+            borderRadius: 10,
+            padding: 14,
+            maxHeight: 620,
+            overflowY: 'auto',
+            position: 'sticky',
+            top: 8,
+          }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>
+              Vista previa — así lo verá el profesional
+            </p>
+            {sections.length > 0 ? (
+              <TemplatedSectionsForm
+                schema={toPreviewSchema(sections)}
+                value={previewValues}
+                onChange={setPreviewValues}
+              />
+            ) : (
+              <p style={{ fontSize: 13, color: 'var(--s400)', margin: 0 }}>
+                Agrega el primer campo y aquí verás el formulario tal como aparecerá en la sesión.
+              </p>
             )}
-            <button
-              type="button"
-              onClick={switchMode}
-              disabled={busy}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 5,
-                fontSize: 12,
-                fontWeight: 600,
-                color: 'var(--teal-dark)',
-                background: 'var(--teal-l)',
-                border: '1px solid var(--teal-100)',
-                borderRadius: 8,
-                cursor: busy ? 'wait' : 'pointer',
-                padding: '5px 10px',
-                fontFamily: "'DM Sans', sans-serif",
-              }}
-            >
-              {mode === 'visual'
-                ? <><Code size={13} /> Modo avanzado (Markdown)</>
-                : <><Blocks size={13} /> Modo visual</>}
-            </button>
           </div>
         </div>
-
-        {mode === 'visual' ? (
-          /* Visual builder + live form preview */
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start', marginBottom: 16 }}>
-            <div style={{ flex: '1 1 380px', minWidth: 0 }}>
-              <TemplateBuilder sections={sections} onChange={setSections} />
-            </div>
-            {sections.length > 0 && (
-              <div style={{
-                flex: '1 1 340px',
-                minWidth: 0,
-                background: 'var(--s50)',
-                border: '1px solid var(--s100)',
-                borderRadius: 10,
-                padding: 14,
-                maxHeight: 560,
-                overflowY: 'auto',
-              }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>
-                  Vista previa — así lo verá el profesional
-                </p>
-                <TemplatedSectionsForm
-                  schema={toPreviewSchema(sections)}
-                  value={previewValues}
-                  onChange={setPreviewValues}
-                />
-              </div>
-            )}
-          </div>
-        ) : (
-          /* Advanced markdown mode */
-          <div style={{ marginBottom: 16 }}>
-            {showPalette && (
-              <pre style={{
-                fontSize: 12,
-                background: 'var(--s50)',
-                border: '1px solid var(--s200)',
-                borderRadius: 8,
-                padding: '10px 12px',
-                whiteSpace: 'pre-wrap',
-                marginBottom: 8,
-                maxHeight: 200,
-                overflowY: 'auto',
-                lineHeight: 1.6,
-                fontFamily: "'DM Mono', monospace",
-                color: 'var(--s700)',
-              }}>
-                {PALETTE}
-              </pre>
-            )}
-            <textarea
-              value={markdown}
-              onChange={e => setMarkdown(e.target.value)}
-              rows={14}
-              placeholder={`# Nombre de la plantilla (opcional)\n\n## Motivo de consulta {text} {required}\nQué trajo el paciente a la sesión.\n\n## Nivel de malestar {scale:0-10}\n\n## Examen mental {widget:mental_exam}\n\n## Tareas para casa {checklist}`}
-              style={{
-                ...S.textarea,
-                ...(mdFocus.focused ? { boxShadow: '0 0 0 2px var(--teal-10)', border: '1px solid var(--teal)' } : {}),
-              }}
-              onFocus={mdFocus.onFocus}
-              onBlur={mdFocus.onBlur}
-            />
-            {(preview.length > 0 || previewError) && (
-              <div style={{
-                background: 'var(--s50)',
-                border: '1px solid var(--s100)',
-                borderRadius: 8,
-                padding: '10px 14px',
-                marginTop: 8,
-              }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-                  Vista previa
-                </p>
-                {previewError ? (
-                  <p style={{ fontSize: 12, color: 'var(--red)' }}>{previewError}</p>
-                ) : (
-                  <SectionPreview sections={preview} />
-                )}
-              </div>
-            )}
-          </div>
-        )}
 
         {editorError && (
           <p style={{ fontSize: 12, color: 'var(--red)', margin: '0 0 14px' }}>{editorError}</p>
@@ -745,7 +540,7 @@ function TemplateCard({ tpl }: { tpl: RecordTemplate }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
           <IconButton
             onClick={() => toggle('view')}
-            label={mode === 'view' ? 'Ocultar markdown' : 'Ver markdown'}
+            label={mode === 'view' ? 'Ocultar vista previa' : 'Ver cómo se ve'}
             color="var(--s400)"
             hoverBg="var(--s100)"
             hoverColor="var(--s700)"
@@ -777,35 +572,15 @@ function TemplateCard({ tpl }: { tpl: RecordTemplate }) {
         </div>
       </div>
 
-      {/* Expanded region */}
+      {/* Expanded region — the format rendered exactly as the professional
+          will see it in session (the markdown source is internal storage,
+          never shown here). */}
       {mode === 'view' && (
-        <div style={{ borderTop: '1px solid var(--s100)', padding: '14px 16px' }}>
+        <div style={{ borderTop: '1px solid var(--s100)', padding: '14px 16px', background: 'var(--s50)' }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-            Markdown fuente
+            Vista previa — así lo ve el profesional en sesión
           </p>
-          <pre style={{
-            fontFamily: "'DM Mono', monospace",
-            fontSize: 12.5,
-            lineHeight: 1.7,
-            color: 'var(--s700)',
-            background: 'var(--s50)',
-            border: '1px solid var(--s200)',
-            borderRadius: 8,
-            padding: '12px 14px',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            margin: 0,
-          }}>
-            {tpl.source_markdown}
-          </pre>
-          {tpl.schema.length > 0 && (
-            <div style={{ marginTop: 14 }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-                Secciones parseadas
-              </p>
-              <SectionPreview sections={tpl.schema} />
-            </div>
-          )}
+          <TemplatedSectionsForm schema={tpl.schema} value={{}} onChange={() => {}} disabled />
         </div>
       )}
 

@@ -8,15 +8,10 @@ from ai_service.drafts.claude import _filter_sections, _validate_typed_value
 from ai_service.drafts.widgets import validate_widget_value
 
 
-def test_risk_enum() -> None:
-    assert validate_widget_value("risk", "NONE") == "NONE"
-    assert validate_widget_value("risk", "SEVERE") is None
-    assert validate_widget_value("risk", 3) is None
-
-
 def test_manual_only_widgets_never_prefill() -> None:
-    # mental_exam is manual by compliance rule; treatment_plan/diagnoses are
-    # self-contained panels. Whatever the model volunteers is dropped.
+    # Widgets are retired (migration 000067) — none is AI-fillable. risk now
+    # travels via the draft's top-level risk_level key, never as a section.
+    assert validate_widget_value("risk", "NONE") is None
     assert validate_widget_value("mental_exam", {"porte": ["adecuado"]}) is None
     assert validate_widget_value("treatment_plan", {"goals": []}) is None
     assert validate_widget_value("diagnoses", [{"code": "F41.1"}]) is None
@@ -85,11 +80,11 @@ def test_filter_sections_drops_malformed_and_keeps_valid() -> None:
     ]
     parsed = {
         "estado": "Llega tranquila",  # valid text
-        "riesgo": "NONE",             # valid enum
+        "riesgo": "NONE",             # volunteered widget value → dropped (risk is top-level now)
         "animo": 7,                   # out of template range → dropped
         "modalidad": "telefónica",    # not an option → dropped
         "barreras": {"si": True},     # wrong shape → dropped
         "fuera_de_schema": "x",       # unknown key → dropped
     }
     out = _filter_sections(parsed, {}, template)
-    assert out == {"estado": "Llega tranquila", "riesgo": "NONE"}
+    assert out == {"estado": "Llega tranquila"}
