@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-07-19
+
+- feat(marketing): **guía "Secreto profesional Ley 1090" publicada en chapni.com/recursos** (`c1c4dbe` en `../chapni`, deploy wrangler + smoke 200) — 5ª guía del hub, cadencia quincenal al día; estreno en el slot educativo de LinkedIn del lunes 07-27. Pendiente en BACKLOG: verificación humana de la numeración de artículos citados.
+- chore(marketing): **batch semanal `chapni-social` completo** — 5 slots (07-20→24) generados con 3 rondas de ajuste de copy, renderizados (fix de líneas huérfanas en titulares vía re-split, el template limita a ~15ch) y confirmados programados ✅ (`cf7e482`/`d89029f`); Artifact con captions copiables. Reglas nuevas en `strategy.md`: vocabulario cotidiano colombiano (veto a "aparato"/"escarbar"/"colega" vocativo/etc.) y sin jerga SOAP en copy social.
+- docs: registradas retroactivamente las sesiones 2026-07-17→18 que no corrieron `/actualizar-contexto` (PRs #202–#206: métricas draft_feedback fase 1, fix hard-delete org vs audit_log, retiro de widgets bespoke con `risk` único AI-fillable, cierre backlog ai_schema + hallazgo `record_type`, builder visual de plantillas).
+
+---
+
 ## 2026-07-15
 
 - enhancement(clinical): **tipos genéricos `multiselect`/`{pills}`/`{allow_other}` para plantillas custom** (PR #199) — disparado por que la IA no llenaba "Evaluación del cierre de sesión" en la Nota de Evolución real de Marcela; se encontró que el `ai_schema` de varios widgets (`session_evaluation`, `task_adherence`, `functionality`, `formulation_5f`, `spa_history`, `functional_analysis`) llevaba desincronizado del componente React desde que se construyeron. En vez de reparar 6 contratos bespoke uno a uno, se agregaron tipos genéricos al parser (Go) + render (React) + prompt (Python) + PDF, cuyo ai_schema se deriva de `options` automáticamente; los 4 formatos de Marcela se reescribieron con la sintaxis nueva (`mental_exam`/`task_checklist`/`risk` se mantienen como widget).

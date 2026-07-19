@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-07-15)
+## Estado actual (2026-07-19)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -56,14 +56,15 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 | 5 — Tests | ✅ resuelto | testcontainers + tests de aislamiento RLS (`internal/integration/{infra,rls,needtoknow}_test.go`); vitest para `client.ts` y `RecordForm` |
 | 6 — Frontend refactor | ✅ resuelto | `SettingsPage` partido en 10 secciones bajo `components/settings/` (191 líneas, solo orquesta); `logout` hace `flushClinicalDrafts()` antes de invalidar el token (`AuthContext.tsx`) |
 
-### Últimos PRs a `main` (sesión 2026-07-15, todos desplegados)
+### Últimos PRs a `main` (sesiones 2026-07-17→18, todos desplegados por CI)
 
-**Sesión disparada por: el usuario subió el audio de prueba de 1h y ningún campo de "Evaluación del cierre de sesión" se llenó — diagnóstico llevó a un rediseño del sistema de tipos de campo de plantillas + un bug de fondo real:**
+- `#202` feat(clinical): **métricas de edición de borradores IA** (feedback loop fase 1, tabla `draft_feedback`) — en prod desde 2026-07-17. Pendientes de fases siguientes: perfil de estilo por profesional, eval set, fase 2 con consentimientos.
+- `#203` fix(db): hard-delete de organización desde Superadmin fallaba contra el `audit_log` append-only.
+- `#204` fix(clinical): **retiro de widgets bespoke desincronizados** — solo quedan `mental_exam`/`risk`/`treatment_plan`/`diagnoses` (con `risk` como único AI-fillable; el ai-service descarta fail-closed valores IA para los manual-only); campos nuevos siempre como `multiselect`/`select` de plantilla.
+- `#205` chore(docs): cierre del ítem de verificación de `ai_schema` en BACKLOG + hallazgo `record_type` INITIAL vs plantilla EVOLUTION registrado.
+- `#206` feat(clinical): **builder visual de plantillas** sobre el source Markdown (Settings → Formatos).
 
-- `#199` enhancement(clinical): **tipos genéricos `multiselect` + `{pills}`/`{allow_other}`** para plantillas custom (Go `markdown.go`/`models.go`, React `TemplatedSectionsForm.tsx`, Python `claude.py`, PDF `renderer.go`) — el ai_schema se deriva de `options` automáticamente, sin construir un widget bespoke por cada checklist/radio-button nuevo. Los 4 formatos de Marcela (Apertura, Plan Terapéutico, Nota de Evolución, Informe de Cierre) reescritos con la sintaxis nueva vía Settings; `mental_exam`/`task_checklist`/`risk` se mantienen como widget (grilla compacta, catálogo con descripciones, y campo de sistema, respectivamente).
-- `#200` fix(clinical): **plantillas: editar ya no muta en sitio** — `recordtemplates.Update` archivaba-e-insertaba en vez de `UPDATE` in-place (bug preexistente, destapado al editar los 4 templates en vivo: cualquier borrador en curso con claves de la versión vieja fallaba con 422 en autosave/finalize, y un PDF de un registro ya **firmado** podía re-renderizarse con el schema de hoy en vez del vigente al aprobarse — violaba la inmutabilidad Res. 1995/1999 que la migración 000046 ya prometía). Validación separada: crear registro/borrador nuevo exige plantilla ACTIVE; continuar uno ya anclado a su `template_id` acepta también una ARCHIVED.
-
-**Ops de la sesión (sin PR):** borrador de prueba huérfano (`9f253ce9…`, DRAFT sin finalizar, roto por el bug de #200) eliminado directo en BD del VPS tras confirmar 0 filas dependientes.
+**Sesión 2026-07-19 (marketing, sin PRs en `clinic-system` — todo en el repo `../chapni`):** batch semanal `chapni-social` completo (5 slots 07-20→24 generados, aprobados con 3 rondas de ajustes de copy, renderizados y **programados ✅** — log `d89029f`); **guía nueva del hub: "Secreto profesional Ley 1090"** escrita, buildeada y **desplegada a chapni.com/recursos** (`c1c4dbe` + wrangler deploy, smoke 200) — 5ª guía, se estrena en el slot educativo del lunes 07-27; reglas nuevas de vocabulario CO y anti-jerga (SOAP) en `strategy.md` de la skill; Artifact semanal con captions copiables publicado.
 
 > Flujo actual: rama `fix/*` → PR → squash-merge → CI deploy. ✅ Branch protection activa desde 2026-07-09.
 > **CI/CD:** core-api `test → build → smoke`; ai-service `pytest → build → deploy`; **frontend `build → rsync al VPS → smoke` (automatizado desde #185)**; `smoke.yml` también corre por `workflow_dispatch` tras cambios manuales.
@@ -109,9 +110,9 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción — CI deploy (último: PR #200, 2026-07-15, fix de versionado de plantillas). Migraciones al día (000063); sin migraciones nuevas. |
-| `ai-service` | ✅ producción — CI deploy (PR #199, 2026-07-15): schema `multiselect` genérico en `claude.py`. Pipeline validado E2E con audio de 58 min (2026-07-11). |
-| `frontend` (Caddy :80/:443) | ✅ producción — **CI deploy automático desde PR #185** (`build-frontend.yml`: build en Actions + rsync in-place al bind mount, sin restart de Caddy). Último: PR #199 (2026-07-15). **Dominio:** `https://app.chapni.com`; `api.marcelachapues.com` legacy (mantiene `/api` para webhooks, redirige 308 el resto). |
+| `core-api:8080` | ✅ producción — CI deploy (último: PR #206, 2026-07-18, builder visual de plantillas). |
+| `ai-service` | ✅ producción — CI deploy (último: PR #204, 2026-07-17: descarte fail-closed de valores IA en widgets manual-only). Pipeline validado E2E con audio de 58 min (2026-07-11). |
+| `frontend` (Caddy :80/:443) | ✅ producción — **CI deploy automático desde PR #185** (`build-frontend.yml`: build en Actions + rsync in-place al bind mount, sin restart de Caddy). Último: PR #206 (2026-07-18). **Dominio:** `https://app.chapni.com`; `api.marcelachapues.com` legacy (mantiene `/api` para webhooks, redirige 308 el resto). |
 | Backups | `pg_dump` diario cifrado GPG → Backblaze B2 + **snapshot cifrado del `.env`** (desde 2026-07-13). Llave GPG rotada 2026-07-13: `backups@chapni.com` (privada en máquina del operador + LastPass; la vieja solo lee dumps ≤ 2026-07-13). **Restore probado**: RTO datos ~15 s — runbook en `docs/ops/DR_RUNBOOK.md`. |
 | **Disco** | ~27% (9,4/38 GB tras el barrido de audios PHI 2026-07-13) — cron semanal en el **host**: `0 4 * * 0 docker system prune -af` → `/var/log/docker-prune.log`. Alerta email si >80% |
 
