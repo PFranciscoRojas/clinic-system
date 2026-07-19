@@ -8,22 +8,14 @@ import (
 	"unicode"
 )
 
-// knownWidgets is the set of widget names registered in services/shared/field-widgets.json.
-// Keep in sync manually when adding new widgets.
-//
-// Only widgets whose structure a generic field type can't express are
-// accepted in new template saves. The retired bespoke widgets
-// (task_checklist, session_evaluation, task_adherence, functionality,
-// formulation_5f, spa_history, functional_analysis, distress_scale) kept
-// drifting out of sync with the AI schema — they are select/multiselect/
-// scale template fields now. Archived template versions that still
-// reference them keep rendering (this list only gates parsing on save).
-var knownWidgets = map[string]bool{
-	"mental_exam":    true,
-	"risk":           true,
-	"treatment_plan": true,
-	"diagnoses":      true,
-}
+// Widget fields are fully retired from new template saves (migration 000067
+// converted every ACTIVE template): the bespoke widgets kept drifting out of
+// sync with the AI schema, mental_exam is expressible with generic
+// select/multiselect fields, risk_level is a fixed system control of the
+// record form (not template content), and diagnoses/treatment_plan live in
+// the patient profile panels. Archived template versions that still
+// reference a widget keep rendering — FieldWidget stays in the model and
+// this parser only gates *saving*.
 
 var (
 	reAnnotation  = regexp.MustCompile(`\{([^}]+)\}`)
@@ -43,7 +35,7 @@ var (
 //     {multiselect:a|b|c}  → multiselect (string[]) with those options
 //     {scale:0-10}         → scale from 0 to 10
 //     {checklist}          → checklist (string[], free text)
-//     {widget:name}        → named widget from the registry
+//     {widget:name}        → rejected (retired since migration 000067; archived schemas may still contain widget sections)
 //     {required}           → marks the section as required
 //     {collapsed}          → starts hidden behind an accordion (e.g. an
 //                            optional, rarely-needed section the form
@@ -178,12 +170,7 @@ func parseHeading(raw string) (*SectionDef, error) {
 
 		case reWidget.MatchString(lower):
 			m := reWidget.FindStringSubmatch(lower)
-			name := m[1]
-			if !knownWidgets[name] {
-				return nil, fmt.Errorf("record_template: unknown widget %q", name)
-			}
-			def.Type = FieldWidget
-			def.Widget = name
+			return nil, fmt.Errorf("record_template: widget %q is retired — use generic field types (select/multiselect/scale/checklist/text)", m[1])
 
 		default:
 			// Unknown annotation — ignore silently to remain forward-compatible.

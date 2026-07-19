@@ -1,31 +1,17 @@
 {
-  "_comment": "Canonical registry of field types and widget names understood by all three stacks (Go, Python, TypeScript). A record template section references one of these 'type' values. Widget names match component identifiers in the frontend. Only widgets whose structure a generic field type can't express are registered — prefer text/select/multiselect/scale (optionally with display=pills or allow_other): their AI schema is derived generically from `options`, no Go/Python/React changes needed per new field. Of the registered widgets only `risk` is AI-fillable; the rest are manual-only and the AI service drops any value the model volunteers for them. Retired bespoke widgets (task_checklist, session_evaluation, task_adherence, functionality, formulation_5f, spa_history, functional_analysis, distress_scale) survive only in archived template versions: the frontend keeps their renderers and the PDF exporter keeps their layouts, but new template saves reject them and the AI no longer fills them.",
-  "types": ["text", "select", "multiselect", "scale", "checklist", "widget"],
+  "_comment": "Canonical registry of field types understood by all three stacks (Go, Python, TypeScript). A record template section references one of these 'type' values. Templates are built ONLY from generic types — text/select/multiselect/scale/checklist (optionally with display=pills or allow_other): their AI schema is derived generically from `options`, no Go/Python/React changes needed per new field. The 'widget' type is fully retired for new saves (migration 000067 converted every ACTIVE template): mental_exam became generic select/multiselect fields, risk_level is a fixed system control of the record form (the AI suggests it via the top-level risk_level key of the draft, independent of the template), and diagnoses/treatment_plan live in the patient profile panels. The names below survive only in ARCHIVED template versions: the frontend keeps their renderers and the PDF exporter keeps their layouts so old records keep rendering, but the parser rejects them on save and the AI drops any value the model volunteers for them. Also archived-only: task_checklist, session_evaluation, task_adherence, functionality, formulation_5f, spa_history, functional_analysis, distress_scale.",
+  "types": ["text", "select", "multiselect", "scale", "checklist"],
   "type_modifiers": {
     "display": "\"pills\" (select|multiselect only) — render as toggle pill buttons instead of a dropdown/checkboxes",
     "allow_other": "bool (multiselect only) — lets the professional add a free-text value beyond the fixed options; the AI may also emit values outside the option list"
   },
-  "widgets": {
-    "mental_exam": {
-      "description": "Mental-status exam checklist (porte, orientación, afecto, pensamiento, percepción, ideación suicida)",
-      "value_shape": "object",
-      "ai": "manual-only — compliance rule: the AI never marks exam options, the professional decides"
-    },
-    "risk": {
-      "description": "Risk assessment widget — writes the system risk_level field (NONE|IDEATION|PLAN|ATTEMPT)",
-      "value_shape": "string",
-      "ai_schema": "one of: NONE, IDEATION, PLAN, ATTEMPT",
-      "writes_system_field": "risk_level"
-    },
-    "treatment_plan": {
-      "description": "Structured therapeutic goals and interventions (self-contained panel backed by its own tables)",
-      "value_shape": "object",
-      "ai": "manual-only — the renderer ignores section values"
-    },
-    "diagnoses": {
-      "description": "ICD-10 diagnoses panel (self-contained; AI suggestions travel separately via suggested_icd10)",
-      "value_shape": "array",
-      "ai": "manual-only — the renderer ignores section values"
-    }
+  "system_fields": {
+    "risk_level": "NONE|IDEATION|PLAN|ATTEMPT — required on finalize, rendered as a fixed control in the record form (never template content). The AI suggests it via the draft's top-level risk_level key; the professional decides."
+  },
+  "archived_widgets": {
+    "mental_exam": "converted by migration 000067 into generic fields (porte, orientación, afecto, pensamiento, percepción, ideación suicida, intento previo)",
+    "risk": "replaced by the fixed risk_level system control",
+    "treatment_plan": "panel lives in the patient profile (own tables)",
+    "diagnoses": "panel lives in the patient profile (own tables; AI suggestions travel via suggested_icd10)"
   }
 }

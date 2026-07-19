@@ -31,7 +31,6 @@ import { TaskAdherencePanel } from './TaskAdherencePanel';
 import { SessionEvaluationPanel } from './SessionEvaluationPanel';
 import { FunctionalityPanel } from './FunctionalityPanel';
 import { SPAHistoryPanel } from './SPAHistoryPanel';
-import { RiskSelector } from './RiskSelector';
 import { TreatmentPlanPanel } from './TreatmentPlanPanel';
 import { DiagnosesPanel } from './DiagnosesPanel';
 import { AutoGrowTextarea } from './AutoGrowTextarea';
@@ -41,7 +40,6 @@ import type {
   Formulation5FData, FunctionalAnalysisData,
   TaskAdherenceData, SessionEvalData, FunctionalityData,
 } from './constants';
-import type { RiskLevel } from '@/api/clinicalRecords';
 
 // SectionsState is a superset of RecordSections — the same flexible dict shape.
 export type SectionsState = RecordSections;
@@ -597,13 +595,10 @@ export function WidgetField({
       );
     }
     case 'risk':
-      return (
-        <RiskSelector
-          value={(typeof v === 'string' ? v : '') as RiskLevel | undefined}
-          onChange={cb}
-          disabled={disabled}
-        />
-      );
+      // Retired (migration 000067): risk_level is a fixed system control the
+      // record form always renders — showing the archived widget too would
+      // put two risk selectors on screen fighting over the same field.
+      return null;
     case 'treatment_plan':
       // TreatmentPlanPanel is self-contained (loads/saves its own data).
       if (!patientId) return <p style={{ margin: 0, fontSize: 12, color: 'var(--s400)' }}>Plan de tratamiento (requiere paciente)</p>;

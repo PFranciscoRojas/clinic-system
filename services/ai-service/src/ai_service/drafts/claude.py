@@ -43,18 +43,11 @@ _SECTION_SCHEMAS: dict[str, dict[str, str]] = {
     },
 }
 
-# Widget AI schemas — kept in sync with services/shared/field-widgets.json.
-# These describe the JSON value shape the AI should emit for each widget key.
-# Only `risk` is AI-fillable: mental_exam is manual by compliance rule (the
-# system prompt forbids the AI from marking exam options — the professional
-# decides), and treatment_plan/diagnoses are self-contained panels whose
-# renderers ignore section values (diagnosis suggestions travel separately
-# via suggested_icd10). Everything else (checklists, radio groups, string
-# dicts) is a template-level select/multiselect/scale whose schema derives
-# from the template itself.
-_WIDGET_AI_SCHEMAS: dict[str, str] = {
-    "risk": 'one of "NONE", "IDEATION", "PLAN", "ATTEMPT"',
-}
+# Valid values for the top-level risk_level suggestion. Since migration
+# 000067 risk is no longer template content: the AI always suggests a level
+# via this top-level key (independent of the template) and the professional
+# confirms it in the fixed risk control of the record form.
+_RISK_LEVELS = {"NONE", "IDEATION", "PLAN", "ATTEMPT"}
 
 _TONE_INSTRUCTIONS: dict[str, str] = {
     "formal":  "Usa terminología psicológica precisa y lenguaje formal clínico, en tercera persona.",
@@ -93,8 +86,14 @@ REGLAS ESTRICTAS:
    quitarse la vida la semana pasada, sin plan concreto". Si no hay ninguna mención
    explícita de este tipo, usa null. Nunca marques ni sugieras una opción específica del
    examen mental — solo describe lo dicho; el profesional decide qué marcar manualmente.
+10. Añade también la clave "risk_level": tu SUGERENCIA del nivel de riesgo, basada SOLO en
+   menciones explícitas de la transcripción (nunca una inferencia): "NONE" si no hay
+   ninguna mención de riesgo, "IDEATION" si hay ideación suicida (pasiva o activa sin
+   plan), "PLAN" si se menciona un plan estructurado, "ATTEMPT" si se menciona un intento
+   de suicidio (actual o previo). El profesional confirmará o cambiará este nivel antes
+   de aprobar.
 
-Formato de respuesta — un objeto JSON con las claves de secciones, "suggested_icd10" y "risk_note":
+Formato de respuesta — un objeto JSON con las claves de secciones, "suggested_icd10", "risk_note" y "risk_level":
 {schema}"""
 
 
@@ -131,13 +130,11 @@ def _build_schema_from_template(sections: list[dict[str, Any]]) -> dict[str, str
         elif field_type == "checklist":
             result[key] = f"array of strings | null — {hint}"
         elif field_type == "widget":
-            # Widgets without an AI schema are manual-only — leave them out of
-            # the prompt entirely so the model is never invited to fill them.
-            widget_name = sec.get("widget", "")
-            ai_schema = _WIDGET_AI_SCHEMAS.get(widget_name)
-            if ai_schema is None:
-                continue
-            result[key] = f"{ai_schema} — {hint}"
+            # Widgets are retired (migration 000067) and only survive in
+            # archived template versions; all of them are manual-only — leave
+            # them out of the prompt so the model is never invited to fill
+            # them. Risk travels via the top-level risk_level key instead.
+            continue
         else:
             result[key] = f"string | null — {hint}"
     return result
@@ -264,7 +261,8 @@ async def generate_clinical_draft(
 
     if not anonymized_transcription.strip():
         return json.dumps(
-            {"record_type": rt, "sections": {}, "suggested_icd10": None, "risk_note": None}, ensure_ascii=False
+            {"record_type": rt, "sections": {}, "suggested_icd10": None, "risk_note": None, "risk_level": None},
+            ensure_ascii=False,
         )
 
     tone_instr  = _TONE_INSTRUCTIONS.get(tone, _TONE_INSTRUCTIONS["formal"])
@@ -345,6 +343,11 @@ async def generate_clinical_draft(
     raw_risk_note = parsed.get("risk_note")
     risk_note = raw_risk_note.strip() if isinstance(raw_risk_note, str) and raw_risk_note.strip() else None
 
+    # Risk level suggestion — a system field of the record, not template
+    # content. Anything outside the enum is dropped fail-closed.
+    raw_risk_level = parsed.get("risk_level")
+    risk_level = raw_risk_level if raw_risk_level in _RISK_LEVELS else None
+
     logger.info(
         "clinical draft generated",
         extra={
@@ -352,9 +355,16 @@ async def generate_clinical_draft(
             "sections": len(sections),
             "icd10": bool(suggested),
             "risk_note": bool(risk_note),
+            "risk_level": risk_level or "-",
         },
     )
     return json.dumps(
-        {"record_type": rt, "sections": sections, "suggested_icd10": suggested, "risk_note": risk_note},
+        {
+            "record_type": rt,
+            "sections": sections,
+            "suggested_icd10": suggested,
+            "risk_note": risk_note,
+            "risk_level": risk_level,
+        },
         ensure_ascii=False,
     )

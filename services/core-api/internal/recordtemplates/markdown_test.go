@@ -114,18 +114,14 @@ func TestParseMarkdown_SelectPills(t *testing.T) {
 	}
 }
 
-func TestParseMarkdown_Widget(t *testing.T) {
+func TestParseMarkdown_WidgetRejected(t *testing.T) {
+	// All widgets are retired from new saves (migration 000067 converted the
+	// active templates); archived schemas keep rendering but the parser
+	// refuses to persist a new template that references one.
 	src := "## Examen mental {widget:mental_exam}\n"
-	sections, _, err := recordtemplates.ParseMarkdown(src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := sections[0]
-	if s.Type != recordtemplates.FieldWidget {
-		t.Errorf("type = %q, want widget", s.Type)
-	}
-	if s.Widget != "mental_exam" {
-		t.Errorf("widget = %q, want mental_exam", s.Widget)
+	_, _, err := recordtemplates.ParseMarkdown(src)
+	if err == nil {
+		t.Fatal("expected error for retired widget, got nil")
 	}
 }
 
@@ -170,6 +166,51 @@ func TestParseMarkdown_UnknownWidget(t *testing.T) {
 	_, _, err := recordtemplates.ParseMarkdown(src)
 	if err == nil {
 		t.Fatal("expected error for unknown widget, got nil")
+	}
+}
+
+func TestParseMarkdown_Migration67MentalExamRoundTrip(t *testing.T) {
+	// Migration 000067 expands widget:mental_exam into these generic fields
+	// with precomputed keys. The markdown it regenerates must parse back to
+	// exactly those keys, or a later edit of the migrated template would
+	// silently re-key the sections and orphan existing draft content.
+	src := "## Examen mental: porte y actitud {multiselect:Adecuado|Colaborador|Ansioso|Hostil|Inhibido} {pills}\n\n" +
+		"## Examen mental: orientación {select:Orientado|Desorientado} {pills}\n\n" +
+		"## Examen mental: áreas de desorientación {multiselect:Tiempo|Espacio|Persona} {pills}\nSolo si está desorientado.\n\n" +
+		"## Examen mental: afecto {multiselect:Eutímico (Estable)|Depresivo|Ansioso|Irritable|Aplanado} {pills}\n\n" +
+		"## Examen mental: pensamiento {multiselect:Lógico / Coherente|Ideas de minusvalía|Ideas obsesivas|Ideas delirantes} {pills}\n\n" +
+		"## Examen mental: percepción {select:Sin alteraciones|Alucinaciones} {pills}\n\n" +
+		"## Examen mental: especificación de la percepción\nSi hay alucinaciones, especifica cuáles.\n\n" +
+		"## Examen mental: ideación suicida {select:Ausente|Pasiva (deseos de morir)|Activa con plan estructurado} {pills}\n\n" +
+		"## Examen mental: intento previo de suicidio {select:Sí|No} {pills}\n"
+	sections, _, err := recordtemplates.ParseMarkdown(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantKeys := []string{
+		"examen_mental_porte_y_actitud",
+		"examen_mental_orientaci_n",
+		"examen_mental_reas_de_desorientaci_n",
+		"examen_mental_afecto",
+		"examen_mental_pensamiento",
+		"examen_mental_percepci_n",
+		"examen_mental_especificaci_n_de_la_percepci_n",
+		"examen_mental_ideaci_n_suicida",
+		"examen_mental_intento_previo_de_suicidio",
+	}
+	if len(sections) != len(wantKeys) {
+		t.Fatalf("got %d sections, want %d", len(sections), len(wantKeys))
+	}
+	for i, want := range wantKeys {
+		if sections[i].Key != want {
+			t.Errorf("section %d key = %q, want %q", i, sections[i].Key, want)
+		}
+	}
+	if sections[0].Type != recordtemplates.FieldMultiselect || sections[0].Display != "pills" {
+		t.Errorf("porte: type/display = %q/%q, want multiselect/pills", sections[0].Type, sections[0].Display)
+	}
+	if sections[6].Type != recordtemplates.FieldText || sections[6].Hint == "" {
+		t.Errorf("especificación: type/hint = %q/%q, want text with hint", sections[6].Type, sections[6].Hint)
 	}
 }
 

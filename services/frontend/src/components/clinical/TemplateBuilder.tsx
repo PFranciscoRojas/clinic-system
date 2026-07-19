@@ -13,12 +13,11 @@
 import { useState } from 'react';
 import {
   ArrowUp, ArrowDown, Trash2, Plus, Type, List, ListChecks,
-  SlidersHorizontal, CheckSquare, Brain, ShieldAlert, Target,
-  Stethoscope, AlertTriangle, type LucideIcon,
+  SlidersHorizontal, CheckSquare, AlertTriangle, type LucideIcon,
 } from 'lucide-react';
 import type { FieldType } from '../../api/recordTemplates';
 import {
-  BuilderSection, FIELD_TYPE_META, WIDGET_META, KNOWN_WIDGETS,
+  BuilderSection, FIELD_TYPE_META, RETIRED_WIDGET_LABELS,
   newBuilderSection, sectionError, duplicateLabelIds,
 } from '../../lib/templateMarkdown';
 
@@ -28,10 +27,6 @@ const TYPE_ICONS: Record<string, LucideIcon> = {
   multiselect: ListChecks,
   scale: SlidersHorizontal,
   checklist: CheckSquare,
-  'widget:mental_exam': Brain,
-  'widget:risk': ShieldAlert,
-  'widget:treatment_plan': Target,
-  'widget:diagnoses': Stethoscope,
 };
 
 const B = {
@@ -143,12 +138,10 @@ export default function TemplateBuilder({ sections, onChange }: Props) {
     onChange(sections.filter((x) => x.id !== s.id));
   };
 
-  const add = (type: FieldType, widget?: string) => {
-    onChange([...sections, newBuilderSection(type, widget)]);
+  const add = (type: FieldType) => {
+    onChange([...sections, newBuilderSection(type)]);
     setPicking(false);
   };
-
-  const usedWidgets = new Set(sections.filter((s) => s.type === 'widget').map((s) => s.widget));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -166,7 +159,7 @@ export default function TemplateBuilder({ sections, onChange }: Props) {
       ))}
 
       {picking ? (
-        <FieldPicker usedWidgets={usedWidgets} onPick={add} onCancel={sections.length > 0 ? () => setPicking(false) : undefined} />
+        <FieldPicker onPick={add} onCancel={sections.length > 0 ? () => setPicking(false) : undefined} />
       ) : (
         <button type="button" onClick={() => setPicking(true)} style={{ ...B.addBtn, justifyContent: 'center', color: 'var(--teal-dark)', fontWeight: 600 }}>
           <Plus size={15} /> Añadir campo
@@ -179,12 +172,10 @@ export default function TemplateBuilder({ sections, onChange }: Props) {
 // ── Field picker ─────────────────────────────────────────────────────────────
 
 function FieldPicker({
-  usedWidgets,
   onPick,
   onCancel,
 }: {
-  usedWidgets: Set<string | undefined>;
-  onPick: (type: FieldType, widget?: string) => void;
+  onPick: (type: FieldType) => void;
   onCancel?: () => void;
 }) {
   return (
@@ -209,29 +200,6 @@ function FieldPicker({
               <span style={{ minWidth: 0 }}>
                 <span style={{ display: 'block', fontWeight: 600 }}>{FIELD_TYPE_META[t].label}</span>
                 <span style={{ display: 'block', fontSize: 11, color: 'var(--s400)' }}>{FIELD_TYPE_META[t].description}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      <p style={{ margin: '12px 0 8px', fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-        Bloques clínicos integrados
-      </p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 8 }}>
-        {KNOWN_WIDGETS.map((w) => {
-          const Icon = TYPE_ICONS[`widget:${w}`] ?? Type;
-          const used = usedWidgets.has(w);
-          return (
-            <button key={w} type="button" disabled={used} onClick={() => onPick('widget', w)}
-              style={{ ...B.addBtn, opacity: used ? 0.45 : 1, cursor: used ? 'not-allowed' : 'pointer' }}
-              onMouseEnter={(e) => { if (!used) e.currentTarget.style.borderColor = 'var(--teal)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--s200)'; }}
-              title={used ? 'Este bloque ya está en la plantilla' : undefined}
-            >
-              <Icon size={16} color="var(--teal)" />
-              <span style={{ minWidth: 0 }}>
-                <span style={{ display: 'block', fontWeight: 600 }}>{WIDGET_META[w].label}{used ? ' · ya agregado' : ''}</span>
-                <span style={{ display: 'block', fontSize: 11, color: 'var(--s400)' }}>{WIDGET_META[w].description}</span>
               </span>
             </button>
           );
@@ -263,9 +231,9 @@ function FieldCard({
   const error = sectionError(s) ?? (duplicate ? 'Hay otro campo con este mismo nombre: cámbiale el nombre a uno de los dos.' : null);
   const isWidget = s.type === 'widget';
   const typeLabel = isWidget
-    ? (WIDGET_META[s.widget ?? '']?.label ?? `Bloque retirado (${s.widget})`)
+    ? `Bloque retirado (${RETIRED_WIDGET_LABELS[s.widget ?? ''] ?? s.widget})`
     : FIELD_TYPE_META[s.type as keyof typeof FIELD_TYPE_META]?.label ?? s.type;
-  const Icon = TYPE_ICONS[isWidget ? `widget:${s.widget}` : s.type] ?? Type;
+  const Icon = isWidget ? AlertTriangle : TYPE_ICONS[s.type] ?? Type;
 
   return (
     <div style={{ ...B.card, ...(error ? B.cardError : {}) }}>
@@ -296,12 +264,8 @@ function FieldCard({
         </div>
       </div>
 
-      {/* Widget description — widgets have no hint/options/toggles */}
-      {isWidget ? (
-        <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--s400)' }}>
-          {WIDGET_META[s.widget ?? '']?.description ?? 'Este bloque ya no está disponible para plantillas nuevas.'}
-        </p>
-      ) : (
+      {/* Retired widget blocks have no hint/options/toggles — just the error below */}
+      {isWidget ? null : (
         <>
           <input
             value={s.hint}

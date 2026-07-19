@@ -13,9 +13,6 @@
 
 import { SectionDef, FieldType } from '../api/recordTemplates';
 
-/** Widgets accepted by the parser on new saves (knownWidgets in markdown.go). */
-export const KNOWN_WIDGETS = ['mental_exam', 'risk', 'treatment_plan', 'diagnoses'] as const;
-
 export interface FieldTypeMeta {
   label: string;
   description: string;
@@ -30,24 +27,14 @@ export const FIELD_TYPE_META: Record<Exclude<FieldType, 'widget'>, FieldTypeMeta
   checklist: { label: 'Lista de ítems', description: 'Ítems de texto libre, agregados uno a uno' },
 };
 
-/** User-facing names for the clinical widget blocks. */
-export const WIDGET_META: Record<string, FieldTypeMeta> = {
-  mental_exam: {
-    label: 'Examen mental',
-    description: 'Checklist clínico por dominios. Lo llena el profesional; la IA nunca lo marca.',
-  },
-  risk: {
-    label: 'Nivel de riesgo',
-    description: 'Campo de sistema (ninguno / ideación / plan / intento). La IA puede sugerirlo.',
-  },
-  treatment_plan: {
-    label: 'Plan de tratamiento',
-    description: 'Panel integrado con los objetivos terapéuticos del paciente.',
-  },
-  diagnoses: {
-    label: 'Diagnósticos CIE-10',
-    description: 'Panel integrado con los diagnósticos del paciente.',
-  },
+/** Display names for retired widget blocks that may still appear when an
+ * old template version is loaded into the builder — save stays blocked until
+ * the professional removes them (sectionError below). */
+export const RETIRED_WIDGET_LABELS: Record<string, string> = {
+  mental_exam: 'Examen mental',
+  risk: 'Nivel de riesgo',
+  treatment_plan: 'Plan de tratamiento',
+  diagnoses: 'Diagnósticos CIE-10',
 };
 
 /**
@@ -73,11 +60,11 @@ export interface BuilderSection {
 let seq = 0;
 export const nextSectionId = () => `bs${++seq}`;
 
-/** A fresh builder field of the given generic type, or a widget block. */
-export function newBuilderSection(type: FieldType, widget?: string): BuilderSection {
+/** A fresh builder field of the given generic type. */
+export function newBuilderSection(type: FieldType): BuilderSection {
   return {
     id: nextSectionId(),
-    label: type === 'widget' ? (WIDGET_META[widget ?? '']?.label ?? '') : '',
+    label: '',
     hint: '',
     required: false,
     collapsed: false,
@@ -87,7 +74,6 @@ export function newBuilderSection(type: FieldType, widget?: string): BuilderSect
     allow_other: false,
     scale_min: 0,
     scale_max: 10,
-    widget,
   };
 }
 
@@ -183,13 +169,10 @@ export function sectionsToMarkdown(sections: BuilderSection[]): string {
 
 /** Per-section error message, or null when the section is valid. */
 export function sectionError(s: BuilderSection): string | null {
-  if (!sanitizeLabel(s.label)) return 'Escribe un nombre para el campo.';
   if (s.type === 'widget') {
-    if (!s.widget || !(KNOWN_WIDGETS as readonly string[]).includes(s.widget)) {
-      return 'Este bloque fue retirado del sistema: conviértelo en un campo de selección o elimínalo para poder guardar.';
-    }
-    return null;
+    return 'Este bloque fue retirado del sistema: elimínalo para poder guardar. El nivel de riesgo ya es un campo fijo del formulario, y los diagnósticos y el plan de tratamiento viven en el perfil del paciente.';
   }
+  if (!sanitizeLabel(s.label)) return 'Escribe un nombre para el campo.';
   if (s.type === 'select' || s.type === 'multiselect') {
     const opts = s.options.map(sanitizeOption).filter(Boolean);
     if (opts.length < 2) return 'Agrega al menos 2 opciones.';

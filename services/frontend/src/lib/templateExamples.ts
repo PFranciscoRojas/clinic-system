@@ -2,7 +2,9 @@
  * templateExamples — starter templates for the record-template gallery.
  *
  * Adapted from the reference clinical formats in docs/formatos/ (FORMATO 1-4)
- * to the generic template field types plus the four supported widgets.
+ * to the generic template field types (widgets are fully retired: risk is a
+ * fixed system control of the record form, and diagnoses/treatment plan live
+ * in the patient profile panels).
  * Identification data (name, ID, contacts) is intentionally absent: the
  * patient record already holds it. discharge_reason is also absent: the
  * discharge form captures it in its own system card outside the template.
@@ -45,11 +47,25 @@ Marca los antecedentes presentes y detalla en la respuesta libre si aplica.
 
 ## Antecedentes familiares en salud mental {multiselect:Ansiedad|Depresión|Suicidio|Psicosis} {pills} {allow_other}
 
-## Examen mental {widget:mental_exam}
+## Examen mental: porte y actitud {multiselect:Adecuado|Colaborador|Ansioso|Hostil|Inhibido} {pills}
 
-## Riesgo {widget:risk}
+## Examen mental: orientación {select:Orientado|Desorientado} {pills}
 
-## Impresión diagnóstica {widget:diagnoses}
+## Examen mental: áreas de desorientación {multiselect:Tiempo|Espacio|Persona} {pills}
+Solo si está desorientado.
+
+## Examen mental: afecto {multiselect:Eutímico (Estable)|Depresivo|Ansioso|Irritable|Aplanado} {pills}
+
+## Examen mental: pensamiento {multiselect:Lógico / Coherente|Ideas de minusvalía|Ideas obsesivas|Ideas delirantes} {pills}
+
+## Examen mental: percepción {select:Sin alteraciones|Alucinaciones} {pills}
+
+## Examen mental: especificación de la percepción {text}
+Si hay alucinaciones, especifica cuáles.
+
+## Examen mental: ideación suicida {select:Ausente|Pasiva (deseos de morir)|Activa con plan estructurado} {pills}
+
+## Examen mental: intento previo de suicidio {select:Sí|No} {pills}
 
 ## Hipótesis clínica provisional {text}
 Formulación inicial del caso: predisposición, adquisición, desencadenantes, mantenimiento y factores protectores.
@@ -73,11 +89,8 @@ Señales concretas de que el proceso avanza.
 
 ## Enfoque y técnicas a utilizar {multiselect:Área cognitiva|Regulación emocional|Aceptación y mindfulness|Activación conductual|Solución de problemas|Interpersonal y autocuidado} {pills} {allow_other}
 
-## Plan de tratamiento {widget:treatment_plan}
-
 ## Tareas para casa {checklist}
 
-## Riesgo {widget:risk}
 `,
   },
   {
@@ -101,7 +114,6 @@ Técnicas aplicadas, proceso trabajado y respuesta del consultante.
 
 ## Nuevos compromisos extra-consulta {checklist}
 
-## Riesgo {widget:risk}
 `,
   },
   {
@@ -122,7 +134,6 @@ Sintomatología presente, funcionamiento en áreas de ajuste y recursos consolid
 ## Recomendaciones y plan preventivo {checklist}
 Pautas de autocuidado y señales de alerta para retomar el proceso.
 
-## Riesgo {widget:risk}
 `,
   },
 ];

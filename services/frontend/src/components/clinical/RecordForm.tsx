@@ -10,6 +10,7 @@ import { RecordSectionsForm, emptyDraft, draftToPayload, recordToDraft, validate
 import { RECORD_TYPE_LABELS } from './constants';
 import TemplatedSectionsForm, { type SectionsState } from './TemplatedSectionsForm';
 import DischargeReasonCard from './DischargeReasonCard';
+import { RiskSelector } from './RiskSelector';
 
 // ─── Clinical record form (template v2) ──────────────────────────────────────
 
@@ -121,6 +122,10 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   // Custom template selection — overridden by lockedTemplateId from parent
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(lockedTemplateId ?? '');
   const [customSections, setCustomSections] = useState<SectionsState>({});
+  // Risk is a fixed system control of the templated path (never template
+  // content since migration 000067). No default: like the integrated format,
+  // the professional must consciously pick a level before saving.
+  const [customRiskLevel, setCustomRiskLevel] = useState<RiskLevel | ''>('');
   // Required by the backend for every DISCHARGE record regardless of format —
   // custom templates don't carry the integrated form's reason radios.
   const [customDischargeReason, setCustomDischargeReason] = useState<DischargeReason | ''>('');
@@ -265,6 +270,11 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
           const savedMatchesLock = lockedTemplateId === undefined || (saved.selectedTemplateId ?? '') === lockedTemplateId;
           if (hasTemplateContent && savedMatchesLock) {
             setCustomSections(savedCustomSections);
+            // Legacy drafts (pre-000067) carried risk inside the sections as
+            // the widget value — merge it into the fixed control.
+            const savedRisk = (typeof saved.customRiskLevel === 'string' && saved.customRiskLevel)
+              || (typeof savedCustomSections.risk === 'string' ? savedCustomSections.risk : '');
+            if (savedRisk) setCustomRiskLevel(savedRisk as RiskLevel);
             setRestored(true);
             setLastSavedAt(Date.now());
             gotContentRef.current = true;
@@ -294,6 +304,8 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
         if (rec.template_id) {
           setSelectedTemplateId(rec.template_id);
           setCustomSections((rec.sections ?? {}) as SectionsState);
+          const recRisk = rec.risk_level || ((rec.sections as SectionsState | undefined)?.risk as string | undefined);
+          if (recRisk) setCustomRiskLevel(recRisk as RiskLevel);
         } else {
           const restoredType = toUIRecordType(rec.record_type, rec.sections);
           if (allowedTypes.includes(restoredType)) {
@@ -323,9 +335,9 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
   // tuple comparison catches it, and the very first render also marks dirty
   // (restored content may not be on the server yet, so the next tick syncs).
   // The autosave tick itself is a no-op while the draft is still empty.
-  const [prevContent, setPrevContent] = useState<{ u?: UIRecordType; d?: ClinicalDraft; c?: SectionsState; t?: string }>({});
-  if (prevContent.u !== uiType || prevContent.d !== draft || prevContent.c !== customSections || prevContent.t !== selectedTemplateId) {
-    setPrevContent({ u: uiType, d: draft, c: customSections, t: selectedTemplateId });
+  const [prevContent, setPrevContent] = useState<{ u?: UIRecordType; d?: ClinicalDraft; c?: SectionsState; t?: string; r?: RiskLevel | '' }>({});
+  if (prevContent.u !== uiType || prevContent.d !== draft || prevContent.c !== customSections || prevContent.t !== selectedTemplateId || prevContent.r !== customRiskLevel) {
+    setPrevContent({ u: uiType, d: draft, c: customSections, t: selectedTemplateId, r: customRiskLevel });
     setDirty(true);
   }
 
@@ -344,7 +356,7 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
       try {
         // customSections/selectedTemplateId must travel with uiType/draft —
         // a custom-template record's real content lives there, not in draft.
-        localStorage.setItem(storageKey, JSON.stringify({ uiType, draft, customSections, selectedTemplateId, customDischargeReason }));
+        localStorage.setItem(storageKey, JSON.stringify({ uiType, draft, customSections, selectedTemplateId, customDischargeReason, customRiskLevel }));
         if (draftHasContent(draft) || Object.keys(customSections).length > 0) setLastSavedAt(Date.now());
       } catch { /* storage full */ }
     };
@@ -358,15 +370,15 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
       window.removeEventListener('pagehide', onHide);
       document.removeEventListener('visibilitychange', onHide);
     };
-  }, [storageKey, uiType, draft, customSections, selectedTemplateId, customDischargeReason]);
+  }, [storageKey, uiType, draft, customSections, selectedTemplateId, customDischargeReason, customRiskLevel]);
 
   // Fase 2 — server-side autosave. A ref mirrors the latest content-bearing
   // state so the 25s interval (created once, stable) never reads stale
   // closures while still avoiding being torn down and recreated on every
   // keystroke. autosaveTickRef.current is read fresh on every tick.
-  const autosaveTickRef = useRef({ uiType, draft, customSections, selectedTemplate, serverDraftId, dirty });
+  const autosaveTickRef = useRef({ uiType, draft, customSections, customRiskLevel, selectedTemplate, serverDraftId, dirty });
   useEffect(() => {
-    autosaveTickRef.current = { uiType, draft, customSections, selectedTemplate, serverDraftId, dirty };
+    autosaveTickRef.current = { uiType, draft, customSections, customRiskLevel, selectedTemplate, serverDraftId, dirty };
   });
 
   useEffect(() => {
@@ -374,7 +386,7 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
 
     const tick = async () => {
       if (stopped) return;
-      const { uiType: ut, draft: d, customSections: cs, selectedTemplate: st, serverDraftId: sid, dirty: dt } = autosaveTickRef.current;
+      const { uiType: ut, draft: d, customSections: cs, customRiskLevel: crl, selectedTemplate: st, serverDraftId: sid, dirty: dt } = autosaveTickRef.current;
       if (!dt) return;
       const hasContent = st ? Object.keys(cs).length > 0 : draftHasContent(d);
       if (!hasContent) return;
@@ -386,7 +398,7 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
             session_date: sessionDate,
             template_id: st.id,
             sections: cs,
-            ...(cs.risk ? { risk_level: cs.risk as RiskLevel } : {}),
+            ...(crl ? { risk_level: crl } : {}),
           }
         : (() => {
             const payload = draftToPayload(ut, d);
@@ -485,13 +497,19 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
           setSaving(false);
           return;
         }
+        if (!customRiskLevel) {
+          setErr('Selecciona el nivel de riesgo — es obligatorio en cada nota.');
+          document.getElementById('templated-risk-selector')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setSaving(false);
+          return;
+        }
         createBody = {
           ...(appointmentId ? { appointment_id: appointmentId } : {}),
           record_type: apiType,
           session_date: sessionDate,
           template_id: selectedTemplate.id,
           sections: customSections,
-          risk_level: ((customSections.risk as string) || 'NONE') as RiskLevel,
+          risk_level: customRiskLevel,
           ...(apiType === 'DISCHARGE' && customDischargeReason ? { discharge_reason: customDischargeReason } : {}),
         };
       } else {
@@ -727,6 +745,14 @@ export function RecordForm({ patientId, appointmentId, defaultType, sessionDate:
               value={customSections}
               onChange={setCustomSections}
             />
+            {/* Risk is a fixed system control — always present, regardless of
+                what the template defines (migration 000067). */}
+            <div id="templated-risk-selector" style={{ marginTop: 16 }}>
+              <RiskSelector
+                value={customRiskLevel || undefined}
+                onChange={(v) => setCustomRiskLevel(v)}
+              />
+            </div>
             {apiType === 'DISCHARGE' && (
               <div style={{ marginTop: 16 }}>
                 <DischargeReasonCard value={customDischargeReason} onChange={setCustomDischargeReason} />
