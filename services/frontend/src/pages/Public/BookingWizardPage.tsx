@@ -56,6 +56,22 @@ export function BookingWizardPage() {
   }));
 
   useEffect(() => { publicBookingApi.orgInfo(slug).then(setInfo).catch(() => {}); }, [slug]);
+  // Only route of the app that search engines may index (see Caddyfile), so it
+  // carries the tenant's own title/description instead of the Chapni default —
+  // a patient searching the professional's name should recognise the result.
+  useEffect(() => {
+    if (!info?.public_name) return;
+    const previous = document.title;
+    document.title = `Agenda tu cita con ${info.public_name}`;
+    let meta = document.head.querySelector<HTMLMetaElement>('meta[name="description"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'description';
+      document.head.appendChild(meta);
+    }
+    meta.content = `Reserva tu sesión con ${info.public_name}: elige modalidad, día y hora disponibles, y confirma en línea.`;
+    return () => { document.title = previous; };
+  }, [info?.public_name]);
   useEffect(() => {
     publicBookingApi.professionals(slug)
       .then(r => setProfessionals(r.professionals ?? []))

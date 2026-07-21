@@ -1,0 +1,6 @@
+# The app is not a marketing site: every route answers with X-Robots-Tag:
+# noindex except the public booking pages allowlisted in the Caddyfile.
+# Crawling must stay allowed for that header to be seen at all — blocking it
+# here would leave already-indexed URLs stuck in the index with no way out.
+User-agent: *
+Disallow: /api/
