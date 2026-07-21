@@ -24,6 +24,13 @@
     encode gzip zstd
     import security_headers
 
+    # Search engines: the app is private, only the booking pages listed here may
+    # be indexed. Everything else (/login, /dashboard, /patients…) is the same
+    # SPA shell, so leaving it crawlable pollutes the brand's results with
+    # duplicates. Add a slug to the matcher to publish another professional.
+    @private not path /book/marcela-chapues /book/marcela-chapues/
+    header @private X-Robots-Tag "noindex, nofollow"
+
     # API routes → core-api (never cached)
     handle /api/* {
         header Cache-Control "no-store"
