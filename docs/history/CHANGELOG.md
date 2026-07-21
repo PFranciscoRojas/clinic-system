@@ -4,6 +4,13 @@
 
 ---
 
+## 2026-07-21
+
+- enhancement(clinical): **retiro total de widgets bespoke** (PR #208, migración `000067_retire_template_widgets`) — `risk` pasa a ser un control fijo del sistema (sugerido por IA, top-level, ya no `{widget:risk}` de plantilla); `diagnoses`/`treatment_plan` viven en los paneles de perfil del paciente. Toca core-api, ai-service y frontend (builder visual + `RecordForm`).
+- fix(clinical): **layout del builder visual de plantillas** (PR #209) — la sección "Formatos de registro" en Settings estaba topada a los mismos 780px de los formularios simples, así que builder+preview no cabían lado a lado y se apilaban; ahora usa 1400px. El botón "ver" de cada plantilla abría la vista previa como acordeón debajo de la fila; ahora abre al lado (info compactada a 280px, preview toma el resto, con scroll). Reportado por el usuario tras probar el builder visual de PR #206 en producción.
+
+---
+
 ## 2026-07-19
 
 - feat(marketing): **guía "Secreto profesional Ley 1090" publicada en chapni.com/recursos** (`c1c4dbe` en `../chapni`, deploy wrangler + smoke 200) — 5ª guía del hub, cadencia quincenal al día; estreno en el slot educativo de LinkedIn del lunes 07-27. Pendiente en BACKLOG: verificación humana de la numeración de artículos citados.
@@ -284,43 +291,12 @@
 
 ---
 
-## 2026-06-20
+## 2026-06-16 — 2026-06-20 (resumen)
 
-- Formatos clínicos F1–F4 reescritos para coincidir exactamente con los documentos físicos de Marcela — layouts lineales sin columnas, orden exacto de secciones, sub-campos contextuales (PRs #101–#104).
-- Fix crítico: white-screen crash por arrays `undefined` en borradores stale de localStorage; fix comprehensivo en FunctionalAnalysisPanel, MentalExamChecklist, ClinicalFormulation5F y RecordSectionsForm (PRs #105–#106). Todo desplegado al VPS.
-
----
-
-## 2026-06-19
-
-- Lote A (formulario paciente): scroll-to-error en validación, select tipo documento, parentesco en contacto emergencia, labels "Primer/Segundo apellido" — `NewPatientPage.tsx` y `EditPatientModal.tsx` (#92–#93).
-- Lote B (página cita): reorganización en 4 bloques + banner de advertencia encima de los botones de acción — `AppointmentPage.tsx`.
-- Lote C (calendario): cancel + reagendar inline desde popup del calendario — `AgendaCalendar.tsx`.
-- fecha nacimiento + teléfono obligatorios en formulario nuevo paciente (#94).
-- SlotPicker: endpoint privado `GET /api/v1/me/availability` (JWT, usa orgID+staffID del token); componente visual de franjas disponibles — días scrolleables + chips de hora; integrado en AppointmentPage y AgendaCalendar (#95).
-- fix(reagendar): citas CANCELLED ocultas del timeline del calendario; después de reagendar desde la página de cita navega al Dashboard en vez de a la nueva cita (#96).
-- Reestructuración del contenedor de contexto: STATUS.md canónico, CHANGELOG.md, skill `actualizar-contexto` mejorada.
-
----
-
-## 2026-06-18
-
-- BC-6 Facturación completo (#80–#90): tarjeta/PSE/Efecty/Nequi, período semana/mes/3meses/año, cards módulo, filtro período global, balance-por-paciente, gráfico ingresos correcto. Migraciones `000024`/`000025`/`000026`. #91 hotfix RLS en consents/ai_drafts/patient_assessments.
-- Rebuild `ai-service` imagen en VPS (`Dockerfile.patch` #79).
-
----
-
-## 2026-06-17
-
-- #69–#73: BC-6 multi-tenant habilitado; postgres/redis/core-api/ai-service en VPS producción.
-- #65–#68: Integración MercadoPago — endpoints + webhook + PSE/Efecty/Nequi/tarjeta.
-- #60–#64: BC-6 backend — tablas `invoices`/`payments`/`billing_rates`, permisos `billing:*`.
-
----
-
-## 2026-06-16
-
-- #48–#59: BC-6 frontend skeleton + Fases MT1–MT5 (multi-tenant): RLS policies en todas las tablas del sistema.
+- Formatos clínicos F1–F4 alineados a los documentos físicos de Marcela + fix white-screen por arrays `undefined` en borradores stale (PRs #101–#106).
+- Formulario paciente y página de cita: validaciones, SlotPicker de disponibilidad, cancelar/reagendar inline desde el calendario (#92–#96).
+- BC-6 Facturación completo: tarjeta/PSE/Efecty/Nequi, filtros de período, balance por paciente (#80–#91, migraciones 000024–000026).
+- BC-6 multi-tenant habilitado + integración MercadoPago (webhook, PSE/Efecty/Nequi/tarjeta) + RLS en todas las tablas del sistema (#48–#73).
 
 ---
 
