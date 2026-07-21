@@ -494,95 +494,109 @@ function TemplateCard({ tpl }: { tpl: RecordTemplate }) {
         transition: 'border-color .2s',
       }}
     >
-      {/* Main row */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px' }}>
-        {/* Info */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 6px', marginBottom: 4 }}>
-            <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)', lineHeight: 1.3 }}>
-              {tpl.name}
-            </span>
-            <span style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              fontSize: 11,
-              background: 'var(--teal-l)',
-              color: 'var(--teal-dark)',
-              border: '1px solid var(--teal-100)',
-              borderRadius: 99,
-              padding: '1px 8px',
-              fontWeight: 600,
-            }}>
-              {RECORD_TYPE_LABEL[tpl.record_type] ?? tpl.record_type}
-            </span>
-            {tpl.is_default && (
-              <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                fontSize: 11,
-                background: '#d1fae5',
-                color: '#065f46',
-                border: '1px solid #6ee7b7',
-                borderRadius: 99,
-                padding: '1px 8px',
-                fontWeight: 600,
-              }}>
-                Predeterminado
-              </span>
-            )}
+      {/* Main row (+ side-by-side preview when viewing, so it appears beside
+          the info column instead of pushing the page down) */}
+      <div style={{ display: 'flex', alignItems: 'stretch' }}>
+        <div style={{ flex: mode === 'view' ? '0 0 280px' : '1 1 auto', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px' }}>
+            {/* Info */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 6px', marginBottom: 4 }}>
+                <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--s800)', lineHeight: 1.3 }}>
+                  {tpl.name}
+                </span>
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  fontSize: 11,
+                  background: 'var(--teal-l)',
+                  color: 'var(--teal-dark)',
+                  border: '1px solid var(--teal-100)',
+                  borderRadius: 99,
+                  padding: '1px 8px',
+                  fontWeight: 600,
+                }}>
+                  {RECORD_TYPE_LABEL[tpl.record_type] ?? tpl.record_type}
+                </span>
+                {tpl.is_default && (
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    fontSize: 11,
+                    background: '#d1fae5',
+                    color: '#065f46',
+                    border: '1px solid #6ee7b7',
+                    borderRadius: 99,
+                    padding: '1px 8px',
+                    fontWeight: 600,
+                  }}>
+                    Predeterminado
+                  </span>
+                )}
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--s400)' }}>
+                {tpl.schema.length} {tpl.schema.length === 1 ? 'sección' : 'secciones'} · v{tpl.version}
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+              <IconButton
+                onClick={() => toggle('view')}
+                label={mode === 'view' ? 'Ocultar vista previa' : 'Ver cómo se ve'}
+                color="var(--s400)"
+                hoverBg="var(--s100)"
+                hoverColor="var(--s700)"
+              >
+                {mode === 'view' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </IconButton>
+              <IconButton
+                onClick={() => toggle('edit')}
+                label={mode === 'edit' ? 'Cerrar editor' : 'Editar plantilla'}
+                color={mode === 'edit' ? 'var(--teal)' : 'var(--s400)'}
+                hoverBg="var(--teal-l)"
+                hoverColor="var(--teal-dark)"
+              >
+                <Pencil size={15} />
+              </IconButton>
+              <IconButton
+                onClick={() => {
+                  if (confirm(`¿Archivar "${tpl.name}"? Los registros existentes no se verán afectados.`))
+                    archiveMutation.mutate();
+                }}
+                disabled={archiveMutation.isPending}
+                label="Archivar plantilla"
+                color="var(--s300)"
+                hoverBg="#fff5f5"
+                hoverColor="var(--red)"
+              >
+                <Archive size={15} />
+              </IconButton>
+            </div>
           </div>
-          <p style={{ fontSize: 12, color: 'var(--s400)' }}>
-            {tpl.schema.length} {tpl.schema.length === 1 ? 'sección' : 'secciones'} · v{tpl.version}
-          </p>
         </div>
 
-        {/* Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-          <IconButton
-            onClick={() => toggle('view')}
-            label={mode === 'view' ? 'Ocultar vista previa' : 'Ver cómo se ve'}
-            color="var(--s400)"
-            hoverBg="var(--s100)"
-            hoverColor="var(--s700)"
-          >
-            {mode === 'view' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </IconButton>
-          <IconButton
-            onClick={() => toggle('edit')}
-            label={mode === 'edit' ? 'Cerrar editor' : 'Editar plantilla'}
-            color={mode === 'edit' ? 'var(--teal)' : 'var(--s400)'}
-            hoverBg="var(--teal-l)"
-            hoverColor="var(--teal-dark)"
-          >
-            <Pencil size={15} />
-          </IconButton>
-          <IconButton
-            onClick={() => {
-              if (confirm(`¿Archivar "${tpl.name}"? Los registros existentes no se verán afectados.`))
-                archiveMutation.mutate();
-            }}
-            disabled={archiveMutation.isPending}
-            label="Archivar plantilla"
-            color="var(--s300)"
-            hoverBg="#fff5f5"
-            hoverColor="var(--red)"
-          >
-            <Archive size={15} />
-          </IconButton>
-        </div>
+        {/* Preview panel — the format rendered exactly as the professional
+            will see it in session (the markdown source is internal storage,
+            never shown here). Beside the info column so it gets the bulk of
+            the card's width instead of a short strip below it. */}
+        {mode === 'view' && (
+          <div style={{
+            flex: '1 1 auto',
+            minWidth: 0,
+            borderLeft: '1px solid var(--s100)',
+            padding: '14px 16px',
+            background: 'var(--s50)',
+            maxHeight: 640,
+            overflowY: 'auto',
+          }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+              Vista previa — así lo ve el profesional en sesión
+            </p>
+            <TemplatedSectionsForm schema={tpl.schema} value={{}} onChange={() => {}} disabled />
+          </div>
+        )}
       </div>
-
-      {/* Expanded region — the format rendered exactly as the professional
-          will see it in session (the markdown source is internal storage,
-          never shown here). */}
-      {mode === 'view' && (
-        <div style={{ borderTop: '1px solid var(--s100)', padding: '14px 16px', background: 'var(--s50)' }}>
-          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-            Vista previa — así lo ve el profesional en sesión
-          </p>
-          <TemplatedSectionsForm schema={tpl.schema} value={{}} onChange={() => {}} disabled />
-        </div>
-      )}
 
       {mode === 'edit' && (
         <div style={{ borderTop: '1px solid var(--s100)', padding: 16 }}>
