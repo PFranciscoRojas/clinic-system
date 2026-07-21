@@ -171,7 +171,7 @@ export function SettingsPage() {
 
         {/* Scrollable sections */}
         <div style={{ flex: 1, overflow: compact ? 'visible' : 'auto' }}>
-          <div style={{ padding: compact ? '18px 14px' : '24px 28px', maxWidth: 780 }}>
+          <div style={{ padding: compact ? '18px 14px' : '24px 28px', maxWidth: section === 'record_templates' ? 1400 : 780 }}>
             {section === 'profile'       && <ProfileSection       setDirty={markDirty} />}
             {section === 'schedule'      && <ScheduleSection />}
             {section === 'notifications' && <NotificationsSection setDirty={markDirty} />}
