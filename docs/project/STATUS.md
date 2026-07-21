@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-07-19)
+## Estado actual (2026-07-21)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -56,13 +56,16 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 | 5 — Tests | ✅ resuelto | testcontainers + tests de aislamiento RLS (`internal/integration/{infra,rls,needtoknow}_test.go`); vitest para `client.ts` y `RecordForm` |
 | 6 — Frontend refactor | ✅ resuelto | `SettingsPage` partido en 10 secciones bajo `components/settings/` (191 líneas, solo orquesta); `logout` hace `flushClinicalDrafts()` antes de invalidar el token (`AuthContext.tsx`) |
 
-### Últimos PRs a `main` (sesiones 2026-07-17→18, todos desplegados por CI)
+### Últimos PRs a `main` (sesiones 2026-07-17→21, todos desplegados por CI)
 
 - `#202` feat(clinical): **métricas de edición de borradores IA** (feedback loop fase 1, tabla `draft_feedback`) — en prod desde 2026-07-17. Pendientes de fases siguientes: perfil de estilo por profesional, eval set, fase 2 con consentimientos.
 - `#203` fix(db): hard-delete de organización desde Superadmin fallaba contra el `audit_log` append-only.
 - `#204` fix(clinical): **retiro de widgets bespoke desincronizados** — solo quedan `mental_exam`/`risk`/`treatment_plan`/`diagnoses` (con `risk` como único AI-fillable; el ai-service descarta fail-closed valores IA para los manual-only); campos nuevos siempre como `multiselect`/`select` de plantilla.
 - `#205` chore(docs): cierre del ítem de verificación de `ai_schema` en BACKLOG + hallazgo `record_type` INITIAL vs plantilla EVOLUTION registrado.
-- `#206` feat(clinical): **builder visual de plantillas** sobre el source Markdown (Settings → Formatos).
+- `#206` feat(clinical): **builder visual de plantillas** sobre el source Markdown (Settings → Formatos) — galería de 4 ejemplos, toggle visual/markdown, guardado fail-closed vía round-trip contra `POST /record-templates/parse`.
+- `#207` chore(docs): cierre de sesión 2026-07-19 (batch social + guía Ley 1090).
+- `#208` enhancement(clinical): **retiro TOTAL de widgets bespoke** — migración `000067_retire_template_widgets`; `risk` pasa a ser control fijo del sistema (sugerido por IA, top-level, ya no `widget:risk` de plantilla); `diagnoses`/`treatment_plan` viven en los paneles de perfil del paciente, no en plantillas; campos nuevos siempre `multiselect`/`select`. Toca core-api (`markdown.go`), ai-service (`claude.py`, `widgets.py`) y frontend (builder visual + `RecordForm`).
+- `#209` fix(clinical): **layout del builder visual** — la sección `record_templates` en Settings estaba topada al mismo ancho (780px) que los formularios simples, así que builder+preview no tenían espacio y se apilaban; ahora usa 1400px. El botón "ver" de cada plantilla abría la vista previa como acordeón a lo ancho debajo de la fila; ahora abre al lado (info se compacta a 280px, preview toma el resto, con scroll).
 
 **Sesión 2026-07-19 (marketing, sin PRs en `clinic-system` — todo en el repo `../chapni`):** batch semanal `chapni-social` completo (5 slots 07-20→24 generados, aprobados con 3 rondas de ajustes de copy, renderizados y **programados ✅** — log `d89029f`); **guía nueva del hub: "Secreto profesional Ley 1090"** escrita, buildeada y **desplegada a chapni.com/recursos** (`c1c4dbe` + wrangler deploy, smoke 200) — 5ª guía, se estrena en el slot educativo del lunes 07-27; reglas nuevas de vocabulario CO y anti-jerga (SOAP) en `strategy.md` de la skill; Artifact semanal con captions copiables publicado.
 
@@ -110,9 +113,9 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción — CI deploy (último: PR #206, 2026-07-18, builder visual de plantillas). |
-| `ai-service` | ✅ producción — CI deploy (último: PR #204, 2026-07-17: descarte fail-closed de valores IA en widgets manual-only). Pipeline validado E2E con audio de 58 min (2026-07-11). |
-| `frontend` (Caddy :80/:443) | ✅ producción — **CI deploy automático desde PR #185** (`build-frontend.yml`: build en Actions + rsync in-place al bind mount, sin restart de Caddy). Último: PR #206 (2026-07-18). **Dominio:** `https://app.chapni.com`; `api.marcelachapues.com` legacy (mantiene `/api` para webhooks, redirige 308 el resto). |
+| `core-api:8080` | ✅ producción — CI deploy (último: PR #208, 2026-07-21, retiro total de widgets + migración 000067). |
+| `ai-service` | ✅ producción — CI deploy (último: PR #208, 2026-07-21: `risk` pasa a control fijo del sistema, ya no widget de plantilla). Pipeline validado E2E con audio de 58 min (2026-07-11). |
+| `frontend` (Caddy :80/:443) | ✅ producción — **CI deploy automático desde PR #185** (`build-frontend.yml`: build en Actions + rsync in-place al bind mount, sin restart de Caddy). Último: PR #209 (2026-07-21, layout del builder visual). **Dominio:** `https://app.chapni.com`; `api.marcelachapues.com` legacy (mantiene `/api` para webhooks, redirige 308 el resto). |
 | Backups | `pg_dump` diario cifrado GPG → Backblaze B2 + **snapshot cifrado del `.env`** (desde 2026-07-13). Llave GPG rotada 2026-07-13: `backups@chapni.com` (privada en máquina del operador + LastPass; la vieja solo lee dumps ≤ 2026-07-13). **Restore probado**: RTO datos ~15 s — runbook en `docs/ops/DR_RUNBOOK.md`. |
 | **Disco** | ~27% (9,4/38 GB tras el barrido de audios PHI 2026-07-13) — cron semanal en el **host**: `0 4 * * 0 docker system prune -af` → `/var/log/docker-prune.log`. Alerta email si >80% |
 
@@ -137,7 +140,7 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 | `core-api` | `services/core-api/` | ✅ Go 1.25, prod |
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
-| Migrations | `services/core-api/migrations/` | Última: `000063_patient_search_tokens` (índice de búsqueda cifrada) + `000062_org_is_test` — ejecutadas en prod 2026-07-10. Ojo: 000052 ya existía (`org_signup_lead`), por eso el salto de numeración |
+| Migrations | `services/core-api/migrations/` | Última: `000067_retire_template_widgets` (retiro total de widgets bespoke en plantillas) — ejecutada en prod 2026-07-21 vía CI (PR #208). Ojo: 000052 ya existía (`org_signup_lead`), por eso el salto de numeración |
 | CI/CD | `.github/workflows/build-ai-service.yml` + `build-core-api.yml` | Build+push ghcr.io + deploy SSH al VPS (secrets: `VPS_HOST`, `VPS_SSH_KEY`, `GHCR_TOKEN`) |
 | Claude skills | `~/.claude/commands/` + `~/.claude/skills/` | `chapni-social` (NO sincronizada al repo `claude-skills`) es ahora un sistema de content-ops completo: auditoría de estado (paso 0, comandos `estado`/`semana`), log con confirmación de publicación en el repo chapni, sinergia con el hub `/recursos`, política de slots perdidos, ritual dominical en batch, generador de banners (`render_banner.py`) y bios/perfiles oficiales documentados. Supervisada por rutina cloud dominical (reporte a Gmail). `ui-ux-pro-max` instalada; `ui-styling` desinstalada 2026-06-28 |
 
