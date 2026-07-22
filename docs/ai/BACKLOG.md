@@ -157,3 +157,4 @@
 
 ## Agenda — Agendado rápido (2026-06-21)
 - ✅ Implementado (2026-06-22, `8b38fd1`): el popover de agendado rápido detecta solapamiento con citas del día (`byDay[day]`, helper `slotIsBusy`) y muestra estado "ocupado" en vez de proponer una hora que luego saldría bloqueada.
+- [2026-07-21] UX BC-3: un paciente recién creado muestra "Sin acceso a este paciente" (Res. 1995 Art. 14) a quien lo creó, hasta que exista cita; evaluar crear patient_staff_rel automático con el creador profesional.
