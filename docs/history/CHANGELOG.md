@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-07-22
+
+- fix(clinical): **los 4 formatos de Marcela estaban corruptos en la BD y quedaron reconstruidos** (PR #215). El `source_markdown` había perdido los saltos de línea, así que siete campos quedaron pegados dentro de la pista de "Antecedentes farmacológicos" y el parser los leyó como texto de ayuda — de ahí las descripciones llenas de `{multiselect:...}`. Hubo además pérdida de caracteres irrecuperable desde la BD (los `.txt` originales están a dos columnas y leerlos línea por línea fusionó vecinos: `Suicidio|Psicosis` → `Suisicosis`). Reconstruidos desde `docs/formatos/` a `docs/formatos/reconstruidos/` y aplicados en prod como versión nueva (apertura: 27 campos con 16 de texto libre → 36 con 19; las versiones viejas quedaron `ARCHIVED`, no borradas). `ParseMarkdown` ahora falla en cerrado si una pista conserva un `##` (PR #213), y un test vigila el rebuild.
+- fix(clinical): **vista previa del builder a altura completa** (PRs #213 y #215) — dos intentos: el primero cambió la altura fija por una acotada al viewport pero dejó el `overflow`, que era el síntoma real; el segundo quita `position: sticky` y el scroll interno juntos (fijar el panel era lo que obligaba a limitarlo). Ahora la vista previa se dibuja entera al lado del constructor y la página tiene un solo scroll.
+- fix(seo): **la app entera era rastreable** (PR #211) — `app.chapni.com/robots.txt` devolvía el `index.html` del SPA, sin `meta robots` ni `canonical`. Sin fuga de datos, pero `/login`, `/dashboard` y `/patients` competían como duplicados. Ahora Caddy responde `noindex, nofollow` en todo salvo una allowlist; por decisión del usuario solo `/book/marcela-chapues` es indexable.
+- fix(marketing): **Cloudflare llevaba semanas devolviendo 403 a todos los crawlers de IA** en chapni.com (GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-User, PerplexityBot) e inyectando un *managed robots.txt* con `Disallow: /` para ellos, mientras Googlebot pasaba normal. Por eso ChatGPT respondía que el dominio no existía y otros modelos describían el producto sin precio, sin prueba gratis y sin la IA. Resuelto en el panel.
+- feat(marketing): en `../chapni`, **`/precios/` y `/seguridad/` como URLs propias** (antes solo anclas del home, y un ancla no se indexa como respuesta), **guía "Cómo elegir software de historia clínica para psicólogos en Colombia"** (criterios sin nombrar ni enlazar competidores, decisión explícita), **IndexNow** en cada `npm run deploy`, `www` con 301 al apex, ruta `*.workers.dev` retirada, y `plan-seo-backlinks-geo.md` corregido tras provocar tres afirmaciones falsas por estar congelado en el 6 de julio.
+
+---
+
 ## 2026-07-21
 
 - enhancement(clinical): **retiro total de widgets bespoke** (PR #208, migración `000067_retire_template_widgets`) — `risk` pasa a ser un control fijo del sistema (sugerido por IA, top-level, ya no `{widget:risk}` de plantilla); `diagnoses`/`treatment_plan` viven en los paneles de perfil del paciente. Toca core-api, ai-service y frontend (builder visual + `RecordForm`).
