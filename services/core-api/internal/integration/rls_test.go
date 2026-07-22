@@ -146,6 +146,8 @@ func TestRLSCoverageComplete(t *testing.T) {
 		"user_roles":    "resolved during auth, before TenantScope",
 		"audit_log":     "append-only audit trail written across scopes",
 		"domain_events": "outbox is processed by an unscoped relay",
+		"trial_emails_sent": "engine bookkeeping written by an unscoped background sweep; " +
+			"no tenant data beyond the org id (mirrors appointment_reminders_sent)",
 	}
 
 	var unprotected []string

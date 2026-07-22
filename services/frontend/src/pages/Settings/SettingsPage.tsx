@@ -14,7 +14,7 @@ import { AISection } from '@/components/settings/AISection';
 import { SecuritySection } from '@/components/settings/SecuritySection';
 import { ConsentTemplatesSection } from '@/components/settings/ConsentTemplatesSection';
 import { UsersSection } from '@/components/settings/UsersSection';
-import { PlanStatusCard, RatesSection } from '@/components/settings/BillingSection';
+import { PlanStatusCard, RatesSection, ReferralCard } from '@/components/settings/BillingSection';
 import { IntegrationsSection } from '@/components/settings/IntegrationsSection';
 import RecordTemplatesSection from '@/components/clinical/RecordTemplatesSection';
 
@@ -179,7 +179,7 @@ export function SettingsPage() {
             {section === 'security'      && <SecuritySection />}
             {section === 'templates'        && <ConsentTemplatesSection />}
             {section === 'record_templates' && <RecordTemplatesSection />}
-            {section === 'billing'          && <><PlanStatusCard /><RatesSection /></>}
+            {section === 'billing'          && <><PlanStatusCard /><ReferralCard /><RatesSection /></>}
             {section === 'users'         && <UsersSection />}
             {section === 'integrations'  && <IntegrationsSection />}
           </div>

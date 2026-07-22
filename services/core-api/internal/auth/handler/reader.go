@@ -56,6 +56,9 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	// still returns the identity (and entitled defaults to true so a hiccup
 	// never locks the user out of their own UI).
 	resp["entitled"] = true
+	if slug, err := h.svc.OrgSlug(r.Context(), claims.OrganizationID); err == nil {
+		resp["org_slug"] = slug
+	}
 	if name, status, trialEndsAt, currentPeriodEnd, err := h.svc.OrgInfo(r.Context(), claims.OrganizationID); err == nil {
 		resp["org_name"] = name
 		resp["subscription_status"] = status

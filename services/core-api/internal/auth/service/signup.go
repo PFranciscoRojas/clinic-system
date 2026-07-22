@@ -97,6 +97,12 @@ func (s *Service) OrgInfo(ctx context.Context, orgID string) (name, status strin
 	return s.repo.OrgInfo(ctx, orgID)
 }
 
+// OrgSlug returns the caller org's URL slug, used by the referral link in
+// Settings ("invite a colleague").
+func (s *Service) OrgSlug(ctx context.Context, orgID string) (string, error) {
+	return s.repo.OrgSlug(ctx, orgID)
+}
+
 // IsInternalOrg reports whether orgID is an operational fixture rather than
 // a real tenant — used by /me to gate the "reset test data" feature.
 func (s *Service) IsInternalOrg(ctx context.Context, orgID string) (bool, error) {

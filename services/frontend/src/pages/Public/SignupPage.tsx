@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Building2, User, Mail, Lock, Eye, EyeOff, AlertTriangle, CheckCircle2, ShieldCheck, Phone } from 'lucide-react';
 import { authApi } from '@/api/auth';
 import { ApiError } from '@/api/client';
@@ -13,6 +13,10 @@ type PageState = 'form' | 'saving' | 'done';
 // existing org later via invite codes — this page is only for new clinics.
 export function SignupPage() {
   const navigate = useNavigate();
+  // Referral attribution: the landing forwards ?ref=<org-slug> here; it rides
+  // along in referral_source ("ref:<slug>") so the operator sees who referred.
+  const [searchParams] = useSearchParams();
+  const ref = (searchParams.get('ref') ?? '').slice(0, 48);
 
   const [orgName, setOrgName] = useState('');
   const [name, setName] = useState('');
@@ -43,7 +47,8 @@ export function SignupPage() {
     if (!acceptedTerms)                  { setErr('Debes aceptar los Términos y la Política de Privacidad para continuar.'); return; }
     setState('saving');
     try {
-      await authApi.signup(orgName.trim(), name.trim(), email.trim(), pwd, isProfessional, acceptedTerms, phone.trim(), source);
+      const referralSource = ref ? (source ? `${source} · ref:${ref}` : `ref:${ref}`) : source;
+      await authApi.signup(orgName.trim(), name.trim(), email.trim(), pwd, isProfessional, acceptedTerms, phone.trim(), referralSource);
       setState('done');
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {

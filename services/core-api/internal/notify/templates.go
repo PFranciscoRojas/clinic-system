@@ -17,6 +17,8 @@ var (
 	tmplVerification  = template.Must(template.New("verification").Parse(tmplVerificationSrc))
 	tmplSignupAlert   = template.Must(template.New("signup-alert").Parse(tmplSignupAlertSrc))
 	tmplTenantWelcome = template.Must(template.New("tenant-welcome").Parse(tmplTenantWelcomeSrc))
+	tmplTrialNudge    = template.Must(template.New("trial-nudge").Parse(tmplTrialNudgeSrc))
+	tmplTrialEnding   = template.Must(template.New("trial-ending").Parse(tmplTrialEndingSrc))
 )
 
 // bookingView and consentView pair tenant branding with the email payload so
@@ -88,6 +90,14 @@ func renderTenantSignupAlert(d TenantSignupDetails) (string, error) {
 
 func renderTenantWelcome(d TenantWelcomeDetails) (string, error) {
 	return execTemplate(tmplTenantWelcome, d)
+}
+
+func renderTrialNudge(d TrialLifecycleDetails) (string, error) {
+	return execTemplate(tmplTrialNudge, d)
+}
+
+func renderTrialEnding(d TrialLifecycleDetails) (string, error) {
+	return execTemplate(tmplTrialEnding, d)
 }
 
 func execTemplate(t *template.Template, data any) (string, error) {
@@ -518,6 +528,82 @@ const tmplVerificationSrc = `<!DOCTYPE html>
           <p style="margin:0;font-size:12px;color:#aaa;line-height:1.6;">
             Este es un mensaje automático del sistema de gestión clínica. No respondas a este correo.
           </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+
+const tmplTrialNudgeSrc = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f5f4f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f5f4f0;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="background:#fff;border-radius:10px;overflow:hidden;max-width:560px;width:100%;">
+        <tr><td style="background:#363285;padding:28px 36px;">
+          <p style="margin:0;color:#fff;font-size:16px;font-weight:600;letter-spacing:.02em;">Chapni · Historia clínica cifrada</p>
+        </td></tr>
+        <tr><td style="padding:36px;">
+          <h1 style="margin:0 0 16px;font-size:20px;color:#1a1a1a;font-weight:600;">¿Cómo vas con tu consultorio?</h1>
+          <p style="margin:0 0 24px;font-size:15px;color:#555;line-height:1.7;">
+            Hola <strong>{{.Name}}</strong>,<br>
+            ya llevas unos días con Chapni y quería saber cómo te ha ido. Si aún no creas tu primer paciente, ese es el mejor punto de partida: toma menos de un minuto. Desde ahí puedes agendar la primera cita y escribir tu primera nota clínica, incluso dictándola por audio.
+          </p>
+          <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 0 24px;">
+            <tr><td style="border-radius:8px;background:#d9a038;">
+              <a href="{{.LoginURL}}" style="display:inline-block;padding:13px 28px;color:#3a2a06;font-size:15px;font-weight:600;text-decoration:none;">Entrar a mi consultorio</a>
+            </td></tr>
+          </table>
+          <p style="margin:0;font-size:14px;color:#777;line-height:1.7;">
+            {{if .SupportWhatsApp}}Si algo no te cuadra o tienes preguntas, escríbeme por <a href="https://wa.me/{{.SupportWhatsApp}}?text=Hola%20Francisco%2C%20estoy%20probando%20Chapni%20y%20tengo%20una%20pregunta" style="color:#363285;font-weight:600;text-decoration:none;">WhatsApp</a>. Respondo yo, no un bot.{{else}}Si algo no te cuadra o tienes preguntas, responde a este correo.{{end}}
+          </p>
+        </td></tr>
+        <tr><td style="padding:16px 36px 24px;border-top:1px solid #ece9e3;">
+          <p style="margin:0;font-size:12px;color:#aaa;line-height:1.6;">Chapni · Historia clínica cifrada</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+
+const tmplTrialEndingSrc = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f5f4f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f5f4f0;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="background:#fff;border-radius:10px;overflow:hidden;max-width:560px;width:100%;">
+        <tr><td style="background:#363285;padding:28px 36px;">
+          <p style="margin:0;color:#fff;font-size:16px;font-weight:600;letter-spacing:.02em;">Chapni · Historia clínica cifrada</p>
+        </td></tr>
+        <tr><td style="padding:36px;">
+          {{if gt .DaysLeft 0}}
+          <h1 style="margin:0 0 16px;font-size:20px;color:#1a1a1a;font-weight:600;">Tu prueba termina {{if eq .DaysLeft 1}}mañana{{else}}en {{.DaysLeft}} días{{end}}</h1>
+          <p style="margin:0 0 24px;font-size:15px;color:#555;line-height:1.7;">
+            Hola <strong>{{.Name}}</strong>,<br>
+            tu periodo de prueba está por terminar. Para seguir usando tu agenda, tus historias clínicas y los cobros sin interrupción, activa tu plan desde la sección de facturación. El pago es en línea y toma un par de minutos.
+          </p>
+          {{else}}
+          <h1 style="margin:0 0 16px;font-size:20px;color:#1a1a1a;font-weight:600;">Tu prueba terminó, tus datos siguen ahí</h1>
+          <p style="margin:0 0 24px;font-size:15px;color:#555;line-height:1.7;">
+            Hola <strong>{{.Name}}</strong>,<br>
+            tu periodo de prueba terminó y la cuenta quedó en pausa. Nada se borró: tus pacientes, citas e historias clínicas siguen cifrados y esperándote. Activa tu plan cuando quieras y retomas exactamente donde ibas.
+          </p>
+          {{end}}
+          <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 0 24px;">
+            <tr><td style="border-radius:8px;background:#d9a038;">
+              <a href="{{.BillingURL}}" style="display:inline-block;padding:13px 28px;color:#3a2a06;font-size:15px;font-weight:600;text-decoration:none;">Activar mi plan</a>
+            </td></tr>
+          </table>
+          <p style="margin:0;font-size:14px;color:#777;line-height:1.7;">
+            {{if .SupportWhatsApp}}¿Dudas sobre el plan o el pago? Escríbeme por <a href="https://wa.me/{{.SupportWhatsApp}}?text=Hola%20Francisco%2C%20tengo%20una%20pregunta%20sobre%20mi%20plan%20de%20Chapni" style="color:#363285;font-weight:600;text-decoration:none;">WhatsApp</a> y lo resolvemos.{{else}}¿Dudas sobre el plan o el pago? Responde a este correo y lo resolvemos.{{end}}
+          </p>
+        </td></tr>
+        <tr><td style="padding:16px 36px 24px;border-top:1px solid #ece9e3;">
+          <p style="margin:0;font-size:12px;color:#aaa;line-height:1.6;">Chapni · Historia clínica cifrada</p>
         </td></tr>
       </table>
     </td></tr>

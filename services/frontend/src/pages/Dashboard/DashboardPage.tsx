@@ -14,6 +14,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
 import { useIsCompact } from '@/lib/useMediaQuery';
 import { AgendaCalendar } from './AgendaCalendar';
+import { FirstStepsCard } from './FirstStepsCard';
 import { PendingNotesCard } from './PendingNotesCard';
 import { AIFeedbackCard } from './AIFeedbackCard';
 
@@ -549,6 +550,9 @@ export function DashboardPage() {
                 </button>
               </div>
             </div>
+
+            {/* Checklist de activación durante el trial — se oculta solo */}
+            <FirstStepsCard />
 
             {/* Sesiones completadas que aún no tienen nota — no olvidar cerrarlas */}
             <PendingNotesCard />
