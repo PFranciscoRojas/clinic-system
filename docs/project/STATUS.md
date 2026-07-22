@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-07-21)
+## Estado actual (2026-07-22)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -56,18 +56,30 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 | 5 — Tests | ✅ resuelto | testcontainers + tests de aislamiento RLS (`internal/integration/{infra,rls,needtoknow}_test.go`); vitest para `client.ts` y `RecordForm` |
 | 6 — Frontend refactor | ✅ resuelto | `SettingsPage` partido en 10 secciones bajo `components/settings/` (191 líneas, solo orquesta); `logout` hace `flushClinicalDrafts()` antes de invalidar el token (`AuthContext.tsx`) |
 
-### Últimos PRs a `main` (sesiones 2026-07-17→21, todos desplegados por CI)
+### Últimos PRs a `main` (sesión 2026-07-21/22, todos desplegados por CI)
 
-- `#202` feat(clinical): **métricas de edición de borradores IA** (feedback loop fase 1, tabla `draft_feedback`) — en prod desde 2026-07-17. Pendientes de fases siguientes: perfil de estilo por profesional, eval set, fase 2 con consentimientos.
-- `#203` fix(db): hard-delete de organización desde Superadmin fallaba contra el `audit_log` append-only.
-- `#204` fix(clinical): **retiro de widgets bespoke desincronizados** — solo quedan `mental_exam`/`risk`/`treatment_plan`/`diagnoses` (con `risk` como único AI-fillable; el ai-service descarta fail-closed valores IA para los manual-only); campos nuevos siempre como `multiselect`/`select` de plantilla.
-- `#205` chore(docs): cierre del ítem de verificación de `ai_schema` en BACKLOG + hallazgo `record_type` INITIAL vs plantilla EVOLUTION registrado.
-- `#206` feat(clinical): **builder visual de plantillas** sobre el source Markdown (Settings → Formatos) — galería de 4 ejemplos, toggle visual/markdown, guardado fail-closed vía round-trip contra `POST /record-templates/parse`.
-- `#207` chore(docs): cierre de sesión 2026-07-19 (batch social + guía Ley 1090).
-- `#208` enhancement(clinical): **retiro TOTAL de widgets bespoke** — migración `000067_retire_template_widgets`; `risk` pasa a ser control fijo del sistema (sugerido por IA, top-level, ya no `widget:risk` de plantilla); `diagnoses`/`treatment_plan` viven en los paneles de perfil del paciente, no en plantillas; campos nuevos siempre `multiselect`/`select`. Toca core-api (`markdown.go`), ai-service (`claude.py`, `widgets.py`) y frontend (builder visual + `RecordForm`).
-- `#209` fix(clinical): **layout del builder visual** — la sección `record_templates` en Settings estaba topada al mismo ancho (780px) que los formularios simples, así que builder+preview no tenían espacio y se apilaban; ahora usa 1400px. El botón "ver" de cada plantilla abría la vista previa como acordeón a lo ancho debajo de la fila; ahora abre al lado (info se compacta a 280px, preview toma el resto, con scroll).
+- `#211` fix(seo): **la app entera era rastreable** — `app.chapni.com/robots.txt` devolvía el `index.html` del SPA con 200, sin `meta robots` ni `canonical`, así que `/login`, `/signup`, `/dashboard` y `/patients` competían como duplicados. Sin fuga de datos (todas devuelven el mismo shell y el contenido exige API autenticada). Ahora Caddy responde `X-Robots-Tag: noindex, nofollow` en todo salvo la allowlist de páginas de reserva; **decisión del usuario: solo `/book/marcela-chapues` es indexable**, cualquier profesional nuevo hay que agregarlo al matcher a mano. El wizard de reserva pone título y descripción propios desde `public_name` (estaba indexado como "Chapni — Historia clínica cifrada", inútil para un paciente que busca el nombre de la profesional).
+- `#212` chore(docs): auditoría y plan del funnel de venta pasiva (`PLAN_VENTA_PASIVA`) — de otra sesión.
+- `#213` fix(clinical): **parser de plantillas falla en cerrado** si una pista conserva un marcador `##`, nombrando el campo culpable, en vez de absorber en silencio todo lo que venga debajo.
+- `#214` feat(auth): emails de ciclo de trial, checklist de primeros pasos y link de referidos v1 — de otra sesión; añade migración `000068_trial_emails_sent`.
+- `#215` fix(clinical): **reconstrucción de los 4 formatos clínicos** + vista previa a altura completa. Ver bloque siguiente.
 
-**Sesión 2026-07-19 (marketing, sin PRs en `clinic-system` — todo en el repo `../chapni`):** batch semanal `chapni-social` completo (5 slots 07-20→24 generados, aprobados con 3 rondas de ajustes de copy, renderizados y **programados ✅** — log `d89029f`); **guía nueva del hub: "Secreto profesional Ley 1090"** escrita, buildeada y **desplegada a chapni.com/recursos** (`c1c4dbe` + wrangler deploy, smoke 200) — 5ª guía, se estrena en el slot educativo del lunes 07-27; reglas nuevas de vocabulario CO y anti-jerga (SOAP) en `strategy.md` de la skill; Artifact semanal con captions copiables publicado.
+### Corrupción de las plantillas de Marcela (2026-07-21) — diagnosticada y reparada
+
+Síntoma: la mayoría de campos aparecían como texto libre con `{multiselect:...}` dentro de la descripción. Causa: el `source_markdown` guardado **perdió los saltos de línea**, así que siete campos quedaron pegados en una sola línea dentro de la pista de "Antecedentes farmacológicos" y el parser los leyó como texto de ayuda. Además hubo **pérdida de caracteres irrecuperable desde la BD**: las listas de opciones de `docs/formatos/*.txt` están a dos columnas y leerlas línea por línea fusionó vecinos (`Antecedentes familiares de salud mental` + `Estilo parental sobreprotector` → `Antecedentes familiareprotector`; `Suicidio|Psicosis` → `Suisicosis`).
+
+Reparación: los originales sí estaban en el repo (`docs/formatos/`). Los 4 formatos quedan reconstruidos como markdown anotado en **`docs/formatos/reconstruidos/`** y aplicados a producción como versión nueva, con las anteriores en `ARCHIVED` (10 versiones archivadas; los registros ya escritos siguen anclados a su propia versión, como exige Res. 1995).
+
+| Formato | Versión | Campos | Con opciones | Texto libre |
+|---|---|---|---|---|
+| Apertura de Historia Clínica (INITIAL, default) | v4 | 36 | 17 | 19 |
+| Plan Terapéutico (EVOLUTION, no default) | v7 | 19 | 14 | 5 |
+| Nota de Evolución (EVOLUTION, default) | v8 | 19 | 15 | 4 |
+| Informe de Cierre (DISCHARGE, default) | v4 | 8 | 4 | 4 |
+
+Antes la apertura tenía 27 campos con 16 de texto libre. `TestReconstructedFormatsParseCleanly` vigila el rebuild (cada formato debe parsear, sin anotaciones colgando en etiqueta o pista, sin select/multiselect de menos de 2 opciones).
+
+**Sesión 2026-07-21/22 (marketing/SEO, sin PRs en `clinic-system` — todo en el repo `../chapni`):** se descubrió que **Cloudflare devolvía 403 a todos los crawlers de IA** (GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-User, PerplexityBot) e inyectaba un *managed robots.txt* con `Disallow: /` para ellos, mientras Googlebot pasaba normal — por eso ChatGPT respondía que el dominio no existía y otros modelos describían el producto sin precio, sin prueba gratis y sin la IA, inventando funciones. Resuelto en el panel. Además: **`/precios/` y `/seguridad/` como URLs propias** (antes solo anclas del home, y un ancla no se indexa como respuesta), **guía nueva "Cómo elegir software de historia clínica para psicólogos en Colombia"** (criterios sin nombrar competidores ni enlazarlos — decisión explícita de no darles visibilidad), **IndexNow** enganchado a `npm run deploy`, `www` con 301 al apex, ruta `*.workers.dev` retirada, y `plan-seo-backlinks-geo.md` corregido (llevaba desactualizado desde el 6 de julio y provocó tres afirmaciones falsas en la sesión).
 
 > Flujo actual: rama `fix/*` → PR → squash-merge → CI deploy. ✅ Branch protection activa desde 2026-07-09.
 > **CI/CD:** core-api `test → build → smoke`; ai-service `pytest → build → deploy`; **frontend `build → rsync al VPS → smoke` (automatizado desde #185)**; `smoke.yml` también corre por `workflow_dispatch` tras cambios manuales.
@@ -81,6 +93,8 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 | **WhatsApp Meta API** | Cargo COP $90.675 pagado. Pendiente: confirmar que la API se desbloqueó, configurar `tpl_reminder_24h` y `tpl_reminder_2h` en Ajustes → Integraciones con los nombres exactos de las plantillas aprobadas. | 🟡 verificar desbloqueo |
 | **Validación de demanda** | Conseguir 2-3 psicólogas externas en beta de diseño (acceso gratis 2 semanas, acompañamiento 1ª sesión en vivo). Sin esto, el go-live 1.0.0 carece de señal de mercado. 2 contactos disponibles (colegas de la esposa). Fases 1-2 de la auditoría deben cerrarse antes de la beta (logout/pérdida de borrador ya resueltos). | 🔴 sin iniciar |
 | **Validación de demanda B2B (clínicas)** | Señal orgánica en producción: ninguna aún (solo 5 orgs totales, casi todas internas/de prueba, 1 solo signup real de tercero). Señal de mercado (2026-07-06): sí existe — competidores colombianos (Psiris, MedSystem, RIPS/CIE10/Res. 1888) e IPS de salud mental reales en Bogotá/Medellín ya operan sin solución especializada en psicología+cifrado. Pendiente decidir: entrevistas directas con 3-5 IPS/clínicas antes del plan B2B completo, o construirlo ya con esta señal. | 🟡 en evaluación |
+| **Formatos reconstruidos — revisión clínica** | Los 4 formatos ya están en prod sin corrupción, pero al reconstruirlos se tomaron 2 decisiones que Marcela debe validar: (a) **consumo de SPA** quedó como un multiselect de sustancias con las frecuencias plegadas, en vez del "Sí/No" + casillas por sustancia del papel; (b) **ideación suicida e intento previo** siguen como campos del formato aunque el sistema ya tiene su control fijo de nivel de riesgo (posible duplicación). Ambas se ajustan desde el builder visual, sin tocar BD. | 🟡 pendiente de revisión |
+| **Autorizar MCP `cloudflare-api`** | Plugin `cloudflare@cloudflare` instalado global (13 skills + 5 MCP). `cloudflare-docs` conectado; `cloudflare-api`, `bindings`, `builds` y `observability` piden OAuth (`/mcp` en el prompt). Sin eso, cada cambio de Cloudflare (reglas, DNS, purge de caché, política de bots) vuelve a ser ida y vuelta manual por el panel. Cabo suelto que quedó sin cerrar: confirmar si *JavaScript Detections* está apagado — el HTML se sirve cacheado (`cf-cache-status: HIT`) y hace falta purgar para verificarlo. | 🟡 pendiente |
 
 ---
 
@@ -113,9 +127,9 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción — CI deploy (último: PR #208, 2026-07-21, retiro total de widgets + migración 000067). |
+| `core-api:8080` | ✅ producción — CI deploy (último: PR #215, 2026-07-22). Migración `000068_trial_emails_sent` aplicada (`schema_migrations` = 68, dirty=f). |
 | `ai-service` | ✅ producción — CI deploy (último: PR #208, 2026-07-21: `risk` pasa a control fijo del sistema, ya no widget de plantilla). Pipeline validado E2E con audio de 58 min (2026-07-11). |
-| `frontend` (Caddy :80/:443) | ✅ producción — **CI deploy automático desde PR #185** (`build-frontend.yml`: build en Actions + rsync in-place al bind mount, sin restart de Caddy). Último: PR #209 (2026-07-21, layout del builder visual). **Dominio:** `https://app.chapni.com`; `api.marcelachapues.com` legacy (mantiene `/api` para webhooks, redirige 308 el resto). |
+| `frontend` (Caddy :80/:443) | ✅ producción — **CI deploy automático desde PR #185** (`build-frontend.yml`: build en Actions + rsync in-place al bind mount, sin restart de Caddy). Último: PR #215 (2026-07-22, vista previa del builder a altura completa). **Caddy recreado a mano** el 2026-07-21 tras PR #211 (bind-mount de archivo: `reload` no basta). **Dominio:** `https://app.chapni.com` (DNS en nube gris a propósito: en proxy se rompe el ACME de Caddy, y Cloudflare corta las subidas en 100 MB — bloqueante para audio de sesión); `api.marcelachapues.com` legacy (mantiene `/api` para webhooks, redirige 308 el resto). |
 | Backups | `pg_dump` diario cifrado GPG → Backblaze B2 + **snapshot cifrado del `.env`** (desde 2026-07-13). Llave GPG rotada 2026-07-13: `backups@chapni.com` (privada en máquina del operador + LastPass; la vieja solo lee dumps ≤ 2026-07-13). **Restore probado**: RTO datos ~15 s — runbook en `docs/ops/DR_RUNBOOK.md`. |
 | **Disco** | ~27% (9,4/38 GB tras el barrido de audios PHI 2026-07-13) — cron semanal en el **host**: `0 4 * * 0 docker system prune -af` → `/var/log/docker-prune.log`. Alerta email si >80% |
 
@@ -128,7 +142,7 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google Calendar OAuth (añadidos 2026-06-24)
 - ~~`ALLOW_DATA_RESET`~~ — eliminado 2026-07-07: el env var global exponía el botón de reset a cualquier CLINIC_ADMIN real. Reemplazado por chequeo `organizations.is_internal` dentro del handler (solo org operador + org demo del smoke test), sin flag que apagar/prender
 - Demo: `admin@demo.clinica.co` / `Admin1234!` · tenant ID `005e349d2fbc5d30000000003`
-- Marcela org (real, 5 usuarios): `aa2cbd1f-76b2-4cf9-bdde-dcf403ad1f04` (slug `marcela-chapues`) — token MP **live** ✅ · desde sesión 24 usa **plantillas personalizadas para los 4 formatos** (Apertura `ee720934`, Plan Terapéutico `6c0c21db`, Nota de Evolución `9e3d4685`, Informe de Cierre `89995be0`) — ya no formato integrado
+- Marcela org (real, 5 usuarios): `aa2cbd1f-76b2-4cf9-bdde-dcf403ad1f04` (slug `marcela-chapues`) — token MP **live** ✅ · usa **plantillas personalizadas para los 4 formatos**, reconstruidas y reemplazadas el 2026-07-21 (Apertura v4, Plan Terapéutico v7, Nota de Evolución v8, Informe de Cierre v4; las versiones previas quedaron `ARCHIVED`, no borradas). Fuente de verdad del contenido: `docs/formatos/reconstruidos/`
 - Marcela org #2 (`ps.marcelachapues@gmail.com`, CLINIC_ADMIN+PROFESSIONAL, 3 pacientes): `fbf1fb3d-607d-4f4d-9870-05e95f63a1a3` (slug `marcelachapues`) — el usuario la considera de prueba; candidata a marcar `is_test` y eliminar desde Superadmin → Tenants (igual que `consultorio-aurora`). `marcela-chapues` es la real y queda protegida (no eliminable).
 
 ---
@@ -140,7 +154,7 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 | `core-api` | `services/core-api/` | ✅ Go 1.25, prod |
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
-| Migrations | `services/core-api/migrations/` | Última: `000067_retire_template_widgets` (retiro total de widgets bespoke en plantillas) — ejecutada en prod 2026-07-21 vía CI (PR #208). Ojo: 000052 ya existía (`org_signup_lead`), por eso el salto de numeración |
+| Migrations | `services/core-api/migrations/` | Última: `000068_trial_emails_sent` (emails de ciclo de trial, PR #214) — aplicada en prod (`schema_migrations` = 68). Ojo: 000052 ya existía (`org_signup_lead`), por eso el salto de numeración |
 | CI/CD | `.github/workflows/build-ai-service.yml` + `build-core-api.yml` | Build+push ghcr.io + deploy SSH al VPS (secrets: `VPS_HOST`, `VPS_SSH_KEY`, `GHCR_TOKEN`) |
 | Claude skills | `~/.claude/commands/` + `~/.claude/skills/` | `chapni-social` (NO sincronizada al repo `claude-skills`) es ahora un sistema de content-ops completo: auditoría de estado (paso 0, comandos `estado`/`semana`), log con confirmación de publicación en el repo chapni, sinergia con el hub `/recursos`, política de slots perdidos, ritual dominical en batch, generador de banners (`render_banner.py`) y bios/perfiles oficiales documentados. Supervisada por rutina cloud dominical (reporte a Gmail). `ui-ux-pro-max` instalada; `ui-styling` desinstalada 2026-06-28 |
 
