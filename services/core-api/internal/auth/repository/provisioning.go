@@ -131,6 +131,15 @@ func (r *Repository) OrgInfo(ctx context.Context, orgID string) (name, status st
 	return name, status, trialEndsAt, currentPeriodEnd, nil
 }
 
+// OrgSlug returns the tenant's URL slug, used by the in-app referral link.
+func (r *Repository) OrgSlug(ctx context.Context, orgID string) (string, error) {
+	var slug string
+	if err := r.db.QueryRow(ctx, `SELECT slug FROM organizations WHERE id = $1`, orgID).Scan(&slug); err != nil {
+		return "", fmt.Errorf("load org slug: %w", err)
+	}
+	return slug, nil
+}
+
 // IsInternalOrg reports whether orgID is an operational fixture (the SaaS
 // operator's own org or the CI-seeded demo org) rather than a real tenant.
 func (r *Repository) IsInternalOrg(ctx context.Context, orgID string) (bool, error) {

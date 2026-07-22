@@ -21,6 +21,7 @@ import (
 	"sghcp/core-api/internal/shared/db"
 	"sghcp/core-api/internal/shared/hash"
 	"sghcp/core-api/internal/shared/outbox"
+	"sghcp/core-api/internal/trial"
 	"sghcp/core-api/internal/whatsapp"
 )
 
@@ -108,6 +109,9 @@ func (a *app) run(ctx context.Context) error {
 	}
 	go reminders.New(a.pool, a.km, notifier, a.wa, slog.Default()).Run(ctx)
 	go retention.New(a.pool, slog.Default()).Run(ctx)
+	// Trial lifecycle emails (day-3 nudge, ends-soon, ended) for self-serve
+	// tenants. Noop notifier ⇒ effectively disabled in dev/CI.
+	go trial.New(a.pool, notifier, a.cfg.AppBaseURL, a.cfg.SupportWhatsApp, slog.Default()).Run(ctx)
 
 	// ListenAndServe blocks forever, so it runs in a goroutine.
 	// We capture unexpected errors (anything other than ErrServerClosed,

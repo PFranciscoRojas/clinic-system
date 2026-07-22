@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { AlertCircle, CheckCircle, Save, Plus, Receipt, Pencil, X, CreditCard } from 'lucide-react';
+import { AlertCircle, CheckCircle, Save, Plus, Receipt, Pencil, X, CreditCard, Gift, Copy, Check, Share2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
@@ -406,3 +406,71 @@ function RateForm({ form, setForm, onSave, onCancel, saving, err, profs }: {
 
 // ── Integrations section (CLINIC_ADMIN only, password-gated) ─────────────────
 
+// ── Referral card ─────────────────────────────────────────────────────────────
+
+// "Invite a colleague" — shareable landing link tagged with the org slug. The
+// landing forwards ?ref= into the signup's referral_source, so the operator
+// sees who brought whom and applies the reward (one free month) manually.
+export function ReferralCard() {
+  const { user } = useAuth();
+  const [copied, setCopied] = useState(false);
+
+  if (!user?.org_slug) return null;
+  const link = `https://chapni.com/?ref=${user.org_slug}`;
+  const waText = encodeURIComponent(
+    `Te comparto Chapni, el sistema que uso para mi consultorio: agenda, historia clínica cifrada y notas con IA. Con este enlace puedes probarlo gratis 14 días: ${link}`,
+  );
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard unavailable — the input below stays selectable */ }
+  };
+
+  return (
+    <SectionCard title="Invita a un colega" icon={Gift} color="#d9a038">
+      <p style={{ fontSize: 13, color: 'var(--s500)', lineHeight: 1.6, margin: '12px 0 14px' }}>
+        Comparte tu enlace con colegas psicólogos. Cuando uno se suscriba habiendo llegado
+        con tu enlace, te regalamos un mes de Chapni.
+      </p>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        <input
+          readOnly
+          value={link}
+          onFocus={e => e.currentTarget.select()}
+          style={{
+            flex: 1, minWidth: 220, padding: '9px 12px', borderRadius: 9,
+            border: '1.5px solid var(--s200)', fontSize: 13, color: 'var(--s700)',
+            fontFamily: "'DM Mono', monospace", background: 'var(--s50)',
+          }}
+        />
+        <button
+          onClick={copy}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px',
+            borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+            background: copied ? '#10b981' : 'var(--teal)', color: '#fff', transition: 'background .2s',
+          }}
+        >
+          {copied ? <Check size={14} /> : <Copy size={14} />}
+          {copied ? 'Copiado' : 'Copiar'}
+        </button>
+        <a
+          href={`https://wa.me/?text=${waText}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px',
+            borderRadius: 9, fontSize: 13, fontWeight: 600, textDecoration: 'none',
+            background: '#25d366', color: '#fff',
+          }}
+        >
+          <Share2 size={14} />
+          WhatsApp
+        </a>
+      </div>
+    </SectionCard>
+  );
+}

@@ -22,7 +22,7 @@ Brechas que hacen perder tráfico o exigir presencia de Francisco:
 | 2 | Cero emails de ciclo de vida del trial (sin nudge día 3, sin aviso de vencimiento) | Trials mueren en silencio |
 | 3 | Sin checklist de primeros pasos in-app; el usuario nuevo cae en una app vacía | Baja activación |
 | 4 | Sin programa de referidos (`referral_source` es solo atribución) | Se pierde el canal más barato |
-| 5 | Landing sin blog; app `noindex` (correcto) pero no hay contenido SEO indexable | Cero tráfico orgánico compuesto |
+| 5 | ~~Landing sin blog~~ Corrección: `/recursos/` ya existe con 6 artículos; falta la rutina quincenal | Tráfico orgánico aún incipiente |
 | 6 | No listado en directorios de software | Leads pasivos sin explotar |
 | 7 | Sin respuestas guardadas de WhatsApp | Cada pregunta cuesta tiempo de Francisco |
 
@@ -63,13 +63,11 @@ Brechas que hacen perder tráfico o exigir presencia de Francisco:
 
 ## Fase 3 — Crecimiento compuesto
 
-### 3.1 Blog SEO en la landing (repo `chapni`)
-- Colección Astro `blog/`, 1 artículo/quincena. Primeros temas (ya hay materia prima):
-  1. Ley 1090 e historia clínica psicológica: obligaciones prácticas (ya existe guía).
-  2. Mejor software de historia clínica para psicólogos en Colombia (comparativa honesta).
-  3. Consentimiento informado en psicología: plantillas y firma digital.
-  4. Transcripción con IA y confidencialidad: por qué el audio no debe salir de tu equipo.
-- Cada artículo cierra con CTA al trial.
+### 3.1 Contenido SEO en la landing (repo `chapni`) — YA EXISTE como `/recursos/`
+- Corrección (2026-07-21): la landing ya tiene la colección `src/content/recursos/` con 6
+  artículos publicados (Ley 1090, Resolución 1995, habeas data, SOAP, consentimiento, cómo
+  elegir software). No hay que crear el blog; la tarea es la rutina: 1 artículo/quincena
+  nuevo en `/recursos/` con CTA al trial.
 
 ### 3.2 Métricas de activación
 - Medir % de signups verificados que crean primer paciente / primera cita en 7 días (funnel real). Base para decidir si hace falta modo con datos de ejemplo.

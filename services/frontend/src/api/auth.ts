@@ -13,6 +13,7 @@ export interface Me {
   email?: string;
   display_name?: string | null;
   org_name?: string;             // the tenant/clinic name, shown in the sidebar
+  org_slug?: string;             // URL slug, used by the referral link in Settings
   roles: string[];
   permissions?: string[];
   onboarding_completed?: boolean;

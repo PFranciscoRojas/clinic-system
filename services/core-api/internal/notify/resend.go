@@ -258,6 +258,35 @@ func (n *ResendNotifier) TenantWelcome(ctx context.Context, toEmail string, d Te
 	}
 }
 
+// TrialNudge checks in a few days into the trial (activation prompt).
+func (n *ResendNotifier) TrialNudge(ctx context.Context, toEmail string, d TrialLifecycleDetails) {
+	html, err := renderTrialNudge(d)
+	if err != nil {
+		return
+	}
+	if err := n.send(ctx, toEmail, "¿Cómo vas con Chapni?", html); err != nil {
+		slog.Default().Warn("notify: trial-nudge email failed", "err", err)
+	}
+}
+
+// TrialEnding warns the owner the trial is about to end or has just ended.
+func (n *ResendNotifier) TrialEnding(ctx context.Context, toEmail string, d TrialLifecycleDetails) {
+	html, err := renderTrialEnding(d)
+	if err != nil {
+		return
+	}
+	subj := fmt.Sprintf("Tu prueba de Chapni termina en %d días", d.DaysLeft)
+	switch {
+	case d.DaysLeft == 1:
+		subj = "Tu prueba de Chapni termina mañana"
+	case d.DaysLeft <= 0:
+		subj = "Tu prueba de Chapni terminó · tus datos siguen seguros"
+	}
+	if err := n.send(ctx, toEmail, subj, html); err != nil {
+		slog.Default().Warn("notify: trial-ending email failed", "err", err)
+	}
+}
+
 // InvoiceReceipt emails the patient their payment receipt with the PDF attached.
 func (n *ResendNotifier) InvoiceReceipt(ctx context.Context, to string, d InvoiceEmailDetails, pdf []byte) error {
 	brand := n.brandFor(ctx, d.OrgID)

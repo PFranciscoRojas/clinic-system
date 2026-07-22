@@ -58,6 +58,16 @@ type TenantWelcomeDetails struct {
 	SupportWhatsApp string // intl number for the wa.me link; empty hides the CTA
 }
 
+// TrialLifecycleDetails carries the data for the trial nudge/expiry emails
+// sent to the tenant owner during and at the end of the free trial.
+type TrialLifecycleDetails struct {
+	Name            string // owner display name — just a greeting
+	DaysLeft        int    // days remaining; 0 = the trial already ended
+	LoginURL        string
+	BillingURL      string // deep link to the in-app billing section (checkout)
+	SupportWhatsApp string // intl number for the wa.me link; empty hides the CTA
+}
+
 // InvoiceEmailDetails carries the data for emailing a patient their payment
 // receipt (the PDF travels separately as an attachment).
 type InvoiceEmailDetails struct {
@@ -107,6 +117,11 @@ type Notifier interface {
 	TenantSignupAlert(ctx context.Context, toEmail string, d TenantSignupDetails)
 	// TenantWelcome greets the new tenant's owner once their email is confirmed.
 	TenantWelcome(ctx context.Context, toEmail string, d TenantWelcomeDetails)
+	// TrialNudge checks in a few days into the trial (activation prompt).
+	TrialNudge(ctx context.Context, toEmail string, d TrialLifecycleDetails)
+	// TrialEnding warns the owner the trial is about to end (DaysLeft > 0)
+	// or has just ended (DaysLeft == 0), with a direct path to checkout.
+	TrialEnding(ctx context.Context, toEmail string, d TrialLifecycleDetails)
 	// InvoiceReceipt emails the patient their payment receipt with the PDF attached.
 	InvoiceReceipt(ctx context.Context, toEmail string, d InvoiceEmailDetails, pdf []byte) error
 	// PaymentReminder nudges a patient about a pending balance.
@@ -130,6 +145,8 @@ func (NoopNotifier) PasswordReset(_ context.Context, _ string, _ PasswordResetDe
 func (NoopNotifier) AccountVerification(_ context.Context, _ string, _ VerificationDetails) {}
 func (NoopNotifier) TenantSignupAlert(_ context.Context, _ string, _ TenantSignupDetails)   {}
 func (NoopNotifier) TenantWelcome(_ context.Context, _ string, _ TenantWelcomeDetails)      {}
+func (NoopNotifier) TrialNudge(_ context.Context, _ string, _ TrialLifecycleDetails)        {}
+func (NoopNotifier) TrialEnding(_ context.Context, _ string, _ TrialLifecycleDetails)       {}
 func (NoopNotifier) InvoiceReceipt(_ context.Context, _ string, _ InvoiceEmailDetails, _ []byte) error {
 	return nil
 }
