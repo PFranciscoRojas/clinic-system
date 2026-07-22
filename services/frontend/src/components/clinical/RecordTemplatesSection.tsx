@@ -345,13 +345,11 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
             border: '1px solid var(--s100)',
             borderRadius: 10,
             padding: 14,
-            // Sticky beside the builder, so it needs an inner scroll — but bounded
-            // by the viewport instead of a fixed 620px, which cut the preview short
-            // on tall screens and left the panel half empty.
-            maxHeight: 'calc(100vh - 24px)',
-            overflowY: 'auto',
-            position: 'sticky',
-            top: 8,
+            // No sticky and no inner scroll: pinning the preview meant capping
+            // its height, and a capped panel cut the form off partway with a
+            // second scrollbar nested inside the page's own. It now renders the
+            // whole format end to end and the page scrolls once.
+            alignSelf: 'stretch',
           }}>
             <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>
               Vista previa — así lo verá el profesional
