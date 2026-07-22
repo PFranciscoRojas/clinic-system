@@ -40,13 +40,78 @@ ver algo específico va directo al capítulo, sin video.
 
 ## Fases de producción
 
-1. **Fase A (sin dependencias):** capítulos 2, 3, 9 — los datos ya existen; el pipeline ya los
-   capturó una vez. Además el esqueleto Astro de `/guia/` con índice y navegación.
-2. **Fase B (flujos por ejecutar):** capítulos 1, 4, 6, 7, 8 — hay que ejecutar cada flujo en la
-   org demo (crear factura, firmar consentimiento, wizard de cita, etc.) capturando por el camino.
-3. **Fase C (pipeline IA):** capítulo 5 — subir un audio de prueba a la org demo (dispara
-   Whisper + Claude en el VPS, avisar antes de correrlo) para capturar transcripción y borrador
-   IA reales. Capítulo 10 con el material legal existente.
+1. **Fase A (sin dependencias):** ✅ COMPLETADA 2026-07-22 — capítulos 2, 3, 9 en vivo en
+   chapni.com/guia (commit `1436bd5` repo chapni). Esqueleto Astro completo: índice con 10
+   capítulos, template de capítulo con lomo lateral, anterior/siguiente, CTA, JSON-LD.
+   Scripts regenerables en `chapni/scripts/guia/` (credenciales por env vars). Detalle
+   técnico: `imageService: 'compile'` en astro.config.mjs (Workers no tiene /_image).
+2. **Fase B (flujos por ejecutar):** capítulos 4, 7, 6, 8, 1 — ver plan detallado abajo.
+3. **Fase C (pipeline IA):** capítulo 5 (audio real por Whisper en VPS, avisar antes) y
+   capítulo 10 (material legal existente, sin pantallazos del sistema).
+
+## Plan detallado — Fase B
+
+Orden elegido para encadenar datos: la cita del cap 4 alimenta la factura del cap 7; el
+consentimiento del cap 6 usa a Laura Cardona; el cap 1 va al final porque necesita una org
+desechable nueva. Un script Playwright por capítulo (`guia-cap0N.mjs`), un `.md` por capítulo.
+
+### Cap 4 — Citas y agenda (`citas-y-agenda.md`)
+- [ ] Wizard de nueva cita paso a paso (paciente → fecha/hora → modalidad): 2-3 capturas.
+- [ ] Agenda con estados visibles (pendiente/confirmada/completada) — ya hay citas sembradas.
+- [ ] Reagendar una cita (modal o drag).
+- [ ] Página pública de reservas `app.chapni.com/book/consultorio-valentina-rios`
+      (verificada activa 2026-07-22: `/api/v1/public/org` responde para la org demo).
+- [ ] Configuración de recordatorios (email/WhatsApp) — captura de la pantalla de ajustes.
+
+### Cap 7 — Facturación (`facturacion.md`)
+- [ ] Ejecutar el flujo real: factura sobre una cita completada de Laura → registrar pago
+      → recibo PDF. La factura queda en la org demo (datos ficticios, sin problema).
+- [ ] Capturas: tarifario (ya existe del cap 9), nueva factura, lista de facturas con
+      estados, registrar pago, recibo PDF, sección MercadoPago (estado "conectar" — la org
+      demo no está conectada y así se muestra el flujo), recordatorio de saldo.
+
+### Cap 6 — Consentimientos (`consentimientos.md`)
+- [ ] Ejecutar el flujo real con Laura Cardona: elegir plantilla → firma remota (generar
+      link, abrirlo en contexto incógnito para capturar la vista del paciente, firmar) →
+      estado firmado. También captura de la firma en consultorio (canvas).
+- [ ] El consentimiento firmado queda registrado en la org demo — correcto, es ficticio.
+
+### Cap 8 — Configuración y equipo (`configuracion-y-equipo.md`)
+- [ ] Solo capturas, sin flujos: perfil profesional, horario de atención, notificaciones,
+      asistente IA, seguridad/PIN, invitar usuario (modal abierto, sin enviar), Google
+      Calendar (estado desconectado), WhatsApp.
+
+### Cap 1 — Primeros pasos (`primeros-pasos.md`)
+- [ ] Necesita cuenta nueva: signup real con `franciscorojas92+guia1@gmail.com`.
+- [ ] Capturas: formulario de registro, correo de verificación (desde Gmail), onboarding
+      (nombre/PIN), acuerdo de tratamiento de datos.
+- [ ] Al terminar: desactivar la org desechable en BD del VPS (superusuario `sghcp_admin`).
+
+## Plan detallado — Fase C
+
+### Cap 5 — Historia clínica (`historia-clinica.md`)
+- [ ] **Prerrequisito:** un audio de sesión ficticia (2-3 min). Opciones: Francisco graba
+      leyendo un guion ficticio (mejor calidad de demo) o TTS. Preparar el guion primero.
+- [ ] **Avisar a Francisco antes de correr Whisper en el VPS** (RTF ~0,15: 3 min de audio
+      ≈ 30 s de CPU). Runbook existente en `scripts/e2e_audio/`.
+- [ ] Capturas: nota nueva, los 4 formatos clínicos, grabar/subir audio, transcripción,
+      borrador IA (inmutable), aprobación explícita, adenda, exportar PDF.
+
+### Cap 10 — Seguridad y cumplimiento (`seguridad-y-cumplimiento.md`)
+- [ ] Sin pantallazos del sistema: redactar reutilizando el material de Ley 1090/1581 y
+      Res. 1995 que ya está en `/recursos/` y `/seguridad`.
+- [ ] Diagrama simple de cifrado (SVG estático con la paleta de marca, no imagen pesada).
+
+## Cierre del funnel (después de la guía o en paralelo)
+
+- [ ] `[LINK_VIDEO]` en `docs/project/WHATSAPP_RESPUESTAS.md` → reemplazar por
+      `chapni.com/guia` (decisión tomada: la guía sustituye al video).
+- [ ] Enlazar la guía desde la home de la landing y desde `/precios` (sección "cómo funciona").
+- [ ] Alta en directorios: Capterra, GetApp, ComparaSoftware — necesita que Francisco cree
+      las cuentas; los pantallazos de la guía sirven como material.
+- [ ] Rutina blog `/recursos/`: 1 artículo por quincena (hay uno en borrador local).
+- [ ] Métricas de activación (backlog clinic-system).
+- [ ] Precios B2B por tramos: sigue bloqueado por entrevistas (PLAN_B2B_COMERCIAL.md).
 
 ## Criterios de redacción
 
