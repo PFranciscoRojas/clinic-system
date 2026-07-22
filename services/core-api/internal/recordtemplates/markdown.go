@@ -56,11 +56,21 @@ func ParseMarkdown(src string) (sections []SectionDef, suggestedName string, err
 	var current *SectionDef
 	var hintLines []string
 
+	// A hint that still carries a "##" marker means headings were jammed onto
+	// one line and every field after the first was silently absorbed as hint
+	// text instead of becoming its own field. That is how Marcela's intake
+	// template ended up with seven fields buried in one description, so this
+	// fails closed rather than storing a template that looks nothing like what
+	// the professional wrote.
+	var flushErr error
 	flush := func() {
 		if current == nil {
 			return
 		}
 		current.Hint = strings.TrimSpace(strings.Join(hintLines, " "))
+		if flushErr == nil && strings.Contains(current.Hint, "##") {
+			flushErr = fmt.Errorf("record_template: the description of %q contains a %q marker — each field needs its own line", current.Label, "##")
+		}
 		sections = append(sections, *current)
 		current = nil
 		hintLines = nil
@@ -90,6 +100,9 @@ func ParseMarkdown(src string) (sections []SectionDef, suggestedName string, err
 	}
 	flush()
 
+	if flushErr != nil {
+		return nil, "", flushErr
+	}
 	if len(sections) == 0 {
 		return nil, suggestedName, ErrInvalidInput
 	}

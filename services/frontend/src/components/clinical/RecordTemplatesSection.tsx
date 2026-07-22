@@ -345,7 +345,10 @@ function TemplateEditor({ initial, onClose }: EditorProps) {
             border: '1px solid var(--s100)',
             borderRadius: 10,
             padding: 14,
-            maxHeight: 620,
+            // Sticky beside the builder, so it needs an inner scroll — but bounded
+            // by the viewport instead of a fixed 620px, which cut the preview short
+            // on tall screens and left the panel half empty.
+            maxHeight: 'calc(100vh - 24px)',
             overflowY: 'auto',
             position: 'sticky',
             top: 8,
@@ -587,8 +590,9 @@ function TemplateCard({ tpl }: { tpl: RecordTemplate }) {
             borderLeft: '1px solid var(--s100)',
             padding: '14px 16px',
             background: 'var(--s50)',
-            maxHeight: 640,
-            overflowY: 'auto',
+            // No inner scroll here: this panel is not sticky, so capping it only
+            // nested a scrollbar inside the page's own. The card grows with the
+            // format and the preview is readable end to end.
           }}>
             <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--s400)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
               Vista previa — así lo ve el profesional en sesión
