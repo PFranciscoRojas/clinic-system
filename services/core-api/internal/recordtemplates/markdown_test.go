@@ -1,6 +1,7 @@
 package recordtemplates_test
 
 import (
+	"strings"
 	"testing"
 
 	"sghcp/core-api/internal/recordtemplates"
@@ -226,5 +227,19 @@ func TestParseMarkdown_InvalidScale(t *testing.T) {
 	_, _, err := recordtemplates.ParseMarkdown(src)
 	if err == nil {
 		t.Fatal("expected error when scale min >= max")
+	}
+}
+
+// A heading jammed onto the tail of a hint line used to be swallowed silently:
+// every field after the first became description text of the field above it.
+func TestParseMarkdownRejectsHeadingInsideHint(t *testing.T) {
+	src := "## Antecedentes farmacológicos\nMedicamentos actuales y dosis.## Consumo de alcohol {select:Sí|No}\n"
+
+	_, _, err := recordtemplates.ParseMarkdown(src)
+	if err == nil {
+		t.Fatal("expected an error for a heading buried in a hint, got nil")
+	}
+	if !strings.Contains(err.Error(), "Antecedentes farmacológicos") {
+		t.Fatalf("error should name the offending field, got %q", err)
 	}
 }
