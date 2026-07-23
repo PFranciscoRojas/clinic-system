@@ -48,6 +48,14 @@ type BookResult struct {
 // GCal is the subset of gcal.Syncer the service needs (kept small for tests).
 type GCal interface {
 	PushLeadEvent(ctx context.Context, ownerUserID string, in gcal.LeadEventInput) (eventID, meetURL string, err error)
+	BusyTimes(ctx context.Context, ownerUserID string, from, to time.Time) ([]gcal.BusyInterval, error)
+}
+
+// busyInterval is an occupied [start,end) range used when computing free slots:
+// either an existing lead booking or an event on the owner's Google Calendar.
+type busyInterval struct {
+	start time.Time
+	end   time.Time
 }
 
 type Service struct {
@@ -98,7 +106,11 @@ func (s *Service) Availability(ctx context.Context, fromDate, toDate string) ([]
 		to = from.Add(maxWindowDays * 24 * time.Hour)
 	}
 
-	booked, err := s.repo.BookedSlots(ctx, from.UTC(), to.AddDate(0, 0, 1).UTC())
+	dur := cfg.DurationMin
+	if dur <= 0 {
+		dur = 30
+	}
+	busy, err := s.busyWindow(ctx, from.UTC(), to.AddDate(0, 0, 1).UTC(), dur)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +121,7 @@ func (s *Service) Availability(ctx context.Context, fromDate, toDate string) ([]
 		if !contains(cfg.ActiveDays, dayLabels[int(d.Weekday())]) {
 			continue
 		}
-		slots := daySlots(d, cfg, tz, booked, now)
+		slots := daySlots(d, cfg, tz, busy, now)
 		if len(slots) > 0 {
 			out = append(out, DayAvailability{Date: d.Format("2006-01-02"), Slots: slots})
 		}
@@ -117,7 +129,32 @@ func (s *Service) Availability(ctx context.Context, fromDate, toDate string) ([]
 	return out, nil
 }
 
-func daySlots(day time.Time, cfg Settings, tz *time.Location, booked []time.Time, now time.Time) []string {
+// busyWindow gathers every occupied interval in [fromUTC, toUTC): existing lead
+// bookings plus the owner's Google Calendar events (so personal blocks hide the
+// slot). A Google read failure is non-fatal — it degrades to bookings-only
+// rather than breaking the public page.
+func (s *Service) busyWindow(ctx context.Context, fromUTC, toUTC time.Time, dur int) ([]busyInterval, error) {
+	booked, err := s.repo.BookedSlots(ctx, fromUTC, toUTC)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]busyInterval, 0, len(booked))
+	for _, b := range booked {
+		out = append(out, busyInterval{start: b, end: b.Add(time.Duration(dur) * time.Minute)})
+	}
+	if s.gcal != nil && s.ownerUserID != "" {
+		gbusy, gerr := s.gcal.BusyTimes(ctx, s.ownerUserID, fromUTC, toUTC)
+		if gerr != nil {
+			slog.Default().Warn("leadbooking: google busy read failed", "err", gerr)
+		}
+		for _, g := range gbusy {
+			out = append(out, busyInterval{start: g.Start, end: g.End})
+		}
+	}
+	return out, nil
+}
+
+func daySlots(day time.Time, cfg Settings, tz *time.Location, busy []busyInterval, now time.Time) []string {
 	start := toMinutes(cfg.StartHour)
 	end := toMinutes(cfg.EndHour)
 	if start < 0 || end <= start {
@@ -139,7 +176,7 @@ func daySlots(day time.Time, cfg Settings, tz *time.Location, booked []time.Time
 		if !slotStart.After(now) {
 			continue // past
 		}
-		if overlapsBooked(slotStart, slotEnd, booked, dur) {
+		if overlapsBusy(slotStart, slotEnd, busy) {
 			continue
 		}
 		slots = append(slots, slotStart.Format("15:04"))
@@ -147,11 +184,9 @@ func daySlots(day time.Time, cfg Settings, tz *time.Location, booked []time.Time
 	return slots
 }
 
-func overlapsBooked(start, end time.Time, booked []time.Time, dur int) bool {
-	for _, b := range booked {
-		bs := b
-		be := b.Add(time.Duration(dur) * time.Minute)
-		if start.Before(be) && bs.Before(end) {
+func overlapsBusy(start, end time.Time, busy []busyInterval) bool {
+	for _, b := range busy {
+		if start.Before(b.end) && b.start.Before(end) {
 			return true
 		}
 	}
@@ -175,16 +210,27 @@ func (s *Service) Book(ctx context.Context, in BookRequest) (BookResult, error) 
 	if !when.After(time.Now()) {
 		return BookResult{}, ErrNotOffered
 	}
-	// The requested time must be a slot the schedule actually offers on that day.
-	day := time.Date(when.Year(), when.Month(), when.Day(), 0, 0, 0, 0, tz)
-	if !contains(cfg.ActiveDays, dayLabels[int(day.Weekday())]) || !contains(daySlots(day, cfg, tz, nil, time.Now()), in.Time) {
-		return BookResult{}, ErrNotOffered
-	}
-
 	dur := cfg.DurationMin
 	if dur <= 0 {
 		dur = 30
 	}
+
+	// The requested time must be a slot the schedule offers on that day…
+	day := time.Date(when.Year(), when.Month(), when.Day(), 0, 0, 0, 0, tz)
+	if !contains(cfg.ActiveDays, dayLabels[int(day.Weekday())]) || !contains(daySlots(day, cfg, tz, nil, time.Now()), in.Time) {
+		return BookResult{}, ErrNotOffered
+	}
+	// …and it must still be free of other bookings and Google Calendar events.
+	// (The DB unique index guards lead-vs-lead races; this also catches a clash
+	// with a personal calendar block, which has no DB constraint.)
+	busy, err := s.busyWindow(ctx, day.UTC(), day.AddDate(0, 0, 1).UTC(), dur)
+	if err != nil {
+		return BookResult{}, err
+	}
+	if !contains(daySlots(day, cfg, tz, busy, time.Now()), in.Time) {
+		return BookResult{}, ErrSlotTaken
+	}
+
 	id, err := s.repo.Insert(ctx, LeadBooking{
 		Name: in.Name, Email: in.Email, Phone: in.Phone, Message: in.Message,
 		ScheduledAt: when.UTC(), DurationMin: dur,

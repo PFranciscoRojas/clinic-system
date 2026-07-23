@@ -39,17 +39,34 @@ func TestDaySlots_SkipsBooked(t *testing.T) {
 	day := time.Date(2999, 1, 4, 0, 0, 0, 0, tz)
 	now := time.Date(2999, 1, 1, 0, 0, 0, 0, tz)
 
-	booked := []time.Time{
-		time.Date(2999, 1, 4, 9, 30, 0, 0, tz).UTC(),
+	busy := []busyInterval{
+		{start: time.Date(2999, 1, 4, 9, 30, 0, 0, tz), end: time.Date(2999, 1, 4, 10, 0, 0, 0, tz)},
 	}
-	slots := daySlots(day, testSettings(), tz, booked, now)
+	slots := daySlots(day, testSettings(), tz, busy, now)
 	for _, s := range slots {
 		if s == "09:30" {
-			t.Fatalf("booked slot 09:30 should be excluded, got %v", slots)
+			t.Fatalf("busy slot 09:30 should be excluded, got %v", slots)
 		}
 	}
 	if len(slots) != 3 {
 		t.Fatalf("expected 3 free slots, got %v", slots)
+	}
+}
+
+func TestDaySlots_SkipsGoogleBusyInterval(t *testing.T) {
+	tz := loadTZ("America/Bogota")
+	day := time.Date(2999, 1, 4, 0, 0, 0, 0, tz)
+	now := time.Date(2999, 1, 1, 0, 0, 0, 0, tz)
+
+	// A personal calendar block 09:15–10:15 overlaps the 09:00, 09:30 and 10:00
+	// slots (each is 30 min), leaving only 10:30 free.
+	busy := []busyInterval{
+		{start: time.Date(2999, 1, 4, 9, 15, 0, 0, tz), end: time.Date(2999, 1, 4, 10, 15, 0, 0, tz)},
+	}
+	slots := daySlots(day, testSettings(), tz, busy, now)
+	want := []string{"10:30"}
+	if len(slots) != len(want) || slots[0] != want[0] {
+		t.Fatalf("got %v, want %v", slots, want)
 	}
 }
 

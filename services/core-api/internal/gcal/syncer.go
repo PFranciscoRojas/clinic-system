@@ -338,6 +338,82 @@ func (s *Syncer) PushLeadEvent(ctx context.Context, ownerUserID string, in LeadE
 	return created.Id, created.HangoutLink, nil
 }
 
+// BusyInterval is an occupied time range on the owner's calendar.
+type BusyInterval struct {
+	Start time.Time
+	End   time.Time
+}
+
+// BusyTimes returns the owner's busy intervals between from and to, read from
+// their connected Google Calendar via the existing calendar.events scope (no
+// extra consent needed — that scope already grants reading events). Events
+// marked "Free" (transparent) or cancelled are ignored; all-day events block
+// their whole span. Returns nil with no error when the owner has no connection,
+// so callers degrade to bookings-only availability instead of failing.
+func (s *Syncer) BusyTimes(ctx context.Context, ownerUserID string, from, to time.Time) ([]BusyInterval, error) {
+	if !s.Enabled() || ownerUserID == "" {
+		return nil, nil
+	}
+	calID, token, err := s.loadRefreshToken(ctx, ownerUserID)
+	if err != nil || token == nil {
+		return nil, err
+	}
+	if calID == "" {
+		calID = "primary"
+	}
+	svc, err := gcalapi.NewService(ctx, option.WithTokenSource(s.cfg.TokenSource(ctx, token)))
+	if err != nil {
+		return nil, err
+	}
+	var out []BusyInterval
+	call := svc.Events.List(calID).
+		TimeMin(from.Format(time.RFC3339)).
+		TimeMax(to.Format(time.RFC3339)).
+		SingleEvents(true). // expand recurring events into instances
+		ShowDeleted(false).
+		MaxResults(2500).
+		OrderBy("startTime")
+	err = call.Pages(ctx, func(page *gcalapi.Events) error {
+		for _, ev := range page.Items {
+			if ev.Transparency == "transparent" || ev.Status == "cancelled" {
+				continue
+			}
+			if st, en, ok := eventInterval(ev); ok {
+				out = append(out, BusyInterval{Start: st, End: en})
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// eventInterval extracts a [start,end) range from a calendar event, handling
+// both timed events (DateTime) and all-day events (Date, end-exclusive).
+func eventInterval(ev *gcalapi.Event) (time.Time, time.Time, bool) {
+	if ev.Start == nil || ev.End == nil {
+		return time.Time{}, time.Time{}, false
+	}
+	if ev.Start.DateTime != "" && ev.End.DateTime != "" {
+		st, e1 := time.Parse(time.RFC3339, ev.Start.DateTime)
+		en, e2 := time.Parse(time.RFC3339, ev.End.DateTime)
+		if e1 == nil && e2 == nil {
+			return st, en, true
+		}
+		return time.Time{}, time.Time{}, false
+	}
+	if ev.Start.Date != "" && ev.End.Date != "" {
+		st, e1 := time.ParseInLocation("2006-01-02", ev.Start.Date, bogota)
+		en, e2 := time.ParseInLocation("2006-01-02", ev.End.Date, bogota)
+		if e1 == nil && e2 == nil {
+			return st, en, true
+		}
+	}
+	return time.Time{}, time.Time{}, false
+}
+
 // DeleteLeadEvent removes a previously created lead event (best-effort, used on
 // cancellation). No-op when the owner has no connection or the id is empty.
 func (s *Syncer) DeleteLeadEvent(ctx context.Context, ownerUserID, eventID string) error {
