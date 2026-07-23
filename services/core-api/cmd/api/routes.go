@@ -23,6 +23,7 @@ import (
 	consentshandler "sghcp/core-api/internal/consents/handler"
 	diagnoseshandler "sghcp/core-api/internal/diagnoses/handler"
 	invoicinghandler "sghcp/core-api/internal/invoicing"
+	leadbookinghandler "sghcp/core-api/internal/leadbooking"
 	legalhandler "sghcp/core-api/internal/legal"
 	"sghcp/core-api/internal/notifications"
 	"sghcp/core-api/internal/notify"
@@ -84,6 +85,16 @@ func (a *app) buildRouter() http.Handler {
 		r.Use(middleware.RateLimit(30, time.Minute))
 		r.Mount("/api/v1/public/availability", availabilityH.PublicRoutes())
 		r.Mount("/api/v1/public/org", availabilityH.InfoRoutes())
+	})
+
+	// Lead (sales) agenda — the superadmin's public "book a call" page (/agenda).
+	// Global, non-tenant; the booked call lands on the superadmin's Google Calendar.
+	leadBookingH := leadbookinghandler.NewHandler(
+		leadbookinghandler.New(a.pool), a.gcal, notifier,
+		a.cfg.LeadsCalendarUserID, a.cfg.SignupNotifyEmail)
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.RateLimit(15, time.Minute))
+		r.Mount("/api/v1/public/agenda", leadBookingH.PublicRoutes())
 	})
 
 	// In-app notification inbox (the topbar bell). Shared: background emitters
@@ -187,6 +198,10 @@ func (a *app) buildRouter() http.Handler {
 
 		// Legal document CMS — SYSTEM_ADMIN write (public reads are above).
 		legalH.RegisterAdminRoutes(r.With(middleware.RequireRole("SYSTEM_ADMIN")))
+
+		// Lead agenda settings + booking list — operator console (SYSTEM_ADMIN).
+		r.With(middleware.RequireRole("SYSTEM_ADMIN")).
+			Mount("/api/v1/admin/lead-bookings", leadBookingH.AdminRoutes())
 	})
 
 	return r

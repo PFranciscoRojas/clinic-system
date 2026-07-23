@@ -147,6 +147,12 @@
 ## Facturación
 - Analytics avanzado: ingresos por servicio, ticket promedio, conversión de leads.
 
+## Agenda de leads (ventas) — /agenda (2026-07-22)
+- **Fase 2: leer free/busy del Google Calendar del superadmin** — hoy la disponibilidad de `/agenda` sale de los horarios configurados menos los leads ya reservados; NO consulta el calendario real, así que un evento personal no bloquea el hueco (el superadmin lo bloquea a mano). Requiere ampliar el scope OAuth a `calendar.readonly` y reautorizar una vez.
+- **UI de horarios en el Operador (SuperAdmin)** — los endpoints admin ya existen (`GET/PUT /api/v1/admin/lead-bookings/settings`, `GET /api/v1/admin/lead-bookings`); falta la tarjeta en `SuperAdminPage.tsx` para editar días/horas sin SQL. Por ahora los defaults (Lun–Vie 09:00–17:00, slots de 30 min) van sembrados por la migración 000069.
+- **Redirect `chapni.com/agenda` → `app.chapni.com/agenda`** — para compartir el link con dominio raíz (cambio en el landing, repo `../chapni`).
+- **Cancelación/reprogramación por el lead** — vía token de un solo uso; hoy se reagenda respondiendo el correo.
+
 ## Booking público
 - **Email de "reserva apartada" a admins** — ✅ Implementado (2026-06-24): `BookingDeferredAdmin` en notifier + resend, llamado desde `holdDeferred()` goroutine.
 - **Doble booking en diferidos** — ✅ Implementado (2026-06-24): re-check de slot en `confirm()` antes del INSERT usando `BusyAppointments`; si hay conflicto → estado `PAID_CONFLICT` + `BookingConflictAdmin` a admins.
