@@ -334,6 +334,67 @@ func (n *ResendNotifier) PaymentReminder(ctx context.Context, to string, d Payme
 	return n.send(ctx, to, "Recordatorio de pago "+d.InvoiceNumber+" · "+brand.PublicName, html)
 }
 
+// LeadBookingConfirmed confirms a booked discovery call to the lead. Product
+// (Chapni) branded, since a lead belongs to no tenant.
+func (n *ResendNotifier) LeadBookingConfirmed(ctx context.Context, d LeadBookingDetails) {
+	greeting := "Hola"
+	if d.Name != "" {
+		greeting = "Hola " + d.Name
+	}
+	meetBlock := ""
+	if d.MeetURL != "" {
+		meetBlock = fmt.Sprintf(
+			`<p style="margin:18px 0 0"><a href="%s" style="display:inline-block;padding:11px 22px;background:%s;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px">Entrar a la videollamada</a></p>`+
+				`<p style="font-size:12px;color:#6b7280;margin:8px 0 0">O copia este enlace: %s</p>`,
+			d.MeetURL, DefaultBrandColor, d.MeetURL)
+	}
+	html := fmt.Sprintf(
+		`<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#1f2937">`+
+			`<p style="font-size:11px;color:%s;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin:0 0 6px">Chapni</p>`+
+			`<h2 style="margin:0 0 12px;font-size:20px">Tu llamada quedó agendada</h2>`+
+			`<p style="font-size:14px;line-height:1.6;margin:0 0 8px">%s. Nos vemos el <strong>%s</strong> (hora de Colombia).</p>`+
+			`<p style="font-size:14px;line-height:1.6;margin:0 0 8px">Es una conversación corta para entender qué necesitas y mostrarte cómo Chapni te puede ayudar. Sin compromiso.</p>`+
+			`%s`+
+			`<p style="font-size:13px;color:#6b7280;margin:22px 0 0">Si necesitas reagendar, responde a este correo.</p></div>`,
+		DefaultBrandColor, greeting, d.When, meetBlock)
+
+	if err := n.send(ctx, d.Email, "Tu llamada con Chapni quedó agendada", html); err != nil {
+		slog.Default().Warn("notify: lead-booking-confirmed email failed", "err", err)
+	}
+}
+
+// LeadBookingAlert tells the superadmin that a lead booked a discovery call.
+func (n *ResendNotifier) LeadBookingAlert(ctx context.Context, toEmail string, d LeadBookingDetails) {
+	if toEmail == "" {
+		return
+	}
+	rows := fmt.Sprintf(
+		`<p style="font-size:14px;line-height:1.7;margin:0 0 4px">Cuándo: <strong>%s</strong></p>`+
+			`<p style="font-size:14px;line-height:1.7;margin:0 0 4px">Nombre: %s</p>`+
+			`<p style="font-size:14px;line-height:1.7;margin:0 0 4px">Correo: %s</p>`,
+		d.When, d.Name, d.Email)
+	if d.Phone != "" {
+		rows += fmt.Sprintf(`<p style="font-size:14px;line-height:1.7;margin:0 0 4px">Teléfono: %s</p>`, d.Phone)
+	}
+	if d.Message != "" {
+		rows += fmt.Sprintf(`<p style="font-size:14px;line-height:1.7;margin:8px 0 0">Mensaje: %s</p>`, d.Message)
+	}
+	meet := ""
+	if d.MeetURL != "" {
+		meet += fmt.Sprintf(`<p style="font-size:13px;margin:12px 0 0"><a href="%s">Enlace de la videollamada</a></p>`, d.MeetURL)
+	}
+	html := fmt.Sprintf(
+		`<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#1f2937">`+
+			`<h2 style="margin:0 0 12px;font-size:18px">Nuevo lead agendó una llamada</h2>`+
+			`%s%s`+
+			`<p style="font-size:13px;color:#6b7280;margin:18px 0 0">Ya está en tu Google Calendar.</p></div>`,
+		rows, meet)
+
+	if err := n.send(ctx, toEmail, fmt.Sprintf("Lead agendó llamada: %s", d.Name), html); err != nil {
+		slog.Default().Warn("notify: lead-booking-alert email failed", "err", err)
+	}
+}
+
 func (n *ResendNotifier) send(ctx context.Context, to, subject, htmlBody string) error {
 	return n.sendWith(ctx, to, subject, htmlBody, nil)
 }

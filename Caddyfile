@@ -28,7 +28,7 @@
     # be indexed. Everything else (/login, /dashboard, /patients…) is the same
     # SPA shell, so leaving it crawlable pollutes the brand's results with
     # duplicates. Add a slug to the matcher to publish another professional.
-    @private not path /book/marcela-chapues /book/marcela-chapues/
+    @private not path /book/marcela-chapues /book/marcela-chapues/ /agenda /agenda/
     header @private X-Robots-Tag "noindex, nofollow"
 
     # API routes → core-api (never cached)

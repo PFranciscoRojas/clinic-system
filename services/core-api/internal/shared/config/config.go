@@ -65,6 +65,11 @@ type Config struct {
 	// Google Calendar OAuth — optional. When empty, the integration is disabled.
 	GoogleClientID     string
 	GoogleClientSecret string
+
+	// LeadsCalendarUserID is the user id whose connected Google Calendar backs
+	// the public lead agenda (/agenda). Empty ⇒ the agenda still records the
+	// booking but skips creating a calendar event.
+	LeadsCalendarUserID string
 }
 
 func Load() Config {
@@ -124,6 +129,8 @@ func Load() Config {
 
 		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
 		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
+
+		LeadsCalendarUserID: getEnv("LEADS_CALENDAR_USER_ID", ""),
 	}
 }
 

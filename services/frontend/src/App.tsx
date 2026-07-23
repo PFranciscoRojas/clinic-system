@@ -20,6 +20,7 @@ import { VerifyEmailPage } from '@/pages/Public/VerifyEmailPage';
 import { VerifyEmailChangePage } from '@/pages/Public/VerifyEmailChangePage';
 import { BillingReturnPage } from '@/pages/Public/BillingReturnPage';
 import { BookingWizardPage } from '@/pages/Public/BookingWizardPage';
+import { LeadBookingPage } from '@/pages/Public/LeadBookingPage';
 import { BookingPaymentReturnPage } from '@/pages/Public/BookingPaymentReturnPage';
 import { TermsPage } from '@/pages/Public/legal/TermsPage';
 import { PrivacyPage } from '@/pages/Public/legal/PrivacyPage';
@@ -71,6 +72,7 @@ export function App() {
       <Route path="/billing/return" element={<BillingReturnPage />} />
       <Route path="/book/return" element={<BookingPaymentReturnPage />} />
       <Route path="/book/:slug" element={<BookingWizardPage />} />
+      <Route path="/agenda" element={<LeadBookingPage />} />
       <Route path="/legal/terminos" element={<TermsPage />} />
       <Route path="/legal/privacidad" element={<PrivacyPage />} />
 

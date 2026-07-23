@@ -98,6 +98,18 @@ type BookingVoucherDetails struct {
 	VoucherURL    string // URL to reopen/print the voucher
 }
 
+// LeadBookingDetails carries the data for the superadmin's lead-agenda emails
+// (a discovery call booked from the public /agenda page). Product-branded
+// (Chapni), not tenant-scoped — a lead belongs to no organization.
+type LeadBookingDetails struct {
+	Name      string // lead's name
+	Email     string // lead's email
+	Phone     string // optional
+	Message   string // optional note the lead left
+	When      string // formatted date+time in America/Bogota
+	MeetURL   string // Google Meet link, when available
+}
+
 // Notifier dispatches booking-lifecycle and consent emails.
 // Implementations must not block — callers fire them in goroutines.
 // Errors are logged internally; they never reach the HTTP response.
@@ -126,6 +138,10 @@ type Notifier interface {
 	InvoiceReceipt(ctx context.Context, toEmail string, d InvoiceEmailDetails, pdf []byte) error
 	// PaymentReminder nudges a patient about a pending balance.
 	PaymentReminder(ctx context.Context, toEmail string, d PaymentReminderDetails) error
+	// LeadBookingConfirmed confirms a booked discovery call to the lead.
+	LeadBookingConfirmed(ctx context.Context, d LeadBookingDetails)
+	// LeadBookingAlert tells the superadmin a lead booked a call.
+	LeadBookingAlert(ctx context.Context, toEmail string, d LeadBookingDetails)
 }
 
 // NoopNotifier satisfies Notifier without sending anything.
@@ -153,3 +169,5 @@ func (NoopNotifier) InvoiceReceipt(_ context.Context, _ string, _ InvoiceEmailDe
 func (NoopNotifier) PaymentReminder(_ context.Context, _ string, _ PaymentReminderDetails) error {
 	return nil
 }
+func (NoopNotifier) LeadBookingConfirmed(_ context.Context, _ LeadBookingDetails)         {}
+func (NoopNotifier) LeadBookingAlert(_ context.Context, _ string, _ LeadBookingDetails)   {}

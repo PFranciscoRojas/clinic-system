@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -276,6 +277,85 @@ func (s *Syncer) PushCreate(ctx context.Context, apptID, staffID, modality strin
 			s.logger.Warn("gcal: save event_id failed", "appt_id", apptID, "err", err)
 		}
 	}()
+}
+
+// LeadEventInput carries the data for a lead (sales) call event.
+type LeadEventInput struct {
+	Title      string    // event summary, e.g. "Llamada Chapni · Ana"
+	Details    string    // description body (lead contact + message)
+	Start      time.Time // event start (any TZ — rendered in America/Bogota)
+	DurMin     int
+	WithMeet   bool // request a Google Meet conference link
+	GuestEmail string
+}
+
+// PushLeadEvent creates a Google Calendar event on the owner's calendar for a
+// lead call and returns the event id and the Meet link (when requested). Unlike
+// PushCreate it runs synchronously and returns the result, because the caller
+// hands the Meet link straight back to the lead. Returns empty strings with no
+// error when the owner has no active connection (the booking still stands).
+func (s *Syncer) PushLeadEvent(ctx context.Context, ownerUserID string, in LeadEventInput) (eventID, meetURL string, err error) {
+	if !s.Enabled() || ownerUserID == "" {
+		return "", "", nil
+	}
+	calID, token, err := s.loadRefreshToken(ctx, ownerUserID)
+	if err != nil || token == nil {
+		return "", "", err
+	}
+	svc, err := gcalapi.NewService(ctx, option.WithTokenSource(s.cfg.TokenSource(ctx, token)))
+	if err != nil {
+		return "", "", err
+	}
+	if calID == "" {
+		calID = "primary"
+	}
+	endAt := in.Start.Add(time.Duration(in.DurMin) * time.Minute)
+	event := &gcalapi.Event{
+		Summary:     in.Title,
+		Description: in.Details,
+		Start:       &gcalapi.EventDateTime{DateTime: in.Start.In(bogota).Format(time.RFC3339), TimeZone: "America/Bogota"},
+		End:         &gcalapi.EventDateTime{DateTime: endAt.In(bogota).Format(time.RFC3339), TimeZone: "America/Bogota"},
+	}
+	if in.GuestEmail != "" {
+		event.Attendees = []*gcalapi.EventAttendee{{Email: in.GuestEmail}}
+	}
+	// SendUpdates=none: Chapni sends its own branded confirmation, so we don't
+	// want Google emailing the attendee a second, unbranded invite.
+	call := svc.Events.Insert(calID, event).SendUpdates("none")
+	if in.WithMeet {
+		event.ConferenceData = &gcalapi.ConferenceData{
+			CreateRequest: &gcalapi.CreateConferenceRequest{
+				RequestId:             "lead-" + strconv.FormatInt(in.Start.UnixNano(), 36),
+				ConferenceSolutionKey: &gcalapi.ConferenceSolutionKey{Type: "hangoutsMeet"},
+			},
+		}
+		call = call.ConferenceDataVersion(1)
+	}
+	created, err := call.Do()
+	if err != nil {
+		return "", "", err
+	}
+	return created.Id, created.HangoutLink, nil
+}
+
+// DeleteLeadEvent removes a previously created lead event (best-effort, used on
+// cancellation). No-op when the owner has no connection or the id is empty.
+func (s *Syncer) DeleteLeadEvent(ctx context.Context, ownerUserID, eventID string) error {
+	if !s.Enabled() || ownerUserID == "" || eventID == "" {
+		return nil
+	}
+	calID, token, err := s.loadRefreshToken(ctx, ownerUserID)
+	if err != nil || token == nil {
+		return err
+	}
+	if calID == "" {
+		calID = "primary"
+	}
+	svc, err := gcalapi.NewService(ctx, option.WithTokenSource(s.cfg.TokenSource(ctx, token)))
+	if err != nil {
+		return err
+	}
+	return svc.Events.Delete(calID, eventID).Do()
 }
 
 // PushCancel deletes the appointment's Google Calendar event.
