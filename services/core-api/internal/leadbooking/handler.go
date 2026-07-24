@@ -62,7 +62,14 @@ func (h *Handler) availability(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusBadRequest, "parámetros inválidos")
 		return
 	}
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{"days": days})
+	// The booking page shows how long the call lasts and in which timezone the
+	// slots are expressed, so both travel with the availability.
+	out := map[string]any{"days": days, "duration_min": 30, "timezone": "America/Bogota"}
+	if cfg, err := h.svc.GetSettings(r.Context()); err == nil {
+		out["duration_min"] = cfg.DurationMin
+		out["timezone"] = cfg.Timezone
+	}
+	httputil.WriteJSON(w, http.StatusOK, out)
 }
 
 func (h *Handler) book(w http.ResponseWriter, r *http.Request) {

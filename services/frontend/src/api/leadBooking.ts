@@ -36,7 +36,7 @@ export interface LeadBooking {
 // Lead (sales) agenda API — no auth. Used by /agenda. Global, non-tenant.
 export const leadBookingApi = {
   availability: (from: string, to: string) =>
-    api.get<{ days: DayAvailability[] }>(
+    api.get<{ days: DayAvailability[]; duration_min: number; timezone: string }>(
       `/public/agenda/availability?from=${from}&to=${to}`,
     ),
 
