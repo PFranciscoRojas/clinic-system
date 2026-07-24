@@ -6,8 +6,10 @@ import {
   Cpu, Users, Bot, RefreshCw, AlertTriangle, Info,
   AlertCircle, MemoryStick,
   CreditCard, Lock, Unlock, CheckCircle, XCircle, Eye, EyeOff, KeyRound,
+  CalendarClock,
 } from 'lucide-react';
 import { adminApi, type AdminOrg, type AdminOrgUser, type SystemHealth, type PlatformMPConfig } from '@/api/admin';
+import { leadBookingAdminApi, type LeadAgendaSettings } from '@/api/leadBooking';
 import { authApi } from '@/api/auth';
 import { legalApi, type LegalDoc } from '@/api/legal';
 import { ConfirmByTextModal } from '@/components/ui/ConfirmByTextModal';
@@ -1127,20 +1129,224 @@ function PlataformaTab() {
   );
 }
 
+// ── Agenda comercial tab ──────────────────────────────────────────────────────
+
+const LEAD_DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+// Half-hour grid, plus '24:00' so a day can run to midnight (the backend
+// special-cases it in toMinutes).
+const HOUR_OPTIONS = (() => {
+  const out: string[] = [];
+  for (let m = 0; m < 24 * 60; m += 30) {
+    out.push(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
+  }
+  out.push('24:00');
+  return out;
+})();
+
+function fmtSlot(iso: string) {
+  return new Date(iso).toLocaleString('es-CO', {
+    weekday: 'short', day: '2-digit', month: 'short',
+    hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota',
+  });
+}
+
+function AgendaTab() {
+  const qc = useQueryClient();
+  const { data: cfg } = useQuery({
+    queryKey: ['admin', 'lead-agenda-settings'],
+    queryFn: leadBookingAdminApi.getSettings,
+  });
+  const { data: booked } = useQuery({
+    queryKey: ['admin', 'lead-bookings'],
+    queryFn: leadBookingAdminApi.list,
+  });
+
+  const [form, setForm] = useState<LeadAgendaSettings | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  // Hydrate the form once the settings land; later refetches must not clobber
+  // edits in progress.
+  useEffect(() => {
+    if (cfg && !form) setForm(cfg);
+  }, [cfg, form]);
+
+  if (!form) {
+    return <div style={{ fontSize: 13, color: 'var(--s500)' }}>Cargando…</div>;
+  }
+
+  const set = <K extends keyof LeadAgendaSettings>(k: K, v: LeadAgendaSettings[K]) => {
+    setForm(f => (f ? { ...f, [k]: v } : f));
+    setMsg(''); setErr('');
+  };
+
+  const toggleDay = (d: string) => {
+    const on = form.active_days.includes(d);
+    set('active_days', on ? form.active_days.filter(x => x !== d) : [...form.active_days, d]);
+  };
+
+  const save = async () => {
+    if (form.active_days.length === 0) { setErr('Elige al menos un día'); return; }
+    if (form.start_hour >= form.end_hour)  { setErr('La hora de fin debe ser posterior a la de inicio'); return; }
+    setSaving(true); setErr(''); setMsg('');
+    try {
+      await leadBookingAdminApi.updateSettings(form);
+      qc.invalidateQueries({ queryKey: ['admin', 'lead-agenda-settings'] });
+      setMsg('Guardado');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'No se pudo guardar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputStyle: React.CSSProperties = {
+    padding: '7px 10px', borderRadius: 7, border: '1.5px solid var(--s200)',
+    fontSize: 13, color: 'var(--s800)', background: '#fff', minWidth: 110,
+  };
+  const cardStyle: React.CSSProperties = {
+    background: '#fff', border: '1px solid var(--s100)', borderRadius: 12, padding: 20,
+  };
+  const labelStyle: React.CSSProperties = {
+    fontSize: 12.5, fontWeight: 600, color: 'var(--s600)', marginBottom: 6, display: 'block',
+  };
+
+  const upcoming = (booked?.bookings ?? []).filter(b => b.status === 'BOOKED');
+
+  return (
+    <div style={{ display: 'grid', gap: 18 }}>
+      <div style={cardStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <CalendarClock size={17} color="#5b52ad" />
+          <span style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--s800)' }}>Horario de la agenda comercial</span>
+        </div>
+        <p style={{ fontSize: 12.5, color: 'var(--s500)', margin: '0 0 18px' }}>
+          Define cuándo se ofrecen llamadas en la página pública <strong>chapni.com/agenda</strong>. Los horarios
+          ocupados en tu Google Calendar se descuentan automáticamente.
+        </p>
+
+        <label style={labelStyle}>Días de atención</label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 18 }}>
+          {LEAD_DAYS.map(d => {
+            const on = form.active_days.includes(d);
+            return (
+              <button
+                key={d}
+                onClick={() => toggleDay(d)}
+                style={{
+                  padding: '7px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                  border: on ? '1.5px solid #5b52ad' : '1.5px solid var(--s200)',
+                  background: on ? '#5b52ad' : '#fff',
+                  color: on ? '#fff' : 'var(--s500)',
+                }}
+              >
+                {d}
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18 }}>
+          <div>
+            <label style={labelStyle}>Hora de inicio</label>
+            <select value={form.start_hour} onChange={e => set('start_hour', e.target.value)} style={inputStyle}>
+              {HOUR_OPTIONS.filter(h => h !== '24:00').map(h => <option key={h} value={h}>{h}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Hora de fin</label>
+            <select value={form.end_hour} onChange={e => set('end_hour', e.target.value)} style={inputStyle}>
+              {HOUR_OPTIONS.map(h => <option key={h} value={h}>{h}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Duración de la llamada</label>
+            <select value={form.duration_min} onChange={e => set('duration_min', Number(e.target.value))} style={inputStyle}>
+              {[15, 20, 30, 45, 60].map(n => <option key={n} value={n}>{n} min</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Espaciado entre horarios</label>
+            <select value={form.slot_step_min} onChange={e => set('slot_step_min', Number(e.target.value))} style={inputStyle}>
+              {[15, 20, 30, 45, 60].map(n => <option key={n} value={n}>Cada {n} min</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Zona horaria</label>
+            <select value={form.timezone} onChange={e => set('timezone', e.target.value)} style={inputStyle}>
+              {['America/Bogota', 'America/Mexico_City', 'America/Santiago', 'America/Lima',
+                'America/Argentina/Buenos_Aires', 'Europe/Madrid'].map(tz => <option key={tz} value={tz}>{tz}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={save}
+            disabled={saving}
+            style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: 'var(--teal)', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}
+          >
+            {saving ? 'Guardando…' : 'Guardar cambios'}
+          </button>
+          {msg && <span style={{ fontSize: 12.5, color: '#059669', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}><CheckCircle size={13} /> {msg}</span>}
+          {err && <span style={{ fontSize: 12.5, color: '#dc2626' }}>{err}</span>}
+        </div>
+      </div>
+
+      <div style={cardStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <Users size={17} color="#5b52ad" />
+          <span style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--s800)' }}>
+            Llamadas agendadas {upcoming.length > 0 && `(${upcoming.length})`}
+          </span>
+        </div>
+        {upcoming.length === 0 ? (
+          <p style={{ fontSize: 13, color: 'var(--s500)', margin: 0 }}>Todavía no hay llamadas agendadas.</p>
+        ) : (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {upcoming.map(b => (
+              <div key={b.id} style={{ borderBottom: '1px solid var(--s100)', paddingBottom: 10 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--s800)' }}>{b.name}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--s600)', marginTop: 2 }}>
+                  {fmtSlot(b.scheduled_at)} · {b.duration_min} min
+                </div>
+                <div style={{ fontSize: 12.5, color: 'var(--s500)', marginTop: 2 }}>
+                  {b.email}{b.phone ? ` · ${b.phone}` : ''}
+                </div>
+                {b.message && (
+                  <div style={{ fontSize: 12.5, color: 'var(--s600)', marginTop: 4, fontStyle: 'italic' }}>“{b.message}”</div>
+                )}
+                {b.meet_url && (
+                  <a href={b.meet_url} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: '#5b52ad', fontWeight: 600 }}>
+                    Enlace de Meet
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-type Tab = 'sistema' | 'tenants' | 'plataforma' | 'legal';
+type Tab = 'sistema' | 'tenants' | 'plataforma' | 'legal' | 'agenda';
 const TAB_TITLES: Record<Tab, string> = {
   sistema:    'Sistema',
   tenants:    'Tenants',
   plataforma: 'Plataforma',
   legal:      'Legal',
+  agenda:     'Agenda comercial',
 };
 
 export function SuperAdminPage() {
   const [searchParams] = useSearchParams();
   const rawTab = searchParams.get('tab') ?? 'sistema';
-  const tab: Tab = (['sistema', 'tenants', 'plataforma', 'legal'] as Tab[]).includes(rawTab as Tab)
+  const tab: Tab = (['sistema', 'tenants', 'plataforma', 'legal', 'agenda'] as Tab[]).includes(rawTab as Tab)
     ? (rawTab as Tab)
     : 'sistema';
 
@@ -1156,6 +1362,7 @@ export function SuperAdminPage() {
       {tab === 'tenants'    && <TenantsTab />}
       {tab === 'legal'      && <LegalTab />}
       {tab === 'plataforma' && <PlataformaTab />}
+      {tab === 'agenda'     && <AgendaTab />}
     </div>
   );
 }
