@@ -4,19 +4,20 @@ Para configurar en WhatsApp Business como respuestas rápidas (`/demo`, `/precio
 Objetivo: responder en 30 segundos sin dar demos en vivo. Sigue las reglas de copy de la marca
 (sin guion largo, sin negrita, tono directo).
 
-Cuando exista el video demo, reemplazar `[LINK_VIDEO]` en todas las respuestas.
+El video demo se descartó: en su lugar está la guía del sistema en chapni.com/guia, con los
+10 capítulos y pantallazos reales. Ahí apuntan ahora las respuestas.
 
 ---
 
 ## /demo — "¿Me lo puedes mostrar?"
 
-> ¡Hola! Claro. Te dejo un video de 4 minutos donde se ve Chapni funcionando de verdad: agenda, historia clínica y la nota que se redacta sola desde el audio de la sesión.
+> ¡Hola! Claro. Te dejo la guía completa de Chapni, con pantallazos reales de cada pantalla: agenda, historia clínica y la nota que se redacta sola desde el audio de la sesión.
 >
-> [LINK_VIDEO]
+> https://chapni.com/guia
 >
 > Y si prefieres tocarlo tú, puedes crear tu cuenta gratis y probarlo 14 días con calma: https://app.chapni.com/signup
 >
-> Cualquier duda que te salga viéndolo, me escribes por aquí.
+> Cualquier duda que te salga leyéndola, me escribes por aquí.
 
 ## /precio — "¿Cuánto cuesta?"
 
