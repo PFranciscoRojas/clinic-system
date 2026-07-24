@@ -1162,23 +1162,21 @@ function AgendaTab() {
     queryFn: leadBookingAdminApi.list,
   });
 
-  const [form, setForm] = useState<LeadAgendaSettings | null>(null);
+  // The form is the fetched settings until the user edits something; from then
+  // on the draft wins, so a background refetch can't clobber edits in progress.
+  const [draft, setDraft] = useState<LeadAgendaSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
 
-  // Hydrate the form once the settings land; later refetches must not clobber
-  // edits in progress.
-  useEffect(() => {
-    if (cfg && !form) setForm(cfg);
-  }, [cfg, form]);
+  const form = draft ?? cfg ?? null;
 
   if (!form) {
     return <div style={{ fontSize: 13, color: 'var(--s500)' }}>Cargando…</div>;
   }
 
   const set = <K extends keyof LeadAgendaSettings>(k: K, v: LeadAgendaSettings[K]) => {
-    setForm(f => (f ? { ...f, [k]: v } : f));
+    setDraft({ ...form, [k]: v });
     setMsg(''); setErr('');
   };
 
