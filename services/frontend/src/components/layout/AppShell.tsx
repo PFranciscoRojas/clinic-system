@@ -6,6 +6,7 @@ import {
   Search, Plus, ChevronDown, Lock, LogOut, Menu,
   UserCircle, Calendar, X, Clock, Building2, Receipt,
   PanelLeftClose, PanelLeftOpen, Activity, FileText, CreditCard,
+  CalendarClock,
 } from 'lucide-react';
 import { BrandMark } from '@/components/ui/BrandMark';
 import { useAuth } from '@/context/AuthContext';
@@ -285,6 +286,7 @@ export function AppShell({ children }: Props) {
                 {([
                   { to: '/admin?tab=sistema',    Icon: Activity,    label: 'Sistema',      tab: 'sistema'    },
                   { to: '/admin?tab=tenants',    Icon: Building2,   label: 'Tenants',      tab: 'tenants'    },
+                  { to: '/admin?tab=agenda',     Icon: CalendarClock, label: 'Agenda comercial', tab: 'agenda' },
                   { to: '/admin?tab=plataforma', Icon: CreditCard,  label: 'Plataforma',   tab: 'plataforma' },
                   { to: '/admin?tab=legal',      Icon: FileText,    label: 'Legal',        tab: 'legal'      },
                 ] as const).map(({ to, Icon, label, tab }) => {
