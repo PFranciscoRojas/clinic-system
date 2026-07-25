@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"sghcp/core-api/internal/shared/hash"
-	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
 )
 
@@ -54,13 +53,13 @@ func (w *Writer) record(r *http.Request, action, resourceType, resourceID, reaso
 	emailHash := hash.Normalize(claims.Email)
 	userAgent := r.UserAgent()
 	roles := claims.Roles
-	// The real client IP, not Caddy's address on the Docker network — every
-	// entry would otherwise record the same useless proxy IP. X-Forwarded-For
-	// is client-controlled, so an unparseable value is dropped rather than
-	// risking the whole INSERT on the ::inet cast.
-	var ip *string
-	if raw := httputil.ExtractIP(r); net.ParseIP(raw) != nil {
-		ip = &raw
+	// RemoteAddr is already the real client IP: chimiddleware.RealIP runs first
+	// on every route and rewrites it from X-Forwarded-For, validating the value
+	// so a malformed header cannot reach the ::inet cast. Do not "fix" this to
+	// re-read the headers here — it would only duplicate that middleware.
+	ip := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(ip); err == nil {
+		ip = host
 	}
 
 	go func() {
