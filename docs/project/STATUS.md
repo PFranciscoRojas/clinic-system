@@ -59,6 +59,7 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 
 ### Últimos PRs a `main` (sesión 2026-07-23/25, todos desplegados por CI)
 
+- `#227` feat(auth): **auditoría de todo acceso denegado a un recurso** — el enlace directo a un paciente de otro consultorio ya fallaba en cerrado (RLS → cero filas → 404, indistinguible de un ID inventado a propósito); faltaba el rastro. Middleware `audit.Writer.Denied()` sobre el grupo protegido registra `RESOURCE_ACCESS_DENIED` con `success=false` ante 403/404 y solo en rutas con ID de recurso. Corrige además que la auditoría venía guardando la IP del proxy de Docker en vez de la del cliente (`httputil.ExtractIP`). Sin migraciones.
 - `#219` feat(agenda): **agenda de leads `/agenda`** vinculada al Google Calendar del superadmin. Migración `000069` (`lead_bookings`, `lead_booking_settings`). Hallazgo: el scope OAuth vigente (`calendar.events`) ya alcanza para crear evento + Meet — no hubo que reautorizar.
 - `#220` feat(agenda): la disponibilidad **respeta el free/busy real del calendario** — antes un bloqueo personal se ofrecía como libre. Ignora eventos "Libre" (transparent) y cancelados; los de día completo bloquean el día. Fail-closed si la lectura falla.
 - `#221` chore(docs): guía del sistema completa — 10 capítulos en vivo en `chapni.com/guia`.
@@ -140,7 +141,7 @@ Antes la apertura tenía 27 campos con 16 de texto libre. `TestReconstructedForm
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción — CI deploy (último: PR #225, contenedor arrancado 2026-07-24 17:17 UTC). Migración `000069_lead_bookings` aplicada — **verificado 2026-07-25: `schema_migrations` = 69, dirty=f**. |
+| `core-api:8080` | ✅ producción — CI deploy (último: PR #227, 2026-07-25 22:34 UTC). Migración `000069_lead_bookings` aplicada — **verificado 2026-07-25: `schema_migrations` = 69, dirty=f**. |
 | `ai-service` | ✅ producción — CI deploy (último: PR #208, 2026-07-21: `risk` pasa a control fijo del sistema, ya no widget de plantilla). Pipeline validado E2E con audio de 58 min (2026-07-11). |
 | `frontend` (Caddy :80/:443) | ✅ producción — **CI deploy automático desde PR #185** (`build-frontend.yml`: build en Actions + rsync in-place al bind mount, sin restart de Caddy). Último: PR #226 (2026-07-25 21:59 UTC, agenda de leads sin nombre de anfitrión). **Caddy recreado a mano** el 2026-07-21 tras PR #211 (bind-mount de archivo: `reload` no basta). **Dominio:** `https://app.chapni.com` (DNS en nube gris a propósito: en proxy se rompe el ACME de Caddy, y Cloudflare corta las subidas en 100 MB — bloqueante para audio de sesión); `api.marcelachapues.com` legacy (mantiene `/api` para webhooks, redirige 308 el resto). |
 | Backups | `pg_dump` diario cifrado GPG → Backblaze B2 + **snapshot cifrado del `.env`** (desde 2026-07-13). Llave GPG rotada 2026-07-13: `backups@chapni.com` (privada en máquina del operador + LastPass; la vieja solo lee dumps ≤ 2026-07-13). **Restore probado**: RTO datos ~15 s — runbook en `docs/ops/DR_RUNBOOK.md`. |
