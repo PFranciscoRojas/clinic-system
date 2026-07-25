@@ -5,8 +5,13 @@ congelados en el 2026-07-22 y no registraban la ola `/agenda` (PRs #219–#226) 
 anterior no cerró con `/actualizar-contexto`. Todo verificado contra producción, no contra los docs.
 
 **Estado real confirmado (2026-07-25):** `schema_migrations` = 69 (dirty=f) · 5 contenedores arriba ·
-disco 27% · últimos 8 runs de CI en verde · working tree limpio · `tsc --noEmit` del frontend sin
-errores · `GET /agenda` → 200 y el free/busy del calendario bloqueando huecos de verdad.
+disco 27% · CI en verde · `tsc --noEmit` del frontend sin errores · `GET /agenda` → 200 y el free/busy
+del calendario bloqueando huecos de verdad. Cerrando la sesión entró además el **PR #227**
+(auditoría de todo acceso denegado a un recurso + IP real del cliente en `audit_log`), ya desplegado.
+
+**Nota de concurrencia:** esta sesión coincidió con otra trabajando el mismo working tree. El PR #227
+se llevó dentro, sin querer, los 4 archivos de documentación de este cierre. No hubo pérdida — el
+contenido quedó íntegro en `main` — pero conviene no tener dos sesiones sobre el mismo checkout.
 
 **Cabo suelto fuera de este repo:** `../chapni` tiene trabajo sin commitear —
 `docs/marketing/plan-seo-backlinks-geo.md` modificado y el artículo
