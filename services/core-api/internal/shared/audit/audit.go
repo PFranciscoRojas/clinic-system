@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"sghcp/core-api/internal/shared/hash"
+	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
 )
 
@@ -33,6 +34,13 @@ func (w *Writer) Record(r *http.Request, action, resourceType, resourceID string
 // snapshot and an explicit justification string in the audit_log metadata.
 // Used for break-the-glass access (Ley 23/1981 — Res. 1995/1999 audit trail).
 func (w *Writer) RecordWithReason(r *http.Request, action, resourceType, resourceID, reason string) {
+	w.record(r, action, resourceType, resourceID, reason, true)
+}
+
+// record is the single insert path. success=false marks a refused access —
+// the entry then documents that the system denied the request, which is the
+// half of the trail an "it never happened" claim cannot dispute.
+func (w *Writer) record(r *http.Request, action, resourceType, resourceID, reason string, success bool) {
 	if w == nil || w.pool == nil {
 		return
 	}
@@ -46,10 +54,13 @@ func (w *Writer) RecordWithReason(r *http.Request, action, resourceType, resourc
 	emailHash := hash.Normalize(claims.Email)
 	userAgent := r.UserAgent()
 	roles := claims.Roles
-
-	ip := r.RemoteAddr
-	if host, _, err := net.SplitHostPort(ip); err == nil {
-		ip = host
+	// The real client IP, not Caddy's address on the Docker network — every
+	// entry would otherwise record the same useless proxy IP. X-Forwarded-For
+	// is client-controlled, so an unparseable value is dropped rather than
+	// risking the whole INSERT on the ::inet cast.
+	var ip *string
+	if raw := httputil.ExtractIP(r); net.ParseIP(raw) != nil {
+		ip = &raw
 	}
 
 	go func() {
@@ -67,10 +78,10 @@ func (w *Writer) RecordWithReason(r *http.Request, action, resourceType, resourc
 				(organization_id, user_id, user_email_hash, action, resource_type,
 				 resource_id, ip_address, user_agent, success,
 				 user_roles_snapshot, metadata)
-			VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, $7::inet, $8, true,
-			        $9, $10::jsonb)
+			VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, $7::inet, $8, $9,
+			        $10, $11::jsonb)
 		`, orgID, userID, emailHash, action, resourceType, resID, ip, userAgent,
-			roles, metadata)
+			success, roles, metadata)
 		if err != nil {
 			slog.Error("audit write failed", "action", action, "resource_type", resourceType, "err", err)
 		}

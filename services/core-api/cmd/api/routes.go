@@ -32,6 +32,7 @@ import (
 	profileshandler "sghcp/core-api/internal/profiles/handler"
 	rthandler "sghcp/core-api/internal/recordtemplates/handler"
 	rtrepo "sghcp/core-api/internal/recordtemplates/repository"
+	"sghcp/core-api/internal/shared/audit"
 	"sghcp/core-api/internal/shared/middleware"
 	tphandler "sghcp/core-api/internal/treatmentplans/handler"
 )
@@ -135,6 +136,10 @@ func (a *app) buildRouter() http.Handler {
 		// Block clinical access once the trial/subscription lapses (export and
 		// the operator console stay open; SYSTEM_ADMIN is never gated).
 		r.Use(middleware.SubscriptionGate(a.pool))
+		// Leave a trail when a resource is refused (403, or the 404 RLS returns
+		// for another tenant's row) — proving the denial is part of the
+		// habeas-data story, and the API's answer alone leaves no record.
+		r.Use(audit.New(a.pool).Denied())
 
 		r.Mount("/api/v1/patients", patientshandler.New(a.pool, a.km, notif).Routes())
 		r.Mount("/api/v1/notifications", notif.Routes())
