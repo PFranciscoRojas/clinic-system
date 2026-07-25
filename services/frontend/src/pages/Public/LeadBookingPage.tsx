@@ -215,10 +215,7 @@ export function LeadBookingPage() {
               <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.01em' }}>Chapni</span>
             </div>
 
-            <p style={{ margin: '26px 0 4px', fontSize: 13, fontWeight: 600, color: INK_SOFT }}>
-              Marcela Chapués · Chapni
-            </p>
-            <h1 style={{ margin: '0 0 18px', fontSize: 23, fontWeight: 800, lineHeight: 1.2, color: INDIGO }}>
+            <h1 style={{ margin: '26px 0 18px', fontSize: 23, fontWeight: 800, lineHeight: 1.2, color: INDIGO }}>
               Llamada de descubrimiento
             </h1>
 
