@@ -588,10 +588,35 @@ export function PatientProfilePage() {
     );
   }
 
+  // A link to a patient of another clinic lands here too: the API answers 404
+  // exactly as it does for a typo, on purpose, so the page must not speculate
+  // about why — just offer the way back.
   if (isError || !patient) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--red)', padding: 24, fontSize: 14 }}>
-        <AlertCircle size={16} /> Paciente no encontrado
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14,
+        padding: '72px 24px', textAlign: 'center',
+      }}>
+        <AlertCircle size={30} color="var(--s400)" />
+        <div>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--s800)' }}>
+            Este paciente no está disponible
+          </p>
+          <p style={{ margin: '6px 0 0', fontSize: 13.5, lineHeight: 1.6, color: 'var(--s500)', maxWidth: 380 }}>
+            El enlace puede estar mal copiado, el paciente pudo ser archivado, o pertenece
+            a otro consultorio.
+          </p>
+        </div>
+        <button
+          onClick={() => navigate('/patients')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px', marginTop: 4,
+            borderRadius: 9, border: '1px solid var(--s200)', background: '#fff',
+            fontSize: 13.5, fontWeight: 600, color: 'var(--s700)', cursor: 'pointer',
+          }}
+        >
+          <ArrowLeft size={15} /> Volver a pacientes
+        </button>
       </div>
     );
   }
