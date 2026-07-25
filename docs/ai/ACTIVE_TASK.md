@@ -1,40 +1,34 @@
 ## Sin tarea pendiente
 
-Sesión 2026-07-21/22 cerrada limpia — PRs #211, #213 y #215 mergeados y desplegados por CI, los 4
-formatos clínicos reconstruidos y aplicados en producción, y el trabajo de landing/SEO del repo
-`../chapni` desplegado y verificado.
+Sesión 2026-07-25 cerrada limpia. No fue de desarrollo sino de **verificación**: los docs estaban
+congelados en el 2026-07-22 y no registraban la ola `/agenda` (PRs #219–#226) porque la sesión
+anterior no cerró con `/actualizar-contexto`. Todo verificado contra producción, no contra los docs.
 
-Quedan dos pendientes que **no son código** y no bloquean nada:
+**Estado real confirmado (2026-07-25):** `schema_migrations` = 69 (dirty=f) · 5 contenedores arriba ·
+disco 27% · últimos 8 runs de CI en verde · working tree limpio · `tsc --noEmit` del frontend sin
+errores · `GET /agenda` → 200 y el free/busy del calendario bloqueando huecos de verdad.
 
-- **Autorizar el MCP `cloudflare-api`** — `/mcp` en el prompt. El plugin `cloudflare@cloudflare` ya
-  está instalado global (13 skills + 5 MCP); solo `cloudflare-docs` quedó conectado. Sin autorizar,
-  cada cambio en Cloudflare vuelve a ser ida y vuelta manual por el panel, como pasó esta sesión con
-  la regla de redirección. De paso queda por confirmar si *JavaScript Detections* está apagado: el
-  script `/cdn-cgi/challenge-platform/…` seguía inyectado pero el HTML se sirve cacheado
-  (`cf-cache-status: HIT`), así que hace falta purgar para verificarlo. Es cosmético — ese script es
-  inline y el CSP del sitio (`script-src 'self'`) ya lo bloquea.
-- **Revisión clínica de 2 decisiones del rebuild de formatos** (ver Bloqueantes en `STATUS.md`):
-  consumo de SPA quedó como multiselect de sustancias con frecuencias plegadas en vez del "Sí/No" +
-  casillas del papel; e ideación suicida / intento previo siguen como campos del formato aunque el
-  sistema ya tiene su control fijo de riesgo. Ambas se ajustan desde el builder visual, sin tocar BD.
+**Cabo suelto fuera de este repo:** `../chapni` tiene trabajo sin commitear —
+`docs/marketing/plan-seo-backlinks-geo.md` modificado y el artículo
+`src/content/recursos/como-elegir-software-historia-clinica-psicologos-colombia.md` sin trackear.
 
 ## Sugerencia de siguiente paso
 
 Basándome en STATUS.md (bloqueantes + roadmap) y BACKLOG.md, lo más valioso a atacar ahora es:
 
-1. **Testimonios de Marcela para la landing** — es el hueco más grande del sitio y lo señalaron los
-   dos LLM que evaluaron chapni.com: cero prueba social en un producto que guarda historias clínicas,
-   donde la confianza lo es todo. Marcela ya es usuaria real; con tres frases suyas (nombre, foto,
-   ciudad) la sección se monta en una sesión corta. Barato y ataca conversión, que es el cuello real.
-2. **Directorios: AlternativeTo, Capterra, GetApp** — el dominio sigue con casi cero backlinks y por
-   eso solo el home está indexado; las 6 guías de `/recursos` siguen descubiertas pero sin indexar.
-   Ninguno pide dirección ni código, y es la única palanca que destraba la indexación. No la puedo
-   ejecutar yo.
-3. **Las 5 entrevistas B2B** (Insight Psicología IPS, Clínica Retornar, IPS Psicoe, Trascender,
-   Centro de Familia UPB) — paradas desde 2026-07-07; bloquean el precio por tramos, RIPS y publicar
-   la tabla B2B en la landing.
+1. **Encender WhatsApp** — al verificar la BD resultó que el pendiente estaba mal descrito: las tres
+   plantillas ya están escritas (`recordatorio_cita_24h`, `recordatorio_cita_2h`, `cita_confirmada`,
+   `es_CO`) y el `phone_number_id` está puesto; lo único que falta es que `enabled` sigue en `false`.
+   Confirmar que Meta desbloqueó tras el pago y activar el toggle en Ajustes → Integraciones. Es la
+   acción más barata del tablero y enciende los recordatorios automáticos de una vez.
+2. **Redirect `chapni.com/agenda` → `app.chapni.com/agenda`** (repo `../chapni`) — hoy da 404, así que
+   el link de la agenda comercial no se puede compartir con el dominio raíz, que es el que la gente
+   escribe. La ola `/agenda` está completa salvo esto. De paso, commitear lo que quedó suelto ahí.
+3. **Testimonios de Marcela para la landing** — sigue siendo el hueco más grande del sitio (cero
+   prueba social en un producto que guarda historias clínicas). Verificado: no hay ni un componente de
+   testimonio en el repo del landing. Con tres frases suyas se monta en una sesión corta.
 4. **Beta con 2-3 psicólogas externas** (🔴, el bloqueante más antiguo del 1.0.0) — sigue siendo la
    acción de mayor apalancamiento y es del founder, no de código.
 
-> El patrón de fondo de la sesión: lo técnico ya está resuelto. Lo que falta para vender no es
-> producto, es que alguien más que Marcela use Chapni.
+> El patrón no cambió respecto a la sesión anterior: lo técnico está resuelto y verificado. Lo que
+> falta para vender no es producto, es que alguien más que Marcela use Chapni.
