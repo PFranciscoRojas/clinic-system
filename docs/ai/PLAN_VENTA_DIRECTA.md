@@ -71,6 +71,46 @@ Bloquea la franja en tu calendario. Misma hora todos los días. Si un día no se
 
 Todo el copy sigue las reglas de escritura de Chapni: sin guion largo, sin negrita, sin abrir con ¿, frases de largo distinto, nada de "no es solo X, es Y".
 
+### 4.0 WhatsApp a las colegas de Marcela (el primero de todos)
+
+Este es el único mensaje con referido de por medio, así que es el que más probabilidad tiene de
+convertir. Lo manda Marcela desde su número, no tú. Un mensaje frío tuyo a una desconocida vale
+mucho menos que este.
+
+Texto para que Marcela mande, ajustando el nombre:
+
+```
+Hola Cami, cómo vas.
+
+Te cuento algo por si te sirve. Francisco me armó un sistema para llevar mis historias clínicas y
+llevo como un año usándolo todos los días. Lo que más me cambió la semana es que ya no me siento
+los domingos a escribir notas: grabo la sesión con permiso del paciente, y me queda un borrador
+escrito que yo reviso y corrijo antes de guardarlo.
+
+Ahora lo quiere abrir a unas pocas psicólogas más antes de lanzarlo bien. Te lo deja montado él
+mismo y gratis un mes, y lo único que pide es que le digas qué te estorba.
+
+Si te suena te lo presento. Si no, no pasa nada.
+```
+
+Si la colega responde que sí, Marcela pasa el contacto y de ahí en adelante escribes tú. Ahí ya
+puedes usar el mensaje 4.2 quitando la parte de presentarte, porque ya te presentaron.
+
+### 4.0.1 Pedirle los testimonios a Marcela
+
+Va en la misma conversación, no en una aparte. Lo que falta en la landing son tres frases suyas,
+con nombre, ciudad y foto. No sirve una frase genérica de "muy buen software": tiene que decir qué
+cambió en su semana.
+
+Tres preguntas para hacerle, y su respuesta literal es el testimonio:
+
+1. Qué hacías antes con las notas de sesión y qué haces ahora.
+2. Qué fue lo primero que notaste distinto en tu semana.
+3. Qué le dirías a una colega que desconfía de grabar la sesión.
+
+Grábala respondiendo o que las escriba por WhatsApp. No las redactes tú: si suenan a copy publicitario
+pierden exactamente lo que las hace valer. Cuando existan, avísame y monto la sección.
+
 ### 4.1 LinkedIn, nota de conexión (máx. 200 caracteres)
 
 ```
