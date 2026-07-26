@@ -1,39 +1,87 @@
-## Sin tarea pendiente
+## Plan de trabajo — adquisición de clientes (definido 2026-07-25)
 
-Sesión 2026-07-25 cerrada limpia. No fue de desarrollo sino de **verificación**: los docs estaban
-congelados en el 2026-07-22 y no registraban la ola `/agenda` (PRs #219–#226) porque la sesión
-anterior no cerró con `/actualizar-contexto`. Todo verificado contra producción, no contra los docs.
+El producto está listo y verificado en producción. El cuello no es técnico: nadie fuera de Marcela
+usa Chapni, y el dominio no aparece en ninguna búsqueda, ni siquiera por su propia marca. Todo lo
+que sigue apunta a eso.
 
-**Estado real confirmado (2026-07-25):** `schema_migrations` = 69 (dirty=f) · 5 contenedores arriba ·
-disco 27% · CI en verde · `tsc --noEmit` del frontend sin errores · `GET /agenda` → 200 y el free/busy
-del calendario bloqueando huecos de verdad. Cerrando la sesión entró además el **PR #227**
-(auditoría de todo acceso denegado a un recurso + IP real del cliente en `audit_log`), ya desplegado.
+**Regla de fondo:** no construir nada nuevo de producto hasta que haya señal de mercado. Las brechas
+B2B (RIPS, factura DIAN, precio por tramo en el checkout) están identificadas y esperan a las
+entrevistas, no al revés.
 
-**Nota de concurrencia:** esta sesión coincidió con otra trabajando el mismo working tree. El PR #227
-se llevó dentro, sin querer, los 4 archivos de documentación de este cierre. No hubo pérdida — el
-contenido quedó íntegro en `main` — pero conviene no tener dos sesiones sobre el mismo checkout.
+### Ya hecho en esta sesión (2026-07-25)
 
-**Cabo suelto fuera de este repo:** `../chapni` tiene trabajo sin commitear —
-`docs/marketing/plan-seo-backlinks-geo.md` modificado y el artículo
-`src/content/recursos/como-elegir-software-historia-clinica-psicologos-colombia.md` sin trackear.
+- ✅ `chapni.com/agenda` redirige a la app (302). Antes daba 404, así que el link de la agenda
+  comercial no servía con el dominio que la gente escribe.
+- ✅ `llms.txt` al día. Estaba congelado en la época de la landing de una sola página: no mencionaba
+  `/precios`, `/seguridad`, los 10 capítulos de `/guia` ni las 6 guías de `/recursos`. Ahora lista
+  todo, dice el precio y declara qué **no** hace (RIPS, multiespecialidad) para que un modelo no lo
+  invente. Es el archivo que leen los LLM.
+- ✅ Guía "cómo elegir software de historia clínica" y la revisión del plan SEO, commiteadas. Estaban
+  publicadas pero vivían solo en el working tree de `../chapni` (`b13d1f8`).
+- ✅ Paquete de directorios listo: `../chapni/docs/marketing/directorios-checklist.md` (`39a4f63`).
 
-## Sugerencia de siguiente paso
+### Bloque 1 — Que Chapni exista en la búsqueda (Francisco, ~1½ h)
 
-Basándome en STATUS.md (bloqueantes + roadmap) y BACKLOG.md, lo más valioso a atacar ahora es:
+Sin esto todo lo demás es invisible. Verificado el 2026-07-25: el sitio no aparece ni buscando
+`"Chapni"`. Lo técnico ya se descartó como causa (los 7 crawlers reciben 200, sitemap de 21 URLs);
+falta que alguien enlace al dominio.
 
-1. **Encender WhatsApp** — al verificar la BD resultó que el pendiente estaba mal descrito: las tres
-   plantillas ya están escritas (`recordatorio_cita_24h`, `recordatorio_cita_2h`, `cita_confirmada`,
-   `es_CO`) y el `phone_number_id` está puesto; lo único que falta es que `enabled` sigue en `false`.
-   Confirmar que Meta desbloqueó tras el pago y activar el toggle en Ajustes → Integraciones. Es la
-   acción más barata del tablero y enciende los recordatorios automáticos de una vez.
-2. **Redirect `chapni.com/agenda` → `app.chapni.com/agenda`** (repo `../chapni`) — hoy da 404, así que
-   el link de la agenda comercial no se puede compartir con el dominio raíz, que es el que la gente
-   escribe. La ola `/agenda` está completa salvo esto. De paso, commitear lo que quedó suelto ahí.
-3. **Testimonios de Marcela para la landing** — sigue siendo el hueco más grande del sitio (cero
-   prueba social en un producto que guarda historias clínicas). Verificado: no hay ni un componente de
-   testimonio en el repo del landing. Con tres frases suyas se monta en una sesión corta.
-4. **Beta con 2-3 psicólogas externas** (🔴, el bloqueante más antiguo del 1.0.0) — sigue siendo la
-   acción de mayor apalancamiento y es del founder, no de código.
+1. **Guía TIC** (`guiatic.com/vendes-tecnologia`) — colombiano, ya rankea para la consulta que nos
+   interesa. 20 min, el de mejor retorno de la lista.
+2. **Capterra** — un registro publica también en GetApp y Software Advice. 45 min.
+3. **AlternativeTo** — autoservicio, sin verificación. 15 min. Los LLM lo citan al responder
+   "alternativas a X".
 
-> El patrón no cambió respecto a la sesión anterior: lo técnico está resuelto y verificado. Lo que
-> falta para vender no es producto, es que alguien más que Marcela use Chapni.
+Todo el texto está escrito en el checklist. A las dos semanas, volver a buscar `"Chapni"`: si el home
+aparece, la teoría se confirmó y vale la pena seguir con más directorios.
+
+### Bloque 2 — Prueba social (Francisco, una conversación)
+
+4. **Tres frases de Marcela** con nombre, foto y ciudad. Es el hueco más grande del sitio y lo
+   señalaron los dos LLM que lo evaluaron: cero prueba social en un producto que guarda historias
+   clínicas. La sección se monta en cuanto existan las frases.
+
+### Bloque 3 — Las cinco entrevistas B2B (Francisco, 2-3 semanas)
+
+5. Insight Psicología IPS, Clínica Retornar, IPS Psicoe, Centro Psicológico Trascender y Centro de
+   Familia UPB Medellín. Guion de 11 preguntas ya escrito en `PLAN_B2B_COMERCIAL.md` §4. Paradas
+   desde el 2026-07-07. Bloquean el precio por tramos, la decisión sobre RIPS y publicar la tabla
+   B2B en la landing.
+
+### Bloque 4 — Venta directa a psicólogas (Francisco, ritmo semanal)
+
+6. Los dos WhatsApp a las colegas de Marcela. Es el ensayo gratis de todo lo demás.
+7. Primeros seis contactos de LinkedIn. La secuencia completa (nota de conexión, primer mensaje,
+   correo frío, dos seguimientos, guion de llamada de 20 min, seis objeciones) ya está escrita en
+   `PLAN_VENTA_DIRECTA.md` §4. No falta redactar nada, falta enviarlo.
+
+### Bloque 5 — Lo mío, cuando lo pidas
+
+- Montar la sección de testimonios en la landing, apenas existan las frases.
+- Guía de `/recursos` sobre RIPS para psicólogos: ataca de frente lo que la competencia usa como
+  diferenciador, con el ángulo honesto de "si tu consulta es particular, no lo necesitas".
+- Capturas y clips reales del producto para la landing, que hoy es 100% texto e ilustración CSS
+  (plan de 4 fases en `../chapni/docs/marketing/plan-contenido-visual-producto.md`).
+- Precio por tramo en el checkout, cuando las entrevistas confirmen la tabla.
+
+### Higiene pendiente
+
+- **Rotar la API key de Explee** (`sk_explee_449b...`): se pegó en un chat, trátala como
+  comprometida. La cuenta está congelada en $0, así que no hay gasto en riesgo, pero la llave vive.
+- **WhatsApp queda apagado a propósito** hasta que haya clientes de pago: la Meta Cloud API cobra por
+  conversación. Ya está todo configurado (plantillas y `phone_number_id`); solo falta el toggle, y
+  encenderlo antes de tiempo es gasto puro. No es un pendiente olvidado.
+- **Competidor nuevo sin analizar:** Psiconapsis (`terapeutas.psiconapsis.com`), colombiano y
+  específico para psicólogos, cubre RIPS y directorio público. Revisar antes de la próxima ronda de
+  precios.
+
+### Estado técnico verificado (2026-07-25)
+
+`schema_migrations` = 69 (dirty=f) · 5 contenedores arriba · disco 27% · CI en verde · `tsc --noEmit`
+limpio · `GET /agenda` 200 con el free/busy del calendario bloqueando huecos reales. Últimos PRs:
+#227 (auditoría de acceso denegado), #229 (ajuste de la IP de auditoría), #230 (registro de GEO y
+competidor).
+
+**Nota de concurrencia:** esta sesión coincidió con otra trabajando el mismo working tree; el PR #227
+se llevó dentro los archivos de documentación de este cierre. No hubo pérdida, pero conviene no tener
+dos sesiones sobre el mismo checkout.
