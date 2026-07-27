@@ -8,14 +8,15 @@ on:
       - '.github/workflows/build-ai-service.yml'
   # On a PR only the test job runs: it is the gate. The build/deploy job is
   # skipped (see its `if`), so a PR never touches GHCR or the VPS.
+  #
+  # No `paths` filter here, on purpose — see the note in build-core-api.yml: a
+  # required check that gets filtered out blocks the PR forever.
   pull_request:
-    paths:
-      - 'services/ai-service/**'
-      - '.github/workflows/build-ai-service.yml'
   workflow_dispatch:
 
 jobs:
-  test:
+  # Globally unique name — branch protection matches required checks by name.
+  ai-service-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,7 +38,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    needs: test
+    needs: ai-service-test
     # Not on pull_request. Deliberately not `== 'push'`: workflow_dispatch is
     # the manual redeploy escape hatch and must keep working.
     if: github.event_name != 'pull_request'

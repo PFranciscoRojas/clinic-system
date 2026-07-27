@@ -8,14 +8,21 @@ on:
       - '.github/workflows/build-core-api.yml'
   # On a PR only test+lint run: they are the gate. The build/deploy jobs are
   # skipped (see their `if`), so a PR never touches GHCR or the VPS.
+  #
+  # No `paths` filter here, on purpose. These checks are required by the branch
+  # protection on main, and GitHub never auto-passes a required check that was
+  # filtered out — it leaves the PR waiting for a status that never reports,
+  # forever, with no admin override. A docs-only PR paying ~2 min of CI is the
+  # cheap side of that trade. The push filter above still keeps a docs change
+  # from redeploying production.
   pull_request:
-    paths:
-      - 'services/core-api/**'
-      - '.github/workflows/build-core-api.yml'
   workflow_dispatch:
 
 jobs:
-  test:
+  # Job names are globally unique across workflows: branch protection matches
+  # required checks by name alone, so a bare `test` here and in
+  # build-ai-service.yml would be ambiguous.
+  core-api-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +36,7 @@ jobs:
         working-directory: services/core-api
         run: go test ./...
 
-  lint:
+  core-api-lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,7 +57,7 @@ jobs:
           staticcheck ./...
 
   build:
-    needs: [test, lint]
+    needs: [core-api-test, core-api-lint]
     # Not on pull_request. Deliberately not `== 'push'`: workflow_dispatch is
     # the manual redeploy escape hatch and must keep working.
     if: github.event_name != 'pull_request'

@@ -6,12 +6,12 @@ on:
     paths:
       - 'services/frontend/**'
       - '.github/workflows/check-frontend.yml'
+  # No `paths` filter — see the note in build-core-api.yml: a required check
+  # that gets filtered out leaves the PR waiting on a status that never reports.
   pull_request:
-    paths:
-      - 'services/frontend/**'
 
 jobs:
-  typecheck:
+  frontend-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
