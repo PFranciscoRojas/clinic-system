@@ -90,7 +90,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 async function requestBlob(path: string, errorMessage: string): Promise<Blob> {
   const res = await authedFetch(path);
   if (!res.ok) {
-    throw new ApiError(res.status, errorMessage);
+    /* A refused download still answers with the JSON error envelope, and that
+     * text is the actionable part ("son 3.000 historias, filtra por fechas").
+     * Fall back to the caller's generic message only when there is none. */
+    const body = await res.json().catch(() => null);
+    throw new ApiError(res.status, body?.error ?? errorMessage);
   }
   return res.blob();
 }

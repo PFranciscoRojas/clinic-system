@@ -37,7 +37,7 @@ func (w *Writer) Denied() func(http.Handler) http.Handler {
 			if resourceID == "" {
 				return
 			}
-			w.record(r, DeniedAction, resourceType, resourceID, "", false)
+			w.record(r, DeniedAction, resourceType, resourceID, nil, false)
 		})
 	}
 }

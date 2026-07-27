@@ -14,6 +14,7 @@ type svcPort interface {
 	Get(ctx context.Context, orgID, recordID string) (*clinicalrecords.ClinicalRecord, error)
 	List(ctx context.Context, f clinicalrecords.ListFilter) ([]*clinicalrecords.RecordMeta, error)
 	ListByOrg(ctx context.Context, f clinicalrecords.OrgListFilter) ([]*clinicalrecords.RecordMeta, error)
+	ListApprovedForExport(ctx context.Context, f clinicalrecords.ExportFilter) ([]clinicalrecords.ExportRecord, error)
 	Update(ctx context.Context, in crrsvc.UpdateInput) error
 	CreateDraft(ctx context.Context, in crrsvc.CreateInput) (string, error)
 	UpdateDraft(ctx context.Context, in crrsvc.UpdateInput) error
