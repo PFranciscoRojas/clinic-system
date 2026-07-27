@@ -31,6 +31,21 @@ type entitlementEntry struct {
 // the future — regardless of whether that was set by a gateway webhook or a
 // manual activation by the operator (cash/transfer). On any lookup error the
 // gate fails open, so an infrastructure hiccup never locks a paying tenant out.
+// isDataExport reports whether the path is one of the tenant's own data-export
+// endpoints. These stay reachable after the subscription lapses: the duty to
+// conserve the clinical history is the professional's (Res. 1995/1999), so
+// billing must never be what stands between them and their own archive.
+// Suffixes are matched explicitly — a bare Contains would also open anything
+// that merely happens to carry the word in a path segment.
+func isDataExport(path string) bool {
+	for _, suffix := range []string{"/export", "/export.zip", "/export.csv"} {
+		if strings.HasSuffix(path, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
 func SubscriptionGate(pool *pgxpool.Pool) func(http.Handler) http.Handler {
 	// One entry per organization (tenant counts are small, growth is bounded);
 	// lookup errors are never cached so fail-open stays a per-request decision.
@@ -42,7 +57,7 @@ func SubscriptionGate(pool *pgxpool.Pool) func(http.Handler) http.Handler {
 			path := r.URL.Path
 			// Always-open: data export (custody), the operator console, and
 			// billing (so a lapsed tenant can still pay to reactivate).
-			if strings.HasSuffix(path, "/export") || strings.HasPrefix(path, "/api/v1/admin") || strings.HasPrefix(path, "/api/v1/billing") {
+			if isDataExport(path) || strings.HasPrefix(path, "/api/v1/admin") || strings.HasPrefix(path, "/api/v1/billing") {
 				next.ServeHTTP(w, r)
 				return
 			}

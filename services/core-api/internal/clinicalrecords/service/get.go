@@ -54,3 +54,10 @@ func (s *Service) List(ctx context.Context, f clinicalrecords.ListFilter) ([]*cl
 func (s *Service) ListByOrg(ctx context.Context, f clinicalrecords.OrgListFilter) ([]*clinicalrecords.RecordMeta, error) {
 	return s.repo.ListByOrg(ctx, f)
 }
+
+// ListApprovedForExport selects the records that go into a bulk archive. No
+// decryption happens here — the caller renders each one through the same PDF
+// path as the single-record export.
+func (s *Service) ListApprovedForExport(ctx context.Context, f clinicalrecords.ExportFilter) ([]clinicalrecords.ExportRecord, error) {
+	return s.repo.ListApprovedForExport(ctx, f)
+}

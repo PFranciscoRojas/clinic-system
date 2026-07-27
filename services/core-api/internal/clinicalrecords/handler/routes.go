@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"time"
+
 	"github.com/go-chi/chi/v5"
 
 	"sghcp/core-api/internal/shared/middleware"
@@ -19,6 +21,13 @@ func (h *Handler) PatientRoutes() chi.Router {
 func (h *Handler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.With(middleware.RequirePermission("clinical_records:read")).Get("/", h.listByOrg)
+	// A full archive download is the single most valuable request an attacker
+	// can make with a stolen session, so it is rate limited well below what a
+	// professional exercising custody would ever need.
+	r.With(
+		middleware.RequirePermission("clinical_records:read"),
+		middleware.RateLimit(5, time.Hour),
+	).Get("/export.zip", h.exportZIP)
 	r.With(middleware.RequirePermission("clinical_records:read")).Get("/{id}", h.get)
 	r.With(middleware.RequirePermission("clinical_records:read")).Get("/{id}/export", h.exportPDF)
 	r.With(middleware.RequirePermission("clinical_records:read")).Get("/{id}/addenda", h.listAddenda)

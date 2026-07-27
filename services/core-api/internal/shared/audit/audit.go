@@ -2,6 +2,7 @@ package audit
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net"
 	"net/http"
@@ -33,13 +34,24 @@ func (w *Writer) Record(r *http.Request, action, resourceType, resourceID string
 // snapshot and an explicit justification string in the audit_log metadata.
 // Used for break-the-glass access (Ley 23/1981 — Res. 1995/1999 audit trail).
 func (w *Writer) RecordWithReason(r *http.Request, action, resourceType, resourceID, reason string) {
-	w.record(r, action, resourceType, resourceID, reason, true)
+	if reason == "" {
+		w.record(r, action, resourceType, resourceID, nil, true)
+		return
+	}
+	w.record(r, action, resourceType, resourceID, map[string]any{"reason": reason}, true)
+}
+
+// RecordWithMetadata stores arbitrary structured context alongside the entry.
+// Used where the action itself is not enough to judge it later — a bulk export
+// is only meaningful in the audit trail together with how much it took.
+func (w *Writer) RecordWithMetadata(r *http.Request, action, resourceType, resourceID string, meta map[string]any) {
+	w.record(r, action, resourceType, resourceID, meta, true)
 }
 
 // record is the single insert path. success=false marks a refused access —
 // the entry then documents that the system denied the request, which is the
 // half of the trail an "it never happened" claim cannot dispute.
-func (w *Writer) record(r *http.Request, action, resourceType, resourceID, reason string, success bool) {
+func (w *Writer) record(r *http.Request, action, resourceType, resourceID string, meta map[string]any, success bool) {
 	if w == nil || w.pool == nil {
 		return
 	}
@@ -67,10 +79,17 @@ func (w *Writer) record(r *http.Request, action, resourceType, resourceID, reaso
 		if resourceID != "" {
 			resID = &resourceID
 		}
+		// Marshal, never concatenate: reason comes straight from a request
+		// header, and a single quote in it would produce invalid JSON that
+		// the ::jsonb cast rejects — losing the whole entry, silently.
 		var metadata *string
-		if reason != "" {
-			s := `{"reason":"` + reason + `"}`
-			metadata = &s
+		if len(meta) > 0 {
+			if raw, mErr := json.Marshal(meta); mErr == nil {
+				s := string(raw)
+				metadata = &s
+			} else {
+				slog.Error("audit metadata marshal failed", "action", action, "err", mErr)
+			}
 		}
 		_, err := w.pool.Exec(context.Background(), `
 			INSERT INTO audit_log

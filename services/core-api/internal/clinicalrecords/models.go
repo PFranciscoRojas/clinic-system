@@ -167,6 +167,31 @@ type OrgListFilter struct {
 	Offset         int
 }
 
+// ExportFilter selects the approved records that go into a bulk archive.
+//
+// SeeAll lifts the treatment-team restriction for callers that have no team to
+// match against (the operator, or a non-clinical role that already holds
+// clinical_records:read). For everyone else the archive is limited to patients
+// the staff member actually treats — the same need-to-know boundary as reading
+// one record (Res. 1995/1999 art. 14).
+type ExportFilter struct {
+	OrganizationID string
+	StaffID        string
+	SeeAll         bool
+	PatientID      string // optional
+	From           string // optional, YYYY-MM-DD
+	To             string // optional, YYYY-MM-DD
+	Limit          int
+}
+
+// ExportRecord is one record selected for an archive. SessionNumber lives on
+// the table but not on the decrypted entity, so it is carried from here rather
+// than looked up again per record.
+type ExportRecord struct {
+	ID            string
+	SessionNumber *int16
+}
+
 // ListFilter specifies query filters for listing records.
 type ListFilter struct {
 	OrganizationID string

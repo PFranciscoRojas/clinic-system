@@ -13,6 +13,7 @@ import (
 	"sghcp/core-api/internal/clinicalrecords"
 	"sghcp/core-api/internal/clinicalrecords/pdf"
 	"sghcp/core-api/internal/diagnoses"
+	"sghcp/core-api/internal/patients"
 	"sghcp/core-api/internal/shared/crypto"
 	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
@@ -64,10 +65,34 @@ func (h *Handler) exportPDF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	patient, err := h.patients.Get(ctx, claims.OrganizationID, rec.PatientID)
+	in, patient, err := h.renderInput(ctx, claims.OrganizationID, rec)
 	if err != nil {
 		writeErr(w, err)
 		return
+	}
+
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition",
+		fmt.Sprintf(`attachment; filename="historia-clinica-%s-%s.pdf"`,
+			patient.DocumentNumber, rec.SessionDate.Format("2006-01-02")))
+
+	if err := pdf.Render(w, in); err != nil {
+		// Headers already sent — nothing useful to return to the client.
+		return
+	}
+
+	h.audit.Record(r, "CLINICAL_RECORD_EXPORT", "clinical_record", recordID)
+}
+
+// renderInput assembles everything the PDF renderer needs for one approved
+// record: patient identification, the responsible professional (never whoever
+// exports), the org letterhead, active diagnoses, addenda and the integrity
+// fingerprint. Shared by the single-record export and the bulk ZIP so both
+// produce byte-identical documents.
+func (h *Handler) renderInput(ctx context.Context, orgID string, rec *clinicalrecords.ClinicalRecord) (pdf.RenderInput, *patients.Patient, error) {
+	patient, err := h.patients.Get(ctx, orgID, rec.PatientID)
+	if err != nil {
+		return pdf.RenderInput{}, nil, err
 	}
 
 	age := yearsBetween(patient.BirthDate, rec.SessionDate)
@@ -90,15 +115,15 @@ func (h *Handler) exportPDF(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// The PDF must credit the responsible professional, not whoever exports.
-	prof := h.professionalInfo(ctx, rec.ResponsibleStaffID, claims.OrganizationID)
+	prof := h.professionalInfo(ctx, rec.ResponsibleStaffID, orgID)
 	signature := h.professionalSignature(ctx, rec.ResponsibleStaffID)
 
-	org := h.orgInfo(ctx, claims.OrganizationID)
+	org := h.orgInfo(ctx, orgID)
 
 	// Supervisor name only when the record was actually cosigned.
 	supervisorName := ""
 	if rec.RequiresCosign && rec.SupervisorCosignedAt != nil && rec.SupervisorID != "" {
-		sup := h.professionalInfo(ctx, rec.SupervisorID, claims.OrganizationID)
+		sup := h.professionalInfo(ctx, rec.SupervisorID, orgID)
 		supervisorName = sup.FullName
 		if sup.License != "" {
 			supervisorName += ", T.P. No. " + sup.License
@@ -109,7 +134,7 @@ func (h *Handler) exportPDF(w http.ResponseWriter, r *http.Request) {
 	var contentHash string
 	h.q(ctx).QueryRow(ctx,
 		`SELECT content_hash FROM clinical_records WHERE id = $1 AND organization_id = $2`,
-		recordID, claims.OrganizationID,
+		rec.ID, orgID,
 	).Scan(&contentHash)
 
 	// When the record was created from a custom template, load the schema
@@ -117,7 +142,7 @@ func (h *Handler) exportPDF(w http.ResponseWriter, r *http.Request) {
 	templateSections := h.loadTemplateSections(ctx, rec.TemplateID)
 
 	var diagLines []pdf.DiagnosisLine
-	if all, err := h.diag.ListByPatient(ctx, claims.OrganizationID, rec.PatientID); err == nil {
+	if all, err := h.diag.ListByPatient(ctx, orgID, rec.PatientID); err == nil {
 		for _, d := range all {
 			if d.Status != diagnoses.StatusActive {
 				continue
@@ -136,14 +161,9 @@ func (h *Handler) exportPDF(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Addenda are part of the legal document.
-	addenda, _ := h.svc.ListAddenda(ctx, claims.OrganizationID, recordID)
+	addenda, _ := h.svc.ListAddenda(ctx, orgID, rec.ID)
 
-	w.Header().Set("Content-Type", "application/pdf")
-	w.Header().Set("Content-Disposition",
-		fmt.Sprintf(`attachment; filename="historia-clinica-%s-%s.pdf"`,
-			patient.DocumentNumber, rec.SessionDate.Format("2006-01-02")))
-
-	err = pdf.Render(w, pdf.RenderInput{
+	return pdf.RenderInput{
 		Record:           rec,
 		Org:              org,
 		Patient:          patientInfo,
@@ -155,13 +175,7 @@ func (h *Handler) exportPDF(w http.ResponseWriter, r *http.Request) {
 		Addenda:          addenda,
 		ContentHash:      contentHash,
 		TemplateSections: templateSections,
-	})
-	if err != nil {
-		// Headers already sent — nothing useful to return to the client.
-		return
-	}
-
-	h.audit.Record(r, "CLINICAL_RECORD_EXPORT", "clinical_record", recordID)
+	}, patient, nil
 }
 
 // professionalInfo resolves the professional profile (full name, tarjeta
