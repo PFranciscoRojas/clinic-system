@@ -6,6 +6,12 @@ on:
     paths:
       - 'services/core-api/**'
       - '.github/workflows/build-core-api.yml'
+  # On a PR only test+lint run: they are the gate. The build/deploy jobs are
+  # skipped (see their `if`), so a PR never touches GHCR or the VPS.
+  pull_request:
+    paths:
+      - 'services/core-api/**'
+      - '.github/workflows/build-core-api.yml'
   workflow_dispatch:
 
 jobs:
@@ -45,6 +51,9 @@ jobs:
 
   build:
     needs: [test, lint]
+    # Not on pull_request. Deliberately not `== 'push'`: workflow_dispatch is
+    # the manual redeploy escape hatch and must keep working.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
