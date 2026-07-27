@@ -1,10 +1,10 @@
 package crypto
 
 import (
-	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -36,7 +36,7 @@ func NewKeyManager(masterKeyHex string) (*KeyManager, error) {
 // The plaintext DEK must be zeroized after use.
 func (km *KeyManager) GenerateDEK() (plaintextDEK []byte, encryptedDEK []byte, keySource string, err error) {
 	dek := make([]byte, KeySize)
-	if _, err = rand.Read(dek); err != nil {
+	if _, err = io.ReadFull(randReader, dek); err != nil {
 		return nil, nil, "", fmt.Errorf("crypto: failed to generate DEK: %w", err)
 	}
 	enc, err := Seal(km.masterKey, dek)
