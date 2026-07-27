@@ -15,6 +15,7 @@ import (
 	aidraftshandler "sghcp/core-api/internal/aidrafts/handler"
 	aisuggestionshandler "sghcp/core-api/internal/aisuggestions"
 	apptshandler "sghcp/core-api/internal/appointments/handler"
+	auditloghandler "sghcp/core-api/internal/auditlog/handler"
 	authhandler "sghcp/core-api/internal/auth/handler"
 	availabilityhandler "sghcp/core-api/internal/availability"
 	billinghandler "sghcp/core-api/internal/billing/handler"
@@ -152,6 +153,9 @@ func (a *app) buildRouter() http.Handler {
 		crr := crrhandler.New(a.pool, a.km, aiSugSvc, rtrepo.New(a.pool))
 		r.Mount("/api/v1/patients/{patient_id}/records", crr.PatientRoutes())
 		r.Mount("/api/v1/clinical-records", crr.Routes())
+
+		// The tenant's own read of the trail the system has always written.
+		r.Mount("/api/v1/audit-log", auditloghandler.New(a.pool, a.km).Routes())
 
 		// Clinical-record templates: professionals create/edit markdown-based formats.
 		r.Mount("/api/v1/record-templates", rthandler.New(a.pool).Routes())

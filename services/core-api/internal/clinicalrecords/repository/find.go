@@ -101,6 +101,49 @@ func (r *Repository) List(ctx context.Context, f clinicalrecords.ListFilter) ([]
 	return result, rows.Err()
 }
 
+// ListApprovedForExport selects the approved records for a bulk archive,
+// ordered so the ZIP comes out grouped by patient and chronological within
+// each. Only APPROVED rows: an unsigned draft is not a clinical document and
+// has no business in a custody copy.
+func (r *Repository) ListApprovedForExport(ctx context.Context, f clinicalrecords.ExportFilter) ([]clinicalrecords.ExportRecord, error) {
+	rows, err := r.q(ctx).Query(ctx, `
+		SELECT cr.id::text, cr.session_number
+		FROM clinical_records cr
+		WHERE cr.organization_id = $1
+		  AND cr.status = 'APPROVED'
+		  AND ($2 = '' OR cr.patient_id = $2::uuid)
+		  AND ($3 = '' OR cr.session_date >= $3::date)
+		  AND ($4 = '' OR cr.session_date <= $4::date)
+		  AND (
+		        $5
+		     OR cr.supervisor_id = $6::uuid
+		     OR EXISTS (
+		          SELECT 1 FROM patient_staff_rel psr
+		          WHERE psr.organization_id = cr.organization_id
+		            AND psr.patient_id      = cr.patient_id
+		            AND psr.staff_id        = $6::uuid
+		            AND psr.ended_at IS NULL
+		        )
+		  )
+		ORDER BY cr.patient_id, cr.session_date, cr.created_at
+		LIMIT $7
+	`, f.OrganizationID, f.PatientID, f.From, f.To, f.SeeAll, f.StaffID, f.Limit)
+	if err != nil {
+		return nil, fmt.Errorf("list approved for export: %w", err)
+	}
+	defer rows.Close()
+
+	var result []clinicalrecords.ExportRecord
+	for rows.Next() {
+		var e clinicalrecords.ExportRecord
+		if err := rows.Scan(&e.ID, &e.SessionNumber); err != nil {
+			return nil, fmt.Errorf("scan export record: %w", err)
+		}
+		result = append(result, e)
+	}
+	return result, rows.Err()
+}
+
 func (r *Repository) ListByOrg(ctx context.Context, f clinicalrecords.OrgListFilter) ([]*clinicalrecords.RecordMeta, error) {
 	rows, err := r.q(ctx).Query(ctx, `
 		SELECT`+metaCols+`

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { AlertCircle, Lock, Key, CheckCircle, Mail, Trash2 } from 'lucide-react';
+import { AlertCircle, Lock, Key, CheckCircle, Mail, Trash2, Download } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { authApi } from '@/api/auth';
 import { adminApi } from '@/api/admin';
+import { clinicalRecordsApi } from '@/api/clinicalRecords';
 import { getLockConfig, setLockConfig } from '@/lib/screenLock';
 import { Toggle, FieldRow, SectionCard, ChipBtn } from './primitives';
 
@@ -201,9 +202,95 @@ export function SecuritySection() {
         </form>
       </SectionCard>
 
+      {/* Custody copy — only a clinical role can pull the whole archive */}
+      {hasClinicalRole(user?.roles ?? []) && <DataExportCard />}
+
       {/* Admin-only test-data wipe — only when the server has it enabled */}
       {user?.data_reset_enabled && (user?.roles ?? []).includes('CLINIC_ADMIN') && <DataResetCard />}
     </>
+  );
+}
+
+function hasClinicalRole(roles: string[]): boolean {
+  return roles.includes('PROFESSIONAL') || roles.includes('INTERN');
+}
+
+// Downloads every approved clinical record as a ZIP of legal PDFs. The duty to
+// conserve the clinical history belongs to the professional (Res. 1995/1999),
+// so getting a complete copy out must never require asking us for it.
+function DataExportCard() {
+  const [from, setFrom] = useState('');
+  const [to,   setTo]   = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err,  setErr]  = useState('');
+  const [done, setDone] = useState(false);
+
+  const download = async () => {
+    setBusy(true); setErr(''); setDone(false);
+    try {
+      const blob = await clinicalRecordsApi.exportAllZip({
+        from: from || undefined,
+        to:   to   || undefined,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `historias-clinicas-${new Date().toISOString().slice(0, 10)}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setDone(true);
+    } catch (ex) {
+      setErr(ex instanceof Error && ex.message ? ex.message : 'No se pudo generar el archivo.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <SectionCard title="Descargar tus historias clínicas" icon={Download} color="#0369a1">
+      <div style={{ padding: '14px 0' }}>
+        <p style={{ fontSize: 13, color: 'var(--s500)', lineHeight: 1.6, marginBottom: 14 }}>
+          Un archivo ZIP con una carpeta por paciente y un PDF legal por cada historia
+          aprobada, más un índice en CSV. Es tu copia de custodia: la puedes descargar cuando
+          quieras, sin pedirnos permiso, y sigue disponible aunque canceles el plan.
+        </p>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end', marginBottom: 12 }}>
+          {[
+            { label: 'Desde (opcional)', val: from, set: setFrom },
+            { label: 'Hasta (opcional)', val: to,   set: setTo   },
+          ].map(({ label, val, set }) => (
+            <div key={label}>
+              <div style={{ fontSize: 12, color: 'var(--s500)', marginBottom: 6 }}>{label}</div>
+              <input
+                type="date"
+                value={val}
+                onChange={e => { set(e.target.value); setErr(''); }}
+                style={{ padding: '8px 11px', borderRadius: 9, border: '1.5px solid var(--s200)', fontSize: 13, color: 'var(--s700)' }}
+              />
+            </div>
+          ))}
+          <button
+            onClick={download}
+            disabled={busy}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none', background: busy ? 'var(--s200)' : '#0369a1', color: busy ? 'var(--s400)' : '#fff', fontSize: 13, fontWeight: 700, cursor: busy ? 'wait' : 'pointer' }}
+          >
+            {busy
+              ? <><span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.3)', borderTopColor: 'var(--s400)', borderRadius: 99, animation: 'spin .7s linear infinite', display: 'inline-block' }} />Preparando…</>
+              : <><Download size={14} />Descargar todo</>}
+          </button>
+        </div>
+
+        {busy && (
+          <div style={{ fontSize: 12.5, color: 'var(--s500)' }}>
+            Cada historia se arma como PDF firmado, así que con muchos pacientes esto puede
+            tardar varios minutos. No cierres la pestaña.
+          </div>
+        )}
+        {err  && <div style={{ fontSize: 12.5, color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 6 }}><AlertCircle size={13} />{err}</div>}
+        {done && <div style={{ fontSize: 12.5, color: '#10b981', display: 'flex', alignItems: 'center', gap: 6 }}><CheckCircle size={13} />Archivo descargado. Guárdalo en un medio cifrado: contiene datos sensibles de tus pacientes.</div>}
+      </div>
+    </SectionCard>
   );
 }
 

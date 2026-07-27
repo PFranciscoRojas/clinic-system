@@ -129,8 +129,19 @@ describe('response handling', () => {
     await expect(api.delete('/consents/1')).resolves.toBeUndefined();
   });
 
-  it('getBlob rejects with the caller message on failure', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => jsonRes(500, { error: 'boom' })));
+  it('getBlob surfaces the backend message on a refused download', async () => {
+    /* The actionable half of a refused export lives in the body ("son 3.000
+     * historias, filtra por fechas") — the caller's generic string is only the
+     * fallback. */
+    vi.stubGlobal('fetch', vi.fn(async () => jsonRes(422, { error: 'son 3.000 historias' })));
+    const err = await api.getBlob('/clinical-records/export.zip', 'no se pudo generar el archivo').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(422);
+    expect((err as ApiError).message).toBe('son 3.000 historias');
+  });
+
+  it('getBlob falls back to the caller message when there is no error body', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>502</html>', { status: 502 })));
     const err = await api.getBlob('/records/1/export', 'no se pudo exportar el PDF').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).message).toBe('no se pudo exportar el PDF');

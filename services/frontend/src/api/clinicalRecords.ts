@@ -133,6 +133,17 @@ export const clinicalRecordsApi = {
     api.post<{ id: string }>(`/clinical-records/${id}/addenda`, { content }),
   exportPDF: (id: string): Promise<Blob> =>
     api.getBlob(`/clinical-records/${id}/export`, 'No se pudo exportar el PDF'),
+  // Full archive: every approved record as a legal PDF, one folder per patient,
+  // plus an index. Slow by nature — the server renders each PDF on the way out.
+  exportAllZip: (f: { from?: string; to?: string; patientId?: string } = {}): Promise<Blob> => {
+    const q = new URLSearchParams();
+    if (f.from)      q.set('from', f.from);
+    if (f.to)        q.set('to', f.to);
+    if (f.patientId) q.set('patient_id', f.patientId);
+    const qs = q.toString();
+    return api.getBlob(`/clinical-records/export.zip${qs ? `?${qs}` : ''}`,
+      'No se pudo generar el archivo');
+  },
 };
 
 export interface ConsentTemplate {
