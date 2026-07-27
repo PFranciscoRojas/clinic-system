@@ -116,9 +116,9 @@ descubiertas al ejecutar el Paso A que hay que resolver antes:**
 
 - [ ] Renombrar los jobs para que sean únicos.
 - [ ] Añadir el job `gate` agregador sin filtro de `paths`.
-- [ ] Arreglar `Check frontend types`, en rojo en `main` desde el 2026-07-27
-      (rama de bulk-export/auditlog). Con el check exigido, nada mergea hasta que
-      esté verde.
+- [x] `Check frontend types` verde en `main` (estuvo en rojo el 2026-07-27 por la
+      rama de bulk-export/auditlog; lo arregló el PR #235). Requisito previo:
+      con el check exigido, nada mergea mientras esté rojo.
 - [ ] Activar la protección exigiendo solo `gate`. Sin `strict: true` al
       principio, para no añadir además la fricción de tener la rama al día.
 
