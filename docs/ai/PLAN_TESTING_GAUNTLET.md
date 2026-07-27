@@ -97,42 +97,55 @@ haría nada.
 suite de integración se ejecuta de verdad en el PR (`ok internal/integration
 10.399s`), o sea que el aislamiento RLS multi-tenant ya protege cada PR por 10 s.
 
-#### Paso B — que la puerta bloquee ⬜ PENDIENTE
+#### Paso B — que la puerta bloquee ✅ HECHO (PR #237, 2026-07-27)
 
 Activar `required_status_checks` en la protección de `main`. **Dos trampas
-descubiertas al ejecutar el Paso A que hay que resolver antes:**
+descubiertas al ejecutar el Paso A que había que resolver antes:**
 
-1. **Colisión de nombres.** Los jobs se llaman `test` tanto en el workflow de
+1. **Colisión de nombres.** Los jobs se llamaban `test` tanto en el workflow de
    core-api como en el de ai-service. GitHub identifica los checks requeridos por
-   nombre, así que exigir `test` es ambiguo. Hay que renombrar los jobs a
-   `core-api-test`, `core-api-lint`, `ai-service-test` antes de exigirlos.
+   nombre, así que exigir `test` era ambiguo.
 2. **Filtros de `paths` + checks requeridos = bloqueo permanente.** Si un PR toca
    solo `docs/`, el job `test` de core-api no se dispara, y GitHub deja el PR en
    *"Expected — waiting for status to be reported"* para siempre. No lo da por
    aprobado. Con `enforce_admins: true` (ya activo) tampoco se puede saltar: es
-   un lockout real del repo. Solución: un job `gate` sin filtro de `paths` que
-   siempre corre, depende de los demás con `if: always()`, y reporta el resultado
-   agregado. Ese único check es el que se exige.
+   un lockout real del repo.
 
-- [ ] Renombrar los jobs para que sean únicos.
-- [ ] Añadir el job `gate` agregador sin filtro de `paths`.
+- [x] Jobs renombrados a nombres únicos: `core-api-test`, `core-api-lint`,
+      `ai-service-test`, `frontend-check`.
+- [x] Filtros de `paths` quitados **solo del trigger `pull_request`**. El de
+      `push` se mantiene, así que un cambio en `docs/` sigue sin redesplegar.
 - [x] `Check frontend types` verde en `main` (estuvo en rojo el 2026-07-27 por la
       rama de bulk-export/auditlog; lo arregló el PR #235). Requisito previo:
       con el check exigido, nada mergea mientras esté rojo.
-- [ ] Activar la protección exigiendo solo `gate`. Sin `strict: true` al
-      principio, para no añadir además la fricción de tener la rama al día.
+- [x] Protección activada con los cuatro checks, `strict: false`.
+
+**Decisión que cambió respecto al plan:** se descartó el job `gate` agregador. En
+vez de rodear la trampa de los `paths`, se elimina: sin filtro en `pull_request`,
+los checks corren siempre y se pueden exigir directamente por nombre. Sin
+mecanismo frágil que mantener. El precio es que un PR de solo documentación paga
+~2 min de CI.
+
+**Cómo se aplicó.** `PATCH` sobre `/protection/required_status_checks` devuelve
+404 si el recurso no existe todavía; hay que hacer `PUT` sobre la protección
+completa, que **reemplaza** todos los ajustes. Guardar antes el estado actual y
+reenviar todos los campos (`enforce_admins`, `required_pull_request_reviews`,
+`allow_force_pushes`…), o se pierden en silencio.
 
 ```bash
-gh api -X PUT repos/:owner/:repo/branches/main/protection/required_status_checks \
-  -f strict=false -f 'contexts[]=gate'
+gh api repos/:owner/:repo/branches/main/protection > protection-backup.json  # SIEMPRE
+gh api -X PUT repos/:owner/:repo/branches/main/protection --input protection-new.json
 ```
 
-**Cómo salir de un lockout** (por si pasa igual): la protección se quita con
-`gh api -X DELETE repos/:owner/:repo/branches/main/protection/required_status_checks`.
-Tenerlo a mano antes de activar, no después.
+**Cómo salir de un lockout** (por si hiciera falta): la protección se quita con
+`gh api -X DELETE repos/:owner/:repo/branches/main/protection`. Tenerlo a mano
+antes de activar, no después.
 
-**Criterio de salida:** un PR con un test roto no se puede mergear, ni siquiera
-por ti.
+**Criterio de salida — verificado.** Se abrió un PR desechable (#238) con un test
+que falla a propósito: `core-api-test` en rojo y el merge bloqueado, con
+`enforce_admins` impidiendo el override. Un PR verde de solo documentación (#233)
+sí mergea. La puerta discrimina en las dos direcciones, que es lo único que
+prueba que existe.
 
 ---
 
