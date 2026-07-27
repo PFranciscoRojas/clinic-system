@@ -67,24 +67,69 @@ El orden importa. Cada fase es inútil sin la anterior.
 
 ---
 
-### Fase 0 — Poner la puerta (1 sesión)
+### Fase 0 — Poner la puerta
 
 Sin esto, todo lo demás es decorativo. Es la fase de mayor retorno del plan entero.
+Se ejecuta en dos pasos con verificación entre medio, porque el job que despliega
+a producción vive dentro del mismo workflow que hay que tocar.
 
-- [ ] Añadir `pull_request:` como trigger a `build-core-api.yml`,
-      `build-ai-service.yml` y `build-frontend.yml` (el job `test`/`lint`, no el
-      job `build`+push a GHCR — ese sigue solo en `main`).
-- [ ] Separar los workflows: `ci-core-api.yml` (test + lint, corre en PR y en
-      main) vs `build-core-api.yml` (build + push imagen, solo main, `needs: ci`).
-- [ ] Activar `required_status_checks` en la protección de `main` con los checks:
-      `test (core-api)`, `lint (core-api)`, `typecheck (frontend)`,
-      `test (ai-service)`. Con `strict: true` para exigir rama al día.
+#### Paso A — que los tests corran en los PRs ✅ HECHO (PR #236, 2026-07-27)
+
+- [x] `pull_request` como trigger en `build-core-api.yml` y `build-ai-service.yml`,
+      con los mismos filtros de `paths`.
+- [x] Los jobs `build` (GHCR + SSH al VPS) condicionados a
+      `if: github.event_name != 'pull_request'`.
+- [x] `build-frontend.yml` sin tocar — el frontend ya corría en PR vía
+      `check-frontend.yml`.
+
+**Decisión que cambió respecto al plan original:** *no* se separaron los workflows
+en `ci-*.yml` + `build-*.yml`. Separarlos obligaba a mover el job de deploy de
+archivo, que es la parte con riesgo real de romper producción en silencio. Con un
+`if` en el job se consigue lo mismo sin tocar el camino de deploy.
+
+**Detalle crítico:** la condición es `!= 'pull_request'`, **no** `== 'push'`. Con
+`== 'push'` el `workflow_dispatch` (la escotilla de redespliegue manual) habría
+dejado de desplegar en silencio: correría test y lint, quedaría en verde, y no
+haría nada.
+
+**Verificado:** en el PR corren `test` + `lint` y `build`/`smoke` salen como
+*skipping*; en `main` corren los cuatro y el smoke contra producción pasa. La
+suite de integración se ejecuta de verdad en el PR (`ok internal/integration
+10.399s`), o sea que el aislamiento RLS multi-tenant ya protege cada PR por 10 s.
+
+#### Paso B — que la puerta bloquee ⬜ PENDIENTE
+
+Activar `required_status_checks` en la protección de `main`. **Dos trampas
+descubiertas al ejecutar el Paso A que hay que resolver antes:**
+
+1. **Colisión de nombres.** Los jobs se llaman `test` tanto en el workflow de
+   core-api como en el de ai-service. GitHub identifica los checks requeridos por
+   nombre, así que exigir `test` es ambiguo. Hay que renombrar los jobs a
+   `core-api-test`, `core-api-lint`, `ai-service-test` antes de exigirlos.
+2. **Filtros de `paths` + checks requeridos = bloqueo permanente.** Si un PR toca
+   solo `docs/`, el job `test` de core-api no se dispara, y GitHub deja el PR en
+   *"Expected — waiting for status to be reported"* para siempre. No lo da por
+   aprobado. Con `enforce_admins: true` (ya activo) tampoco se puede saltar: es
+   un lockout real del repo. Solución: un job `gate` sin filtro de `paths` que
+   siempre corre, depende de los demás con `if: always()`, y reporta el resultado
+   agregado. Ese único check es el que se exige.
+
+- [ ] Renombrar los jobs para que sean únicos.
+- [ ] Añadir el job `gate` agregador sin filtro de `paths`.
+- [ ] Arreglar `Check frontend types`, en rojo en `main` desde el 2026-07-27
+      (rama de bulk-export/auditlog). Con el check exigido, nada mergea hasta que
+      esté verde.
+- [ ] Activar la protección exigiendo solo `gate`. Sin `strict: true` al
+      principio, para no añadir además la fricción de tener la rama al día.
 
 ```bash
 gh api -X PUT repos/:owner/:repo/branches/main/protection/required_status_checks \
-  -f strict=true \
-  -f 'contexts[]=test' -f 'contexts[]=lint' -f 'contexts[]=typecheck'
+  -f strict=false -f 'contexts[]=gate'
 ```
+
+**Cómo salir de un lockout** (por si pasa igual): la protección se quita con
+`gh api -X DELETE repos/:owner/:repo/branches/main/protection/required_status_checks`.
+Tenerlo a mano antes de activar, no después.
 
 **Criterio de salida:** un PR con un test roto no se puede mergear, ni siquiera
 por ti.
