@@ -10,6 +10,12 @@ import (
 
 const KeySize = 32 // AES-256
 
+// randReader is the entropy source for nonces and DEKs. It is a variable only
+// so tests can prove the fail-closed behaviour when the system runs out of
+// entropy: a Seal that silently produced an all-zero nonce would destroy GCM's
+// guarantees. Production code must never reassign it.
+var randReader io.Reader = rand.Reader
+
 // Seal encrypts plaintext with AES-256-GCM using key.
 // Output layout: nonce (12 bytes) || ciphertext || GCM tag (16 bytes).
 // Store the returned []byte directly in a BYTEA PostgreSQL column.
@@ -26,7 +32,7 @@ func Seal(key, plaintext []byte) ([]byte, error) {
 		return nil, err
 	}
 	nonce := make([]byte, gcm.NonceSize())
-	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
+	if _, err = io.ReadFull(randReader, nonce); err != nil {
 		return nil, err
 	}
 	// gcm.Seal appends ciphertext+tag to nonce slice
