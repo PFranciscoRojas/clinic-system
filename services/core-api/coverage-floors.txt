@@ -1,0 +1,31 @@
+# Coverage floors for core-api, enforced by scripts/check_coverage.sh in CI.
+#
+# Format: <target> <minimum percent>
+#   total          the whole module
+#   <import path>  one package
+#
+# The ratchet only goes up. If a run measures more than DRIFT points above a
+# floor, the check fails and tells you the new number to write here: that is
+# deliberate, it is what stops the floor from rotting while the code improves.
+# If a run measures below a floor, the check fails too — that is a PR adding
+# untested code.
+#
+# Measured with `go test -short`, i.e. unit tests only. The integration suite
+# (testcontainers) still runs in the core-api-test job; it is excluded here
+# because it exercises SQL through a raw pool rather than Go statements, so
+# counting it would inflate the number without reflecting tested logic.
+
+total 7.8
+
+# Phase 1 packages — already at their target.
+sghcp/core-api/internal/shared/crypto 92.0
+sghcp/core-api/internal/shared/hash 80.0
+
+# Phase 2. The gap to 100% in these two is the code that needs a live database:
+# TenantScope's success path and SubscriptionGate's lookup are covered in
+# internal/integration/middleware_test.go, and IsAssignedToPatient in
+# internal/integration/needtoknow_test.go. Those runs are excluded from this
+# measurement on purpose (see the header), so the floors are what unit tests
+# alone can reach — not the real coverage of these packages.
+sghcp/core-api/internal/shared/middleware 87.0
+sghcp/core-api/internal/shared/clinicalperm 72.7
