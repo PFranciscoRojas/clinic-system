@@ -1,6 +1,6 @@
 .PHONY: setup up down build logs ps shell-api shell-db \
         migrate-up migrate-down migrate-create \
-        test-api test-ai lint-api lint-ai \
+        test-api test-ai lint-api lint-ai coverage coverage-bump \
         sqlc dev frontend-build
 
 # ── Bootstrap de datos/volumes (ejecutar una vez antes de `make up`) ──────────
@@ -55,6 +55,14 @@ test-api:
 
 test-ai:
 	cd services/ai-service && python -m pytest tests/ -v
+
+# Trinquete de cobertura: mismo script que corre el CI. `coverage-bump` reescribe
+# services/core-api/coverage-floors.txt con lo medido (commitear junto a los tests).
+coverage:
+	./scripts/check_coverage.sh
+
+coverage-bump:
+	./scripts/check_coverage.sh --bump
 
 # ── Linters ──────────────────────────────────────────────────────────────────
 lint-api:

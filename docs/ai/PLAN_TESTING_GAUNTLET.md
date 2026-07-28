@@ -177,28 +177,52 @@ un **trinquete** que impida que la cobertura global baje.
 
 Orden de ataque (por riesgo × ausencia de tests):
 
-1. `internal/shared/crypto` — objetivo **95 %**. Roundtrip encrypt/decrypt, DEK
-   por paciente, rotación de `MASTER_KEY`, fallo al descifrar con la clave
-   equivocada, nonce nunca reutilizado, ciphertext manipulado → error (no
-   plaintext basura).
-2. `internal/shared/clinicalperm` + `internal/shared/middleware` — **90 %**.
-   Autorización: cada denegación esperada probada explícitamente. Fail-closed.
-3. `internal/auth/service` — **85 %**. Expiración de token, refresh, revocación,
+1. ✅ `internal/shared/crypto` — objetivo 95 %. **Hecho en la Fase 1** (PR #239):
+   92,3 % medido, que es el 100 % del código alcanzable. Los 4 bloques restantes
+   son errores de `aes.NewCipher`/`cipher.NewGCM` inalcanzables mientras la
+   guarda de tamaño de clave exista.
+2. ✅ `internal/shared/clinicalperm` + `internal/shared/middleware` (PR #242).
+   87,4 % y 72,7 % en unitarios; el resto son las ramas que necesitan BD viva,
+   cubiertas en `internal/integration/middleware_test.go` y `needtoknow_test.go`.
+3. ⬜ `internal/auth/service` — **85 %**. Expiración de token, refresh, revocación,
    rate limit, hashing de contraseñas.
-4. `internal/invoicing` (3.091 LOC) — **85 %**. Redondeo, IVA, retenciones,
+4. ⬜ `internal/invoicing` (3.091 LOC) — **85 %**. Redondeo, IVA, retenciones,
    NUMERIC en todos los caminos.
-5. `internal/availability` + `internal/booking` — **85 %**. Solapes, zonas
+5. ⬜ `internal/availability` + `internal/booking` — **85 %**. Solapes, zonas
    horarias, doble reserva.
 
-- [ ] Añadir job `coverage` al CI que falle si el total baja respecto a
-      `.coverage-floor` (fichero versionado con el número actual).
-- [ ] Añadir pisos por paquete en un `scripts/check_coverage.sh` que lea un mapa
-      paquete→mínimo. Los paquetes de la lista de arriba entran uno a uno; el
-      resto arranca en 0 y sube solo con el trinquete global.
+- [x] Job `core-api-coverage` en CI que corre `scripts/check_coverage.sh`.
+- [x] Pisos por paquete en `services/core-api/coverage-floors.txt`.
 
-**Regla operativa:** el trinquete solo sube. Cada PR que añade código sin test
-baja el porcentaje y el CI lo rechaza. Así la cobertura crece sin que tengas que
-mirarla.
+**El trinquete, como quedó implementado.** Falla de tres formas, no de una:
+
+| señal | qué pasó |
+|---|---|
+| `BELOW` | un target por debajo de su piso — el PR añadió código sin tests |
+| `BUMP` | un target más de 1 punto por encima — hay que subir el piso |
+| `STALE` | un piso que nombra un paquete que ya no produce statements |
+
+`BUMP` es lo que hace que el trinquete realmente trinque. Sin él, el piso se
+queda en el número inicial para siempre y el mecanismo se pudre en silencio.
+Con él, subir la cobertura obliga a registrar el número nuevo, y bajarla después
+vuelve a fallar. `make coverage-bump` reescribe el fichero con lo medido.
+
+**Decisiones que conviene no revertir sin pensarlo:**
+
+- Se mide con `go test -short`: solo unitarios, sin docker, menos de un minuto.
+  La suite de integración sigue corriendo en `core-api-test`. Contarla aquí
+  inflaría el número sin reflejar lógica probada — los tests de integración
+  ejercitan SQL a través de un pool crudo, no statements de Go.
+- El script agrega el **perfil crudo** de cobertura, no `go tool cover -func`:
+  el perfil trae el número de statements por bloque, así que el total por
+  paquete va ponderado en vez de ser un promedio sin peso de porcentajes por
+  función (que sobrevalora las funciones cortas).
+- Los pisos de paquetes con código dependiente de BD llevan el porqué escrito en
+  el propio fichero, para que nadie lea 72,7 % como "cobertura real del paquete".
+
+**Trampa que costó un run rojo:** el repo tiene `core.fileMode = false`, así que
+`chmod +x` no llega a git y el job muere con `Permission denied` (exit 126). Hay
+que registrarlo explícitamente: `git update-index --chmod=+x <script>`.
 
 ---
 

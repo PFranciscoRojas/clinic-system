@@ -56,8 +56,24 @@ jobs:
           go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
           staticcheck ./...
 
+  # The ratchet. Runs `go test -short`, so no docker and no testcontainers: it
+  # finishes in well under a minute and is the check that makes untested code
+  # cost something.
+  core-api-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/core-api/go.mod
+          cache-dependency-path: services/core-api/go.sum
+
+      - name: Coverage floors
+        run: ./scripts/check_coverage.sh
+
   build:
-    needs: [core-api-test, core-api-lint]
+    needs: [core-api-test, core-api-lint, core-api-coverage]
     # Not on pull_request. Deliberately not `== 'push'`: workflow_dispatch is
     # the manual redeploy escape hatch and must keep working.
     if: github.event_name != 'pull_request'
