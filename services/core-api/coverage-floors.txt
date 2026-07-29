@@ -15,7 +15,7 @@
 # because it exercises SQL through a raw pool rather than Go statements, so
 # counting it would inflate the number without reflecting tested logic.
 
-total 10.9
+total 12.1
 
 # Phase 1 packages — already at their target.
 sghcp/core-api/internal/shared/crypto 92.0
@@ -35,3 +35,13 @@ sghcp/core-api/internal/shared/clinicalperm 72.7
 # Those need a seam in production code to reach, and crypto already has one
 # where it was worth it (randReader). Not worth it here.
 sghcp/core-api/internal/auth/service 87.0
+
+# Phase 2, step 4. Read this number carefully: 22% is NOT "the money code is
+# a fifth tested". Every function in this package that can run without a
+# database or an HTTP request is at 100% — validation, cent arithmetic, the
+# billing scope, the period windows, the whole receipt formatting layer. The
+# other ~77% of the statements are chi handlers and pgx repository methods,
+# which have no unit-testable surface at all. Raising this floor means either
+# covering more pure logic or restructuring the package; it does not mean
+# writing more tests of the same kind.
+sghcp/core-api/internal/invoicing 22.5
