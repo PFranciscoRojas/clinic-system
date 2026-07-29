@@ -19,7 +19,7 @@ total 12.1
 
 # Phase 1 packages — already at their target.
 sghcp/core-api/internal/shared/crypto 92.0
-sghcp/core-api/internal/shared/hash 80.0
+sghcp/core-api/internal/shared/hash 88.1
 
 # Phase 2. The gap to 100% in these two is the code that needs a live database:
 # TenantScope's success path and SubscriptionGate's lookup are covered in

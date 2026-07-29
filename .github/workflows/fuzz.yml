@@ -1,0 +1,52 @@
+name: Fuzz
+
+# `go test ./...` only replays the seed corpus. This is the job that actually
+# generates input.
+#
+# Two cadences on purpose:
+#
+#   * on a PR, a short budget — enough to replay every corpus entry and probe a
+#     little around the change, without adding minutes to the wait;
+#   * nightly, a long budget — this is where discovery really happens, and
+#     nobody is sitting watching it.
+#
+# When a target does find a failing input, Go writes it under
+# testdata/fuzz/<Target>/. Commit that file: it becomes a seed, so from then on
+# the case is replayed by every ordinary `go test` run, deterministically.
+on:
+  pull_request:
+  schedule:
+    # 07:00 UTC = 02:00 in Bogotá.
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      fuzztime:
+        description: 'Time budget per fuzz target (e.g. 30s, 5m)'
+        required: false
+        default: '60s'
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/core-api/go.mod
+          cache-dependency-path: services/core-api/go.sum
+
+      - name: Run every fuzz target
+        env:
+          # 12 targets today: 15s each keeps a PR under ~3 minutes, while the
+          # nightly run gets a budget that can actually explore.
+          FUZZTIME: ${{ github.event.inputs.fuzztime || (github.event_name == 'schedule' && '120s') || '15s' }}
+        run: ./scripts/run_fuzz.sh
+
+      - name: Upload any failing inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-failures
+          path: services/core-api/**/testdata/fuzz/**
+          if-no-files-found: ignore
