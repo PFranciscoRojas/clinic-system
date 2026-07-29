@@ -33,22 +33,7 @@ func TestRenderReceipt(t *testing.T) {
 	}
 }
 
-func TestFormatMoney(t *testing.T) {
-	cases := map[string]string{
-		"80000.00": "$80.000 COP",
-		"1234567":  "$1.234.567 COP",
-		"70000.50": "$70.000,5 COP",
-		"0":        "$0 COP",
-	}
-	for in, want := range cases {
-		if got := formatMoney(in, "COP"); got != want {
-			t.Errorf("formatMoney(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
-func TestBalance(t *testing.T) {
-	if got := balance(Invoice{TotalDue: "70000.00", TotalPaid: "30000.00"}); got != "40000.00" {
-		t.Errorf("balance = %q, want 40000.00", got)
-	}
-}
+// formatMoney and balance were covered here by four and one case
+// respectively. Both are now in receipt_helpers_test.go, whose tables are
+// supersets of those cases plus the boundaries they did not reach (grouping at
+// every digit length, negative balances, cent-exact remainders).

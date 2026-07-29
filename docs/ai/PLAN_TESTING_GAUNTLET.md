@@ -189,8 +189,9 @@ Orden de ataque (por riesgo × ausencia de tests):
    cubrir son fallos de infraestructura (bcrypt, `crypto/rand`, Redis) que
    pedirían una costura en producción; en crypto se hizo donde valía la pena
    (`randReader`), aquí no compensa.
-4. ⬜ `internal/invoicing` (3.091 LOC) — **85 %**. Redondeo, IVA, retenciones,
-   NUMERIC en todos los caminos.
+4. ✅ `internal/invoicing` (3.091 LOC) — **objetivo 85 % mal calibrado**, ver
+   abajo. Alcanzado 22,6 %, que es **el 100 % de lo que tiene superficie
+   unitaria** (PR #244).
 5. ⬜ `internal/availability` + `internal/booking` — **85 %**. Solapes, zonas
    horarias, doble reserva.
 
@@ -226,6 +227,23 @@ vuelve a fallar. `make coverage-bump` reescribe el fichero con lo medido.
 **Trampa que costó un run rojo:** el repo tiene `core.fileMode = false`, así que
 `chmod +x` no llega a git y el job muere con `Permission denied` (exit 126). Hay
 que registrarlo explícitamente: `git update-index --chmod=+x <script>`.
+
+**El objetivo de 85 % para `invoicing` estaba mal puesto, y conviene decirlo.**
+Se fijó antes de medir, asumiendo que el paquete era sobre todo lógica. No lo
+es: de sus 3.091 líneas, la enorme mayoría son handlers de chi y métodos de
+repositorio con pgx, que no tienen superficie unitaria ninguna. Lo que sí es
+lógica —validación de montos, aritmética de centavos, el alcance de facturación
+por rol, las ventanas de periodo, todo el formateo del recibo— está al **100 %**,
+y eso deja el paquete en 22,6 %.
+
+Ese 22,6 % **no significa** "el código de dinero está cubierto en un quinto".
+Está anotado dentro de `coverage-floors.txt` para que nadie lo lea así. Subirlo
+pide cubrir más lógica pura o reestructurar el paquete; no pide más tests del
+mismo tipo.
+
+Lección para las fases que quedan: **medir antes de poner un número**. Un piso
+inventado obliga después a elegir entre bajarlo (y perder la señal) o escribir
+tests de relleno que suben el porcentaje sin probar nada.
 
 **Patrón que funcionó para el repositorio falso** (`internal/auth/service`): en
 vez de implementar los ~35 métodos de `auth.Repository`, embeber la interfaz en

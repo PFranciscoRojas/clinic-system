@@ -82,24 +82,24 @@ func (h *Handler) InvoiceRoutes() chi.Router {
 
 // BookingPayment is one row returned by GET /invoices/bookings.
 type BookingPayment struct {
-	ID             string     `json:"id"`
-	BookingNumber  int64      `json:"booking_number"`
-	ScheduledAt    time.Time  `json:"scheduled_at"`
-	GuestName      string     `json:"guest_name"`
-	Email          string     `json:"email"`
-	Phone          string     `json:"phone"`
-	Modality       string     `json:"modality"`
-	Amount         int        `json:"amount"`
-	Status         string     `json:"status"`
-	PaymentType    string     `json:"payment_type"`
-	PaymentMethod  string     `json:"payment_method"`
-	MpPaymentID    string     `json:"mp_payment_id"`
-	VoucherURL     string     `json:"voucher_url"`
-	HoldExpiresAt  *time.Time `json:"hold_expires_at"`
-	PaidAt         *time.Time `json:"paid_at"`
-	AppointmentID  *string    `json:"appointment_id"`
-	InvoiceID      *string    `json:"invoice_id"`
-	InvoiceNumber  *int       `json:"invoice_number"`
+	ID            string     `json:"id"`
+	BookingNumber int64      `json:"booking_number"`
+	ScheduledAt   time.Time  `json:"scheduled_at"`
+	GuestName     string     `json:"guest_name"`
+	Email         string     `json:"email"`
+	Phone         string     `json:"phone"`
+	Modality      string     `json:"modality"`
+	Amount        int        `json:"amount"`
+	Status        string     `json:"status"`
+	PaymentType   string     `json:"payment_type"`
+	PaymentMethod string     `json:"payment_method"`
+	MpPaymentID   string     `json:"mp_payment_id"`
+	VoucherURL    string     `json:"voucher_url"`
+	HoldExpiresAt *time.Time `json:"hold_expires_at"`
+	PaidAt        *time.Time `json:"paid_at"`
+	AppointmentID *string    `json:"appointment_id"`
+	InvoiceID     *string    `json:"invoice_id"`
+	InvoiceNumber *int       `json:"invoice_number"`
 }
 
 // GET /invoices/bookings — list booking payments (PAID and active PENDING_PAYMENT holds).
