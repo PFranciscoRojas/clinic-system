@@ -15,7 +15,7 @@
 # because it exercises SQL through a raw pool rather than Go statements, so
 # counting it would inflate the number without reflecting tested logic.
 
-total 7.8
+total 10.9
 
 # Phase 1 packages — already at their target.
 sghcp/core-api/internal/shared/crypto 92.0
@@ -29,3 +29,9 @@ sghcp/core-api/internal/shared/hash 80.0
 # alone can reach — not the real coverage of these packages.
 sghcp/core-api/internal/shared/middleware 87.0
 sghcp/core-api/internal/shared/clinicalperm 72.7
+
+# Phase 2, step 3. What is left uncovered here is infrastructure failure:
+# bcrypt refusing to hash, crypto/rand running dry, Redis rejecting a write.
+# Those need a seam in production code to reach, and crypto already has one
+# where it was worth it (randReader). Not worth it here.
+sghcp/core-api/internal/auth/service 87.0
