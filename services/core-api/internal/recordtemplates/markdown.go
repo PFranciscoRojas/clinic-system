@@ -106,6 +106,28 @@ func ParseMarkdown(src string) (sections []SectionDef, suggestedName string, err
 	if len(sections) == 0 {
 		return nil, suggestedName, ErrInvalidInput
 	}
+
+	// Two fields whose labels slugify to the same key are indistinguishable
+	// from there on. The record payload is a map keyed by SectionDef.Key
+	// (clinicalrecords/service/create.go builds its whitelist from it), so the
+	// professional fills both fields and only one value survives — and the PDF
+	// then prints that one value under both headings. Fail closed, the same way
+	// this parser already refuses headings jammed onto one line: a template
+	// that silently drops clinical text is worse than one that will not save.
+	//
+	// Only reachable at save time — ParseMarkdown is called from the create /
+	// preview / update handlers, never when loading a stored schema — so this
+	// cannot break templates that already exist.
+	seenKeys := make(map[string]string, len(sections))
+	for _, s := range sections {
+		if prev, dup := seenKeys[s.Key]; dup {
+			return nil, "", fmt.Errorf(
+				"record_template: %q and %q both become the field %q — give them distinct names",
+				prev, s.Label, s.Key)
+		}
+		seenKeys[s.Key] = s.Label
+	}
+
 	return sections, suggestedName, nil
 }
 
@@ -200,10 +222,15 @@ func slugify(s string) string {
 	var b strings.Builder
 	prev := '_'
 	for _, r := range s {
+		// The ASCII bound applies to digits too. It used to guard only the
+		// letter branch, so unicode.IsDigit let non-ASCII digits through —
+		// "۴" (U+06F4) became the key "۴", contradicting both this function's
+		// contract and the letter branch right above. Found by fuzzing; no
+		// stored template was affected.
 		if unicode.IsLetter(r) && r <= unicode.MaxASCII {
 			b.WriteRune(r)
 			prev = r
-		} else if unicode.IsDigit(r) {
+		} else if unicode.IsDigit(r) && r <= unicode.MaxASCII {
 			b.WriteRune(r)
 			prev = r
 		} else {

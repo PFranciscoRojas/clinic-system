@@ -279,19 +279,56 @@ no bugs que arreglar de paso):
 Go trae fuzzing nativo, sin dependencias. Aquí el input lo genera la máquina, así
 que el agente no puede escribir un test que "pase por construcción".
 
-- [ ] `FuzzEncryptDecrypt` en `crypto`: para cualquier plaintext,
-      `Decrypt(Encrypt(x)) == x`. Y para cualquier ciphertext manipulado,
-      `Decrypt` devuelve error.
-- [ ] `FuzzHashSearch` en `shared/hash`: determinismo, sin colisiones en el
-      corpus, normalización estable (tildes, mayúsculas, espacios).
-- [ ] `FuzzTemplateParse` en `recordtemplates`: ninguna plantilla malformada debe
-      provocar panic.
-- [ ] `FuzzMarkdownRender` en `recordtemplates/markdown` y el renderer de PDF: sin
-      panics, sin inyección en el PDF.
-- [ ] Propiedades de dinero en `invoicing`: `suma(líneas) == total` siempre;
-      `total >= 0`; redondeo asociativo. Con `testing/quick` o casos generados.
-- [ ] Añadir al CI un job `fuzz` con `-fuzztime=60s` por objetivo (no infinito),
-      y versionar el corpus de `testdata/fuzz/` cuando encuentre un fallo.
+- [x] `FuzzSealOpen` / `FuzzOpenArbitraryInput` en `crypto` (PR #239).
+- [x] `shared/hash` (PR #246): 6 objetivos. El importante es
+      `FuzzSearchRoundTrip` — para cualquier nombre, **todo prefijo de toda
+      palabra tiene que encontrarlo**. Si el lado de escritura y el de lectura
+      discrepan en el plegado aunque sea para una entrada, ese paciente queda
+      ilocalizable y nadie ve un error: parece que nunca se registró.
+- [x] `recordtemplates` (PR #246): 3 objetivos sobre `ParseMarkdown` y
+      `slugify`. **Encontraron dos bugs reales**, ver la tabla al final.
+- [ ] `FuzzMarkdownRender` sobre el renderer de PDF: **no hay renderer de
+      markdown que fuzzear** — `recordtemplates` solo parsea. El PDF se
+      construye en `clinicalrecords/pdf/renderer.go` a partir del esquema ya
+      parseado, y fuzzearlo pide un `ClinicalRecord` completo. Va a la Fase 4,
+      con el resto de lo que necesita fixtures pesados.
+- [x] Propiedades de dinero en `invoicing` (PR #246): 4 objetivos. Lo que
+      `normalizeAmount` acepta siempre pasa su propio patrón, siempre convierte
+      con `toCents`, nunca lleva un carácter que pueda cambiar el significado
+      del literal `::numeric`, y el viaje de ida y vuelta por centavos no pierde
+      valor.
+- [x] Job `fuzz` en CI (PR #246), con `scripts/run_fuzz.sh`. **Descubre** los
+      objetivos con grep en vez de listarlos: una lista se queda obsoleta en
+      silencio, que es justo el fallo que esta fase existe para evitar. Dos
+      cadencias — 15 s por objetivo en PR, 120 s en la corrida nocturna, y
+      `workflow_dispatch` con presupuesto a medida.
+
+**Lo que encontró el fuzzing, que es el punto de la fase.** Cinco entradas
+fallidas: tres eran mías (afirmé de más) y **dos eran bugs reales**. Ninguna de
+las cinco era alcanzable escribiendo casos a mano.
+
+| entrada | qué pasaba | veredicto |
+|---|---|---|
+| `ⅅ` (U+2145) | `unicode.IsUpper` da `true` pero `ToLower` lo deja igual: "sin mayúsculas tras plegar" es inalcanzable | **Mi test.** La propiedad correcta es `x == ToLower(x)` |
+| `ſ` (U+017F, s larga) | `ToUpper("ſ")="S"` y `ToLower("S")="s"`: mayusculizar no es reversible | **Mi test.** Afirmaba una propiedad de Unicode, no del código |
+| `"A\xc5 ֹ"` | `foldToken` recorta **antes** de quitar diacríticos, así que al quitar una marca combinante queda un espacio sin recortar | **Mi test.** Los dos llamadores envuelven en `strings.Fields`, que lo absorbe. La propiedad real es la estabilidad de la lista de tokens |
+| `"## Campo\n## Campo"` | Dos campos con la misma etiqueta producen la misma `key` | **Bug real.** `clinicalrecords/service/create.go` indexa el payload por `key`: el profesional rellena dos campos y solo sobrevive uno, y el PDF imprime ese valor bajo ambos títulos. Arreglado fallando cerrado, igual que ya hacía este parser con las cabeceras pegadas |
+| `۴` (U+06F4) | El filtro ASCII de `slugify` se aplicaba a las letras pero **no** a los dígitos | **Bug real**, menor. La rama de letras ya lo hacía y el comentario prometía ASCII: era un descuido. Arreglado |
+
+Los dos bugs reales solo son alcanzables al **guardar** una plantilla
+(`ParseMarkdown` nunca corre al cargar un esquema ya almacenado), así que el
+arreglo no puede romper nada existente. Lo verifiqué además contra la BD de
+producción: cero plantillas con claves duplicadas, cero claves no-ASCII.
+
+Las cinco entradas están versionadas en `testdata/fuzz/`, así que se replican en
+cada `go test` normal.
+
+**Decisión abierta para Francisco:** el job `fuzz` **no** está en los checks
+requeridos. Un gate no determinista es una trampa distinta a los otros cuatro:
+el mismo PR puede pasar al reintentar, y eso enseña a darle a reintentar, que
+destruye la credibilidad de toda la puerta. Recomendación: dejarlo informativo
+unas semanas, ver cuántos hallazgos reales produce la corrida nocturna, y
+requerirlo solo si el ruido es cero.
 
 ---
 
