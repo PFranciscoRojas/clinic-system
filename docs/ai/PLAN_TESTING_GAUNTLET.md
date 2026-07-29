@@ -192,8 +192,14 @@ Orden de ataque (por riesgo × ausencia de tests):
 4. ✅ `internal/invoicing` (3.091 LOC) — **objetivo 85 % mal calibrado**, ver
    abajo. Alcanzado 22,6 %, que es **el 100 % de lo que tiene superficie
    unitaria** (PR #244).
-5. ⬜ `internal/availability` + `internal/booking` — **85 %**. Solapes, zonas
-   horarias, doble reserva.
+5. ✅ `internal/availability` + `internal/leadbooking` — mismo caso que
+   `invoicing`: 16,4 % y 16,1 %, que es **el 100 % de la lógica pura** de cada
+   uno (PR #245). Solapes, buffer, zonas horarias y doble reserva cubiertos;
+   el resto son handlers y repositorios.
+
+**Fase 2 cerrada.** Cobertura unitaria global: 6,1 % → **12,5 %**. El número
+global importa poco por sí solo; lo que cambió es que los cinco paquetes de
+mayor riesgo tienen su lógica al 100 % y un piso que impide que baje.
 
 - [x] Job `core-api-coverage` en CI que corre `scripts/check_coverage.sh`.
 - [x] Pisos por paquete en `services/core-api/coverage-floors.txt`.
