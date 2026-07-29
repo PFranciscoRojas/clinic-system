@@ -45,3 +45,10 @@ sghcp/core-api/internal/auth/service 87.0
 # covering more pure logic or restructuring the package; it does not mean
 # writing more tests of the same kind.
 sghcp/core-api/internal/invoicing 22.5
+
+# Phase 2, step 5. Same reading as invoicing above: every function that runs
+# without a database is at 100% — slot generation, the overlap check with its
+# buffer, the schedule parsing and the timezone fallbacks. The rest is chi
+# handlers and pgx repositories.
+sghcp/core-api/internal/availability 16.0
+sghcp/core-api/internal/leadbooking 16.0
