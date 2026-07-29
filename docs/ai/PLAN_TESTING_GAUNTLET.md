@@ -336,16 +336,57 @@ requerirlo solo si el ruido es cero.
 
 Los bugs que los tests unitarios nunca ven y que en producción cuestan un cliente.
 
-- [ ] **Doble reserva:** N goroutines pidiendo el mismo slot a la vez; exactamente
-      una gana. Sobre el arnés de integración, con Postgres real.
-- [ ] **RLS bajo concurrencia:** dos tenants operando en paralelo sobre el mismo
-      pool; ninguna fuga cruzada.
-- [ ] **`go test -race`** en CI. El `Makefile` ya lo usa en `test-api`; el
-      workflow **no**. Corregirlo.
-- [ ] **Idempotencia del outbox** (`shared/outbox`): reprocesar el mismo mensaje
-      dos veces no duplica efectos.
-- [ ] **Migraciones reversibles:** test que aplica todas las `up`, luego todas las
-      `down`, luego todas las `up` de nuevo. Hoy nadie prueba las `down`.
+- [x] **Doble reserva** (PR #247): 24 goroutines soltadas a la vez sobre el mismo
+      slot; exactamente una gana. La garantía es `uq_bookings_active_slot`
+      (índice único parcial, migración 000060) y el `ON CONFLICT DO NOTHING` es
+      lo que convierte la carrera en un 409 limpio en vez de un 500. También
+      que un hold cancelado libera el slot — el índice es parcial sobre
+      `PENDING_PAYMENT` justo para eso.
+- [x] **RLS bajo concurrencia** (PR #247): 120 lecturas de dos tenants en
+      paralelo sobre el mismo pool, y después el pool drenado entero para
+      comprobar que ninguna conexión volvió con el GUC puesto.
+- [x] **`go test -race`** en CI. El workflow corría sin él: los tests de
+      concurrencia habrían pasado igual mientras una carrera pasaba inadvertida.
+- [x] **Idempotencia del outbox** (PR #247): un segundo ciclo no reenvía lo ya
+      publicado, Redis caído deja el evento en `published = FALSE` (nunca
+      marcado sin haber salido, que es la pérdida silenciosa), y vuelve a salir
+      solo cuando Redis regresa.
+- [x] **Migraciones reversibles** (PR #247). **Encontró un bug real:**
+      `000036_drop_booking_requests.down.sql` recreaba la tabla con la
+      definición de `000004` — `TEXT` donde el esquema tenía los enums
+      `booking_modality`/`booking_status`, sin `resolved_by`, sin los dos
+      índices, sin las columnas de consentimiento de `000007` y sin la RLS de
+      `000032`. Consecuencia: un rollback completo era **imposible** (el `down`
+      de `000007` fallaba después sobre una columna que ya no existía), y de
+      paso se perdía la evidencia de consentimiento de la Ley 1581/2012.
+      Reescrito para restaurar el esquema tal como estaba justo antes.
+
+**Lo que el test de migraciones verifica ahora**, y que nadie verificaba:
+
+1. Toda `up` tiene su `.down.sql` y viceversa (esto corre sin Docker).
+2. Las 71 `up` aplican limpias sobre una BD virgen.
+3. Las 71 `down` aplican limpias en orden inverso.
+4. Tras el rollback completo **no sobrevive ninguna tabla**.
+5. Las `up` vuelven a aplicar, y la huella del esquema
+   (`information_schema.columns` completo) es **idéntica** a la primera.
+
+El punto 5 es el fuerte: un `down` que solo *casi* deshace su `up` deja deriva,
+y esa deriva no se ve hasta el rollback siguiente. Corre en un contenedor propio
+para no tocar el arnés compartido.
+
+**Hueco documentado, no arreglado.** `bookings` tiene índice único; `appointments`
+**no**. Su `idx_appt_daily` es deliberadamente no-único, el CTE del repositorio
+solo comprueba *holds* de reserva, y el servicio no añade nada. Así que dos
+personas creando una cita para el mismo profesional y la misma hora desde la
+agenda interna **ambas ganan**, pese a que `ErrConflict` dice literalmente
+"conflicts with an existing appointment".
+
+Puede ser intencional — un supervisor sentado en sesión, una sesión grupal, un
+sobrecupo deliberado — y por eso **no lo cambié**. Producción tiene cero slots
+duplicados hoy. `TestConcurrentAppointmentsAreNotGuarded` documenta el
+comportamiento actual y falla con un mensaje explícito si alguien añade la
+restricción, para que la decisión sea consciente. **Pendiente de la decisión de
+Francisco.**
 
 ---
 
