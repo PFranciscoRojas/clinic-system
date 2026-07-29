@@ -184,8 +184,11 @@ Orden de ataque (por riesgo × ausencia de tests):
 2. ✅ `internal/shared/clinicalperm` + `internal/shared/middleware` (PR #242).
    87,4 % y 72,7 % en unitarios; el resto son las ramas que necesitan BD viva,
    cubiertas en `internal/integration/middleware_test.go` y `needtoknow_test.go`.
-3. ⬜ `internal/auth/service` — **85 %**. Expiración de token, refresh, revocación,
-   rate limit, hashing de contraseñas.
+3. ✅ `internal/auth/service` — objetivo 85 %, alcanzado **87,2 %** (PR #243).
+   Unitarios con repositorio falso + miniredis, sin docker. Lo que queda sin
+   cubrir son fallos de infraestructura (bcrypt, `crypto/rand`, Redis) que
+   pedirían una costura en producción; en crypto se hizo donde valía la pena
+   (`randReader`), aquí no compensa.
 4. ⬜ `internal/invoicing` (3.091 LOC) — **85 %**. Redondeo, IVA, retenciones,
    NUMERIC en todos los caminos.
 5. ⬜ `internal/availability` + `internal/booking` — **85 %**. Solapes, zonas
@@ -223,6 +226,27 @@ vuelve a fallar. `make coverage-bump` reescribe el fichero con lo medido.
 **Trampa que costó un run rojo:** el repo tiene `core.fileMode = false`, así que
 `chmod +x` no llega a git y el job muere con `Permission denied` (exit 126). Hay
 que registrarlo explícitamente: `git update-index --chmod=+x <script>`.
+
+**Patrón que funcionó para el repositorio falso** (`internal/auth/service`): en
+vez de implementar los ~35 métodos de `auth.Repository`, embeber la interfaz en
+el struct falso y declarar solo los que el test necesita. Un método que el
+código llame sin que el test lo haya cableado es `nil` y **panica de forma
+ruidosa** — que es justo lo que se quiere: una llamada inesperada al repositorio
+es un hallazgo, no algo que devolver como valor cero en silencio.
+
+**Dos cosas que los tests encontraron y que no se tocaron** (son decisiones,
+no bugs que arreglar de paso):
+
+- `token.Claims.UserID` lleva `json:"sub"` y a la vez el struct embebe
+  `jwt.RegisteredClaims`, cuyo `Subject` también es `sub`. `encoding/json`
+  resuelve el choque a favor del campo más superficial, así que `Subject` nunca
+  se escribe ni se lee: la asignación en `issueTokenPair` es código muerto. Hoy
+  nadie lee `.Subject`, pero quien empiece a hacerlo recibirá `""`. Fijado en
+  `TestIssuedTokenCarriesTheUserInSubOnly`.
+- `sanitizePhone` conserva `+` en cualquier posición y solo recorta el inicial,
+  así que un `+` intermedio sobrevive a un valor que se usa tal cual en un
+  enlace `wa.me`. Es entrada opcional escrita por humanos, no rompe nada hoy.
+  Fijado en `TestSanitizePhoneKeepsInternalPlusSigns`, que avisa si se endurece.
 
 ---
 
