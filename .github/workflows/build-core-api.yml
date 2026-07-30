@@ -32,9 +32,13 @@ jobs:
           go-version-file: services/core-api/go.mod
           cache-dependency-path: services/core-api/go.sum
 
+      # -race, matching `make test-api`. Without it the concurrency tests in
+      # internal/integration still pass while a data race goes unreported: the
+      # detector is the only thing that sees an unsynchronised write, and the
+      # torture tests exist precisely to trigger those.
       - name: Run tests
         working-directory: services/core-api
-        run: go test ./...
+        run: go test -race ./...
 
   core-api-lint:
     runs-on: ubuntu-latest
