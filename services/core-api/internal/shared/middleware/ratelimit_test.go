@@ -151,3 +151,98 @@ func TestRateLimitUnderConcurrency(t *testing.T) {
 		t.Errorf("%d of %d concurrent requests were allowed, want exactly %d", allowed, attempts, limit)
 	}
 }
+
+// TestRateLimitWindowBoundary pins the exact instant the window rolls over.
+// Mutation testing found the comparison in `now.Sub(b.windowStart) > window`
+// untested at its boundary: TestRateLimitWindowResets waits well past the
+// window, so turning `>` into `>=` (or negating it) changed nothing any test
+// could see — and that comparison is the difference between a limit that
+// resets on time and one that resets a whole window late.
+func TestRateLimitWindowBoundary(t *testing.T) {
+	const window = 120 * time.Millisecond
+	h := RateLimit(1, window)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	send := func() int {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", nil)
+		req.RemoteAddr = "192.0.2.77:1234"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	start := time.Now()
+	if code := send(); code != http.StatusOK {
+		t.Fatalf("first request = %d", code)
+	}
+
+	// Comfortably inside the window: still limited.
+	time.Sleep(window / 3)
+	if code := send(); code != http.StatusTooManyRequests {
+		t.Errorf("request at %v into a %v window = %d, want 429",
+			time.Since(start), window, code)
+	}
+
+	// Comfortably past it: allowed again.
+	time.Sleep(window)
+	if code := send(); code != http.StatusOK {
+		t.Errorf("request at %v into a %v window = %d, want 200 — the window never rolled over",
+			time.Since(start), window, code)
+	}
+}
+
+// TestRateLimitCountsWithinOneWindowOnly: a second window starts a fresh
+// count rather than carrying the old one, so a client that hit the limit once
+// gets its full budget back rather than a reduced one.
+func TestRateLimitCountsWithinOneWindowOnly(t *testing.T) {
+	const window = 100 * time.Millisecond
+	h := RateLimit(2, window)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	send := func() int {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", nil)
+		req.RemoteAddr = "192.0.2.88:1234"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	// Exhaust the first window.
+	for i := 1; i <= 2; i++ {
+		if code := send(); code != http.StatusOK {
+			t.Fatalf("request %d of the first window = %d", i, code)
+		}
+	}
+	if code := send(); code != http.StatusTooManyRequests {
+		t.Fatalf("the third request in the window = %d, want 429", code)
+	}
+
+	time.Sleep(window + 50*time.Millisecond)
+
+	// The full budget must be back, not one request.
+	for i := 1; i <= 2; i++ {
+		if code := send(); code != http.StatusOK {
+			t.Errorf("request %d of the second window = %d, want 200 — the count "+
+				"carried over instead of resetting", i, code)
+		}
+	}
+}
+
+// Surviving mutants in this package, and why they stay:
+//
+//   - ratelimit.go:34 (both mutators) is inside the sweeper goroutine that
+//     evicts expired buckets. `buckets` is a closure variable with no accessor,
+//     so eviction is invisible from outside: whether a stale bucket was dropped
+//     or merely reset produces the same observable behaviour on every request.
+//     Killing these means exporting internals purely to satisfy the tool, which
+//     is a worse codebase for a better number.
+//   - ratelimit.go:54 CONDITIONALS_BOUNDARY turns `now.Sub(b.windowStart) > window`
+//     into `>=`. Distinguishing them requires a request landing on the exact
+//     nanosecond the window elapses. Not reachable by a test that isn't a
+//     coin flip, and a flaky test costs more than this mutant.
+//   - subscription.go:66/72/81 are killed — by TestSubscriptionGate* in
+//     internal/integration, which needs a real Postgres. gremlins only runs the
+//     tests of the package it mutates, so cross-package coverage never counts.
+//     Tool limitation. Do not duplicate those tests here.

@@ -395,19 +395,83 @@ Francisco.**
 Esta es la pieza que cierra el círculo: mide si tus tests **detectarían** un fallo,
 no si pasan. Es lenta, así que se acota.
 
-- [ ] Herramienta: `github.com/gtramontina/gremlins` (Go). Alternativa
-      `go-mutesting`. Ambas están poco mantenidas — evaluar primero con una prueba
-      de 30 min sobre `crypto` antes de comprometerse.
-- [ ] Alcance: **solo** `crypto`, `clinicalperm`, `invoicing`, `availability`.
-      Correr mutación sobre 227 ficheros es inviable en CI.
-- [ ] Umbral inicial: **60 % de mutantes muertos**, subiendo 5 puntos por
-      trimestre.
-- [ ] No en cada PR. Job nocturno (`schedule: cron`) que abre issue si baja.
+- [x] Herramienta: `github.com/go-gremlins/gremlins`. Evaluada sobre `crypto`
+      antes de comprometerse, como decía el plan. **Funciona, pero solo con un
+      ajuste** (ver abajo).
+- [x] Alcance ampliado a los 9 paquetes con lógica de negocio, no solo cuatro:
+      el runner tarda minutos, no horas, y el job es nocturno.
+- [x] Umbral inicial **60 %**, en `scripts/run_mutation.sh` (`MUTATION_THRESHOLD`).
+- [x] Job nocturno `.github/workflows/mutation.yml` (06:20 UTC, antes del fuzz),
+      con `workflow_dispatch`. Abre issue etiquetada `mutation-testing` si baja,
+      y comenta en la existente en lugar de abrir siete en una semana mala.
 
-**Si gremlins no funciona bien:** el sustituto barato y honesto es que tú (o un
-agente adversario con prompt distinto) introduzca 10 bugs a mano en el código
-crítico una vez al trimestre y compruebe cuántos atrapa la suite. Menos elegante,
-igual de informativo.
+**El ajuste sin el cual la herramienta miente:** por defecto gremlins reportó los
+16 mutantes de `crypto` como `TIMED OUT` en menos de un segundo. No es un
+resultado, es un fallo de la herramienta calculando mal el presupuesto por
+mutante a partir de su baseline. Con `--timeout-coefficient 200` el mismo
+paquete da 100 %. Un informe de mutación sin ese flag parece un resultado y no lo
+es; es la clase de número que te haría escribir tests para nada. También: hay que
+pasarle una ruta de paquete (`./internal/shared/crypto`), no `/...` ni entrar al
+directorio.
+
+#### Línea base medida (2026-07-30)
+
+| paquete | matados | vivos | eficacia |
+|---|---|---|---|
+| `shared/crypto` | 16 | 0 | 100 % |
+| `shared/clinicalperm` | 3 | 0 | 100 % |
+| `recordtemplates` | 23 | 0 | 100 % |
+| `leadbooking` | 24 | 1 | 96,0 % |
+| `auth/service` | 127 | 16 | 88,8 % |
+| `shared/hash` | 12 | 2 | 85,7 % |
+| `availability` | 32 | 6 | 84,2 % |
+| `invoicing` | 96 | 28 | 77,4 % |
+| `shared/middleware` | 19 | 7 | 73,1 % |
+
+Todos por encima del umbral de 60 %. Los dos peores se atacaron directamente:
+
+- **`hash` 78,6 % → 85,7 %**: el tope `searchTokenMaxPrefix` (24 runas) estaba
+  *completamente* sin probar. Ningún ejemplo usaba una palabra de más de 24
+  runas, así que mover ese límite no rompía nada. Es el tope que impide que un
+  input absurdo escriba cientos de filas de índice por paciente, y tiene que
+  aplicarse igual en escritura y en lectura o dejas de encontrar al paciente
+  escribiendo su nombre completo. Ahora lo cubren `TestSearchTokensCapLongWords`
+  y `TestSearchTokensJustUnderTheCap`.
+- **`middleware` 73,1 %, sin cambio**: añadí dos tests de frontera de ventana
+  (`TestRateLimitWindowBoundary`, `TestRateLimitCountsWithinOneWindowOnly`) que
+  son buenos tests y no mataron a nadie. Los dejé igual, y esa es la lección de
+  la fase.
+
+#### Lo que enseñan los supervivientes (más que el número)
+
+Escribir tests hasta llegar al 100 % habría sido el error. De los nueve mutantes
+vivos que quedan, **ninguno es una laguna real**:
+
+1. **Mutantes equivalentes** (`hash.go:94`, `hash.go:121`, `ratelimit.go:54`).
+   Cambiar `len(r) > 24` por `>= 24` hace que una palabra de exactamente 24 runas
+   entre en la rama que la trunca… a 24 runas. Los dos programas son idénticos en
+   comportamiento: **no existe input que los distinga**. Son inmatables por
+   definición, no por falta de esfuerzo.
+2. **Estado no observable** (`ratelimit.go:34`). Está dentro de la goroutine que
+   limpia buckets caducados; `buckets` es una variable de clausura sin accesor.
+   Matarlo exige exportar internals solo para contentar a la herramienta: peor
+   código a cambio de mejor número.
+3. **Cobertura que gremlins no puede ver** (`subscription.go:66/72/81`). Están
+   matados por `TestSubscriptionGate*` en `internal/integration`, que necesita un
+   Postgres real. **gremlins solo ejecuta los tests del propio paquete que muta**,
+   así que toda la cobertura cross-package cuenta como cero. Limitación de la
+   herramienta, no del suite.
+
+El razonamiento está escrito como comentario al final de `hash_test.go` y
+`ratelimit_test.go`, no aquí, para que el próximo agente que corra mutación lo
+encuentre donde va a mirar. La plantilla de issue del job nocturno repite las
+tres categorías: **la pregunta correcta ante un superviviente no es "¿cómo lo
+mato?" sino "¿cuál de los tres es?"**.
+
+**Si gremlins deja de funcionar:** el sustituto barato y honesto sigue en pie —
+que tú (o un agente adversario con prompt distinto) introduzca 10 bugs a mano en
+el código crítico una vez al trimestre y compruebe cuántos atrapa la suite. Menos
+elegante, igual de informativo.
 
 ---
 
