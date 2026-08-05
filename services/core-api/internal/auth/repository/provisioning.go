@@ -29,8 +29,19 @@ func (r *Repository) CreateOrgWithOwner(ctx context.Context, p auth.CreateOrgPar
 	// Try the base slug first, then base-2, base-3, … until one is free. The
 	// unique index on organizations.slug is the source of truth; we retry only
 	// on its violation so a concurrent signup can't slip a duplicate past us.
+	//
+	// Each attempt runs inside a SAVEPOINT. Postgres aborts the whole
+	// transaction on any statement error, so without one the retry issues its
+	// INSERT into an already-aborted transaction and gets 25P02 instead — the
+	// loop could never succeed, and the second clinic whose name slugified the
+	// same as an existing one was told "could not create account" (500) with no
+	// way to get past it. Found by the acceptance scenarios, which sign two
+	// clinics up under the same name on purpose.
 	slug = p.BaseSlug
 	for attempt := 1; ; attempt++ {
+		if _, err = tx.Exec(ctx, `SAVEPOINT slug_attempt`); err != nil {
+			return "", "", "", fmt.Errorf("savepoint for slug attempt: %w", err)
+		}
 		err = tx.QueryRow(ctx, `
 			INSERT INTO organizations
 				(name, slug, plan, subscription_status, trial_ends_at, signup_phone, signup_source)
@@ -38,9 +49,16 @@ func (r *Repository) CreateOrgWithOwner(ctx context.Context, p auth.CreateOrgPar
 			RETURNING id
 		`, p.OrgName, slug, trialEnds, p.Phone, p.ReferralSource).Scan(&orgID)
 		if err == nil {
+			// Release it: savepoints accumulate on the transaction otherwise.
+			if _, err = tx.Exec(ctx, `RELEASE SAVEPOINT slug_attempt`); err != nil {
+				return "", "", "", fmt.Errorf("release slug savepoint: %w", err)
+			}
 			break
 		}
 		if isUniqueViolation(err, "organizations_slug_key") && attempt < 50 {
+			if _, rbErr := tx.Exec(ctx, `ROLLBACK TO SAVEPOINT slug_attempt`); rbErr != nil {
+				return "", "", "", fmt.Errorf("rollback slug savepoint: %w", rbErr)
+			}
 			slug = fmt.Sprintf("%s-%d", p.BaseSlug, attempt+1)
 			continue
 		}
