@@ -481,20 +481,78 @@ Lo que Uncle Bob llama pruebas de aceptación: la especificación en lenguaje de
 negocio, no de código. Aquí es donde tú, el humano, sigues leyendo — pero lees
 `.feature`, no Go.
 
-- [ ] `godog` (Cucumber para Go) contra el arnés de integración, levantando el
+- [x] `godog` (Cucumber para Go) contra el arnés de integración, levantando el
       router real y hablando HTTP.
-- [ ] Ficheros `.feature` en español, en `services/core-api/features/`.
+- [x] Ficheros `.feature` en español, en `services/core-api/features/`.
 - [ ] Escenarios iniciales, uno por flujo que si se rompe pierdes un cliente:
-      - Alta de paciente → cita → sesión → historia clínica firmada → factura.
-      - Un profesional no ve pacientes de otro profesional sin relación.
-      - Un borrador IA no se convierte en historia sin aprobación explícita.
-      - Consentimiento vencido bloquea la creación de historia.
-      - Cancelación de cita libera el slot y no factura.
-- [ ] Los `.feature` los escribes/apruebas **tú**. El agente implementa los steps.
+      - [x] Aislamiento multi-tenant (`aislamiento_multitenant.feature`).
+      - [ ] Alta de paciente → cita → sesión → historia clínica firmada → factura.
+      - [ ] Un profesional no ve pacientes de otro profesional sin relación.
+      - [ ] Un borrador IA no se convierte en historia sin aprobación explícita.
+      - [ ] Consentimiento vencido bloquea la creación de historia.
+      - [ ] Cancelación de cita libera el slot y no factura.
+- [x] Los `.feature` los escribes/apruebas **tú**. El agente implementa los steps.
       Esa es la frontera correcta: el humano especifica, la máquina implementa.
 
 **Este es el punto en que empiezas a poder no leer el código.** Antes de tener
 aceptación, no.
+
+#### Lo que costó levantarlo
+
+- **La suite vive en `package main`, dentro de `cmd/api`.** `buildRouter` es un
+  método no exportado sobre `*app`; probar el router *real* — con su cadena de
+  middlewares, su orden de rutas y su manejo de errores — exige estar dentro del
+  paquete. Un router reconstruido en el test sería un router distinto del que se
+  despliega, y entonces el escenario verde no prueba nada.
+- **`internal/testinfra` existe porque Go no deja importar identificadores de los
+  `_test.go` de otro paquete.** El bootstrap de Postgres estaba en el arnés de
+  `internal/integration`; ahora vive en un fichero normal que ambos importan.
+  Duplicarlo habría permitido que derivaran, y el día que derivan uno de los dos
+  está probando un esquema que producción no tiene.
+- **Los correos llevan sufijo por escenario** (`norte+a1b2c3d4@ejemplo.co`,
+  derivado del hash del nombre del escenario). Los escenarios comparten una sola
+  base de datos y el email es único global; sin eso, el segundo escenario que
+  registra "Consultorio Norte" falla por una colisión que no tiene nada que ver
+  con lo que se está probando.
+- **Ryuk mataba la base de datos del otro paquete a mitad de suite.**
+  testcontainers deriva el ID de sesión del pid padre, así que todos los
+  paquetes de un `go test ./...` comparten un mismo reaper; diez segundos
+  después de que el primer binario termine, ryuk destruye *todos* los
+  contenedores de la sesión. Con dos paquetes dueños de una base de datos, el
+  más lento se quedaba hablándole a un puerto muerto. `testinfra.Start` alarga
+  ahora esa gracia a 10 minutos. Se arregla ahí y no en el Makefile a propósito:
+  el próximo paquete que llame a `Start` hereda el arreglo en vez de volver a
+  descubrir el bug.
+
+#### El primer escenario encontró un bug de producción
+
+Los escenarios dan de alta dos consultorios seguidos. Se les puso el mismo nombre
+para probar el aislamiento con datos idénticos, y el segundo alta devolvió 500.
+
+No era el test. `CreateOrgWithOwner` resuelve las colisiones de slug reintentando
+el `INSERT` con `base-2`, `base-3`… dentro de la misma transacción. **Postgres
+aborta la transacción entera ante cualquier error de sentencia**, así que el
+reintento posterior a la violación de unicidad se ejecutaba sobre una transacción
+ya muerta y recibía `25P02` para siempre. El bucle era código inalcanzable que
+protegía un caso que siempre fallaba.
+
+En producción eso significa que dos consultorios cuyo nombre genera el mismo slug
+— "Consultorio Psicológico", "Centro de Psicología", el nombre propio de la
+terapeuta — el segundo **no podía registrarse nunca**: "no se pudo crear la
+cuenta", HTTP 500, sin salida. Un registro perdido en el último paso, en silencio,
+en la única métrica que importa cuando estás vendiendo.
+
+Arreglado con `SAVEPOINT` / `ROLLBACK TO SAVEPOINT` / `RELEASE SAVEPOINT` por
+intento. La causa queda fijada por dos tests directos en `internal/integration`
+(`TestSignupSurvivesASlugCollision`, `TestSignupStillRejectsADuplicateEmail`) para
+que sobreviva aunque los escenarios se reescriban; se verificó que son
+load-bearing revirtiendo el arreglo y viendo el `25P02` exacto.
+
+**La tesis de la fase, con evidencia:** ningún test unitario iba a encontrar esto.
+El repositorio hace lo que dice hacer si lo miras función por función. Solo hablar
+HTTP contra el sistema entero, como un usuario, expuso que la transacción estaba
+muerta. Es exactamente el motivo por el que la aceptación es lo que te permite
+dejar de leer el código.
 
 ---
 
