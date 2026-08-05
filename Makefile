@@ -1,6 +1,7 @@
 .PHONY: setup up down build logs ps shell-api shell-db \
         migrate-up migrate-down migrate-create \
         test-api test-ai lint-api lint-ai coverage coverage-bump \
+        bundle bundle-bump secrets vulns \
         sqlc dev frontend-build
 
 # ── Bootstrap de datos/volumes (ejecutar una vez antes de `make up`) ──────────
@@ -63,6 +64,23 @@ coverage:
 
 coverage-bump:
 	./scripts/check_coverage.sh --bump
+
+# Presupuesto de tamaño del bundle (mismo script que el CI). `bundle-bump`
+# reescribe services/frontend/bundle-budget.txt con lo medido.
+bundle:
+	./scripts/check_bundle_size.sh
+
+bundle-bump:
+	./scripts/check_bundle_size.sh --bump
+
+# ── El punto ciego (fase 7) ───────────────────────────────────────────────────
+# Secretos y CVEs. Los tests de fuente (hosts salientes, PII en logs) corren
+# solos dentro de `make test-api`.
+secrets:
+	gitleaks git . --no-banner --redact --config .gitleaks.toml
+
+vulns:
+	cd services/core-api && govulncheck ./...
 
 # ── Linters ──────────────────────────────────────────────────────────────────
 lint-api:

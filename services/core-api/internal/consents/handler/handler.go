@@ -156,7 +156,7 @@ func (h *Handler) signInOffice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id, err := h.createSigned(r.Context(), claims.OrganizationID, patientID, claims.UserID,
-		tpl, body.SignaturePNG, consents.ChannelInOffice, r.RemoteAddr, r.UserAgent())
+		tpl, body.SignaturePNG, consents.ChannelInOffice, httputil.ClientIP(r), r.UserAgent())
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "internal error")
 		return
@@ -238,7 +238,7 @@ func (h *Handler) upload(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	evEnc, err := crypto.Seal(plainDEK, consents.BuildEvidence(time.Now(), consents.ChannelInOffice, r.RemoteAddr, r.UserAgent()))
+	evEnc, err := crypto.Seal(plainDEK, consents.BuildEvidence(time.Now(), consents.ChannelInOffice, httputil.ClientIP(r), r.UserAgent()))
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "internal error")
 		return

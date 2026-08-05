@@ -558,17 +558,76 @@ dejar de leer el código.
 
 ### Fase 7 — El punto ciego: lo que ningún test ve
 
-- [ ] **Secret scanning:** `gitleaks` en CI. Un agente que hardcodea una API key
+- [x] **Secret scanning:** `gitleaks` en CI. Un agente que hardcodea una API key
       pasa todos los tests.
-- [ ] **PII en logs:** grep en CI que falla si aparece `log.*patient.name`,
-      `log.*document`, o el struct de paciente completo en un log.
-- [ ] **Dependencias:** `dependency-review-action` en PR. Un agente que añade una
+- [x] **PII en logs:** test que falla si un `slog.*` recibe un nombre, un
+      documento, un teléfono o un campo SOAP.
+- [x] **Dependencias:** `dependency-review-action` en PR. Un agente que añade una
       librería nueva debe ser visible sin leer el diff.
-- [ ] **`govulncheck`** en CI para CVEs de dependencias Go.
-- [ ] **Llamadas de red no autorizadas:** lista blanca de hosts; test que falla si
-      aparece un `http.Get` a un dominio fuera de la lista.
-- [ ] **Presupuesto de tamaño de bundle** en frontend: falla si crece >10 % en un
-      PR.
+- [x] **`govulncheck`** en CI para CVEs de dependencias Go.
+- [x] **Llamadas de red no autorizadas:** lista blanca de hosts; test que falla
+      si aparece un dominio fuera de la lista.
+- [x] **Presupuesto de tamaño de bundle** en frontend: falla si crece por encima
+      del techo declarado.
+
+#### Lo que se construyó
+
+| Qué | Dónde | Corre en |
+|---|---|---|
+| Secretos (historia completa, 734 commits) | `.gitleaks.toml`, job `secret-scan` | PR y push |
+| CVEs de dependencias Go | job `govulncheck` | PR y push |
+| Dependencias nuevas, con licencia | job `dependency-review` | solo PR |
+| Hosts salientes no declarados | `internal/invariants` | `go test ./...` |
+| PII en logs | `internal/invariants` | `go test ./...` |
+| Presupuesto de bundle | `scripts/check_bundle_size.sh` | `frontend-check` |
+
+Los dos que escanean el código fuente son **tests, no greps de CI**, a propósito:
+así corren también en el portátil y en el hook de pre-push de la fase 8. Un
+control que solo existe en el CI es un control con el que te encuentras cuando
+ya empujaste.
+
+Los dos tienen su propio test que comprueba que **siguen mirando algo**
+(`TestThePIICheckStillWorks`, y el corte de "menos de 50 ficheros .go" en el
+walk). Un escáner que dejó de reconocer el código no falla: pasa. Es el modo de
+avería que hace inútil a la mitad de las herramientas de este tipo.
+
+#### El primer escaneo encontró un agujero real, y el parche no era el upgrade
+
+`govulncheck` reportó cuatro CVEs. Tres eran rutina. El cuarto, GO-2026-5777 /
+GO-2026-5775, era nuestro: `chi.RealIP` — que corría en **todas** las rutas —
+reescribía `RemoteAddr` con el valor **más a la izquierda** de
+`X-Forwarded-For`, que es lo que el cliente escriba.
+
+Consecuencias en producción, las tres del mismo bug:
+
+1. **El límite de intentos de login no existía.** El bucket del rate limiter se
+   indexa por IP. Una cabecera distinta por petición = un bucket nuevo por
+   petición. Fuerza bruta sin techo contra `/auth/login`.
+2. **La evidencia de consentimiento registraba una IP inventada.** El campo
+   existe para poder decir quién firmó y desde dónde; lo firmaba el firmante.
+3. **La auditoría, igual.**
+
+Subir de versión **no arregla nada**: chi v5.3.0 conserva `RealIP`, solo lo marca
+deprecado. El arreglo es cambiar de API:
+`ClientIPFromRemoteAddr` + `ClientIPFromXFF()` (la entrada de **la derecha**, la
+que añade nuestro propio Caddy — la única de la cadena que ningún cliente pudo
+escribir), y un único accesor `httputil.ClientIP` que jamás lee una cabecera.
+Los seis sitios que leían `r.RemoteAddr` a mano pasan por él.
+
+Eso solo es correcto por la topología: Caddy es la única entrada y core-api no
+publica puerto al host. Está escrito en el comentario del middleware, junto con
+qué habría que cambiar si algún día se pone un CDN delante (`chapni.com` ya está
+en Cloudflare; `app.chapni.com` no).
+
+`TestForgedForwardedForCannotBuyExtraRequests` reproduce el ataque contra el stack
+real, con un simulador de Caddy de seis líneas. Se verificó que es load-bearing:
+volviendo a `RealIP`, cinco intentos de login con cabecera falsificada pasan un
+límite de tres.
+
+**La lección, que vale más que el parche:** el escáner se pone verde con el
+`go get`. La vulnerabilidad seguía ahí. Una herramienta que mira versiones no
+puede ver que sigues llamando a la función rota, y "CI en verde" nunca ha
+querido decir "arreglado".
 
 ---
 

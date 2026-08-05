@@ -55,7 +55,28 @@ func (a *app) buildRouter() http.Handler {
 
 	// ── Global middleware (runs on every request, in order) ───────────────────
 	r.Use(chimiddleware.RequestID)
-	r.Use(chimiddleware.RealIP)
+	// Client IP resolution. Read it with httputil.ClientIP, never from a header.
+	//
+	// chimiddleware.RealIP used to be here and was withdrawn upstream as a
+	// vulnerability (GO-2026-5777, GO-2026-5775): it overwrote RemoteAddr with
+	// the LEFTMOST X-Forwarded-For entry, which is whatever the client typed.
+	// Sending a different one per request gave every request its own
+	// rate-limit bucket, and put a forged address into consent evidence.
+	//
+	// The order below matters. ClientIPFromRemoteAddr sets the TCP peer as the
+	// baseline so there is always an IP; ClientIPFromXFF overwrites it with
+	// the RIGHTMOST X-Forwarded-For entry — the one Caddy itself appended, the
+	// only entry in the chain no client could have written.
+	//
+	// The no-argument form is correct for exactly one trusted hop, which is
+	// what we have: Caddy is the only ingress and core-api is not published to
+	// the host (see docker-compose.yml). If a CDN is ever put in front of
+	// app.chapni.com — chapni.com is already on Cloudflare, this host is not —
+	// the rightmost entry becomes the CDN edge instead of the visitor, and
+	// this must become ClientIPFromXFF(<edge CIDRs…>). It fails safe either
+	// way: it groups clients, it never trusts them.
+	r.Use(chimiddleware.ClientIPFromRemoteAddr)
+	r.Use(chimiddleware.ClientIPFromXFF())
 	r.Use(middleware.StructuredLogger(slog.Default()))
 	r.Use(chimiddleware.Recoverer)
 	// 30 s request-context timeout for every route except the session-audio

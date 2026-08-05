@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
-	"strings"
+
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 )
 
 func WriteJSON(w http.ResponseWriter, status int, v any) {
@@ -22,13 +23,24 @@ func DecodeJSON(r *http.Request, v any) error {
 	return json.NewDecoder(r.Body).Decode(v)
 }
 
-// ExtractIP reads the real client IP accounting for Caddy's X-Real-IP header.
-func ExtractIP(r *http.Request) string {
-	if ip := r.Header.Get("X-Real-IP"); ip != "" {
+// ClientIP returns the client's IP as the middleware stack resolved it, and is
+// the only sanctioned way to get it. It never reads a request header itself.
+//
+// The header is attacker-controlled. Anyone can send
+// `X-Forwarded-For: 1.2.3.4` or `X-Real-IP: whatever`, so trusting the value a
+// client supplied turns the rate limiter into a no-op (a fresh IP per request
+// means a fresh bucket per request, and the brute-force limit on /auth/login
+// stops existing) and writes a forged address into the consent evidence and
+// the audit trail — records whose whole purpose is to say who did something
+// and from where.
+//
+// Only the right-hand end of X-Forwarded-For is trustworthy, because our own
+// Caddy appends it; the middleware in cmd/api/routes.go is what reads it. Here
+// we only fetch what it stored, falling back to the TCP peer address for
+// requests that never passed through that stack (tests, other entrypoints).
+func ClientIP(r *http.Request) string {
+	if ip := chimiddleware.GetClientIP(r.Context()); ip != "" {
 		return ip
-	}
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		return strings.TrimSpace(strings.Split(xff, ",")[0])
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

@@ -24,7 +24,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pair, err := h.svc.Login(r.Context(), req.Email, req.Password, httputil.ExtractIP(r), r.UserAgent())
+	pair, err := h.svc.Login(r.Context(), req.Email, req.Password, httputil.ClientIP(r), r.UserAgent())
 	if err != nil {
 		slog.Error("auth.login", "err", err)
 		writeErr(w, err)

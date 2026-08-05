@@ -117,7 +117,7 @@ func (h *Handler) publicPostSign(w http.ResponseWriter, r *http.Request) {
 		}
 		// Staff attribution goes to whoever generated the link.
 		id, err := h.createSigned(ctx, tok.OrganizationID, tok.PatientID, tok.CreatedBy,
-			tpl, body.SignaturePNG, consents.ChannelRemoteLink, r.RemoteAddr, r.UserAgent())
+			tpl, body.SignaturePNG, consents.ChannelRemoteLink, httputil.ClientIP(r), r.UserAgent())
 		if err != nil {
 			httputil.WriteError(w, http.StatusInternalServerError, "internal error")
 			return nil

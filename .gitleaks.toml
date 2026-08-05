@@ -1,0 +1,35 @@
+# Secret scanning. The repository is public: anything committed here is
+# published the moment it is pushed, and rotating a leaked MASTER_KEY means
+# re-encrypting every patient's clinical history. This runs on every PR.
+#
+# Baseline when this was added: no secret has ever been committed. The real
+# secrets (.env, .claude/) are gitignored and were never in a commit — verified
+# by scanning all 734 commits of history, not just the working tree.
+#
+# The allowlist below is short on purpose. An entry here is a claim that a
+# specific string is not a credential; if it grows, that claim stops being
+# reviewable and this file starts protecting the leak instead of the repo.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Values that look like keys and are not"
+
+paths = [
+  # A static catalogue of therapy exercises. Every entry has a `key:` field
+  # holding a slug ("grounding_54321", "respiracion_diafragmatica") that the
+  # generic-api-key rule reads as a credential. There are no secrets in a list
+  # of breathing exercises.
+  '''services/frontend/src/components/clinical/constants\.ts''',
+]
+
+regexes = [
+  # The 64-hex test vectors for MASTER_KEY and SEARCH_PEPPER in the acceptance
+  # suite. They are written to be recognisably fake and they encrypt nothing
+  # but a container that lives for twelve seconds. Allowlisted by exact value,
+  # not by path: a real key hardcoded in a test file is still a real key, and
+  # allowlisting *_test.go wholesale would hide it.
+  '''0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef''',
+  '''fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210''',
+]

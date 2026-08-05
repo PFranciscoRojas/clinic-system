@@ -156,7 +156,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		claims.OrganizationID, claims.UserID,
 		hash.Normalize(claims.Email),
 		patientID,
-		r.RemoteAddr, r.UserAgent(),
+		httputil.ClientIP(r), r.UserAgent(),
 	)
 
 	w.WriteHeader(http.StatusNoContent)
