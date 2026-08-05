@@ -562,8 +562,10 @@ dejar de leer el código.
       pasa todos los tests.
 - [x] **PII en logs:** test que falla si un `slog.*` recibe un nombre, un
       documento, un teléfono o un campo SOAP.
-- [x] **Dependencias:** `dependency-review-action` en PR. Un agente que añade una
-      librería nueva debe ser visible sin leer el diff.
+- [x] **Dependencias:** las 15 dependencias directas, enumeradas con su razón en
+      `internal/invariants`; la decimosexta rompe el build. (`dependency-review-action`
+      necesita el Dependency graph activado en Settings — un interruptor, no algo
+      que un workflow pueda encender. El job queda documentado para restaurarlo.)
 - [x] **`govulncheck`** en CI para CVEs de dependencias Go.
 - [x] **Llamadas de red no autorizadas:** lista blanca de hosts; test que falla
       si aparece un dominio fuera de la lista.
@@ -576,7 +578,7 @@ dejar de leer el código.
 |---|---|---|
 | Secretos (historia completa, 734 commits) | `.gitleaks.toml`, job `secret-scan` | PR y push |
 | CVEs de dependencias Go | job `govulncheck` | PR y push |
-| Dependencias nuevas, con licencia | job `dependency-review` | solo PR |
+| Dependencias directas declaradas | `internal/invariants` | `go test ./...` |
 | Hosts salientes no declarados | `internal/invariants` | `go test ./...` |
 | PII en logs | `internal/invariants` | `go test ./...` |
 | Presupuesto de bundle | `scripts/check_bundle_size.sh` | `frontend-check` |
@@ -628,6 +630,13 @@ límite de tres.
 `go get`. La vulnerabilidad seguía ahí. Una herramienta que mira versiones no
 puede ver que sigues llamando a la función rota, y "CI en verde" nunca ha
 querido decir "arreglado".
+
+De paso, `govulncheck` en el runner destapó 12 CVEs de la librería estándar que
+en local no se veían: mi Go es más nuevo que el que declara `go.mod`. El mínimo
+sube a **1.25.12** (`crypto/tls`, `net/http`, `html/template`, `archive/tar`,
+`net/textproto`). El `Dockerfile` ya usaba `golang:1.25-alpine`, que resuelve al
+último parche, así que producción no estaba expuesta — pero el número que
+declara el módulo era una mentira que nadie estaba comprobando.
 
 ---
 

@@ -31,10 +31,15 @@ jobs:
           # secret — it lives in the pack file, and this repo is public.
           fetch-depth: 0
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/core-api/go.mod
+          cache-dependency-path: services/core-api/go.sum
+
       - name: gitleaks
         run: |
           go install github.com/zricethezav/gitleaks/v8@v8.30.1
-          gitleaks git . --no-banner --redact --config .gitleaks.toml
+          "$(go env GOPATH)/bin/gitleaks" git . --no-banner --redact --config .gitleaks.toml
 
   # CVEs are published after the code is written, so this fails on code that
   # was clean when it merged. It runs on push to main too: a nightly-style
@@ -55,16 +60,13 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
-  # A new dependency is the one change that is invisible in a diff you skim:
-  # `go.sum` grows by twenty lines and none of them are readable. This posts
-  # the licence and known vulnerabilities of anything added, in the PR itself.
-  # Only meaningful on a PR (it diffs base against head).
-  dependency-review:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/dependency-review-action@v4
-        with:
-          fail-on-severity: high
-          comment-summary-in-pr: on-failure
+  # A new dependency is the change that disappears in a diff you skim: go.sum
+  # grows by twenty unreadable lines. GitHub's own dependency-review-action
+  # would post the licence and known CVEs of anything added, but it needs the
+  # Dependency graph switched on for the repository — a settings toggle, not
+  # something a workflow can enable. Until then the guarantee lives in
+  # internal/invariants: the fifteen direct requires are enumerated with a
+  # reason each, and a sixteenth fails the build.
+  #
+  # To turn the real thing on: Settings → Advanced Security → Dependency graph,
+  # then restore this job.

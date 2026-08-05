@@ -141,6 +141,78 @@ func TestNoUndeclaredOutboundHosts(t *testing.T) {
 	}
 }
 
+// ─── Direct dependencies ─────────────────────────────────────────────────────
+
+// Every module this service depends on directly, and why. Adding one is the
+// change that vanishes in a diff you skim — go.sum grows by twenty unreadable
+// lines and nobody reads them — and it is also the highest-leverage way to get
+// hostile code into a system that decrypts clinical histories.
+//
+// A dependency that cannot be justified in one line probably should not be
+// here. That is the point of writing the line.
+var directDependencies = map[string]string{
+	"github.com/go-chi/chi/v5":                                     "HTTP router",
+	"github.com/go-chi/cors":                                       "CORS middleware",
+	"github.com/jackc/pgx/v5":                                      "Postgres driver",
+	"github.com/redis/go-redis/v9":                                 "Redis client (sessions, streams, jobs)",
+	"github.com/golang-jwt/jwt/v5":                                 "JWT signing and verification",
+	"github.com/google/uuid":                                       "UUIDs",
+	"github.com/go-pdf/fpdf":                                       "clinical-record and invoice PDFs",
+	"golang.org/x/crypto":                                          "bcrypt",
+	"golang.org/x/text":                                            "Unicode normalisation for search tokens",
+	"golang.org/x/oauth2":                                          "Google Calendar OAuth",
+	"google.golang.org/api":                                        "Google Calendar API",
+	"github.com/alicebob/miniredis/v2":                             "test only: in-process Redis",
+	"github.com/cucumber/godog":                                    "test only: Gherkin acceptance suite",
+	"github.com/testcontainers/testcontainers-go":                  "test only: throwaway Postgres",
+	"github.com/testcontainers/testcontainers-go/modules/postgres": "test only: throwaway Postgres",
+}
+
+func TestNoUndeclaredDependencies(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(moduleRoot(), "go.mod"))
+	if err != nil {
+		t.Fatalf("read go.mod: %v", err)
+	}
+
+	declared := map[string]bool{}
+	inBlock := false
+	for _, line := range strings.Split(string(raw), "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(trimmed, "require ("):
+			inBlock = true
+			continue
+		case inBlock && trimmed == ")":
+			inBlock = false
+			continue
+		}
+		if !inBlock || trimmed == "" || strings.HasPrefix(trimmed, "//") {
+			continue
+		}
+		if strings.Contains(trimmed, "// indirect") {
+			continue
+		}
+		module := strings.Fields(trimmed)[0]
+		declared[module] = true
+		if _, ok := directDependencies[module]; !ok {
+			t.Errorf("undeclared direct dependency %q\n"+
+				"\tAdd it to directDependencies with the one-line reason it is here, "+
+				"in the same commit that introduces it. If you cannot write the line, "+
+				"that is the answer.", module)
+		}
+	}
+
+	if len(declared) == 0 {
+		t.Fatal("parsed no direct requires from go.mod — this check is reading nothing")
+	}
+	for module := range directDependencies {
+		if !declared[module] {
+			t.Errorf("%q is listed here but is no longer a direct requirement; drop the line",
+				module)
+		}
+	}
+}
+
 // ─── PII in logs ─────────────────────────────────────────────────────────────
 
 // Log calls, by the method name. Receivers vary (slog, s.logger, e.logger), so
