@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"net"
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"sghcp/core-api/internal/shared/hash"
+	"sghcp/core-api/internal/shared/httputil"
 	"sghcp/core-api/internal/shared/middleware"
 )
 
@@ -65,14 +65,11 @@ func (w *Writer) record(r *http.Request, action, resourceType, resourceID string
 	emailHash := hash.Normalize(claims.Email)
 	userAgent := r.UserAgent()
 	roles := claims.Roles
-	// RemoteAddr is already the real client IP: chimiddleware.RealIP runs first
-	// on every route and rewrites it from X-Forwarded-For, validating the value
-	// so a malformed header cannot reach the ::inet cast. Do not "fix" this to
-	// re-read the headers here — it would only duplicate that middleware.
-	ip := r.RemoteAddr
-	if host, _, err := net.SplitHostPort(ip); err == nil {
-		ip = host
-	}
+	// The audit trail answers "who did this, and from where". A value the
+	// caller could choose would make the second half a fiction, so the IP
+	// comes from the middleware stack and never from a header — see
+	// httputil.ClientIP. Do not "fix" this to read X-Forwarded-For here.
+	ip := httputil.ClientIP(r)
 
 	go func() {
 		var resID *string

@@ -37,3 +37,9 @@ jobs:
       - name: Unit tests
         working-directory: services/frontend
         run: npm test
+
+      # Builds the bundle and enforces the gzipped budget. Nothing else in CI
+      # would notice the app getting heavier — a slow bundle is still a correct
+      # one — and the clinics using this are on Colombian mobile links.
+      - name: Bundle size budget
+        run: ./scripts/check_bundle_size.sh

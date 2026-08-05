@@ -1,0 +1,3 @@
+# Maximum gzipped size, in kB, of all JS and CSS in services/frontend/dist/assets.
+# Rewrite with: scripts/check_bundle_size.sh --bump
+300

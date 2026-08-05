@@ -1,0 +1,72 @@
+# The blind spot: what no test sees.
+#
+# Every other check in this repo answers "does the code do what it should?".
+# These answer "did something get in that nobody looked at?" — a hardcoded key,
+# a dependency nobody chose, a CVE published after the code was written. An
+# agent that commits an API key passes the whole test suite.
+#
+# No `paths` filter on pull_request, deliberately: these are meant to be
+# required checks, and GitHub never auto-passes a required check it filtered
+# out — the PR waits forever for a status that never reports.
+name: Guard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Job names are globally unique across workflows: branch protection matches
+  # required checks by name alone.
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history. A secret deleted in the next commit is still a leaked
+          # secret — it lives in the pack file, and this repo is public.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/core-api/go.mod
+          cache-dependency-path: services/core-api/go.sum
+
+      - name: gitleaks
+        run: |
+          go install github.com/zricethezav/gitleaks/v8@v8.30.1
+          "$(go env GOPATH)/bin/gitleaks" git . --no-banner --redact --config .gitleaks.toml
+
+  # CVEs are published after the code is written, so this fails on code that
+  # was clean when it merged. It runs on push to main too: a nightly-style
+  # signal that does not depend on anyone opening a PR.
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/core-api/go.mod
+          cache-dependency-path: services/core-api/go.sum
+
+      - name: govulncheck
+        working-directory: services/core-api
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+  # A new dependency is the change that disappears in a diff you skim: go.sum
+  # grows by twenty unreadable lines. GitHub's own dependency-review-action
+  # would post the licence and known CVEs of anything added, but it needs the
+  # Dependency graph switched on for the repository — a settings toggle, not
+  # something a workflow can enable. Until then the guarantee lives in
+  # internal/invariants: the fifteen direct requires are enumerated with a
+  # reason each, and a sixteenth fails the build.
+  #
+  # To turn the real thing on: Settings → Advanced Security → Dependency graph,
+  # then restore this job.

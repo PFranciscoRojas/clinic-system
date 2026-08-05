@@ -1,10 +1,11 @@
 package middleware
 
 import (
-	"net"
 	"net/http"
 	"sync"
 	"time"
+
+	"sghcp/core-api/internal/shared/httputil"
 )
 
 // RateLimit returns middleware that allows at most `limit` requests per
@@ -41,12 +42,11 @@ func RateLimit(limit int, window time.Duration) func(http.Handler) http.Handler 
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// RealIP middleware runs earlier, so RemoteAddr holds the client
-			// IP (with or without port depending on the proxy headers).
-			ip := r.RemoteAddr
-			if host, _, err := net.SplitHostPort(ip); err == nil {
-				ip = host
-			}
+			// The bucket key. It must not be anything the caller can choose:
+			// one bucket per attacker-supplied header value is the same as no
+			// rate limit at all. httputil.ClientIP only ever returns what the
+			// ClientIPFrom* middlewares resolved, or the TCP peer.
+			ip := httputil.ClientIP(r)
 
 			mu.Lock()
 			b, ok := buckets[ip]

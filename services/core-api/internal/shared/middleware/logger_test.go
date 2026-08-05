@@ -50,7 +50,9 @@ func TestStructuredLoggerRecordsTheRequest(t *testing.T) {
 		"path":      "/api/v1/patients",
 		"status":    float64(http.StatusCreated),
 		"bytes":     float64(5),
-		"remote_ip": "203.0.113.4:5000",
+		// Bare IP, no port: the field is a client identity, and the ephemeral
+		// source port changes on every connection from the same client.
+		"remote_ip": "203.0.113.4",
 	}
 	for k, v := range want {
 		if entry[k] != v {

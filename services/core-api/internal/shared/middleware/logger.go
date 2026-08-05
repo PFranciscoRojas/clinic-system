@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5/middleware"
+
+	"sghcp/core-api/internal/shared/httputil"
 )
 
 // StructuredLogger returns chi middleware that logs each request as a JSON slog entry.
@@ -23,7 +25,7 @@ func StructuredLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 					"bytes", ww.BytesWritten(),
 					"duration_ms", time.Since(start).Milliseconds(),
 					"request_id", middleware.GetReqID(r.Context()),
-					"remote_ip", r.RemoteAddr,
+					"remote_ip", httputil.ClientIP(r),
 				)
 			}()
 
