@@ -645,17 +645,91 @@ declara el módulo era una mentira que nadie estaba comprobando.
 Lo anterior es infraestructura. Esto es lo que hace que el agente la use **antes**
 de decirte "listo".
 
-- [ ] Añadir a `CLAUDE.md` una sección **Definition of Done** explícita: ningún
+- [x] Añadir a `CLAUDE.md` una sección **Definition of Done** explícita: ningún
       cambio se reporta como terminado sin `make verify` en verde.
-- [ ] Crear `make verify` = `test-api -race` + `lint-api` + cobertura + los tests
+- [x] Crear `make verify` = `test-api -race` + `lint-api` + cobertura + los tests
       de invariantes + typecheck frontend + pytest. Un solo comando.
-- [ ] Hook `pre-push` en git que corre `make verify`. El agente no puede empujar
+- [x] Hook `pre-push` en git que corre `make verify`. El agente no puede empujar
       código roto aunque quiera.
-- [ ] Regla en `CLAUDE.md`: **está prohibido debilitar, saltar (`t.Skip`) o
+- [x] Regla en `CLAUDE.md`: **está prohibido debilitar, saltar (`t.Skip`) o
       borrar un test para hacer pasar el build.** Si un test estorba, se reporta,
       no se toca. Añadir un check en CI que falle si el número de `t.Skip` sube.
-- [ ] Regla: todo bug encontrado en producción entra primero como test que falla,
+- [x] Regla: todo bug encontrado en producción entra primero como test que falla,
       y luego se arregla. Sin excepción.
+
+#### Lo que se construyó
+
+| Qué | Dónde | Corre en |
+|---|---|---|
+| El comando único que decide "hecho" | `scripts/verify.sh`, `make verify` | portátil, hook |
+| Puerta antes de empujar | `.githooks/pre-push`, `make hooks` | `git push` |
+| Trinquete de skips | `scripts/check_skips.sh`, `skip-budget.txt` | `make verify`, job `skip-ratchet` |
+| El contrato escrito | `CLAUDE.md` → *Definition of Done* | lo lee el agente al arrancar |
+
+`make verify` corre los once pasos **en serie y en el orden del CI**. En serie a
+propósito: cuando algo se rompe quieres el primer fallo y su log entero, no ocho
+flujos entrelazados. Tarda ~2 min y no se detiene en el primer rojo — acumula los
+nombres y los lista al final, porque enterarte de un fallo por ejecución es la
+forma más cara de arreglar tres.
+
+El mensaje final no es decorativo:
+
+```
+verify FAILED (116s): ai-test
+
+The work is not done. Fix it — do not weaken, skip or delete a test to
+get past this; see the Definition of Done in CLAUDE.md.
+```
+
+Es el único sitio donde la regla aparece **en el momento exacto** en que apetece
+romperla. Una regla que solo vive en `CLAUDE.md` compite con 200 líneas de
+contexto; ésta la lee quien acaba de ver rojo.
+
+`VERIFY_SKIP="frontend-test ai-test" make verify` existe para el loop rápido, y
+la propia ayuda del script dice para qué no sirve. Una salida de emergencia que
+no existe no se respeta: se desinstala el hook, que es peor porque no se ve.
+Igual con `git push --no-verify`, que queda en el historial del shell.
+
+#### El trinquete de skips
+
+Es el único control de todo el plan que no mira el código sino **cómo se puso
+verde el build**. Todo lo demás pasa cuando borras un test; esto falla.
+
+Cuenta `t.Skip`/`t.Skipf`, `it.skip`/`test.skip`/`xit`/`xdescribe` y
+`@pytest.mark.skip`/`xfail`/`pytest.skip(`, y lo compara con un número
+commiteado. Hoy: **4** (3 Go, 1 Python). Excluye `skipIfShort`, que no es apagar
+un test sino la forma en que la suite de integración dice "esto necesita Docker"
+— y es el mecanismo sobre el que corre el trinquete de cobertura.
+
+Falla en las dos direcciones, como los otros trinquetes: subir el número exige
+`--bump` en el mismo commit (y el motivo en el mensaje), y bajarlo sin fijarlo
+también falla — un skip que pagaste no se puede volver a gastar.
+
+#### Tres cosas que sólo se ven al ejecutarlo
+
+**El hook recibe stdin.** Git le pasa al `pre-push` la lista de refs por la
+entrada estándar; cualquier paso que lea stdin se la come. `make verify </dev/null`.
+Y hay que detectar el borrado de rama —sha local todo ceros— o borrar una rama
+remota dispara dos minutos de tests. El `set -euo pipefail` muerde ahí: un
+`$only_deletes && exit 0` mata el script cuando la variable es `false`.
+
+**El primer `make verify` salió rojo por el entorno, no por el código.**
+`python` en esta máquina es `/usr/sbin/python` y no tiene pytest; el `.venv` de
+`ai-service` estaba vacío. El script resuelve ahora el intérprete (`.venv` si
+existe) y, si falta, imprime la línea `pip install` exacta del workflow. La
+diferencia importa: un paso rojo que no puedes arreglar se convierte en un paso
+que aprendes a ignorar, y entonces `make verify` ya no decide nada.
+
+**Y el arreglo de eso rompió el trinquete.** Al instalar pytest en el `.venv`, la
+cuenta de skips pasó de 4 a 5 sin que cambiara una línea nuestra: el `grep`
+estaba leyendo los `test_*.py` de las dependencias. El propio trinquete pilló su
+propio falso positivo en la primera ejecución después. Ahora excluye `.venv`,
+`node_modules`, `vendor`, `dist` y `__pycache__` — un control que reacciona a un
+`npm ci` es un control que se acaba desactivando.
+
+Se comprobó que falla en las dos direcciones antes de darlo por bueno
+(presupuesto a 3: rojo con la lista de los cuatro; a 9: rojo por obsoleto). Un
+trinquete que nunca se ha visto en rojo es una hipótesis.
 
 ---
 

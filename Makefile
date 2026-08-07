@@ -1,11 +1,25 @@
 .PHONY: setup up down build logs ps shell-api shell-db \
         migrate-up migrate-down migrate-create \
         test-api test-ai lint-api lint-ai coverage coverage-bump \
-        bundle bundle-bump secrets vulns \
+        bundle bundle-bump secrets vulns skips skips-bump \
+        verify hooks \
         sqlc dev frontend-build
 
+# ── El contrato: un solo comando decide si el trabajo está hecho ─────────────
+# `make verify` corre los mismos checks que el CI, en el mismo orden. Ningún
+# cambio se reporta como terminado sin esto en verde (ver Definition of Done en
+# CLAUDE.md). Para un loop local rápido: VERIFY_SKIP="frontend-test ai-test" make verify
+verify:
+	./scripts/verify.sh
+
+# Instala el hook pre-push (git no versiona .git/hooks; core.hooksPath sí apunta
+# a un directorio del repo). Una vez por clon.
+hooks:
+	git config core.hooksPath .githooks
+	@echo "==> core.hooksPath = .githooks — 'git push' corre 'make verify'"
+
 # ── Bootstrap de datos/volumes (ejecutar una vez antes de `make up`) ──────────
-setup:
+setup: hooks
 	mkdir -p data/postgres data/redis data/audio data/caddy
 	cp -n .env.example .env || true
 	@echo "Edita .env con tus valores reales, luego ejecuta: make up"
@@ -81,6 +95,15 @@ secrets:
 
 vulns:
 	cd services/core-api && govulncheck ./...
+
+# Trinquete de skips: falla si sube el número de tests apagados (t.Skip, it.skip,
+# @pytest.mark.skip). `skips-bump` reescribe skip-budget.txt — subirlo es una
+# decisión y va en el mensaje del commit.
+skips:
+	./scripts/check_skips.sh
+
+skips-bump:
+	./scripts/check_skips.sh --bump
 
 # ── Linters ──────────────────────────────────────────────────────────────────
 lint-api:

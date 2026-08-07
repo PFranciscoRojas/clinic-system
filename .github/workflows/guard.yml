@@ -60,6 +60,17 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
+  # The one check aimed not at the code but at how the build was made to pass.
+  # Everything else here goes green when a test is deleted or turned off; this
+  # goes red. No toolchain: it is grep against a committed number.
+  skip-ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip budget
+        run: ./scripts/check_skips.sh
+
   # A new dependency is the change that disappears in a diff you skim: go.sum
   # grows by twenty unreadable lines. GitHub's own dependency-review-action
   # would post the licence and known CVEs of anything added, but it needs the
