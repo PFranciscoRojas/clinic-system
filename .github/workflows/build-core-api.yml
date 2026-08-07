@@ -111,11 +111,55 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: root
           key: ${{ secrets.VPS_SSH_KEY }}
+          # `set -e` so a failed step stops the deploy instead of carrying on
+          # to the next line. Without it a migration could fail and the new
+          # binary would still start, against the old schema.
           script: |
+            set -e
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u pfranciscorojas --password-stdin
             cd /root/clinic-system
             git pull origin main
             docker compose pull core-api
+
+            # Migrate BEFORE starting the new binary.
+            #
+            # This used to be a manual step, and the failure mode was silent:
+            # the workflow went green, the new code was running, and the schema
+            # it expected was not there. It happened on 000072 (PR #254) and was
+            # only caught because someone thought to check.
+            #
+            # Before the new container, not after, because the new code is the
+            # one that needs the new columns. That ordering assumes migrations
+            # are additive — a migration that DROPs something the running
+            # version still reads must be split across two deploys, which is the
+            # normal rule for zero-downtime anyway.
+            #
+            # golang-migrate is idempotent: with nothing pending it prints "no
+            # change" and exits 0, so every deploy runs this and almost every
+            # deploy does nothing.
+            set -a; . ./.env; set +a
+            docker run --rm \
+              -v /root/clinic-system/services/core-api/migrations:/migrations \
+              --network container:sghcp_postgres \
+              migrate/migrate \
+              -path=/migrations/ \
+              -database "postgres://$DB_USER:$DB_PASSWORD@localhost:5432/$DB_NAME?sslmode=disable" \
+              up
+
+            # A failed migration leaves schema_migrations.dirty = true, and
+            # golang-migrate refuses to do anything else until a human resolves
+            # it with `force <version>`. Fail the deploy loudly here rather than
+            # let the next one hit a wall it did not cause.
+            DIRTY=$(docker compose exec -T postgres \
+              psql -U "$DB_USER" -d "$DB_NAME" -tAc \
+              "SELECT dirty FROM schema_migrations")
+            if [ "$DIRTY" != "f" ]; then
+              echo "::error::schema_migrations is dirty — the migration failed halfway."
+              echo "Resolve it by hand before deploying again (migrate ... force <version>)."
+              exit 1
+            fi
+            echo "schema version: $(docker compose exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -tAc 'SELECT version FROM schema_migrations')"
+
             docker compose up -d core-api
             docker image prune -f
 
