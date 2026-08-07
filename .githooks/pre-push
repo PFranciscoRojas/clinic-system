@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+#
+# Runs `make verify` before every push.
+#
+# The other checks in this repo tell you afterwards. This one is the only place
+# that stops broken code from leaving the machine at all — CI reports on a
+# branch that is already published, and by then the agent has moved on and the
+# human is reading a green-looking PR.
+#
+# Install (once per clone; git config is not committed):
+#
+#   make hooks
+#
+# Escape hatch: `git push --no-verify`. It exists because a hook you cannot
+# bypass gets uninstalled instead, and an uninstalled hook is invisible while
+# --no-verify is right there in the shell history. Use it for a WIP branch you
+# are pushing to look at somewhere else, never for a merge.
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+# Deleting a remote branch pushes the zero object id and no commits. Nothing to
+# verify, and blocking it would be absurd.
+only_deletes=true
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+  [[ -z "${local_sha:-}" ]] && continue
+  if [[ ! "$local_sha" =~ ^0+$ ]]; then
+    only_deletes=false
+  fi
+done
+if [[ "$only_deletes" == true ]]; then
+  exit 0
+fi
+
+printf '\033[1m── pre-push: make verify\033[0m\n'
+printf '   (git push --no-verify skips this — see .githooks/pre-push)\n'
+
+# </dev/null because git hands the hook a stdin full of ref lines; a step that
+# reads stdin would otherwise swallow them and behave strangely.
+make verify < /dev/null

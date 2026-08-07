@@ -1,0 +1,4 @@
+# Number of skipped/disabled tests across the repo.
+# Raising this is a decision. Record why in the commit message.
+# Rewrite with: scripts/check_skips.sh --bump
+4

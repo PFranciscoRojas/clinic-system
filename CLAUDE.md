@@ -65,6 +65,50 @@ services/
   - `docs/ai/BACKLOG.md` → ideas y tareas pendientes
   - `docs/history/CHANGELOG.md` → historial compactado
 
+# Definition of Done (OVERRIDE)
+
+Un cambio está terminado cuando `make verify` sale en verde. No antes, y no por
+otro criterio.
+
+```
+make verify     # los mismos checks que el CI, en el mismo orden
+make hooks      # una vez por clon: 'git push' corre make verify
+```
+
+Está prohibido reportar trabajo como hecho apoyándose en la parte de la suite
+que se alcanzó a correr, en "los tests que toqué pasan", o en que compila. Si
+`make verify` no se corrió, el estado que se reporta es "sin verificar", con esa
+palabra.
+
+`VERIFY_SKIP="frontend-test ai-test" make verify` existe para el loop local
+rápido. Nunca para declarar algo terminado.
+
+## Reglas sobre los tests
+
+1. **Prohibido debilitar, saltar o borrar un test para que pase el build.**
+   Esto incluye `t.Skip`, `it.skip`/`xit`, `@pytest.mark.skip`/`xfail`, comentar
+   una aserción, aflojar una comparación, bajar un piso de cobertura y subir un
+   presupuesto. Un test rojo es información; apagarlo la destruye y el diff que
+   lo hace parece limpieza.
+   El trinquete (`make skips`, `skip-budget.txt`) falla si el número de tests
+   apagados sube. Si uno *tiene* que apagarse, se sube el presupuesto en el mismo
+   commit y el motivo va en el mensaje: `scripts/check_skips.sh --bump`.
+   Lo mismo para `scripts/check_coverage.sh --bump` y
+   `scripts/check_bundle_size.sh --bump`: son decisiones, no arreglos.
+
+2. **Si el test está mal, se arregla o se borra diciéndolo.** Borrar un test es
+   legítimo cuando la garantía que cubría dejó de existir; lo ilegítimo es
+   borrarlo porque estorba. La diferencia se escribe en el commit.
+
+3. **Todo bug encontrado en producción entra primero como test que falla.**
+   Se reproduce, se ve rojo, y sólo entonces se arregla. Sin excepción. Un
+   arreglo sin test es el mismo bug esperando a volver, y el bug ya demostró que
+   la suite no lo veía.
+
+4. **Un hallazgo de seguridad se pinea con un test que falla antes del parche**,
+   y el test se queda. Actualizar la dependencia deja el escáner en verde con la
+   vulnerabilidad todavía viva (ver `chi.RealIP`, PR #250).
+
 # Ramas (Libflow adaptado)
 
 `main` protegido (solo PR aprobado) · `feature/*` · `enhancement/*` · `fix/*` · `hotfix/*`
