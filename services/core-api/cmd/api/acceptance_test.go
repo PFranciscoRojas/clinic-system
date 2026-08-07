@@ -60,6 +60,17 @@ type world struct {
 	// lastPatientID is the patient created by the most recent registration step,
 	// which is what "esa misma paciente" refers to.
 	lastPatientID string
+	// The rest of the trail one scenario leaves behind. A step says "esa cita"
+	// or "la historia" and means the one the previous step produced — which is
+	// the point of the end-to-end scenarios: the identifier has to survive the
+	// hop from one bounded context to the next.
+	lastAppointmentID string
+	lastRecordID      string
+	lastInvoiceID     string
+
+	// userIDs caches what /auth/me reports per actor, so booking an appointment
+	// does not re-ask on every step.
+	userIDs map[string]string
 
 	// scenarioTag disambiguates the email addresses written in the .feature.
 	// One database serves every scenario, and an email is globally unique by
@@ -172,7 +183,11 @@ func initScenario(ctx *godog.ScenarioContext) {
 	w := &world{}
 
 	ctx.Before(func(ctx context.Context, sc *godog.Scenario) (context.Context, error) {
-		*w = world{tokens: map[string]string{}, scenarioTag: scenarioTag(sc)}
+		*w = world{
+			tokens:      map[string]string{},
+			userIDs:     map[string]string{},
+			scenarioTag: scenarioTag(sc),
+		}
 		return ctx, nil
 	})
 
@@ -187,6 +202,8 @@ func initScenario(ctx *godog.ScenarioContext) {
 	ctx.When(`^alguien consulta la lista de pacientes sin haber iniciado sesión$`, w.consultaSinSesion)
 	ctx.Then(`^la lista no contiene a "([^"]*)"$`, w.laListaNoContiene)
 	ctx.Then(`^la respuesta es (\d+)$`, w.laRespuestaEs)
+
+	registerFlujoSteps(ctx, w)
 }
 
 // scenarioTag derives a short stable token from the scenario's own identity, so
@@ -195,6 +212,20 @@ func initScenario(ctx *godog.ScenarioContext) {
 func scenarioTag(sc *godog.Scenario) string {
 	sum := sha256.Sum256([]byte(sc.Uri + sc.Name))
 	return hex.EncodeToString(sum[:4])
+}
+
+// clientIP derives a stable per-scenario address from the scenario tag, inside
+// TEST-NET-3 (203.0.113.0/24, reserved for documentation by RFC 5737) so it can
+// never collide with anything real.
+func (w *world) clientIP() string {
+	b, err := hex.DecodeString(w.scenarioTag)
+	if err != nil || len(b) == 0 {
+		return "203.0.113.1"
+	}
+	// .0 and .255 are the network and broadcast addresses; keep out of both.
+	// Two scenarios colliding on the same octet is harmless — they would share
+	// a bucket that allows twenty requests a minute and neither makes five.
+	return fmt.Sprintf("203.0.113.%d", int(b[0])%254+1)
 }
 
 // addr turns the address written in the .feature into the one actually used.
@@ -228,6 +259,18 @@ func (w *world) do(method, path string, body any) error {
 	if tok := w.tokens[w.actor]; tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}
+	// Arrive the way a request arrives in production: through Caddy, which
+	// appends the client's address to X-Forwarded-For. ClientIPFromXFF takes
+	// the rightmost entry, so this is not spoofing — the harness IS the proxy
+	// here, exactly as in the middleware's own tests (PR #250).
+	//
+	// Without it every scenario looks like the same visitor and they share one
+	// rate-limit bucket: the signup limiter (20/min per IP) started answering
+	// 429 as soon as the suite grew past a handful of scenarios. Giving each
+	// scenario its own address is both the fix and the more faithful model —
+	// these are different clinics signing up, not one clinic signing up seven
+	// times, and the limiter is left exactly as production has it.
+	req.Header.Set("X-Forwarded-For", w.clientIP())
 
 	resp, err := acptServer.Client().Do(req)
 	if err != nil {

@@ -556,6 +556,36 @@ dejar de leer el código.
 
 ---
 
+#### Segunda tanda de escenarios: el flujo completo (2026-08-07)
+
+`consulta_completa.feature` — de la cita a la factura cobrada, más la
+inmutabilidad de la historia cerrada y su corolario, la adenda. 7 escenarios en
+total en la suite, 64 pasos, 7 s.
+
+**Y encontró otro bug de producción.** El paso *"Entonces la historia queda
+firmada"* no se conforma con el 204 de `finalize` — vuelve a pedir la historia y
+mira lo que la API dice de ella, que es lo único que la profesional ve en
+pantalla. Decía `finalized: false` sobre una historia que la base de datos tenía
+sellada: `Service.Get` construye el registro campo a campo y **se dejaba
+`FinalizedAt`**. El repositorio lo traía, el handler lo serializaba, y el mapeo
+entre los dos lo tiraba.
+
+Ningún test unitario podía verlo: cada capa era correcta por separado. Es
+exactamente el hueco que un escenario de aceptación existe para tapar, y la
+segunda vez que pasa en este plan.
+
+El otro hallazgo no fue un bug sino el harness chocando con un control real: el
+límite de 20 altas por minuto y por IP empezó a devolver 429 según crecía la
+suite, porque los siete escenarios llegaban todos desde `127.0.0.1`. La
+tentación evidente —aflojar el límite en test— es justo lo que CLAUDE.md
+prohíbe. La solución es más fiel a producción, no menos: cada escenario llega
+con su propio `X-Forwarded-For`, igual que Caddy lo pone. No es falsificar
+(`ClientIPFromXFF` toma la entrada de la derecha, y aquí el harness *es* el
+proxy); es dejar de fingir que siete consultorios distintos son el mismo
+visitante. El limitador queda tal cual está en producción.
+
+---
+
 ### Fase 7 — El punto ciego: lo que ningún test ve
 
 - [x] **Secret scanning:** `gitleaks` en CI. Un agente que hardcodea una API key
