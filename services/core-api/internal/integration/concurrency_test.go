@@ -132,23 +132,23 @@ func TestBookingHoldFreesTheSlotOnceResolved(t *testing.T) {
 	}
 }
 
-// TestConcurrentAppointmentsAreNotGuarded documents a gap rather than a
-// guarantee, so that it is visible instead of assumed.
+// TestConcurrentAppointmentsCannotDoubleBookAProfessional pins the rule for the
+// internal agenda: one professional, one patient, one hour.
 //
-// `bookings` is protected by a unique index. `appointments` is not: its
-// idx_appt_daily index on (staff_id, scheduled_at) is deliberately NOT unique,
-// the repository's CTE only checks for a conflicting *booking hold*, and the
-// service layer adds no check of its own. So two staff members creating an
-// appointment for the same professional and instant from the internal agenda
-// both succeed.
+// Until migration 000072 nothing enforced it. `bookings` (the public page) had
+// its unique index; `appointments` had only a plain idx_appt_daily, the
+// repository's CTE checked for a conflicting *booking hold* and nothing else,
+// and the service added no check of its own. Two tabs saving at once produced
+// two patients in the same slot, and the professional found out when both of
+// them turned up.
 //
-// That may well be intended — a supervisor sitting in, a group session, a
-// deliberate overbook. It is not obviously a bug, which is exactly why it
-// should not be silently "fixed" from a test. Production currently has zero
-// double-booked slots.
+// This test writes straight to the table on purpose, bypassing every layer of
+// Go. That is the whole point: a check in the service cannot decide a race,
+// because both requests read "free" before either writes. Only the database
+// sees both writers.
 //
-// If a uniqueness rule is ever added, this test fails and says so.
-func TestConcurrentAppointmentsAreNotGuarded(t *testing.T) {
+// The two tests below are the other half — what the rule must NOT break.
+func TestConcurrentAppointmentsCannotDoubleBookAProfessional(t *testing.T) {
 	skipIfShort(t)
 	ctx := context.Background()
 
@@ -166,13 +166,14 @@ func TestConcurrentAppointmentsAreNotGuarded(t *testing.T) {
 	if err := insert(); err != nil {
 		t.Fatalf("first appointment: %v", err)
 	}
-	err := insert()
 
-	if err != nil {
-		t.Fatalf("a second appointment on the same slot was rejected (%v).\n"+
-			"That is arguably the better behaviour, but it is a change: update this "+
-			"test, and check that legitimate overbooking (supervision, group sessions) "+
-			"still works.", err)
+	// The second one must lose. Checking in the service and then inserting is
+	// not enough: two requests can both read "the slot is free" before either
+	// writes. Only a unique index decides a race, because only the database
+	// sees both writers.
+	if err := insert(); err == nil {
+		t.Fatal("a second appointment was accepted on a slot the professional " +
+			"already has taken — two patients booked into the same hour")
 	}
 
 	var n int
@@ -182,9 +183,68 @@ func TestConcurrentAppointmentsAreNotGuarded(t *testing.T) {
 	).Scan(&n); err != nil {
 		t.Fatalf("count: %v", err)
 	}
-	if n != 2 {
-		t.Errorf("%d appointments on the slot, want 2 — this test documents that "+
-			"the internal agenda permits it", n)
+	if n != 1 {
+		t.Errorf("%d appointments on the slot, want 1", n)
+	}
+}
+
+// TestACancelledSlotCanBeRebooked is the other half of the guarantee, and the
+// reason the index is partial. Cancelling frees the hour; a professional who
+// cancels at 10:00 and books someone else into 10:00 is doing the ordinary
+// thing, and a naive UNIQUE(staff_id, scheduled_at) would refuse it forever.
+func TestACancelledSlotCanBeRebooked(t *testing.T) {
+	skipIfShort(t)
+	ctx := context.Background()
+
+	tn := seedTenant(t, "rebook-cancelled")
+	slot := time.Now().Add(144 * time.Hour).Truncate(time.Hour)
+
+	var first string
+	if err := adminPool.QueryRow(ctx, `
+		INSERT INTO appointments (organization_id, patient_id, staff_id, scheduled_at, duration_min, modality)
+		VALUES ($1, $2, $3, $4, 50, 'VIRTUAL') RETURNING id`,
+		tn.OrgID, tn.PatientID, tn.UserID, slot,
+	).Scan(&first); err != nil {
+		t.Fatalf("first appointment: %v", err)
+	}
+
+	if _, err := adminPool.Exec(ctx,
+		`UPDATE appointments SET status = 'CANCELLED' WHERE id = $1`, first); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+
+	if _, err := adminPool.Exec(ctx, `
+		INSERT INTO appointments (organization_id, patient_id, staff_id, scheduled_at, duration_min, modality)
+		VALUES ($1, $2, $3, $4, 50, 'VIRTUAL')`,
+		tn.OrgID, tn.PatientID, tn.UserID, slot); err != nil {
+		t.Fatalf("the slot was still blocked after cancelling the appointment on it: %v", err)
+	}
+}
+
+// TestTwoProfessionalsShareTheSameHour: the constraint is per professional, not
+// per clinic. Two psychologists seeing their own patients at 10:00 is what a
+// clinic with two consulting rooms looks like.
+func TestTwoProfessionalsShareTheSameHour(t *testing.T) {
+	skipIfShort(t)
+	ctx := context.Background()
+
+	a := seedTenant(t, "shared-hour-a")
+	b := seedTenant(t, "shared-hour-b")
+	slot := time.Now().Add(168 * time.Hour).Truncate(time.Hour)
+
+	book := func(tn tenant) error {
+		_, err := adminPool.Exec(ctx, `
+			INSERT INTO appointments (organization_id, patient_id, staff_id, scheduled_at, duration_min, modality)
+			VALUES ($1, $2, $3, $4, 50, 'VIRTUAL')`,
+			tn.OrgID, tn.PatientID, tn.UserID, slot)
+		return err
+	}
+
+	if err := book(a); err != nil {
+		t.Fatalf("first professional: %v", err)
+	}
+	if err := book(b); err != nil {
+		t.Fatalf("a second professional was blocked from their own 10:00: %v", err)
 	}
 }
 
