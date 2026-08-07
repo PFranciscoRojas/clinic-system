@@ -39,6 +39,13 @@ func (s *Service) Get(ctx context.Context, orgID, recordID string) (*clinicalrec
 		SupervisorCosignedAt: raw.SupervisorCosignedAt,
 		CreatedAt:            raw.CreatedAt,
 		UpdatedAt:            raw.UpdatedAt,
+		// Comes straight from FindByID and was being dropped here, which made
+		// GET /clinical-records/{id} report `finalized: false` on a record that
+		// had been signed — the detail screen showed a closed clinical record as
+		// an open draft. Found by the acceptance scenario, not by any unit test:
+		// every layer was individually correct and the mapping between two of
+		// them was not.
+		FinalizedAt: raw.FinalizedAt,
 	}
 
 	if rec.Sections, err = openSections(dek, raw.SectionsEnc); err != nil {
