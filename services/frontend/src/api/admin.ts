@@ -40,6 +40,10 @@ export interface SystemHealth {
   tenants: {
     active: number;
     trialing: number;
+    // Status still active/trialing but the access deadline already passed —
+    // these tenants are locked out by the API gate.
+    expired: number;
+    suspended: number;
     past_due: number;
     canceled: number;
     total_users: number;

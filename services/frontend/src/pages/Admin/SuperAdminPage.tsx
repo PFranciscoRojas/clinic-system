@@ -15,6 +15,7 @@ import { legalApi, type LegalDoc } from '@/api/legal';
 import { ConfirmByTextModal } from '@/components/ui/ConfirmByTextModal';
 import { Markdown } from '@/components/common/Markdown';
 import { useIsMobile } from '@/lib/useMediaQuery';
+import { orgAccess } from '@/lib/subscription';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -137,9 +138,9 @@ function UsageBar({ pct, color }: { pct: number; color: string }) {
   );
 }
 
-function TenantBadge({ label, count, color }: { label: string; count: number; color: string }) {
+function TenantBadge({ label, count, color, tip }: { label: string; count: number; color: string; tip?: string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'var(--s50)', borderRadius: 10, padding: '10px 14px', minWidth: 64 }}>
+    <div title={tip} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'var(--s50)', borderRadius: 10, padding: '10px 14px', minWidth: 64 }}>
       <span style={{ fontSize: 22, fontWeight: 800, color }}>{count}</span>
       <span style={{ fontSize: 11, color: 'var(--s500)', marginTop: 2 }}>{label}</span>
     </div>
@@ -323,10 +324,18 @@ function SistemaTab() {
         {/* Tenants */}
         <MetricCard icon={<Users size={16} />} title="Tenants" subtitle="Organizaciones registradas en el sistema">
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-            <TenantBadge label="activos" count={h.tenants.active} color="#16a34a" />
-            <TenantBadge label="trial" count={h.tenants.trialing} color="#2a2769" />
-            <TenantBadge label="vencidos" count={h.tenants.past_due} color="#d97706" />
-            <TenantBadge label="cancelados" count={h.tenants.canceled} color="#9ca3af" />
+            <TenantBadge label="activos" count={h.tenants.active} color="#16a34a"
+              tip="Plan pagado vigente: pueden entrar ahora mismo." />
+            <TenantBadge label="trial" count={h.tenants.trialing} color="#2a2769"
+              tip="En prueba gratuita todavía vigente." />
+            <TenantBadge label="vencidos" count={h.tenants.expired} color="#dc2626"
+              tip="Su plan o prueba caducó: la app los bloquea aunque la columna diga 'active'. Estos son los que hay que renovar." />
+            <TenantBadge label="suspendidos" count={h.tenants.suspended} color="#d97706"
+              tip="Bloqueados a mano por el operador." />
+            <TenantBadge label="pago pendiente" count={h.tenants.past_due} color="#d97706"
+              tip="Cobro fallido reportado por la pasarela." />
+            <TenantBadge label="cancelados" count={h.tenants.canceled} color="#9ca3af"
+              tip="Cuenta cancelada; las historias clínicas se conservan." />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <StatRow label="Total usuarios" value={h.tenants.total_users}
@@ -513,14 +522,6 @@ function OrgUsersPanel({ orgId }: { orgId: string }) {
   );
 }
 
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  active:    { label: 'Activo',    color: '#16a34a' },
-  trialing:  { label: 'Trial',     color: '#2a2769' },
-  past_due:  { label: 'Vencido',   color: '#b45309' },
-  suspended: { label: 'Suspendido',color: '#d97706' },
-  canceled:  { label: 'Cancelado', color: '#dc2626' },
-};
-
 // Values match the "¿Cómo nos conociste?" select on the public signup form.
 const REFERRAL_LABELS: Record<string, string> = {
   recommendation: 'Recomendación de un colega',
@@ -609,8 +610,10 @@ function TenantsTab() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {(orgs ?? []).map(o => {
-            const st = STATUS_LABELS[o.subscription_status] ?? { label: o.subscription_status, color: '#9ca3af' };
-            const until = o.current_period_end ?? o.trial_ends_at;
+            // The badge follows the API's entitlement rule, not the raw column:
+            // an 'active' org whose paid period lapsed is blocked, and saying
+            // "Activo" here is how a locked-out clinic looks fine from admin.
+            const acc = orgAccess(o);
             const busy = busyId === o.id;
             const expanded = expandedId === o.id;
             return (
@@ -628,19 +631,48 @@ function TenantsTab() {
                     <span style={{ fontWeight: 700, fontSize: 12, color: '#b45309', background: '#fef3c7',
                       border: '1px solid #fcd34d', borderRadius: 20, padding: '2px 10px', whiteSpace: 'nowrap' }}>Prueba</span>
                   )}
-                  <span style={{ fontWeight: 700, fontSize: 12, color: st.color, background: st.color + '18',
-                    borderRadius: 20, padding: '3px 10px', whiteSpace: 'nowrap' }}>{st.label}</span>
+                  <span style={{ fontWeight: 700, fontSize: 12, color: acc.color, background: acc.color + '18',
+                    borderRadius: 20, padding: '3px 10px', whiteSpace: 'nowrap' }}>{acc.label}</span>
+                  {/* Traceability: when access and the stored column disagree,
+                      show the column too — it's what the operator has to fix. */}
+                  {acc.mismatch && (
+                    <span title={`La columna subscription_status sigue en "${acc.rawStatus}", pero la API ya bloquea el acceso porque la fecha pasó.`}
+                      style={{ fontSize: 11, fontWeight: 600, color: 'var(--s500)', background: 'var(--s100)',
+                        border: '1px solid var(--s200)', borderRadius: 20, padding: '2px 8px', whiteSpace: 'nowrap' }}>
+                      BD: {acc.rawStatus}
+                    </span>
+                  )}
                   <div style={{ fontSize: 12, color: 'var(--s500)', whiteSpace: 'nowrap' }}>
-                    <span title="Usuarios">👥 {o.total_users}</span>
-                    <span style={{ marginLeft: 8 }} title="Pacientes">🗂 {o.total_patients}</span>
+                    {o.total_users} {o.total_users === 1 ? 'usuario' : 'usuarios'}
+                    <span style={{ marginLeft: 8 }}>{o.total_patients} {o.total_patients === 1 ? 'paciente' : 'pacientes'}</span>
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--s400)', whiteSpace: 'nowrap' }}>{fmtDate(until)}</div>
+                  <div style={{ fontSize: 12, color: 'var(--s400)', whiteSpace: 'nowrap', textAlign: 'right' }}>
+                    <div>{fmtDate(acc.until)}</div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: acc.entitled ? 'var(--s400)' : acc.color }}>{acc.detail}</div>
+                  </div>
                   <span style={{ fontSize: 16, color: 'var(--s300)', userSelect: 'none' }}>{expanded ? '▲' : '▼'}</span>
                 </div>
 
                 {/* Panel expandible de acciones */}
                 {expanded && (
                   <div style={{ borderTop: '1px solid var(--s100)', padding: '12px 16px', background: 'var(--s50)' }}>
+                    {/* Estado de acceso: qué ve el cliente al entrar, y por qué */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 12.5, color: 'var(--s600)', marginBottom: 10 }}>
+                      <span>{acc.entitled ? '🔓 Puede entrar' : '🔒 Bloqueado al entrar'} — {acc.detail}</span>
+                      <span>Prueba: <strong>{fmtDate(o.trial_ends_at)}</strong></span>
+                      <span>Plan pagado: <strong>{fmtDate(o.current_period_end)}</strong></span>
+                      <span>Registro: <strong>{fmtDate(o.created_at)}</strong></span>
+                    </div>
+                    {acc.mismatch && (
+                      <div style={{ fontSize: 12.5, lineHeight: 1.6, color: '#7f1d1d', background: '#fef2f2',
+                        border: '1px solid #fecaca', borderRadius: 10, padding: '8px 11px', marginBottom: 12 }}>
+                        La columna <code>subscription_status</code> quedó en <strong>{acc.rawStatus}</strong>, pero la fecha de acceso ya pasó,
+                        así que la API responde 402 y el usuario ve “tu período terminó”.
+                        {o.current_period_end
+                          ? ' Usa “Activar meses” para renovar: extender el trial no sirve mientras el plan pagado tenga fecha vencida.'
+                          : ' Usa “Extender trial” o “Activar meses” para devolverle el acceso.'}
+                      </div>
+                    )}
                     {/* Contacto y origen del lead (formulario de signup) */}
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 12.5, color: 'var(--s600)', marginBottom: 12 }}>
                       {o.owner_email && (
