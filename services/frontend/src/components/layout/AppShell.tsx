@@ -630,13 +630,18 @@ function SubscriptionExpired({ onLogout }: { onLogout: () => void }) {
   // permission checkout requires — other roles have to ask the admin instead.
   const canPay = (user?.roles ?? []).includes('CLINIC_ADMIN');
   const go = () => navigate('/settings/billing');
+  // A clinic that already paid once and let the period lapse is not on a trial;
+  // telling it "tu período de prueba terminó" reads as a mistake on our side.
+  const title = user?.subscription_status === 'trialing'
+    ? 'Tu período de prueba terminó'
+    : 'Tu plan venció';
   return (
     <div style={{ minHeight: '100dvh', background: 'linear-gradient(135deg, #2a2769, #171533)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <div style={{ background: '#fff', borderRadius: 18, padding: '36px 34px', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', width: '100%', maxWidth: 460, textAlign: 'center' }}>
         <div style={{ width: 60, height: 60, borderRadius: 16, background: '#fffbeb', border: '1.5px solid #fcd34d', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
           <Clock size={28} color="#92400e" />
         </div>
-        <div style={{ fontWeight: 800, fontSize: 21, color: 'var(--s800)', marginBottom: 10 }}>Tu período de prueba terminó</div>
+        <div style={{ fontWeight: 800, fontSize: 21, color: 'var(--s800)', marginBottom: 10 }}>{title}</div>
         <div style={{ fontSize: 14, color: 'var(--s500)', lineHeight: 1.7, marginBottom: 24 }}>
           Para seguir usando tu consultorio, activa tu plan. Escríbenos para reactivar tu cuenta
           (pago por transferencia, Nequi o efectivo) y la dejamos lista enseguida.

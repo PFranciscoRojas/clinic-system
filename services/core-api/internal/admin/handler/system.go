@@ -52,10 +52,32 @@ type redisStats struct {
 type tenantCounts struct {
 	Active        int `json:"active"`
 	Trialing      int `json:"trialing"`
+	Expired       int `json:"expired"`
+	Suspended     int `json:"suspended"`
 	PastDue       int `json:"past_due"`
 	Canceled      int `json:"canceled"`
 	TotalUsers    int `json:"total_users"`
 	TotalPatients int `json:"total_patients"`
+}
+
+// tenantBucket maps a tenant to the counter it belongs in, using the same rule
+// the request gate uses (middleware.Entitled): active/trialing only count as
+// such while their access deadline is still in the future. current says whether
+// COALESCE(current_period_end, trial_ends_at) is. Without this, a clinic whose
+// paid period lapsed keeps subscription_status = 'active' and inflates the
+// "activos" count while the API is already answering it 402.
+func tenantBucket(status string, current bool) string {
+	switch status {
+	case "active", "trialing":
+		if !current {
+			return "expired"
+		}
+		return status
+	case "past_due", "suspended", "canceled":
+		return status
+	default:
+		return ""
+	}
 }
 
 type aiQueueStats struct {
@@ -237,22 +259,31 @@ func (h *Handler) systemHealth(w http.ResponseWriter, r *http.Request) {
 	// and test-flagged orgs are excluded from every count here — neither is
 	// a real paying clinic, and test data would contaminate the metrics.
 	tcRows, err := h.pool.Query(ctx, `
-		SELECT subscription_status, COUNT(*) FROM organizations WHERE NOT is_internal AND NOT is_test GROUP BY subscription_status
+		SELECT subscription_status,
+		       COALESCE(COALESCE(current_period_end, trial_ends_at) > NOW(), false) AS current,
+		       COUNT(*)
+		FROM organizations WHERE NOT is_internal AND NOT is_test
+		GROUP BY 1, 2
 	`)
 	if err == nil {
 		for tcRows.Next() {
 			var status string
+			var current bool
 			var count int
-			if tcRows.Scan(&status, &count) == nil {
-				switch status {
+			if tcRows.Scan(&status, &current, &count) == nil {
+				switch tenantBucket(status, current) {
 				case "active":
-					out.Tenants.Active = count
+					out.Tenants.Active += count
 				case "trialing":
-					out.Tenants.Trialing = count
+					out.Tenants.Trialing += count
+				case "expired":
+					out.Tenants.Expired += count
+				case "suspended":
+					out.Tenants.Suspended += count
 				case "past_due":
-					out.Tenants.PastDue = count
+					out.Tenants.PastDue += count
 				case "canceled":
-					out.Tenants.Canceled = count
+					out.Tenants.Canceled += count
 				}
 			}
 		}
