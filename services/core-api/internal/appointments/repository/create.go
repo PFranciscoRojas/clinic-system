@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"sghcp/core-api/internal/appointments"
 )
@@ -75,6 +76,20 @@ func (r *Repository) Create(ctx context.Context, p appointments.CreateParams) (s
 		).Scan(&staffOK); e == nil && !staffOK {
 			return "", fmt.Errorf("%w: staff_id is not an active member of the organization", appointments.ErrInvalidInput)
 		}
+		return "", appointments.ErrConflict
+	}
+	// idx_appt_staff_slot_unique: the professional already has that exact slot
+	// taken. This is the branch that catches the race the CTE above cannot —
+	// two requests both passing every check before either of them writes.
+	// Reported as the same conflict, because to the caller it is the same
+	// thing: the hour is not available.
+	//
+	// "23505" is unique_violation. Spelled out rather than pulled from
+	// github.com/jackc/pgerrcode: a whole module for one constant is a
+	// dependency to justify, and internal/invariants would rightly ask.
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" &&
+		pgErr.ConstraintName == "idx_appt_staff_slot_unique" {
 		return "", appointments.ErrConflict
 	}
 	return id, err
