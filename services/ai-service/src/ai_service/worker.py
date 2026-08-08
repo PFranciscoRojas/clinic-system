@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import pathlib
+import socket
 from typing import Any
 
 import asyncpg
@@ -25,18 +26,55 @@ logger = logging.getLogger(__name__)
 
 STREAM_NAME = "ai_jobs"
 CONSUMER_GROUP = "ai-service"
-CONSUMER_NAME = "ai-worker-1"
+
+
+def _consumer_name() -> str:
+    """One consumer identity per process.
+
+    This used to be the constant "ai-worker-1": correct for exactly one replica
+    and a trap for two. Two processes sharing a consumer name share a PEL
+    identity, so _reclaim_stale on one of them can XCLAIM a message the other is
+    still working on — the same job transcribed twice, two drafts, twice the
+    Claude bill. Scaling the service should be a compose change, not a bug.
+    """
+    return f"ai-worker-{socket.gethostname()}-{os.getpid()}"
+
+
+CONSUMER_NAME = _consumer_name()
 # Must stay under 5s: redis-py 8.x enforces an internal 5s read timeout
 # even with socket_timeout=None, so BLOCK >= 5000 raises TimeoutError
 BLOCK_MS = 4_000
 BATCH_SIZE = 5
 
+# The longest job the pipeline can legitimately be handed, used to size the
+# reclaim window below. MAX_AUDIO_SECONDS sits comfortably above what core-api's
+# 200 MB upload cap admits at the recorder's current bitrate; WORST_CASE_RTF is
+# the real-time factor measured on the 2-vCPU VPS (58 min of audio -> ~8.5 min of
+# whisper `base`, RTF 0.15) with headroom for a busier or slower box.
+MAX_AUDIO_SECONDS = 3 * 60 * 60
+WORST_CASE_RTF = 0.25
+WORST_CASE_JOB_MS = int(MAX_AUDIO_SECONDS * WORST_CASE_RTF * 1_000)
+
 # Orphaned-job recovery: entries stuck in the PEL (consumer crashed mid-job or
 # a failure path skipped the ack) are reclaimed after this idle time; after
 # MAX_DELIVERIES attempts the job is dead-lettered (draft ERROR / suggestion
 # FAILED, visible in the UI) and acked.
-RECLAIM_IDLE_MS = 300_000
+#
+# This has to outlast the longest job, and it is derived rather than picked
+# because the flat 5 min it used to be did not: an hour of audio takes ~8.5 min
+# to transcribe. The only thing that kept a live job from being reclaimed and
+# processed a second time is that _handle is awaited inline in the read loop, so
+# _reclaim_stale cannot run while one is in flight. That is an accident of being
+# sequential, not a guarantee — concurrency or a second replica would end it.
+RECLAIM_IDLE_MS = WORST_CASE_JOB_MS + 300_000
 MAX_DELIVERIES = 3
+
+# Startup sweep threshold. It only runs at boot, when no job of this process can
+# still be alive, so anything above zero is safe for a single replica. It is tied
+# to the reclaim window anyway because with a second replica a booting instance
+# would otherwise mark another instance's live long job as failed — fail-safe
+# beats a faster error message on a draft that is genuinely stuck.
+SWEEP_STUCK_AFTER_MS = RECLAIM_IDLE_MS
 
 # History budget for treatment_plan / risk_detection: newest sessions win.
 HISTORY_MAX_RECORDS = 20
@@ -648,15 +686,19 @@ class AIWorker:
             """
             UPDATE ai_drafts
             SET status = 'ERROR', error_message = 'processing interrupted (worker restart)'
-            WHERE status = 'PROCESSING' AND created_at < NOW() - INTERVAL '30 minutes'
-            """
+            WHERE status = 'PROCESSING'
+              AND created_at < NOW() - ($1::bigint * INTERVAL '1 millisecond')
+            """,
+            SWEEP_STUCK_AFTER_MS,
         )
         res_s = await self._db.execute(
             """
             UPDATE ai_suggestions
             SET status = 'FAILED', error = 'processing interrupted (worker restart)', updated_at = NOW()
-            WHERE status = 'PROCESSING' AND updated_at < NOW() - INTERVAL '30 minutes'
-            """
+            WHERE status = 'PROCESSING'
+              AND updated_at < NOW() - ($1::bigint * INTERVAL '1 millisecond')
+            """,
+            SWEEP_STUCK_AFTER_MS,
         )
         logger.info("startup sweep done", extra={"drafts": res_d, "suggestions": res_s})
 

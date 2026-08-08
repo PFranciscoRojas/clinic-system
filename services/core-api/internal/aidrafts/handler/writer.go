@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -117,8 +116,6 @@ func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	filename := fmt.Sprintf("%s%s", appointmentID, ext)
-
 	draftID, err := h.svc.UploadAudio(r.Context(), aidraftssvc.UploadAudioInput{
 		OrganizationID: claims.OrganizationID,
 		AppointmentID:  appointmentID,
@@ -129,7 +126,7 @@ func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 		NoteStyle:      noteStyle,
 		Tone:           tone,
 		Approach:       approach,
-		Filename:       filename,
+		Ext:            ext,
 		Audio:          file,
 		AudioSize:      header.Size,
 	})

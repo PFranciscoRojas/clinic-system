@@ -69,7 +69,7 @@ step "bundle"         ./scripts/check_bundle_size.sh
 #
 # whisper/torch (~2 GB) is deliberately absent — conftest.py stubs it, exactly
 # as in build-ai-service.yml. Only the test deps are needed:
-#   services/ai-service/.venv/bin/pip install pytest pytest-asyncio pydantic-settings anthropic
+#   services/ai-service/.venv/bin/pip install pytest pytest-asyncio pydantic-settings anthropic redis asyncpg cryptography
 PY=python3
 if [[ -x services/ai-service/.venv/bin/python ]]; then
   PY=.venv/bin/python
