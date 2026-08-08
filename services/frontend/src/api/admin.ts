@@ -65,6 +65,42 @@ export interface SystemHealth {
   alerts: { level: string; code: string; message: string; tip: string }[];
 }
 
+/** One step of the activation funnel. `median_hours` is null for `signup` (its
+ *  own origin) and for `paid` (nothing records when a tenant started paying). */
+export interface ActivationStep {
+  key: string;
+  label: string;
+  orgs: number;
+  pct: number;
+  median_hours: number | null;
+}
+
+export interface ActivationOrg {
+  org_id: string;
+  name: string;
+  slug: string;
+  subscription_status: string;
+  signup_source: string | null;
+  created_at: string;
+  trial_ends_at: string | null;
+  current_period_end: string | null;
+  last_login_at: string | null;
+  total_patients: number;
+  total_appointments: number;
+  total_records: number;
+  total_ai_drafts: number;
+  /** One entry per timestamped step; null means the tenant never reached it. */
+  reached: Record<string, string | null>;
+  paid: boolean;
+  furthest_step: string;
+}
+
+export interface ActivationMetrics {
+  cohort_total: number;
+  steps: ActivationStep[];
+  orgs: ActivationOrg[];
+}
+
 // Admin-only maintenance. resetClinicalData only ever works for operational
 // fixture orgs (reflected by me.data_reset_enabled) — never a real tenant.
 // The org/billing endpoints are SYSTEM_ADMIN-only (the SaaS operator console).
@@ -84,6 +120,8 @@ export const adminApi = {
     ),
 
   systemHealth: () => api.get<SystemHealth>('/admin/system/health'),
+
+  activationMetrics: () => api.get<ActivationMetrics>('/admin/metrics/activation'),
 
   suspendOrg: (id: string) =>
     api.post<{ subscription_status: string }>(`/admin/orgs/${id}/suspend`, {}),

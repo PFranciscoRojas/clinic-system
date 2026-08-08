@@ -46,6 +46,7 @@ func (h *Handler) Routes() chi.Router {
 		r.Delete("/orgs/{id}/users/{user_id}", h.removeOrgUser)
 		r.Post("/orgs/{id}/users/{user_id}/reactivate", h.reactivateOrgUser)
 		r.Get("/system/health", h.systemHealth)
+		r.Get("/metrics/activation", h.activationMetrics)
 		r.Get("/platform/mp", h.getPlatformMP)
 		r.Put("/platform/mp", h.updatePlatformMP)
 		r.Put("/platform/mp/tokens", h.updatePlatformTokens)
