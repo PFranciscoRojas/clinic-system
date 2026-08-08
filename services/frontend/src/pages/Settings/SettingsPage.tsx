@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   UserRound, Clock, Bell, Sparkles, ShieldCheck,
-  FileText, Settings, Users, Receipt, Plug, ScrollText,
+  FileText, Settings, Users, Receipt, Plug,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useIsCompact } from '@/lib/useMediaQuery';
@@ -23,13 +23,12 @@ import RecordTemplatesSection from '@/components/clinical/RecordTemplatesSection
 // Each section is a sub-route (/settings/:section) so it is deep-linkable and
 // the browser back button navigates between sections.
 
-type SectionId = 'profile' | 'schedule' | 'notifications' | 'ai' | 'security' | 'audit' | 'templates' | 'record_templates' | 'billing' | 'users' | 'integrations';
+type SectionId = 'profile' | 'schedule' | 'notifications' | 'ai' | 'security' | 'templates' | 'record_templates' | 'billing' | 'users' | 'integrations';
 
 const SECTIONS: { id: SectionId; icon: React.ElementType; label: string; color?: string; group: string }[] = [
   { id: 'profile',       icon: UserRound,  label: 'Perfil profesional',  group: 'Personal'     },
   { id: 'schedule',      icon: Clock,       label: 'Horario y agenda',    group: 'Personal'     },
   { id: 'security',      icon: ShieldCheck, label: 'Seguridad',            group: 'Personal',    color: '#ef4444' },
-  { id: 'audit',         icon: ScrollText,  label: 'Registro de accesos',  group: 'Personal',    color: '#ef4444' },
   { id: 'ai',            icon: Sparkles,    label: 'Asistente IA',         group: 'Herramientas',color: '#f59e0b' },
   { id: 'notifications', icon: Bell,        label: 'Notificaciones',       group: 'Herramientas' },
   { id: 'templates',        icon: FileText,  label: 'Plantillas clínicas',  group: 'Herramientas',color: '#7d75c7' },
@@ -61,16 +60,23 @@ export function SettingsPage() {
   const visibleSections = SECTIONS.filter(s => {
     if (s.id === 'billing' || s.id === 'integrations') return isAdmin;
     if (s.id === 'users' || s.id === 'templates') return canManageOrg;
-    // The trail needs audit_log:read — held by admins and professionals, not
-    // by interns or receptionists, and meaningless for the SaaS operator.
-    if (s.id === 'audit') return !isSysAdmin && canManageOrg;
     if (s.id === 'schedule' || s.id === 'ai' || s.id === 'notifications') return !isSysAdmin;
     return true;
   });
 
-  // /settings → first visible section; unknown or not-visible id → same fallback.
-  const section: SectionId = visibleSections.some(s => s.id === sectionParam)
-    ? (sectionParam as SectionId)
+  // The access trail lives at the foot of Seguridad rather than as an entry of
+  // its own: it is consulted when something happened, not configured, and a
+  // second red item next to Seguridad read as an alarm on every visit. It needs
+  // audit_log:read — held by admins and professionals, not by interns or
+  // receptionists, and meaningless for the SaaS operator.
+  const canReadAudit = !isSysAdmin && canManageOrg;
+
+  // /settings → first visible section; unknown or not-visible id → same
+  // fallback, except /settings/audit, which is where the trail used to live and
+  // may still be bookmarked: it lands on the section that now contains it.
+  const requestedSection = sectionParam === 'audit' ? 'security' : sectionParam;
+  const section: SectionId = visibleSections.some(s => s.id === requestedSection)
+    ? (requestedSection as SectionId)
     : visibleSections[0].id;
   const setSection = (id: SectionId) => navigate(`/settings/${id}`);
 
@@ -181,8 +187,7 @@ export function SettingsPage() {
             {section === 'schedule'      && <ScheduleSection />}
             {section === 'notifications' && <NotificationsSection setDirty={markDirty} />}
             {section === 'ai'            && <AISection            setDirty={markDirty} saveRef={aiSaveRef} />}
-            {section === 'security'      && <SecuritySection />}
-            {section === 'audit'         && <AuditLogSection />}
+            {section === 'security'      && <><SecuritySection />{canReadAudit && <AuditLogSection />}</>}
             {section === 'templates'        && <ConsentTemplatesSection />}
             {section === 'record_templates' && <RecordTemplatesSection />}
             {section === 'billing'          && <><PlanStatusCard /><ReferralCard /><RatesSection /></>}
