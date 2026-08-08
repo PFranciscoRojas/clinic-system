@@ -92,6 +92,10 @@ export interface ActivationOrg {
   /** One entry per timestamped step; null means the tenant never reached it. */
   reached: Record<string, string | null>;
   paid: boolean;
+  /** Where the money came from: a real charge, a MercadoPago checkout with no
+   *  charge recorded yet, or a manual activation from the console. Empty when
+   *  the tenant is not paying. */
+  paid_source: 'charged' | 'checkout' | 'manual' | '';
   furthest_step: string;
 }
 
@@ -99,6 +103,9 @@ export interface ActivationMetrics {
   cohort_total: number;
   steps: ActivationStep[];
   orgs: ActivationOrg[];
+  paid_breakdown: { charged: number; checkout: number; manual: number };
+  /** Sample size below which the percentages say nothing. */
+  min_readable_cohort: number;
 }
 
 // Admin-only maintenance. resetClinicalData only ever works for operational

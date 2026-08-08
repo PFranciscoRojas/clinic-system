@@ -26,6 +26,9 @@ func registerActivacionSteps(reg *godog.ScenarioContext, w *world) {
 	reg.Then(`^"([^"]*)" ya registró a su primer paciente$`, w.yaTienePrimerPaciente)
 	reg.Then(`^"([^"]*)" ya firmó su primera historia clínica$`, w.yaFirmoPrimeraHistoria)
 	reg.Then(`^"([^"]*)" aparece con (\d+) paciente$`, w.apareceConPacientes)
+	reg.When(`^el operador activa "([^"]*)" por (\d+) mes$`, w.elOperadorActiva)
+	reg.Then(`^"([^"]*)" figura como activado a mano$`, w.figuraComoActivadoAMano)
+	reg.Then(`^el embudo no reporta ningún pago cobrado$`, w.sinPagosCobrados)
 }
 
 // ── El operador ───────────────────────────────────────────────────────────────
@@ -88,6 +91,8 @@ type acptActivacionOrg struct {
 	Name          string                `json:"name"`
 	Reached       map[string]*time.Time `json:"reached"`
 	TotalPatients int                   `json:"total_patients"`
+	Paid          bool                  `json:"paid"`
+	PaidSource    string                `json:"paid_source"`
 }
 
 type acptActivacion struct {
@@ -98,6 +103,11 @@ type acptActivacion struct {
 		Orgs  int    `json:"orgs"`
 	} `json:"steps"`
 	Orgs []acptActivacionOrg `json:"orgs"`
+	Paid struct {
+		Charged  int `json:"charged"`
+		Checkout int `json:"checkout"`
+		Manual   int `json:"manual"`
+	} `json:"paid_breakdown"`
 }
 
 func (w *world) elOperadorConsultaElEmbudo() error {
@@ -185,7 +195,64 @@ func (w *world) yaFirmoPrimeraHistoria(nombre string) error {
 	return nil
 }
 
+func (w *world) figuraComoActivadoAMano(nombre string) error {
+	o, err := w.orgEnElEmbudo(nombre)
+	if err != nil {
+		return err
+	}
+	if !o.Paid {
+		return fmt.Errorf("%q se activó y el embudo no lo cuenta como pagando", nombre)
+	}
+	if o.PaidSource != "manual" {
+		return fmt.Errorf("el embudo dice que %q paga por %q, y lo activó el operador a mano", nombre, o.PaidSource)
+	}
+	return nil
+}
+
+func (w *world) sinPagosCobrados() error {
+	f, err := w.embudo()
+	if err != nil {
+		return err
+	}
+	if f.Paid.Charged != 0 {
+		return fmt.Errorf("el embudo reporta %d pagos cobrados y no se ha cobrado ninguno", f.Paid.Charged)
+	}
+	return nil
+}
+
 // ── Consola de organizaciones ─────────────────────────────────────────────────
+
+// elOperadorActiva does what the operator does for a clinic that pays out of
+// band (cash, Nequi, transfer): looks it up in the console and switches it on.
+func (w *world) elOperadorActiva(nombre string, meses int) error {
+	if err := w.elOperadorConsultaLaConsola(); err != nil {
+		return err
+	}
+	if w.status != http.StatusOK {
+		return fmt.Errorf("consultar la consola devolvió %d: %s", w.status, w.body)
+	}
+	var orgs []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(w.body, &orgs); err != nil {
+		return fmt.Errorf("leer la consola: %w (%s)", err, w.body)
+	}
+	for _, o := range orgs {
+		if o.Name != nombre {
+			continue
+		}
+		if err := w.do(http.MethodPost, "/api/v1/admin/orgs/"+o.ID+"/activate",
+			map[string]any{"months": meses}); err != nil {
+			return err
+		}
+		if w.status != http.StatusOK {
+			return fmt.Errorf("activar %q devolvió %d: %s", nombre, w.status, w.body)
+		}
+		return nil
+	}
+	return fmt.Errorf("%q no aparece en la consola de organizaciones", nombre)
+}
 
 func (w *world) apareceConPacientes(nombre string, esperados int) error {
 	if w.status != http.StatusOK {
