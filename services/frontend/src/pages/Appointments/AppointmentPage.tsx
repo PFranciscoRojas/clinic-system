@@ -15,6 +15,7 @@ import { PatientSearchBox } from '@/components/patients/PatientSearchBox';
 import { calcAge } from '@/lib/age';
 import { fmtDateOnly } from '@/lib/dates';
 import { recordingStore } from '@/lib/recordingStore';
+import { AUDIO_BITS_PER_SECOND, AUDIO_CONSTRAINTS, CHUNK_MS } from '@/lib/recording';
 import { useIsCompact } from '@/lib/useMediaQuery';
 import { CLR_DANGER, CLR_WARN, CLR_SUCCESS, CLR_INFO, CLR_PROC, CLR_NEUTRAL } from '@/lib/tokens';
 import { clinicalRecordsApi, consentsApi, type RecordMeta, type RecordType } from '@/api/clinicalRecords';
@@ -575,9 +576,12 @@ export function AppointmentPage() {
     if (mediaRef.current) return;
     setMicError('');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: AUDIO_CONSTRAINTS });
       const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
-      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      const rec = new MediaRecorder(stream, {
+        ...(mime ? { mimeType: mime } : {}),
+        audioBitsPerSecond: AUDIO_BITS_PER_SECOND,
+      });
       chunksRef.current = [];
       rec.ondataavailable = e => {
         if (e.data.size > 0) {
@@ -585,7 +589,7 @@ export function AppointmentPage() {
           recordingStore.appendChunk(id!, e.data).catch(() => {});
         }
       };
-      rec.start(1000);
+      rec.start(CHUNK_MS);
       mediaRef.current = rec;
 
       // Live level meter so the user can see the mic is actually capturing

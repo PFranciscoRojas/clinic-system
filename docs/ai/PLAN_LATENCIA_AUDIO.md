@@ -52,10 +52,11 @@ self._handle(...)` inline en el bucle de lectura). Una hora de audio bloquea ~9 
 todos los jobs de todas las orgs, incluidos los recaps de 3 s que solo esperan a la
 API de Claude y no consumen CPU.
 
-**f) Defecto que empeora con la duración:** `recordingStore.appendChunk`
-(`recordingStore.ts:19`) lee el array completo y lo reescribe en **cada chunk de
-1 s**. Al minuto 55 son ~3.300 entradas releídas y reescritas por segundo. O(n²)
-sobre la duración de la sesión.
+**f) Defecto que empeora con la duración** ✅ *(resuelto en la Fase 1)*:
+`recordingStore.appendChunk` leía el array completo y lo reescribía en **cada
+chunk de 1 s**. Al minuto 55 eran ~3.300 entradas releídas y reescritas por
+segundo. O(n²) sobre la duración de la sesión, justo en las sesiones largas para
+las que existe la recuperación.
 
 ---
 
@@ -81,6 +82,9 @@ solo dice "procesando grabación", sin posición en fila ni ETA.
 ### 3.2 Problemas reales encontrados
 
 **P1 — Colisión de archivo entre tomas de la misma cita, con pérdida de datos.**
+✅ *Resuelto en PR #260. Se deja el diagnóstico porque es lo que justifica la
+forma que tiene hoy `saveAudio`.*
+
 `upload.go:87` arma el directorio con el appointment y `writer.go:120` nombra el
 archivo con el mismo appointment. Ruta determinista, y `saveAudio` abre con
 `O_TRUNC` (`upload.go:93`). Dos tomas de la misma cita escriben el mismo archivo.
@@ -99,6 +103,8 @@ rompe:
 Se pierde la toma 2 entera y la toma 1 sale mal.
 
 **P2 — `RECLAIM_IDLE_MS` es más corto que el trabajo que protege.**
+✅ *Resuelto en PR #260 — la ventana se deriva del peor trabajo legítimo.*
+
 `worker.py:38` reclama entradas del PEL tras **5 min** de inactividad. Una
 transcripción de 1 h tarda **8,5 min**. Hoy no explota únicamente porque `_handle`
 se hace `await` inline dentro del bucle, así que `_reclaim_stale` no puede correr
@@ -135,16 +141,20 @@ La mitad peligrosa está cubierta, y bien:
 
 ### 3.4 Qué NO está cubierto
 
-- **Cero tests de `worker.py`.** 697 líneas, el archivo más complejo del servicio,
-  sin ninguna prueba. Los tests de `ai-service` son todos unitarios y puros
-  (anonimización, prompt guard, alucinación, widgets, prompts por enfoque). Nada de
-  la cola, del PEL, del reclaim, de la consolidación de tomas ni del borrado de
-  audio.
-- **Ningún test de subida de audio concurrente.** `ai_drafts_test.go` cubre resolve,
-  roundtrip de plantilla y fail-closed sin TenantScope. Nada de dos subidas
-  simultáneas ni de la colisión de rutas.
-- **Ninguna prueba de carga.** Hoy no hay forma de responder "¿aguanta 5 sesiones
-  cerrando a la vez?" con datos en vez de con opinión.
+*(Actualizado tras PR #260 y la Fase 1. Lo tachado ya está cubierto.)*
+
+- ~~**Cero tests de `worker.py`**~~ — ya hay
+  `tests/test_worker_queue_safety.py`, los primeros del archivo. Pinean las
+  invariantes de la cola (ventana de reclaim, umbral del sweep, identidad del
+  consumidor). Sigue sin cubrirse la **semántica** de la cola: consolidación de
+  tomas, borrado de audio, dos jobs a la vez de extremo a extremo.
+- ~~**Ningún test de subida de audio concurrente**~~ — cubierto en
+  `aidrafts/service/upload_test.go`: dos tomas de la misma cita (secuenciales y
+  concurrentes), separación por org y por cita, y limpieza del parcial cuando el
+  cuerpo falla.
+- **Ninguna prueba de carga.** Sigue abierto: no hay forma de responder "¿aguanta
+  5 sesiones cerrando a la vez?" con datos en vez de con opinión. Depende de las
+  columnas de tiempos de la Fase 0.
 
 ### 3.5 Hallazgo colateral, fuera del alcance de este plan
 
@@ -168,10 +178,10 @@ Columnas no-PII en `ai_drafts`: `audio_seconds`, `upload_ms`, `transcribe_ms`,
 `llm_ms`, `rtf`, `whisper_model`. Sin esto no hay forma de probar que una
 optimización sirvió más allá de cronometrar a mano. Migración `000070`.
 
-### Fase 0.5 — Concurrencia y seguridad de la cola ← **va primero**
+### Fase 0.5 — Concurrencia y seguridad de la cola ✅ (hecha, PR #260)
 
-P1 es un bug con pérdida de datos que existe **hoy en producción**, independiente
-de toda la optimización de latencia.
+P1 era un bug con pérdida de datos que existía en producción, independiente de
+toda la optimización de latencia.
 
 1. **Ruta única por toma**: `{org}/{appointment}/{take-uuid}.webm` en vez de
    `{appointment}.webm`, con escritura a `.part` + `rename` atómico y limpieza del
@@ -206,14 +216,29 @@ de toda la optimización de latencia.
 - ⬜ `scripts/e2e_audio/`: escenario de 3 sesiones cerrando simultáneamente, con
   p50/p95 por etapa usando las columnas de la Fase 0.
 
-### Fase 1 — Bytes y bitrate (bajo riesgo, ganancia inmediata)
+### Fase 1 — Bytes y bitrate ✅ (hecha)
 
 `audioBitsPerSecond: 24000` + `getUserMedia({audio:{channelCount:1,
-sampleRate:16000, echoCancellation:true, noiseSuppression:true}})`. Subir el
-`timeslice` de 1 s a 5 s y arreglar el `appendChunk` O(n²) con claves
-autoincrementales en vez de un array reescrito.
+sampleRate:16000, echoCancellation:true, noiseSuppression:true}})`, `timeslice`
+de 1 s a 5 s, y `appendChunk` O(n²) reemplazado por un registro por chunk con
+índice por cita (`lib/recording.ts`, `lib/recordingStore.ts`).
 
 → Upload 2 min → ~20 s. Disco y volumen `audio_data`: 6× menos.
+
+Notas de la implementación:
+
+- El store sube a `DB_VERSION` 2 pero **conserva el almacén v1** y lo lee: quien
+  esté grabando cuando aterrice el deploy tiene ahí la única copia de su sesión,
+  y el banner de recuperación tiene que seguir encontrándola. Cubierto por tests.
+- `seq` es autoincremental **numérico** a propósito: una secuencia en texto
+  pondría el chunk 10 antes del 2 y devolvería una sesión que salta en el tiempo.
+- El O(n²) quedó medido, no argumentado: el test cuenta ítems escritos y daba
+  820 para 40 chunks (n(n+1)/2) antes del cambio, 40 después.
+- `fake-indexeddb` entra como dependencia de desarrollo porque happy-dom no trae
+  IndexedDB. Los tests usan el `Blob` de `node:buffer`: el de happy-dom no
+  sobrevive el structured clone del fake (queda en `{type}`, sin bytes), y con
+  él las aserciones de orden y contenido habrían pasado con cualquier
+  implementación.
 
 ### Fase 2 — Upload por partes durante la sesión
 
