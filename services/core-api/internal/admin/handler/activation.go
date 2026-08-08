@@ -44,6 +44,22 @@ var activationStepDefs = []activationStepDef{
 // than invent a date, the step reports its count and leaves the median null.
 const paidStepKey = "paid"
 
+// How a paying tenant came to be paying. A tenant the operator switched on from
+// the console is not a sale, and with a cohort this small counting the two the
+// same is the difference between "we have a customer" and "we comped one".
+const (
+	paidNone     = ""         // not paying
+	paidCharged  = "charged"  // a payment webhook actually charged them
+	paidCheckout = "checkout" // went through MercadoPago, no charge recorded yet
+	paidManual   = "manual"   // activated by hand from the operator console
+)
+
+// minReadableCohort is the size below which the percentages are arithmetic
+// rather than information: with four tenants each one is twenty-five points.
+// The API reports the threshold so the console can say so instead of drawing
+// confident-looking bars over a sample of one.
+const minReadableCohort = 5
+
 type orgActivation struct {
 	OrgID              string     `json:"org_id"`
 	Name               string     `json:"name"`
@@ -64,12 +80,17 @@ type orgActivation struct {
 	TotalAppointments  int        `json:"total_appointments"`
 	TotalRecords       int        `json:"total_records"`
 	TotalAIDrafts      int        `json:"total_ai_drafts"`
+	HasBillingProvider bool       `json:"-"`
+	HasRecordedCharge  bool       `json:"-"`
 
 	// Reached carries one entry per timestamped step, null when not reached, so
 	// the console can render a row without knowing the step list.
 	Reached map[string]*time.Time `json:"reached"`
 	// Paid is the last step, tracked apart because it has no date.
 	Paid bool `json:"paid"`
+	// PaidSource says whether the money was real: charged, checkout, manual, or
+	// empty when the tenant is not paying at all.
+	PaidSource string `json:"paid_source"`
 	// FurthestStep is the last step the organization reached.
 	FurthestStep string `json:"furthest_step"`
 }
@@ -84,10 +105,23 @@ type activationStep struct {
 	MedianHours *float64 `json:"median_hours"`
 }
 
+// paidBreakdown splits the last step of the funnel by where the money came
+// from, so "1 · 100%" on the paid bar can never be read as a sale that did not
+// happen.
+type paidBreakdown struct {
+	Charged  int `json:"charged"`
+	Checkout int `json:"checkout"`
+	Manual   int `json:"manual"`
+}
+
 type activationResponse struct {
 	CohortTotal int              `json:"cohort_total"`
 	Steps       []activationStep `json:"steps"`
 	Orgs        []orgActivation  `json:"orgs"`
+	Paid        paidBreakdown    `json:"paid_breakdown"`
+	// MinReadableCohort is the sample size below which the percentages say
+	// nothing. The console warns instead of pretending.
+	MinReadableCohort int `json:"min_readable_cohort"`
 }
 
 // GET /api/v1/admin/metrics/activation — SYSTEM_ADMIN.
@@ -101,7 +135,8 @@ func (h *Handler) activationMetrics(w http.ResponseWriter, r *http.Request) {
 		       trial_ends_at, current_period_end, verified_at, onboarded_at,
 		       first_patient_at, first_appointment_at, first_record_at,
 		       first_ai_draft_at, last_login_at,
-		       total_patients, total_appointments, total_records, total_ai_drafts
+		       total_patients, total_appointments, total_records, total_ai_drafts,
+		       has_billing_provider, has_recorded_charge
 		FROM   platform_org_activation()
 		WHERE  NOT is_internal AND NOT is_test
 	`)
@@ -119,12 +154,13 @@ func (h *Handler) activationMetrics(w http.ResponseWriter, r *http.Request) {
 			&o.CreatedAt, &o.TrialEndsAt, &o.CurrentPeriodEnd, &o.VerifiedAt, &o.OnboardedAt,
 			&o.FirstPatientAt, &o.FirstAppointmentAt, &o.FirstRecordAt, &o.FirstAIDraftAt,
 			&o.LastLoginAt, &o.TotalPatients, &o.TotalAppointments, &o.TotalRecords,
-			&o.TotalAIDrafts); err != nil {
+			&o.TotalAIDrafts, &o.HasBillingProvider, &o.HasRecordedCharge); err != nil {
 			slog.Error("admin.activation-metrics.scan", "err", err)
 			httputil.WriteError(w, http.StatusInternalServerError, "scan error")
 			return
 		}
-		o.Paid = o.SubscriptionStatus == "active"
+		o.PaidSource = paidSource(o)
+		o.Paid = o.PaidSource != paidNone
 		o.Reached = reachedSteps(o)
 		o.FurthestStep = furthestStep(o)
 		orgs = append(orgs, o)
@@ -136,10 +172,47 @@ func (h *Handler) activationMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, activationResponse{
-		CohortTotal: len(orgs),
-		Steps:       activationFunnel(orgs),
-		Orgs:        orgs,
+		CohortTotal:       len(orgs),
+		Steps:             activationFunnel(orgs),
+		Orgs:              orgs,
+		Paid:              splitPaid(orgs),
+		MinReadableCohort: minReadableCohort,
 	})
+}
+
+// paidSource reads the evidence the billing paths leave behind. A MercadoPago
+// subscription is switched on by the "authorized" preapproval event, which does
+// not write a payment id — only the recurring charge does — so a tenant who
+// subscribed this month would look manual for a month if the charge were the
+// only signal. Having a provider customer id is what tells them apart, since a
+// manual activation writes neither column.
+func paidSource(o orgActivation) string {
+	if o.SubscriptionStatus != "active" {
+		return paidNone
+	}
+	switch {
+	case o.HasRecordedCharge:
+		return paidCharged
+	case o.HasBillingProvider:
+		return paidCheckout
+	default:
+		return paidManual
+	}
+}
+
+func splitPaid(orgs []orgActivation) paidBreakdown {
+	var out paidBreakdown
+	for _, o := range orgs {
+		switch o.PaidSource {
+		case paidCharged:
+			out.Charged++
+		case paidCheckout:
+			out.Checkout++
+		case paidManual:
+			out.Manual++
+		}
+	}
+	return out
 }
 
 // reachedSteps flattens the timestamped milestones into the map the console

@@ -771,6 +771,12 @@ function daysAgo(iso: string) {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
 }
 
+const PAID_SOURCE_LABEL: Record<string, string> = {
+  charged:  'cobrado',
+  checkout: 'suscrito, sin cobro aún',
+  manual:   'activado a mano',
+};
+
 function ActivacionTab() {
   const { data, isLoading } = useQuery<ActivationMetrics>({
     queryKey: ['admin-activation'],
@@ -783,6 +789,12 @@ function ActivacionTab() {
   const stepLabel = (key: string) =>
     data.steps.find(s => s.key === key)?.label ?? 'Creó la cuenta';
 
+  // Below the threshold each tenant is worth a huge slice of the bar, so the
+  // percentages are arithmetic and not information. Saying it once, loudly,
+  // beats drawing confident bars over a sample of one.
+  const thin = data.cohort_total < data.min_readable_cohort;
+  const paid = data.paid_breakdown;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
       <div style={{ fontSize: 13, color: 'var(--s500)', lineHeight: 1.6, maxWidth: 620 }}>
@@ -791,23 +803,58 @@ function ActivacionTab() {
         están anidados: quien se salta la puesta en marcha y registra un paciente cuenta igual.
       </div>
 
-      <MetricCard icon={<TrendingUp size={16} />} title="Embudo de activación" subtitle="Cuántos llegaron a cada paso y cuánto tardó la mediana desde el registro">
+      {thin && (
+        <AlertBanner
+          level="warning"
+          message={
+            data.cohort_total === 0
+              ? 'Todavía no hay ningún consultorio real que medir.'
+              : `Cohorte de ${data.cohort_total}: los porcentajes todavía no dicen nada.`
+          }
+          tip={
+            data.cohort_total === 0
+              ? 'El embudo se llena solo, con los registros que entren por la web. Marcar una organización como prueba la saca de aquí.'
+              : `Con ${data.cohort_total} ${data.cohort_total === 1 ? 'consultorio' : 'consultorios'} cada uno vale ${Math.round(100 / data.cohort_total)} puntos, así que un 100% significa "los que hay llegaron", no "todo el mundo llega". Los tiempos tampoco son medianas todavía: son los tiempos de esos mismos consultorios. La lectura empieza a valer alrededor de ${data.min_readable_cohort} registros.`
+          }
+        />
+      )}
+
+      <MetricCard
+        icon={<TrendingUp size={16} />}
+        title="Embudo de activación"
+        subtitle={thin
+          ? 'Cuántos llegaron a cada paso y cuánto tardaron desde el registro'
+          : 'Cuántos llegaron a cada paso y cuánto tardó la mediana desde el registro'}
+      >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {data.steps.map(s => (
             <div key={s.key}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
                 <span style={{ fontSize: 12.5, color: 'var(--s600, var(--s500))' }}>{s.label}</span>
                 <span style={{ fontSize: 12.5, color: 'var(--s500)' }}>
-                  <b style={{ color: 'var(--s800)' }}>{s.orgs}</b> · {Math.round(s.pct)}%
+                  <b style={{ color: 'var(--s800)' }}>{s.orgs}</b>
+                  {/* Con la cohorte pequeña el porcentaje se muestra apagado:
+                      sigue estando para quien lo busque, sin pretender que mide. */}
+                  <span style={{ color: thin ? 'var(--s300)' : 'var(--s500)' }}> · {Math.round(s.pct)}%</span>
                   <span style={{ marginLeft: 10, color: 'var(--s400)' }}>{fmtElapsed(s.median_hours)}</span>
                 </span>
               </div>
               <div style={{ background: 'var(--s100)', borderRadius: 4, height: 8, overflow: 'hidden' }}>
                 <div style={{
                   width: `${Math.min(s.pct, 100)}%`, height: '100%',
-                  background: s.key === 'paid' ? '#16a34a' : 'var(--teal)', transition: 'width .4s',
+                  background: s.key === 'paid' ? '#16a34a' : 'var(--teal)',
+                  opacity: thin ? 0.45 : 1, transition: 'width .4s',
                 }} />
               </div>
+              {/* El último paso es el que más se presta a leerse de más: una
+                  activación manual desde la consola no es una venta. */}
+              {s.key === 'paid' && s.orgs > 0 && (
+                <div style={{ fontSize: 11.5, color: 'var(--s400)', marginTop: 4 }}>
+                  {paid.charged} con cobro real
+                  {paid.checkout > 0 && ` · ${paid.checkout} suscrito sin cobro aún`}
+                  {paid.manual > 0 && ` · ${paid.manual} activado a mano desde la consola`}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -837,8 +884,17 @@ function ActivacionTab() {
                       se registró hace {daysAgo(o.created_at)} d · {o.subscription_status}
                     </div>
                   </td>
-                  <td style={{ padding: '8px', color: o.paid ? '#16a34a' : 'var(--s600, var(--s500))', fontWeight: o.paid ? 700 : 400 }}>
+                  <td style={{
+                    padding: '8px',
+                    color: o.paid_source === 'charged' ? '#16a34a' : 'var(--s600, var(--s500))',
+                    fontWeight: o.paid_source === 'charged' ? 700 : 400,
+                  }}>
                     {stepLabel(o.furthest_step)}
+                    {o.paid && o.paid_source !== 'charged' && (
+                      <span style={{ display: 'block', fontSize: 11, color: 'var(--s400)' }}>
+                        {PAID_SOURCE_LABEL[o.paid_source]}
+                      </span>
+                    )}
                   </td>
                   <td style={{ padding: '8px', textAlign: 'right' }}>{o.total_patients}</td>
                   <td style={{ padding: '8px', textAlign: 'right' }}>{o.total_appointments}</td>

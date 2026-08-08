@@ -43,6 +43,15 @@ Característica: El operador ve en qué paso se detienen los consultorios nuevos
     Cuando el operador consulta la consola de organizaciones
     Entonces "Consultorio Nuevo" aparece con 1 paciente
 
+  # Activar un consultorio a mano desde la consola no es una venta. El embudo
+  # los contaba juntos, y con una cohorte pequeña esa diferencia es la lectura
+  # entera: tener un cliente que paga o tener uno al que se le regaló el mes.
+  Escenario: Un consultorio activado a mano no cuenta como pago cobrado
+    Cuando el operador activa "Consultorio Nuevo" por 1 mes
+    Y el operador consulta el embudo de activación
+    Entonces "Consultorio Nuevo" figura como activado a mano
+    Y el embudo no reporta ningún pago cobrado
+
   # Lo que separa este embudo de un contador de filas: el operador es un rol de
   # la plataforma, no un tenant más, y ningún otro rol puede asomarse.
   Escenario: Una profesional no puede consultar el embudo

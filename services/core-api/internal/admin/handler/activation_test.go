@@ -146,6 +146,57 @@ func TestActivationFunnelEmptyCohort(t *testing.T) {
 	}
 }
 
+// A tenant the operator switched on by hand is not a sale. Counting it as one
+// is the difference between "we have a paying customer" and "we comped one",
+// and with a cohort of three that difference is the whole reading.
+func TestPaidSource(t *testing.T) {
+	cases := []struct {
+		name     string
+		status   string
+		provider bool
+		charge   bool
+		want     string
+	}{
+		{"trialing tenant is not paying", "trialing", false, false, paidNone},
+		{"canceled tenant is not paying, even with a past charge", "canceled", true, true, paidNone},
+		{"activated by hand from the console", "active", false, false, paidManual},
+		{"charged by a payment webhook", "active", true, true, paidCharged},
+		// The MercadoPago preapproval activates the tenant without writing a
+		// payment id; only the recurring charge does. Without the provider
+		// column a fresh subscriber would read as manual for a month.
+		{"subscribed through MercadoPago, first charge not in yet", "active", true, false, paidCheckout},
+		// Defensive: a charge recorded with no provider id should still read as
+		// money that moved, not as a comp.
+		{"charge recorded without a provider id", "active", false, true, paidCharged},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			o := orgActivation{
+				SubscriptionStatus: tc.status,
+				HasBillingProvider: tc.provider,
+				HasRecordedCharge:  tc.charge,
+			}
+			if got := paidSource(o); got != tc.want {
+				t.Errorf("paidSource = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSplitPaid(t *testing.T) {
+	orgs := []orgActivation{
+		{PaidSource: paidManual},
+		{PaidSource: paidManual},
+		{PaidSource: paidCharged},
+		{PaidSource: paidCheckout},
+		{PaidSource: paidNone},
+	}
+	got := splitPaid(orgs)
+	if got.Manual != 2 || got.Charged != 1 || got.Checkout != 1 {
+		t.Errorf("splitPaid = %+v, want 2 manual / 1 charged / 1 checkout", got)
+	}
+}
+
 func TestMedian(t *testing.T) {
 	cases := []struct {
 		name string
