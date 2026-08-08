@@ -294,16 +294,17 @@ func (h *Handler) systemHealth(w http.ResponseWriter, r *http.Request) {
 		JOIN organizations o ON o.id = u.organization_id
 		WHERE NOT o.is_internal AND NOT o.is_test
 	`).Scan(&out.Tenants.TotalUsers) //nolint:errcheck
+	// Both totals below go through platform_org_activation(): patients and
+	// ai_drafts are RLS-scoped and this connection has no app.current_org, so
+	// counting them directly returns zero for every tenant (000073).
 	h.pool.QueryRow(ctx, `
-		SELECT COUNT(*) FROM patients p
-		JOIN organizations o ON o.id = p.organization_id
-		WHERE NOT o.is_internal AND NOT o.is_test
+		SELECT COALESCE(SUM(m.total_patients), 0)
+		FROM platform_org_activation() m
+		WHERE NOT m.is_internal AND NOT m.is_test
 	`).Scan(&out.Tenants.TotalPatients) //nolint:errcheck
 
 	// --- Cola IA ---
-	qRows, err := h.pool.Query(ctx, `
-		SELECT status::text, COUNT(*) FROM ai_drafts GROUP BY status
-	`)
+	qRows, err := h.pool.Query(ctx, `SELECT status, total FROM platform_ai_draft_status()`)
 	if err == nil {
 		for qRows.Next() {
 			var status string

@@ -6,9 +6,9 @@ import {
   Cpu, Users, Bot, RefreshCw, AlertTriangle, Info,
   AlertCircle, MemoryStick,
   CreditCard, Lock, Unlock, CheckCircle, XCircle, Eye, EyeOff, KeyRound,
-  CalendarClock,
+  CalendarClock, TrendingUp,
 } from 'lucide-react';
-import { adminApi, type AdminOrg, type AdminOrgUser, type SystemHealth, type PlatformMPConfig } from '@/api/admin';
+import { adminApi, type AdminOrg, type AdminOrgUser, type SystemHealth, type PlatformMPConfig, type ActivationMetrics } from '@/api/admin';
 import { leadBookingAdminApi, type LeadAgendaSettings } from '@/api/leadBooking';
 import { authApi } from '@/api/auth';
 import { legalApi, type LegalDoc } from '@/api/legal';
@@ -754,6 +754,113 @@ function TenantsTab() {
   );
 }
 
+// ── Activación tab ────────────────────────────────────────────────────────────
+
+// Chapni se vende sin vendedor: alguien crea la cuenta en la web, tiene 14 días
+// y nadie lo acompaña. Esta pestaña dice en qué paso se queda la gente, con
+// hechos que ya están en la base de datos (ningún pixel, ninguna tabla nueva).
+
+function fmtElapsed(hours: number | null) {
+  if (hours === null) return '—';
+  if (hours < 1) return `${Math.round(hours * 60)} min`;
+  if (hours < 48) return `${Math.round(hours)} h`;
+  return `${(hours / 24).toFixed(1)} d`;
+}
+
+function daysAgo(iso: string) {
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+}
+
+function ActivacionTab() {
+  const { data, isLoading } = useQuery<ActivationMetrics>({
+    queryKey: ['admin-activation'],
+    queryFn: adminApi.activationMetrics,
+  });
+
+  if (isLoading) return <div style={{ fontSize: 14, color: 'var(--s400)' }}>Cargando…</div>;
+  if (!data) return null;
+
+  const stepLabel = (key: string) =>
+    data.steps.find(s => s.key === key)?.label ?? 'Creó la cuenta';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+      <div style={{ fontSize: 13, color: 'var(--s500)', lineHeight: 1.6, maxWidth: 620 }}>
+        {data.cohort_total} {data.cohort_total === 1 ? 'consultorio real' : 'consultorios reales'} en
+        la cohorte. Quedan fuera las organizaciones internas y las marcadas como prueba. Los pasos no
+        están anidados: quien se salta la puesta en marcha y registra un paciente cuenta igual.
+      </div>
+
+      <MetricCard icon={<TrendingUp size={16} />} title="Embudo de activación" subtitle="Cuántos llegaron a cada paso y cuánto tardó la mediana desde el registro">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {data.steps.map(s => (
+            <div key={s.key}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                <span style={{ fontSize: 12.5, color: 'var(--s600, var(--s500))' }}>{s.label}</span>
+                <span style={{ fontSize: 12.5, color: 'var(--s500)' }}>
+                  <b style={{ color: 'var(--s800)' }}>{s.orgs}</b> · {Math.round(s.pct)}%
+                  <span style={{ marginLeft: 10, color: 'var(--s400)' }}>{fmtElapsed(s.median_hours)}</span>
+                </span>
+              </div>
+              <div style={{ background: 'var(--s100)', borderRadius: 4, height: 8, overflow: 'hidden' }}>
+                <div style={{
+                  width: `${Math.min(s.pct, 100)}%`, height: '100%',
+                  background: s.key === 'paid' ? '#16a34a' : 'var(--teal)', transition: 'width .4s',
+                }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </MetricCard>
+
+      <MetricCard icon={<Users size={16} />} title="Consultorio por consultorio" subtitle="Dónde se detuvo cada uno y qué ha hecho dentro del sistema">
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+            <thead>
+              <tr style={{ textAlign: 'left', color: 'var(--s400)', fontSize: 11.5 }}>
+                <th style={{ padding: '6px 8px 6px 0', fontWeight: 600 }}>Consultorio</th>
+                <th style={{ padding: '6px 8px', fontWeight: 600 }}>Se quedó en</th>
+                <th style={{ padding: '6px 8px', fontWeight: 600, textAlign: 'right' }}>Pac.</th>
+                <th style={{ padding: '6px 8px', fontWeight: 600, textAlign: 'right' }}>Citas</th>
+                <th style={{ padding: '6px 8px', fontWeight: 600, textAlign: 'right' }}>Hist.</th>
+                <th style={{ padding: '6px 8px', fontWeight: 600, textAlign: 'right' }}>IA</th>
+                <th style={{ padding: '6px 8px', fontWeight: 600 }}>Último ingreso</th>
+                <th style={{ padding: '6px 0 6px 8px', fontWeight: 600 }}>Origen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.orgs.map(o => (
+                <tr key={o.org_id} style={{ borderTop: '1px solid var(--s100)' }}>
+                  <td style={{ padding: '8px 8px 8px 0' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--s800)' }}>{o.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--s400)' }}>
+                      se registró hace {daysAgo(o.created_at)} d · {o.subscription_status}
+                    </div>
+                  </td>
+                  <td style={{ padding: '8px', color: o.paid ? '#16a34a' : 'var(--s600, var(--s500))', fontWeight: o.paid ? 700 : 400 }}>
+                    {stepLabel(o.furthest_step)}
+                  </td>
+                  <td style={{ padding: '8px', textAlign: 'right' }}>{o.total_patients}</td>
+                  <td style={{ padding: '8px', textAlign: 'right' }}>{o.total_appointments}</td>
+                  <td style={{ padding: '8px', textAlign: 'right' }}>{o.total_records}</td>
+                  <td style={{ padding: '8px', textAlign: 'right' }}>{o.total_ai_drafts}</td>
+                  <td style={{ padding: '8px', color: 'var(--s500)' }}>{fmtDate(o.last_login_at)}</td>
+                  <td style={{ padding: '8px 0 8px 8px', color: 'var(--s400)' }}>{o.signup_source ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {data.orgs.length === 0 && (
+            <div style={{ textAlign: 'center', color: 'var(--s400)', padding: '24px 0', fontSize: 14 }}>
+              Todavía no se ha registrado ningún consultorio real.
+            </div>
+          )}
+        </div>
+      </MetricCard>
+    </div>
+  );
+}
+
 // ── Legal CMS ─────────────────────────────────────────────────────────────────
 
 type LegalDocType = 'terms' | 'privacy' | 'dpa';
@@ -1364,10 +1471,11 @@ function AgendaTab() {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-type Tab = 'sistema' | 'tenants' | 'plataforma' | 'legal' | 'agenda';
+type Tab = 'sistema' | 'tenants' | 'activacion' | 'plataforma' | 'legal' | 'agenda';
 const TAB_TITLES: Record<Tab, string> = {
   sistema:    'Sistema',
   tenants:    'Tenants',
+  activacion: 'Activación',
   plataforma: 'Plataforma',
   legal:      'Legal',
   agenda:     'Agenda comercial',
@@ -1376,7 +1484,7 @@ const TAB_TITLES: Record<Tab, string> = {
 export function SuperAdminPage() {
   const [searchParams] = useSearchParams();
   const rawTab = searchParams.get('tab') ?? 'sistema';
-  const tab: Tab = (['sistema', 'tenants', 'plataforma', 'legal', 'agenda'] as Tab[]).includes(rawTab as Tab)
+  const tab: Tab = (['sistema', 'tenants', 'activacion', 'plataforma', 'legal', 'agenda'] as Tab[]).includes(rawTab as Tab)
     ? (rawTab as Tab)
     : 'sistema';
 
@@ -1390,6 +1498,7 @@ export function SuperAdminPage() {
 
       {tab === 'sistema'    && <SistemaTab />}
       {tab === 'tenants'    && <TenantsTab />}
+      {tab === 'activacion' && <ActivacionTab />}
       {tab === 'legal'      && <LegalTab />}
       {tab === 'plataforma' && <PlataformaTab />}
       {tab === 'agenda'     && <AgendaTab />}

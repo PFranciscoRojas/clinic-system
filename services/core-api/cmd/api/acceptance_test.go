@@ -57,6 +57,9 @@ type world struct {
 	tokens map[string]string
 	// actor is whoever "inició sesión" most recently.
 	actor string
+	// operator is the SaaS operator's address once the scenario has provisioned
+	// them, so the operator steps can switch to that token and back.
+	operator string
 	// lastPatientID is the patient created by the most recent registration step,
 	// which is what "esa misma paciente" refers to.
 	lastPatientID string
@@ -204,6 +207,7 @@ func initScenario(ctx *godog.ScenarioContext) {
 	ctx.Then(`^la respuesta es (\d+)$`, w.laRespuestaEs)
 
 	registerFlujoSteps(ctx, w)
+	registerActivacionSteps(ctx, w)
 }
 
 // scenarioTag derives a short stable token from the scenario's own identity, so

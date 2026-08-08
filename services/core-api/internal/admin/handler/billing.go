@@ -39,19 +39,23 @@ type orgRow struct {
 // state, so the operator can see who to activate. Internal fixtures (the
 // operator's own org, the CI smoke-test demo org) are excluded — they are
 // never paying clinics and would just clutter the screen.
+//
+// The patient count comes from platform_org_activation() rather than a join on
+// patients: this runs on a raw pool connection with no app.current_org, and
+// under FORCE RLS that join returned zero for every tenant (000073).
 func (h *Handler) listOrgs(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.pool.Query(r.Context(), `
 		SELECT o.id, o.name, o.slug, o.subscription_status, o.is_test, o.trial_ends_at,
 		       o.current_period_end, o.created_at,
 		       COUNT(DISTINCT u.id)::int AS total_users,
-		       COUNT(DISTINCT p.id)::int AS total_patients,
+		       COALESCE(MAX(m.total_patients), 0) AS total_patients,
 		       o.signup_phone, o.signup_source,
 		       (SELECT u2.email FROM users u2
 		        WHERE u2.organization_id = o.id
 		        ORDER BY u2.created_at ASC LIMIT 1) AS owner_email
 		FROM organizations o
 		LEFT JOIN users u ON u.organization_id = o.id
-		LEFT JOIN patients p ON p.organization_id = o.id
+		LEFT JOIN platform_org_activation() m ON m.org_id = o.id
 		WHERE NOT o.is_internal
 		GROUP BY o.id
 		ORDER BY o.created_at DESC
