@@ -7,7 +7,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
 	"sghcp/core-api/internal/aidrafts"
@@ -83,21 +85,53 @@ func (s *Service) UploadAudio(ctx context.Context, in UploadAudioInput) (string,
 	return draftID, nil
 }
 
+// audioExtRe is defence in depth: the handler already rejects anything outside
+// its allowlist, but saveAudio builds a filesystem path and must never take an
+// extension on faith.
+var audioExtRe = regexp.MustCompile(`^\.[a-z0-9]{2,4}$`)
+
+// saveAudio writes the upload under <audioDir>/<org>/<appointment>/<take>.<ext>.
+//
+// The take id is minted here and is the whole point. The path used to be built
+// from the appointment id alone and opened with O_TRUNC, so a session recorded
+// in several takes — which the worker explicitly supports and consolidates —
+// had every take writing the same file: the second upload truncated the audio
+// the worker was still transcribing for the first draft, and then lost itself
+// when that draft finished and unlinked the file.
+//
+// The write goes to a sibling `.part` and is renamed into place, so a failed or
+// abandoned body never leaves half-written PHI where the worker can find it.
 func (s *Service) saveAudio(in UploadAudioInput) (string, error) {
+	if !audioExtRe.MatchString(in.Ext) {
+		return "", fmt.Errorf("%w: unsupported audio extension", aidrafts.ErrInvalidInput)
+	}
+
 	dir := filepath.Join(s.audioDir, in.OrganizationID, in.AppointmentID)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return "", fmt.Errorf("create audio dir: %w", err)
 	}
 
-	dest := filepath.Join(dir, in.Filename)
-	f, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	dest := filepath.Join(dir, uuid.NewString()+in.Ext)
+	tmp := dest + ".part"
+
+	// O_EXCL: a take id that already exists is a bug, never something to
+	// silently overwrite.
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
 		return "", fmt.Errorf("create audio file: %w", err)
 	}
-	defer f.Close()
-
 	if _, err := io.Copy(f, in.Audio); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
 		return "", fmt.Errorf("write audio file: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return "", fmt.Errorf("close audio file: %w", err)
+	}
+	if err := os.Rename(tmp, dest); err != nil {
+		_ = os.Remove(tmp)
+		return "", fmt.Errorf("finalize audio file: %w", err)
 	}
 	return dest, nil
 }

@@ -26,9 +26,11 @@ jobs:
           python-version: '3.12'
 
       # whisper/torch (~2 GB) is deliberately NOT installed — conftest.py
-      # stubs it; no test loads a model.
+      # stubs it; no test loads a model. redis/asyncpg/cryptography are small
+      # and are real imports of worker.py, which now has tests: stubbing those
+      # would fake the very module under test.
       - name: Install test dependencies
-        run: pip install pytest pytest-asyncio pydantic-settings anthropic
+        run: pip install pytest pytest-asyncio pydantic-settings anthropic redis asyncpg cryptography
 
       - name: Run tests
         working-directory: services/ai-service
