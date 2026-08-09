@@ -1,6 +1,9 @@
 package service
 
-import "io"
+import (
+	"io"
+	"time"
+)
 
 type UploadAudioInput struct {
 	OrganizationID string
@@ -23,4 +26,9 @@ type UploadAudioInput struct {
 	Ext       string
 	Audio     io.Reader
 	AudioSize int64
+	// UploadStartedAt is when the handler began reading the request body, used
+	// to record how long the audio took to arrive. The zero value means the
+	// caller did not measure, and the column stays NULL — "no medido" and "tardó
+	// 0 ms" have to stay distinguishable in the data.
+	UploadStartedAt time.Time
 }

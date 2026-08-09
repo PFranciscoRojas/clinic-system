@@ -36,6 +36,9 @@ type CreateParams struct {
 	AIModelVersion string
 	WhisperModel   string
 	TemplateID     string // custom record template; "" = integrated format
+	// UploadMS is how long the audio took to arrive and land on disk. nil when
+	// the caller did not measure — the column stays NULL rather than 0.
+	UploadMS *int32
 }
 
 // DraftMeta is the lightweight row returned by the list endpoint (no decryption).

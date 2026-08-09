@@ -6,6 +6,7 @@ import logging
 import os
 import pathlib
 import socket
+import time
 from typing import Any
 
 import asyncpg
@@ -323,7 +324,8 @@ class AIWorker:
             raise RuntimeError(f"ai_draft {draft_id} not found")
 
         # 2. Transcribe locally — audio never leaves the server
-        transcription = await asyncio.to_thread(transcribe_audio, audio_path)
+        result = await asyncio.to_thread(transcribe_audio, audio_path)
+        transcription = result.text
 
         # 2b. Consolidate: a session can be recorded in several takes (a power cut
         #     mid-session, an F5, then a fresh recording). Fold the earlier takes'
@@ -351,13 +353,21 @@ class AIWorker:
         #     "review". Mark it EMPTY (terminal, hidden from the review list)
         #     and tell them to re-upload or write the note by hand.
         if not transcription.strip():
+            # The timings are recorded even though there is no draft: a run that
+            # spent nine minutes of CPU to produce nothing still consumed the
+            # queue, and leaving it out of the data would flatter the numbers.
+            # llm_ms stays NULL because Claude was never called.
             await self._db.execute(
                 """
                 UPDATE ai_drafts
-                SET status = 'EMPTY', processed_at = NOW()
+                SET status = 'EMPTY', processed_at = NOW(),
+                    transcribe_ms = $2, audio_seconds = $3, whisper_model = $4
                 WHERE id = $1
                 """,
                 draft_id,
+                result.transcribe_ms,
+                result.audio_seconds,
+                result.model,
             )
             try:
                 await self._notify(
@@ -395,9 +405,11 @@ class AIWorker:
                 logger.warning("invalid sections_schema in job; using hardcoded fallback", extra={"draft_id": draft_id})
 
         # 5. Generate the clinical-record sections via Claude API with anonymized text only
+        llm_started = time.monotonic()
         clinical_draft = await generate_clinical_draft(
             anonymized, record_type, note_style, tone, template_sections, approach
         )
+        llm_ms = int((time.monotonic() - llm_started) * 1000)
         clinical_draft = await self._validate_suggested_icd10(clinical_draft)
 
         # 6. Encrypt both outputs with the draft's DEK before storing
@@ -411,12 +423,28 @@ class AIWorker:
             SET transcription_enc = $2,
                 draft_content_enc = $3,
                 status = 'DRAFT_READY',
-                processed_at = NOW()
+                processed_at = NOW(),
+                transcribe_ms = $4,
+                audio_seconds = $5,
+                llm_ms = $6,
+                -- core-api wrote a constant here at upload time that has no way
+                -- of knowing which model this service is configured to run.
+                -- Overwrite it with what actually ran, or the RTF comparison
+                -- the Fase 3 decision rests on compares against a label.
+                whisper_model = $7
             WHERE id = $1
             """,
             draft_id,
             transcription_enc,
             draft_content_enc,
+            # transcribe_ms/audio_seconds cover this take only. When earlier
+            # takes were folded in above, the transcript is longer than the
+            # audio these two describe — the RTF stays per-take, which is the
+            # figure worth comparing across runs.
+            result.transcribe_ms,
+            result.audio_seconds,
+            llm_ms,
+            result.model,
         )
 
         # Mark the earlier takes SUPERSEDED now that this draft carries their
