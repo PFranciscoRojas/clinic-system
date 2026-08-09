@@ -172,11 +172,38 @@ el PR. Va al BACKLOG como ítem propio, con su test rojo antes del parche.
 
 ## 4. Fases
 
-### Fase 0 — Instrumentar (bloqueante para todo lo demás)
+### Fase 0 — Instrumentar (bloqueante para todo lo demás) ✅ (hecha)
 
 Columnas no-PII en `ai_drafts`: `audio_seconds`, `upload_ms`, `transcribe_ms`,
 `llm_ms`, `rtf`, `whisper_model`. Sin esto no hay forma de probar que una
-optimización sirvió más allá de cronometrar a mano. Migración `000070`.
+optimización sirvió más allá de cronometrar a mano. Migración ~~`000070`~~
+`000075` (la numeración avanzó mientras el plan esperaba).
+
+Cómo quedó:
+
+- `upload_ms` lo mide core-api desde antes de leer el cuerpo hasta que el
+  archivo está en disco, y viaja en el mismo INSERT que crea el borrador. NULL
+  cuando nadie midió, nunca 0: un borrador sin medición no puede entrar a los
+  percentiles como una subida instantánea.
+- `transcribe_ms`, `audio_seconds` y `llm_ms` los escribe el worker. También en
+  el camino `EMPTY`: una corrida que quemó nueve minutos de CPU para no producir
+  nada es justo lo que la instrumentación existe para hacer visible.
+- `rtf` es **columna generada**, no un valor que alguien escriba. Un RTF que no
+  cuadre con sus propios operandos sería peor que no tener RTF: mentiría
+  exactamente en la comparación para la que existe.
+- `audio_seconds` sale de `ffprobe` (lee la cabecera, no decodifica) y cae a la
+  última marca de segmento de Whisper cuando el contenedor no declara duración —
+  el caso normal de un WebM armado con `MediaRecorder`. Si ninguna de las dos
+  puede, queda NULL y el RTF también. Nunca se adivina.
+
+**Hallazgo colateral:** `whisper_model` ya existía, y era mentira. Lo escribía
+core-api al subir, desde una constante `"base"` que no tiene forma de saber qué
+modelo corre el ai-service — que lee el suyo de `settings.whisper_model`, es
+decir, de una variable de entorno del VPS. Bastaba con exportar
+`WHISPER_MODEL=small` para que la base de datos siguiera diciendo `base` sin que
+nada fallara. Ahora el worker lo sobrescribe con lo que realmente corrió, que es
+un prerequisito de la Fase 3: comparar el RTF de dos modelos usando una etiqueta
+que no sabe que el modelo cambió no compara nada.
 
 ### Fase 0.5 — Concurrencia y seguridad de la cola ✅ (hecha, PR #260)
 
@@ -330,8 +357,8 @@ CAX ARM (CTranslate2 soporta NEON, y sale más barato que el CX21 actual).
 
 ## 7. Orden
 
-`Fase 0` → `Fase 0.5` → `Fase 1` → `Fase 3` → **medir** → `Fase 2` → `Fase 5` →
-decidir `Fase 4` contra upgrade de VPS.
+~~`Fase 0`~~ ✅ → ~~`Fase 0.5`~~ ✅ → ~~`Fase 1`~~ ✅ → `Fase 3` → **medir** →
+`Fase 2` → `Fase 5` → decidir `Fase 4` contra upgrade de VPS.
 
 La Fase 3 va antes que la 2 a propósito: es el cambio con más ganancia por línea
 tocada (8,5 min → ~2,2 min cambiando una dependencia). Una vez medida sabremos si

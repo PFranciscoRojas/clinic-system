@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -71,6 +73,11 @@ func (s *Service) UploadAudio(ctx context.Context, in UploadAudioInput) (string,
 		AIModelVersion: aiModelVer,
 		WhisperModel:   whisperModel,
 		TemplateID:     in.TemplateID,
+		// Measured here rather than in the handler because this is the last
+		// point before the row exists: the body has been received and the file
+		// is already on disk, which is exactly what the professional waits for
+		// while the progress bar moves.
+		UploadMS: uploadMillis(in.UploadStartedAt, time.Now()),
 	})
 	if err != nil {
 		return "", err
@@ -83,6 +90,33 @@ func (s *Service) UploadAudio(ctx context.Context, in UploadAudioInput) (string,
 	}
 
 	return draftID, nil
+}
+
+// uploadMillis reports how long the request spent receiving the audio body and
+// writing it to disk — the "Upload" row of the latency baseline, measured
+// server-side where the clock is ours.
+//
+// Returns nil rather than 0 when there is nothing to report, because the column
+// is nullable for a reason: an unmeasured draft must not enter the percentiles
+// as an instantaneous upload.
+func uploadMillis(startedAt, now time.Time) *int32 {
+	if startedAt.IsZero() {
+		return nil
+	}
+	elapsed := now.Sub(startedAt).Milliseconds()
+	if elapsed < 0 {
+		// Unreachable through the handler (time.Now carries a monotonic reading,
+		// which cannot go backwards), but reachable from a caller that builds
+		// both timestamps by hand. A negative would fail the column's CHECK and
+		// take the whole upload down with it, which is a terrible trade for a
+		// telemetry value.
+		return nil
+	}
+	if elapsed > math.MaxInt32 {
+		elapsed = math.MaxInt32
+	}
+	ms := int32(elapsed)
+	return &ms
 }
 
 // audioExtRe is defence in depth: the handler already rejects anything outside

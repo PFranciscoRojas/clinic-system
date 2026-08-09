@@ -56,6 +56,12 @@ func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	r = r.WithContext(ctx)
 
+	// Start the upload clock before the first byte of the body is read.
+	// ParseMultipartForm blocks until the whole multipart body has arrived, so
+	// this timestamp plus the moment the file lands on disk is the wall time the
+	// professional actually spends staring at the progress bar.
+	uploadStartedAt := time.Now()
+
 	// MaxBytesReader is the real size cap: ParseMultipartForm's argument only
 	// bounds the in-memory portion — without this, an oversized body would
 	// spool to temp files on disk without limit.
@@ -126,9 +132,10 @@ func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 		NoteStyle:      noteStyle,
 		Tone:           tone,
 		Approach:       approach,
-		Ext:            ext,
-		Audio:          file,
-		AudioSize:      header.Size,
+		Ext:             ext,
+		Audio:           file,
+		AudioSize:       header.Size,
+		UploadStartedAt: uploadStartedAt,
 	})
 	if err != nil {
 		writeErr(w, err)
