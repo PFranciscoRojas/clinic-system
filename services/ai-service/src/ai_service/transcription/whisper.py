@@ -1,13 +1,11 @@
 import logging
-import math
 import re
-import subprocess
 import time
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
-import whisper
+from faster_whisper import WhisperModel
 
 from ai_service.config import settings
 
@@ -43,10 +41,28 @@ def _looks_hallucinated(text: str) -> bool:
 
 
 @lru_cache(maxsize=1)
-def _load_model() -> whisper.Whisper:
-    """Load Whisper model once and cache. Model is pre-baked into the Docker image."""
-    logger.info("loading whisper model", extra={"model": settings.whisper_model})
-    return whisper.load_model(settings.whisper_model)
+def _load_model() -> WhisperModel:
+    """Load the Whisper model once and cache it. Pre-baked into the Docker image.
+
+    This is CTranslate2, not PyTorch: the same OpenAI weights, converted and
+    quantised. int8 is the whole reason CPU inference is viable on a 2-vCPU box
+    — the reference PyTorch runtime this replaced spent ~8.5 min on an hour of
+    audio, which is most of the latency the professional waits through.
+    """
+    logger.info(
+        "loading whisper model",
+        extra={
+            "model": settings.whisper_model,
+            "compute_type": settings.whisper_compute_type,
+            "cpu_threads": settings.whisper_cpu_threads,
+        },
+    )
+    return WhisperModel(
+        settings.whisper_model,
+        device="cpu",
+        compute_type=settings.whisper_compute_type,
+        cpu_threads=settings.whisper_cpu_threads,
+    )
 
 
 # Whisper's initial_prompt doesn't work like an LLM instruction — it biases
@@ -80,80 +96,39 @@ class Transcription:
 
     text: str
     transcribe_ms: int
-    #: Wall-clock length of the recording. None when neither ffprobe nor the
-    #: segment list could tell us, which leaves rtf NULL rather than wrong.
+    #: Wall-clock length of the recording. None when the runtime could not say,
+    #: which leaves rtf NULL rather than wrong.
     audio_seconds: float | None
     model: str
 
 
-# ffprobe reads the container header; it does not decode the stream, so this is
-# a millisecond-scale call even on an hour of audio. The timeout only exists so
-# a corrupt file cannot wedge the worker.
-_FFPROBE_TIMEOUT_S = 20
-
-
-def _parse_ffprobe_duration(stdout: str) -> float | None:
-    """Read a duration in seconds out of ffprobe's single-value output.
-
-    ffprobe prints `N/A` when the container carries no duration — the normal
-    case for a WebM assembled from MediaRecorder chunks, which is exactly what
-    this pipeline receives — so an unparseable value is expected, not an error.
-    """
-    value = stdout.strip()
-    if not value:
-        return None
+def _usable_duration(seconds: Any) -> float | None:
+    """Accept a duration only if it can carry the weight of an RTF."""
     try:
-        seconds = float(value)
-    except ValueError:
+        value = float(seconds)
+    except (TypeError, ValueError):
         return None
-    if not math.isfinite(seconds) or seconds <= 0:
+    # NaN and inf both survive float() and both poison every aggregate computed
+    # over the column afterwards.
+    if value != value or value in (float("inf"), float("-inf")) or value <= 0:
         return None
-    return seconds
+    return value
 
 
-def _duration_from_segments(segments: list[dict[str, Any]]) -> float | None:
-    """Fallback duration: where Whisper's last segment ends.
+def _duration_from_segments(segments: list[Any]) -> float | None:
+    """Fallback duration: where the last segment ends.
 
-    Cheap (the segments are already in hand) but a lower bound: trailing silence
-    produces no segment, so a recording left running after the session ends
-    reads as shorter than it was, which makes the RTF look worse than it is.
-    Preferring ffprobe keeps that bias out of the numbers whenever the container
-    is honest about its own length.
+    A lower bound — trailing silence produces no segment, so a recording left
+    running after the session ends reads as shorter than it was, which makes the
+    RTF look worse than it is. Only used when the runtime does not report a
+    duration of its own.
     """
     end = 0.0
     for seg in segments:
-        try:
-            end = max(end, float(seg["end"]))
-        except (KeyError, TypeError, ValueError):
-            continue
+        candidate = _usable_duration(getattr(seg, "end", None))
+        if candidate is not None:
+            end = max(end, candidate)
     return end or None
-
-
-def probe_audio_seconds(audio_path: str) -> float | None:
-    """Duration of the recording per ffprobe, or None if it cannot say.
-
-    Best-effort by design: this is telemetry, and no failure here may cost a
-    clinical draft.
-    """
-    try:
-        proc = subprocess.run(
-            [
-                "ffprobe", "-v", "error",
-                "-show_entries", "format=duration",
-                "-of", "default=noprint_wrappers=1:nokey=1",
-                audio_path,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=_FFPROBE_TIMEOUT_S,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        logger.warning("ffprobe failed", extra={"path": audio_path, "err": str(exc)})
-        return None
-    if proc.returncode != 0:
-        return None
-    return _parse_ffprobe_duration(proc.stdout)
 
 
 def transcribe_audio(audio_path: str) -> Transcription:
@@ -166,23 +141,38 @@ def transcribe_audio(audio_path: str) -> Transcription:
     logger.info("transcribing audio", extra={"path": audio_path})
 
     started = time.monotonic()
-    result = model.transcribe(
+    segment_iter, info = model.transcribe(
         audio_path,
-        language="es",        # Colombian Spanish
-        fp16=False,           # CPU inference; set True if GPU is available
-        verbose=False,
+        language="es",                    # Colombian Spanish
         initial_prompt=CLINICAL_PROMPT_ES,
+        # The VAD attacks the silence-hallucination loop at its source instead
+        # of cleaning it up afterwards: silence never reaches the decoder, so
+        # there is nothing for it to "continue" from. _looks_hallucinated below
+        # stays as a safety net, demoted from primary defence.
+        vad_filter=True,
+        # Each window decodes on its own. With this on, one hallucinated window
+        # becomes the prompt for the next and the loop feeds itself — the exact
+        # failure this pipeline has already been bitten by.
+        condition_on_previous_text=False,
     )
+
+    # transcribe() is lazy: it returns a generator in milliseconds and does the
+    # actual work while it is consumed. Timing the call alone would record ~0 ms
+    # for an eight-minute transcription and quietly make the instrumentation
+    # report a pipeline that costs nothing.
+    segments = list(segment_iter)
     elapsed_ms = int((time.monotonic() - started) * 1000)
 
     # Drop segments Whisper itself flagged as likely silence/no-speech —
     # defense in depth alongside the repetition check below.
-    segments = result.get("segments", [])
     text = "".join(
-        seg["text"] for seg in segments if seg.get("no_speech_prob", 0) <= 0.6
-    ).strip() if segments else str(result["text"]).strip()
+        seg.text for seg in segments if (seg.no_speech_prob or 0) <= 0.6
+    ).strip()
 
-    audio_seconds = probe_audio_seconds(audio_path)
+    # The runtime decoded the audio to transcribe it, so it knows the true
+    # length — better than asking the container, which for a WebM assembled from
+    # MediaRecorder chunks usually declares no duration at all.
+    audio_seconds = _usable_duration(getattr(info, "duration", None))
     if audio_seconds is None:
         audio_seconds = _duration_from_segments(segments)
 

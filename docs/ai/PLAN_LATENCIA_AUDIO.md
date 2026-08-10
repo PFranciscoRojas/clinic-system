@@ -285,7 +285,7 @@ Notas de la implementación:
 
 → Upload percibido ~20 s → ~2 s.
 
-### Fase 3 — Cambiar el runtime de Whisper
+### Fase 3 — Cambiar el runtime de Whisper ✅ (hecha, falta medir)
 
 `openai-whisper` → `faster-whisper` con `compute_type="int8"`, `cpu_threads=2`,
 `vad_filter=True`, `condition_on_previous_text=False`. Se conservan
@@ -299,7 +299,23 @@ red de seguridad en vez de defensa principal. Bonus: se cae `torch` del Dockerfi
 
 Decisión que se abre: con ese margen, `small` en int8 queda en ~0,12 RTF, es decir
 **más rápido que el `base` de hoy y con mejor español**. Evaluar con el audio de
-referencia de `scripts/e2e_audio/` y WER medido.
+referencia de `scripts/e2e_audio/` y WER medido. Ahora es un cambio de
+`WHISPER_MODEL` en el `.env` más un rebuild, sin tocar código.
+
+**Trampa que costó un test:** `transcribe()` de faster-whisper devuelve un
+**generador**. Vuelve en 0,16 s sin haber transcrito nada; el trabajo ocurre
+mientras se consume. Cronometrar la llamada —que es la forma obvia de escribirlo,
+y la que heredaba la Fase 0— reporta ~0 ms para una transcripción de ocho
+minutos. Verificado: contra esa versión el test da `assert 0 >= 50`.
+
+`audio_seconds` ahora sale de `info.duration`, que es lo que el runtime realmente
+decodificó. Eso hace redundante el `ffprobe` de la Fase 0 y se borró: mantener
+dos fuentes que pueden discrepar es como empieza a mentir una instrumentación.
+
+**Pendiente y explícito: el número todavía no está medido.** El código está en
+producción y la mejora es esperada, no observada. La medición sale de correr
+`scripts/e2e_audio/` y leer `rtf` de la fila, que es precisamente para lo que se
+hizo la Fase 0.
 
 ### Fase 4 — Transcribir durante la sesión
 
@@ -357,8 +373,9 @@ CAX ARM (CTranslate2 soporta NEON, y sale más barato que el CX21 actual).
 
 ## 7. Orden
 
-~~`Fase 0`~~ ✅ → ~~`Fase 0.5`~~ ✅ → ~~`Fase 1`~~ ✅ → `Fase 3` → **medir** →
-`Fase 2` → `Fase 5` → decidir `Fase 4` contra upgrade de VPS.
+~~`Fase 0`~~ ✅ → ~~`Fase 0.5`~~ ✅ → ~~`Fase 1`~~ ✅ → ~~`Fase 3`~~ ✅ →
+**medir** ← *aquí estamos* → `Fase 2` → `Fase 5` → decidir `Fase 4` contra
+upgrade de VPS.
 
 La Fase 3 va antes que la 2 a propósito: es el cambio con más ganancia por línea
 tocada (8,5 min → ~2,2 min cambiando una dependencia). Una vez medida sabremos si

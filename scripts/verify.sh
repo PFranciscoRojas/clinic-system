@@ -67,8 +67,9 @@ step "bundle"         ./scripts/check_bundle_size.sh
 # interpreter here is the difference between a red step you fix and a red step
 # you learn to ignore.
 #
-# whisper/torch (~2 GB) is deliberately absent — conftest.py stubs it, exactly
-# as in build-ai-service.yml. Only the test deps are needed:
+# faster-whisper and its converted weights are deliberately absent — conftest.py
+# stubs the module, exactly as in build-ai-service.yml. Only the test deps are
+# needed:
 #   services/ai-service/.venv/bin/pip install pytest pytest-asyncio pydantic-settings anthropic redis asyncpg cryptography
 PY=python3
 if [[ -x services/ai-service/.venv/bin/python ]]; then

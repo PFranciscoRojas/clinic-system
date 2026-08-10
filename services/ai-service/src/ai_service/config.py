@@ -28,8 +28,15 @@ class Settings(BaseSettings):
     # the source text, not creative.
     anthropic_temperature: float = 0.2
 
-    # Whisper
+    # Whisper (faster-whisper / CTranslate2)
     whisper_model: str = "base"
+    # int8 quantisation is what makes CPU inference viable here; float32 on the
+    # same box is roughly the PyTorch runtime this replaced.
+    whisper_compute_type: str = "int8"
+    # Matches the CX21's 2 vCPU. Settable because the plan explicitly puts a
+    # bigger box on the table (CPX31, 4 vCPU), and moving there should be an
+    # .env change, not a code change. 0 means "every core CTranslate2 can see".
+    whisper_cpu_threads: int = 2
 
     # Audio
     audio_base_path: str = "/data/audio"

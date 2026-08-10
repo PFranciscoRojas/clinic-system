@@ -9,23 +9,22 @@ os.environ.setdefault("REDIS_PASSWORD", "test")
 os.environ.setdefault("MASTER_KEY", "00" * 32)
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
 
-# The real whisper package drags in torch (~2 GB) and no test ever loads a
-# model — transcription tests only exercise pure helpers. Stub it when absent
-# so the suite runs on CI and dev machines without the inference stack.
+# faster-whisper pulls CTranslate2 and the converted weights, and no test ever
+# loads a model — transcription tests exercise pure helpers and a fake model.
+# Stub it when absent so the suite runs on CI and dev machines without the
+# inference stack. (This used to stub `whisper`, which additionally dragged in
+# ~2 GB of torch; that dependency is gone.)
 try:
-    import whisper  # noqa: F401
+    import faster_whisper  # noqa: F401
 except ModuleNotFoundError:
-    _stub = types.ModuleType("whisper")
+    _stub = types.ModuleType("faster_whisper")
 
-    class _Whisper:  # matches the type annotation in transcription/whisper.py
-        pass
+    class _WhisperModel:  # matches the annotation in transcription/whisper.py
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            raise RuntimeError("faster_whisper is stubbed in tests — no model loading")
 
-    def _load_model(name: str) -> None:
-        raise RuntimeError("whisper is stubbed in tests — no model loading")
-
-    _stub.Whisper = _Whisper  # type: ignore[attr-defined]
-    _stub.load_model = _load_model  # type: ignore[attr-defined]
-    sys.modules["whisper"] = _stub
+    _stub.WhisperModel = _WhisperModel  # type: ignore[attr-defined]
+    sys.modules["faster_whisper"] = _stub
 
 
 # spaCy and its Spanish model are ~500 MB and only the NER layer of the
