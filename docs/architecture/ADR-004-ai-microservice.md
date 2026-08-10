@@ -100,7 +100,7 @@ Profesional sube audio
 | Propósito | Tecnología |
 |---|---|
 | Framework API | FastAPI 0.115+ |
-| Transcripción | `openai-whisper` (local) |
+| Transcripción | `faster-whisper` / CTranslate2 int8 (local) |
 | NER / Anonimización | `spaCy` (modelo `es_core_news_lg`) |
 | LLM | Anthropic Claude API (`claude-sonnet-4-6`) |
 | Cola de mensajes | Redis Streams (Bootstrap y dev) → AWS SQS (Cloud) |

@@ -25,8 +25,8 @@ jobs:
         with:
           python-version: '3.12'
 
-      # whisper/torch (~2 GB) is deliberately NOT installed — conftest.py
-      # stubs it; no test loads a model. redis/asyncpg/cryptography are small
+      # faster-whisper and its weights are deliberately NOT installed —
+      # conftest.py stubs the module; no test loads a model. redis/asyncpg/cryptography are small
       # and are real imports of worker.py, which now has tests: stubbing those
       # would fake the very module under test.
       - name: Install test dependencies
@@ -64,9 +64,12 @@ jobs:
           context: ./services/ai-service
           push: true
           tags: ghcr.io/pfranciscorojas/clinic-system-ai-service:latest
-          # Must match WHISPER_MODEL in the prod .env — a mismatch means the
-          # container re-downloads the model at runtime after every recreate.
-          build-args: WHISPER_MODEL=base
+          # Must match WHISPER_MODEL and WHISPER_COMPUTE_TYPE in the prod .env —
+          # a mismatch means the container re-downloads the weights at runtime
+          # after every recreate, mid-transcription, on someone's real draft.
+          build-args: |
+            WHISPER_MODEL=base
+            WHISPER_COMPUTE_TYPE=int8
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
