@@ -62,10 +62,17 @@ class FakeModel:
 
 
 @pytest.fixture
-def use_model(monkeypatch):
-    """Install a fake model in place of the real one."""
+def use_model(monkeypatch, split_audio_into):
+    """Install a fake model in place of the real one.
+
+    The recording is also cut into pieces before any of this runs, and the
+    cutting shells out to ffmpeg — so it is replaced by a single piece standing
+    for the whole file. What these tests are about is unchanged: the fake model
+    answers the same way whatever path it is handed.
+    """
 
     def _install(model: FakeModel) -> FakeModel:
+        split_audio_into(["/audio/take.webm"])
         monkeypatch.setattr(whisper_mod, "_load_model", lambda: model)
         return model
 

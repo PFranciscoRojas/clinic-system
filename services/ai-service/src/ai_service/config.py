@@ -37,6 +37,16 @@ class Settings(BaseSettings):
     # bigger box on the table (CPX31, 4 vCPU), and moving there should be an
     # .env change, not a code change. 0 means "every core CTranslate2 can see".
     whisper_cpu_threads: int = 2
+    # Length of the pieces the recording is cut into before transcription.
+    # faster-whisper builds the log-Mel spectrogram of whatever it is given in
+    # one pass, at ~0.9 MB per second of audio, so this is what bounds peak
+    # memory: an hour in one piece needs ~3.4 GB and OOM-killed the service on a
+    # 1.9 GB box. 180 s measured at 528 MB peak for the same recording.
+    whisper_chunk_seconds: int = 180
+    # How far from a nominal boundary a silence may be and still be used as the
+    # cut. Wide enough to almost always find one in a conversation; narrow
+    # enough that the pieces stay near whisper_chunk_seconds.
+    whisper_chunk_search_seconds: int = 25
 
     # Audio
     audio_base_path: str = "/data/audio"

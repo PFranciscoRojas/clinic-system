@@ -1,6 +1,12 @@
+import glob
 import logging
+import os
 import re
+import subprocess
+import tempfile
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
@@ -131,24 +137,177 @@ def _duration_from_segments(segments: list[Any]) -> float | None:
     return end or None
 
 
-def transcribe_audio(audio_path: str) -> Transcription:
-    """Transcribe a local audio file to text using Whisper.
+# ── Cutting the recording up ────────────────────────────────────────────────
+#
+# faster-whisper builds the log-Mel spectrogram of whatever it is handed in a
+# single pass (feature_extractor.py), keeping the strided float32 frames, the
+# complex128 FFT and its complex64 copy alive at the same time. That costs
+# ~0.9 MB per second of audio: an hour needs ~3.4 GB, and this box has 1.9 GB.
+# It OOM-killed the service on the first real session-length recording.
+#
+# So ffmpeg cuts the file into pieces first and Whisper only ever sees one at a
+# time. Peak memory becomes a function of whisper_chunk_seconds instead of the
+# length of the session — 528 MB at 180 s, against 3459 MB for the whole hour,
+# for 2% more wall time.
 
-    Audio file is read from the local filesystem — it never leaves the server.
-    Raises FileNotFoundError if audio_path doesn't exist.
+_SILENCE_RE = re.compile(r"silence_(start|end):\s*(-?[\d.]+)")
+# ffmpeg's progress line, written once the decoder has been through every frame.
+_PROGRESS_TIME_RE = re.compile(r"time=(\d+):(\d{2}):(\d{2}(?:\.\d+)?)")
+
+# Generous: this is a whole decode pass over the file, and being wrong about it
+# costs a worse cut plan, never a failed transcription.
+#
+# Both ffmpeg calls below are resolved off PATH and take no shell: the only
+# non-constant argument is a path this service wrote itself, under
+# settings.audio_base_path, from an appointment id core-api validated as a UUID.
+_FFMPEG_TIMEOUT_S = 30 * 60
+
+
+def _parse_silences(stderr: str) -> list[float]:
+    """The midpoint of every silence ffmpeg reported.
+
+    The midpoint, not either edge: it is the point furthest from the speech on
+    both sides, so a cut there takes nothing off either piece.
     """
-    model = _load_model()
-    logger.info("transcribing audio", extra={"path": audio_path})
+    midpoints: list[float] = []
+    start: float | None = None
+    for kind, value in _SILENCE_RE.findall(stderr):
+        if kind == "start":
+            start = float(value)
+        elif start is not None:
+            midpoints.append((start + float(value)) / 2)
+            start = None
+    return midpoints
 
-    started = time.monotonic()
+
+def _parse_decoded_seconds(stderr: str) -> float | None:
+    """How long the recording actually is, per ffmpeg's last progress line.
+
+    Deliberately not the container header: a WebM assembled from MediaRecorder
+    chunks declares `Duration: N/A`, which is why this pipeline could not report
+    an RTF at all before. The progress line is written after the decoder has
+    walked every frame, so it cannot be wrong about it.
+    """
+    matches = _PROGRESS_TIME_RE.findall(stderr)
+    if not matches:
+        return None
+    hours, minutes, seconds = matches[-1]
+    return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+
+
+def _silence_plan(audio_path: str) -> tuple[list[float], float | None]:
+    """One ffmpeg pass: where the silences are, and how long the file is.
+
+    Returns an empty plan rather than raising. Knowing where the silences are is
+    an optimisation; cutting at all is the safety property, and _split_audio
+    still falls back to evenly spaced cuts without this.
+    """
+    try:
+        completed = subprocess.run(  # noqa: S603 — see _FFMPEG_TIMEOUT_S
+            [  # noqa: S607 — ffmpeg off PATH, see _FFMPEG_TIMEOUT_S
+                "ffmpeg", "-nostdin", "-i", audio_path, "-vn",
+                "-af", "silencedetect=noise=-30dB:d=0.35",
+                "-f", "null", "-",
+            ],
+            capture_output=True, text=True, timeout=_FFMPEG_TIMEOUT_S, check=True,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.warning(
+            "could not look for silences; falling back to evenly spaced cuts",
+            extra={"path": audio_path, "error": str(exc)},
+        )
+        return [], None
+    return _parse_silences(completed.stderr), _parse_decoded_seconds(completed.stderr)
+
+
+def _cut_points(
+    midpoints: list[float], total_s: float | None, window_s: int, search_s: int
+) -> list[float]:
+    """Where to cut: the silence nearest each nominal boundary, or the boundary.
+
+    Each window is measured from the cut that was actually made, not from the
+    nominal boundary — otherwise a run of early cuts compounds and the pieces
+    drift shorter and shorter.
+    """
+    cuts: list[float] = []
+    target = float(window_s)
+    for mid in midpoints:
+        if mid < target - search_s:
+            continue
+        # Nobody stopped talking anywhere near this boundary. Cut anyway: the
+        # memory bound is the point of the exercise and it does not negotiate.
+        while mid > target + search_s:
+            cuts.append(target)
+            target += window_s
+        cuts.append(mid)
+        target = mid + window_s
+    # Everything after the last silence is still audio, and a 20-minute tail
+    # costs as much memory as a 20-minute recording. Skipped when ffmpeg could
+    # not say how long the file is — a guessed length is worse than a fixed
+    # schedule.
+    if total_s is not None:
+        while target < total_s:
+            cuts.append(target)
+            target += window_s
+    return cuts
+
+
+@contextmanager
+def _split_audio(audio_path: str) -> Iterator[list[str]]:
+    """The recording as an ordered list of pieces, deleted on the way out.
+
+    The pieces land next to the recording rather than in /tmp: they are the same
+    order of magnitude as the audio (an hour of 16 kHz mono PCM is ~108 MB) and
+    this is the volume already sized for that.
+    """
+    with tempfile.TemporaryDirectory(
+        prefix="whisper-", dir=os.path.dirname(audio_path) or None
+    ) as workdir:
+        yield _cut_into_pieces(audio_path, workdir)
+
+
+def _cut_into_pieces(audio_path: str, dest_dir: str) -> list[str]:
+    """Cut the recording into 16 kHz mono WAV pieces. Returns them in order."""
+    window = settings.whisper_chunk_seconds
+    midpoints, total_s = _silence_plan(audio_path)
+    cuts = _cut_points(midpoints, total_s, window, settings.whisper_chunk_search_seconds)
+
+    # No usable cut plan (silence detection failed, or a recording of solid
+    # speech shorter than one window): let ffmpeg space them evenly. Same bound,
+    # just blind about where words fall.
+    where = (
+        ["-segment_times", ",".join(f"{c:.3f}" for c in cuts)] if cuts
+        else ["-segment_time", str(window)]
+    )
+    subprocess.run(  # noqa: S603 — see _FFMPEG_TIMEOUT_S
+        [  # noqa: S607 — ffmpeg off PATH, see _FFMPEG_TIMEOUT_S
+            "ffmpeg", "-nostdin", "-loglevel", "error", "-i", audio_path,
+            "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le",
+            "-f", "segment", *where,
+            os.path.join(dest_dir, "piece%04d.wav"),
+        ],
+        capture_output=True, text=True, timeout=_FFMPEG_TIMEOUT_S, check=True,
+    )
+    pieces = sorted(glob.glob(os.path.join(dest_dir, "piece*.wav")))
+    logger.info(
+        "recording split for transcription",
+        extra={"path": audio_path, "pieces": len(pieces), "seconds": total_s},
+    )
+    return pieces
+
+
+def _transcribe_piece(model: WhisperModel, piece: str) -> tuple[str, float | None]:
+    """One piece, start to finish: its text and how long it was."""
     segment_iter, info = model.transcribe(
-        audio_path,
+        piece,
         language="es",                    # Colombian Spanish
         initial_prompt=CLINICAL_PROMPT_ES,
         # The VAD attacks the silence-hallucination loop at its source instead
         # of cleaning it up afterwards: silence never reaches the decoder, so
         # there is nothing for it to "continue" from. _looks_hallucinated below
-        # stays as a safety net, demoted from primary defence.
+        # stays as a safety net, demoted from primary defence. (It is not what
+        # drives peak memory — measured at 3459 MB with it and 3187 MB without,
+        # on the same hour of audio. Cutting the file is what fixed that.)
         vad_filter=True,
         # Each window decodes on its own. With this on, one hallucinated window
         # becomes the prompt for the next and the loop feeds itself — the exact
@@ -161,20 +320,42 @@ def transcribe_audio(audio_path: str) -> Transcription:
     # for an eight-minute transcription and quietly make the instrumentation
     # report a pipeline that costs nothing.
     segments = list(segment_iter)
-    elapsed_ms = int((time.monotonic() - started) * 1000)
 
     # Drop segments Whisper itself flagged as likely silence/no-speech —
-    # defense in depth alongside the repetition check below.
-    text = "".join(
-        seg.text for seg in segments if (seg.no_speech_prob or 0) <= 0.6
-    ).strip()
+    # defense in depth alongside the repetition check in _looks_hallucinated.
+    text = "".join(seg.text for seg in segments if (seg.no_speech_prob or 0) <= 0.6)
 
-    # The runtime decoded the audio to transcribe it, so it knows the true
-    # length — better than asking the container, which for a WebM assembled from
-    # MediaRecorder chunks usually declares no duration at all.
-    audio_seconds = _usable_duration(getattr(info, "duration", None))
-    if audio_seconds is None:
-        audio_seconds = _duration_from_segments(segments)
+    # The runtime decoded this piece, so it knows exactly how long it was.
+    seconds = _usable_duration(getattr(info, "duration", None))
+    if seconds is None:
+        seconds = _duration_from_segments(segments)
+    return text, seconds
+
+
+def transcribe_audio(audio_path: str) -> Transcription:
+    """Transcribe a local audio file to text using Whisper.
+
+    Audio file is read from the local filesystem — it never leaves the server.
+    Raises FileNotFoundError if audio_path doesn't exist.
+    """
+    model = _load_model()
+    logger.info("transcribing audio", extra={"path": audio_path})
+
+    started = time.monotonic()
+    parts: list[str] = []
+    total_seconds = 0.0
+    with _split_audio(audio_path) as pieces:
+        for piece in pieces:
+            piece_text, piece_seconds = _transcribe_piece(model, piece)
+            parts.append(piece_text)
+            if piece_seconds is not None:
+                total_seconds += piece_seconds
+
+    elapsed_ms = int((time.monotonic() - started) * 1000)
+    text = "".join(parts).strip()
+    # Summed from the pieces, so one piece the runtime could not measure leaves
+    # the total a little short instead of leaving it unknown.
+    audio_seconds = total_seconds if total_seconds > 0 else None
 
     def _result(final_text: str) -> Transcription:
         return Transcription(
