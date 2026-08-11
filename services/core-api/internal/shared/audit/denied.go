@@ -63,6 +63,24 @@ func (s *statusRecorder) Write(b []byte) (int, error) {
 	return s.ResponseWriter.Write(b)
 }
 
+// Unwrap exposes the writer underneath so http.ResponseController can reach the
+// connection through this wrapper.
+//
+// Without it, ResponseController stops here and returns http.ErrNotSupported —
+// and it does so silently, because the only caller that needs it (the session
+// audio upload, extending its read deadline past the server-wide 15 s
+// ReadTimeout) was discarding the error. The effect in production was that
+// every audio upload lasting more than 15 s died with "malformed multipart
+// body": a 2 MB file uploaded in 1 s succeeded and the same 2 MB throttled to
+// 100 KB/s failed. Time, not size, which is why it never looked like a size
+// limit and why smaller recordings only hid it on fast links.
+//
+// Any future wrapper of http.ResponseWriter needs this method too. It is one
+// line, and the failure it prevents is invisible.
+func (s *statusRecorder) Unwrap() http.ResponseWriter {
+	return s.ResponseWriter
+}
+
 // routeResource pulls the resource this request was after: the deepest URL
 // param that is a uuid, plus the collection segment right before it in the
 // route pattern ("/api/v1/patients/{id}" → "patients"). Returns an empty id
