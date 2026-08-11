@@ -34,6 +34,44 @@ Los 11 minutos son **todos** percibidos: el reloj arranca cuando el profesional
 cierra la sesión. Nada del trabajo ocurre mientras la sesión pasa, que es cuando
 sobra CPU y sobra ancho de banda.
 
+### 1.1 Medición después de las fases 0 / 0.5 / 1 / 3 / 3.1 — 2026-08-11
+
+Medido en el VPS, no estimado. Misma grabación de 3368,76 s, código de producción,
+`WHISPER_MODEL=base`, `int8`, `cpu_threads=2`:
+
+| Etapa | Antes | Ahora | Meta del plan |
+|---|---|---|---|
+| Grabación → blob webm | 61 MB | **11 MB** | — |
+| Upload @ ~500 KB/s | ~2 min | **21,5 s** | — |
+| Transcripción | ~8,5 min (RTF ~0,147) | **6,9 min (RTF 0,1224)** | ~2,2 min (RTF 0,04) |
+| Claude draft | ~28 s | ~28 s | — |
+| **Total percibido** | **~11 min** | **~7,8 min** | 1–3 min |
+
+Desglose de esos 412 s de transcripción, también medido en el VPS:
+
+| | tiempo | % |
+|---|---|---|
+| `silencedetect` (una pasada de decodificación) | 7,2 s | 1,7 % |
+| troceo con ffmpeg (incluye la pasada anterior) | 14,5 s | 3,5 % |
+| Whisper sobre los 21 trozos | 397,5 s | 96,5 % |
+
+**El cambio de runtime compró ~17 %, no 4×.** La estimación de RTF 0,04 salía de
+los benchmarks publicados de faster-whisper, que corren en CPU de escritorio. El
+mismo código en esta máquina da 0,079; en 2 vCPU compartidos da 0,1224. La Fase 3
+igual valió la pena por otra vía —la imagen bajó de 4,08 GB a 2,18 GB y `torch`
+desapareció— pero como palanca de latencia rindió poco. Queda escrito para que
+nadie vuelva a presupuestar contra un benchmark de otra máquina.
+
+El troceo **no** es un candidato a optimizar: 3,5 % del reloj.
+
+Consecuencia para lo que sigue: con la transcripción en 96,5 % del tiempo y sin
+margen de CPU, la palanca que queda no es hacer Whisper más rápido sino **dejar de
+esperarlo**. El pipeline ya es por trozos (Fase 3.1), que es justo el sustrato que
+la Fase 2 necesitaba: si cada trozo se transcribe a medida que llega durante la
+sesión, lo percibido tras "Finalizar sesión" colapsa al último trozo más Claude
+—del orden de 50 s— sin comprar un solo núcleo. **La Fase 2 pasa a ser la fase con
+más ganancia por línea tocada, el puesto que tenía la Fase 3.**
+
 ---
 
 ## 2. Los cuellos de botella
@@ -430,12 +468,15 @@ núcleos.
 ## 7. Orden
 
 ~~`Fase 0`~~ ✅ → ~~`Fase 0.5`~~ ✅ → ~~`Fase 1`~~ ✅ → ~~`Fase 3`~~ ✅ →
-~~`Fase 3.1` (troceo, arregla el OOM)~~ ✅ → **medir en el VPS** ← *aquí estamos*
-→ `Fase 2` → `Fase 5` → decidir `Fase 4` contra upgrade de VPS.
+~~`Fase 3.1` (troceo, arregla el OOM)~~ ✅ → ~~**medir en el VPS**~~ ✅ (§1.1) →
+`Fase 2` ← *aquí estamos* → `Fase 5` → decidir `Fase 4` contra upgrade de VPS.
 
-La Fase 3 va antes que la 2 a propósito: es el cambio con más ganancia por línea
-tocada (8,5 min → ~2,2 min cambiando una dependencia). Una vez medida sabremos si
-la Fase 4 vale su complejidad o si conviene más gastar €8/mes en núcleos.
+La Fase 3 iba antes que la 2 a propósito: se esperaba que fuera el cambio con más
+ganancia por línea tocada (8,5 min → ~2,2 min cambiando una dependencia). **Medida,
+dio 6,9 min, no 2,2** (§1.1). Ese puesto pasa ahora a la Fase 2: transcribir
+durante la sesión es lo único que ataca el 96,5 % del reloj sin comprar núcleos.
+La Fase 4 y el upgrade a CPX31 se deciden después de la Fase 2, cuando se sepa
+cuánto queda realmente por ganar.
 
 ---
 
