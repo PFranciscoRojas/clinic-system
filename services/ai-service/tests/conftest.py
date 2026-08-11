@@ -1,6 +1,10 @@
 import os
 import sys
 import types
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+
+import pytest
 
 # Settings() requires these at import time in the modules under test; the
 # tests never call the network or the DB.
@@ -65,3 +69,25 @@ except ModuleNotFoundError:
     _spacy.language = _language_mod  # type: ignore[attr-defined]
     sys.modules["spacy"] = _spacy
     sys.modules["spacy.language"] = _language_mod
+
+
+@pytest.fixture
+def split_audio_into(monkeypatch: pytest.MonkeyPatch) -> Callable[[list[str]], list[str]]:
+    """Replace the ffmpeg split with a fixed list of pieces.
+
+    Transcription tests drive a fake model and decode nothing, but
+    transcribe_audio now cuts the recording up before it transcribes anything —
+    and that step shells out to ffmpeg and makes a temp directory next to the
+    file. Neither exists here.
+    """
+    from ai_service.transcription import whisper as whisper_mod
+
+    def _install(pieces: list[str]) -> list[str]:
+        @contextmanager
+        def _split(audio_path: str) -> Iterator[list[str]]:
+            yield pieces
+
+        monkeypatch.setattr(whisper_mod, "_split_audio", _split)
+        return pieces
+
+    return _install
