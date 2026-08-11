@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -42,13 +43,30 @@ func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Extend this connection's deadlines before touching the body: the
-	// server-wide 15 s ReadTimeout would otherwise cut a session-length
-	// upload mid-body. Best-effort — a ResponseWriter that doesn't support
-	// per-request deadlines (e.g. httptest) just keeps the server defaults.
+	// server-wide 15 s ReadTimeout would otherwise cut a session-length upload
+	// mid-body.
+	//
+	// This used to be documented as best-effort, on the theory that a writer
+	// without per-request deadlines "just keeps the server defaults". That
+	// reading is what hid the bug: keeping the server defaults is not a
+	// degraded mode here, it is a broken upload.
 	rc := http.NewResponseController(w)
 	deadline := time.Now().Add(audioUploadDeadline)
-	_ = rc.SetReadDeadline(deadline)
-	_ = rc.SetWriteDeadline(deadline)
+	// These errors used to be discarded, and that is the whole reason the
+	// failure below shipped: ResponseController returns ErrNotSupported the
+	// moment any middleware wraps the ResponseWriter without an Unwrap method,
+	// and the upload then dies at the server's 15 s ReadTimeout with a
+	// "malformed multipart body" 400 that names neither the deadline nor the
+	// wrapper. Logging it costs nothing and turns a silent breakage into a line
+	// that says what happened.
+	if err := rc.SetReadDeadline(deadline); err != nil {
+		slog.Error("audio upload cannot extend its read deadline; uploads slower than the server ReadTimeout will fail",
+			"err", err, "appointment_id", appointmentID)
+	}
+	if err := rc.SetWriteDeadline(deadline); err != nil {
+		slog.Error("audio upload cannot extend its write deadline",
+			"err", err, "appointment_id", appointmentID)
+	}
 
 	// This route is exempt from the router's 30 s context timeout (it would
 	// expire while the body is still arriving) — bound it here instead.
@@ -123,15 +141,15 @@ func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 	}
 
 	draftID, err := h.svc.UploadAudio(r.Context(), aidraftssvc.UploadAudioInput{
-		OrganizationID: claims.OrganizationID,
-		AppointmentID:  appointmentID,
-		PatientID:      patientID,
-		RequestedBy:    claims.UserID,
-		RecordType:     recordType,
-		TemplateID:     templateID,
-		NoteStyle:      noteStyle,
-		Tone:           tone,
-		Approach:       approach,
+		OrganizationID:  claims.OrganizationID,
+		AppointmentID:   appointmentID,
+		PatientID:       patientID,
+		RequestedBy:     claims.UserID,
+		RecordType:      recordType,
+		TemplateID:      templateID,
+		NoteStyle:       noteStyle,
+		Tone:            tone,
+		Approach:        approach,
 		Ext:             ext,
 		Audio:           file,
 		AudioSize:       header.Size,
