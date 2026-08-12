@@ -51,4 +51,4 @@ sghcp/core-api/internal/invoicing 22.5
 # buffer, the schedule parsing and the timezone fallbacks. The rest is chi
 # handlers and pgx repositories.
 sghcp/core-api/internal/availability 16.0
-sghcp/core-api/internal/leadbooking 16.0
+sghcp/core-api/internal/leadbooking 17.1

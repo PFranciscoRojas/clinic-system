@@ -90,6 +90,12 @@ step "skips" ./scripts/check_skips.sh
 # which is exactly the piece nobody would notice going wrong. Milliseconds.
 step "fuzz-classifier" ./scripts/run_fuzz_test.sh
 
+# Same shape, same reason: mutation testing itself runs nightly, but the logic
+# that reads its output — what counts as a measurement, what counts as a hang —
+# runs here. It is the piece that stayed wrong for eight nights without anybody
+# noticing, because its only symptom was a number that looked fine.
+step "mutation-reader" ./scripts/run_mutation_test.sh
+
 if have gitleaks; then
   step "secrets" gitleaks git . --no-banner --redact --config .gitleaks.toml
 else
