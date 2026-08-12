@@ -12,8 +12,9 @@ from typing import Any
 import asyncpg
 import redis.asyncio as aioredis
 
+from ai_service.config import settings
 from ai_service.crypto import open_, seal
-from ai_service.transcription.whisper import transcribe_audio
+from ai_service.transcription.whisper import sweep_orphaned_pieces, transcribe_audio
 from ai_service.anonymization.ner import anonymize
 from ai_service.drafts.claude import generate_clinical_draft
 from ai_service.suggestions.claude import (
@@ -133,6 +134,15 @@ class AIWorker:
             await self._sweep_stuck()
         except Exception as exc:
             logger.exception("startup sweep failed", exc_info=exc)
+        # Before taking a single job: decoded audio from a process that did not
+        # shut down cleanly. tempfile cleans up on the way out of the `with`,
+        # never on a SIGKILL — and this service has already taken one, when the
+        # kernel OOM-killed it on 2026-08-11. What that would leave behind now is
+        # unencrypted PCM of a clinical session.
+        try:
+            sweep_orphaned_pieces(settings.audio_base_path)
+        except Exception as exc:
+            logger.exception("orphaned audio sweep failed", exc_info=exc)
         while True:
             try:
                 await self._reclaim_stale()

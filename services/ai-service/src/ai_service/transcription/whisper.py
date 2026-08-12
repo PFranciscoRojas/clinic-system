@@ -2,6 +2,7 @@ import glob
 import logging
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import time
@@ -252,6 +253,12 @@ def _cut_points(
     return cuts
 
 
+#: Marks a working directory of decoded pieces. The pid goes in the name so a
+#: later boot can tell an abandoned directory from one a live job is using —
+#: see sweep_orphaned_pieces.
+PIECE_DIR_PREFIX = "whisper-"
+
+
 @contextmanager
 def _split_audio(audio_path: str) -> Iterator[list[str]]:
     """The recording as an ordered list of pieces, deleted on the way out.
@@ -261,9 +268,75 @@ def _split_audio(audio_path: str) -> Iterator[list[str]]:
     this is the volume already sized for that.
     """
     with tempfile.TemporaryDirectory(
-        prefix="whisper-", dir=os.path.dirname(audio_path) or None
+        prefix=f"{PIECE_DIR_PREFIX}{os.getpid()}-", dir=os.path.dirname(audio_path) or None
     ) as workdir:
         yield _cut_into_pieces(audio_path, workdir)
+
+
+def _process_is_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # Alive, just not ours to signal.
+        return True
+    return True
+
+
+def _owner_is_gone(name: str) -> bool:
+    """Whether the process that made this working directory is finished."""
+    rest = name[len(PIECE_DIR_PREFIX):]
+    pid_text = rest.split("-", 1)[0]
+    if not pid_text.isdigit():
+        # No pid in the name. Either PR #265, which shipped these as
+        # `whisper-XXXX` with nothing to say who owned them, or a directory
+        # nobody here created. Anything already on the volume when this process
+        # started is by definition not this process's — sweep it.
+        return True
+    return not _process_is_alive(int(pid_text))
+
+
+def sweep_orphaned_pieces(base_path: str) -> int:
+    """Delete decoded pieces left behind by processes that are gone.
+
+    `tempfile.TemporaryDirectory` cleans up on the way out of the `with`, but not
+    when the process is SIGKILLed. What survives then is unencrypted PCM of a
+    clinical session: the same speech the rest of this system encrypts per
+    patient, in the clear, until somebody notices.
+
+    Nobody has seen one of these yet, and that is not evidence of anything — the
+    chunking that creates them shipped hours after the OOM kill of 2026-08-11,
+    so the one SIGKILL this service is known to have taken happened before there
+    was anything to leave behind. The kill is the proof that the scenario is
+    real; the empty volume is just the order the two changes landed in.
+
+    Called at worker startup, before it takes a job. Returns how many were
+    removed. Never raises: this is hygiene, not a precondition for starting.
+    """
+    removed = 0
+    for parent, dirs, _ in os.walk(base_path):
+        for name in list(dirs):
+            if not name.startswith(PIECE_DIR_PREFIX) or not _owner_is_gone(name):
+                continue
+            path = os.path.join(parent, name)
+            try:
+                shutil.rmtree(path)
+            except OSError as exc:
+                logger.warning(
+                    "could not delete orphaned audio pieces",
+                    extra={"path": path, "error": str(exc)},
+                )
+                continue
+            dirs.remove(name)  # nothing left to descend into
+            removed += 1
+            logger.info("deleted orphaned audio pieces", extra={"path": path})
+    if removed:
+        logger.warning(
+            "swept decoded audio left behind by a process that did not shut down cleanly",
+            extra={"directories": removed, "base_path": base_path},
+        )
+    return removed
 
 
 def _cut_into_pieces(audio_path: str, dest_dir: str) -> list[str]:
