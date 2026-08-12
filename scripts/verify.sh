@@ -85,6 +85,11 @@ step "ai-test" bash -c "cd services/ai-service && PYTHONPATH=src $PY -m pytest -
 # the one check aimed at how the previous steps were made to pass.
 step "skips" ./scripts/check_skips.sh
 
+# Fuzzing itself runs in CI, not here — it costs minutes. What runs here is the
+# logic that decides whether a red fuzz run blocks a merge or gets retried,
+# which is exactly the piece nobody would notice going wrong. Milliseconds.
+step "fuzz-classifier" ./scripts/run_fuzz_test.sh
+
 if have gitleaks; then
   step "secrets" gitleaks git . --no-banner --redact --config .gitleaks.toml
 else
