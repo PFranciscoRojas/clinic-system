@@ -124,6 +124,28 @@ func TestDaySlotsFallbacks(t *testing.T) {
 	})
 }
 
+// TestDaySlotsIterationBoundClipsNothingReal pins the one configuration that
+// reaches maxSlotsPerDay exactly. The bound exists so that no flipped operator
+// can make the loop stop advancing while it keeps allocating — a mutant that did
+// exactly that used to grow the test binary past 9 GB and kill the CI runner.
+// The risk of a bound is the opposite mistake: clipping an honest answer one slot
+// short. A full day at minute granularity is 1440 slots and must come back
+// whole.
+func TestDaySlotsIterationBoundClipsNothingReal(t *testing.T) {
+	cfg := testSettings()
+	cfg.StartHour, cfg.EndHour = "00:00", "24:00"
+	cfg.SlotStepMin, cfg.DurationMin = 1, 1
+
+	got := slotsOn(t, cfg, nil)
+	if len(got) != maxSlotsPerDay {
+		t.Fatalf("got %d slots, want %d — the bound must sit exactly at a full day of one-minute slots, not one short of it",
+			len(got), maxSlotsPerDay)
+	}
+	if got[0] != "00:00" || got[len(got)-1] != "23:59" {
+		t.Errorf("slots run %s..%s, want 00:00..23:59", got[0], got[len(got)-1])
+	}
+}
+
 func TestDaySlotsSkipsThePast(t *testing.T) {
 	tz := testTZ(t)
 	cfg := testSettings() // 09:00–11:00, 30/30

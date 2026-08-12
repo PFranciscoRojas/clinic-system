@@ -52,36 +52,74 @@ jobs:
           path: mutation.log
           retention-days: 30
 
-      # A nightly failure that only exists in the Actions tab is a nightly
-      # failure nobody sees. One issue per drop, reusing an open one so a week of
-      # red nights does not become seven issues.
-      - name: Open an issue when efficacy drops
-        if: failure() && github.event_name == 'schedule'
+  # Reporting lives in its own job, and that is the whole point of the split.
+  #
+  # It used to be a step inside `mutation`, guarded by `if: failure()`. Between
+  # 2026-08-05 and 2026-08-12 the run died eight nights running with exit 143 —
+  # a mutant that turned a loop unbounded, the test binary past 9 GB, the kernel
+  # taking the runner down. A dead runner runs no more steps, so the step whose
+  # entire job was to make a nightly failure visible was the one thing the
+  # failure reliably suppressed. Eight red nights, zero issues, nothing in the
+  # Actions tab that anybody would look at.
+  #
+  # A separate job gets its own runner. It survives the first one being killed,
+  # which is exactly the case that has to be reported.
+  report:
+    needs: mutation
+    if: always() && github.event_name == 'schedule' && needs.mutation.result != 'success'
+    runs-on: ubuntu-latest
+    steps:
+      # The artifact may not exist: if the runner died, the upload step above
+      # never ran either. Missing is not an error here — it is the most
+      # informative outcome there is, and the script below says so.
+      - name: Download report
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: mutation-report
+
+      # One issue per drop, reusing an open one so a week of red nights does not
+      # become seven issues.
+      - name: Open an issue
         uses: actions/github-script@v7
+        env:
+          MUTATION_RESULT: ${{ needs.mutation.result }}
         with:
           script: |
             const fs = require('fs');
-            let log = '';
+            let log = null;
             try { log = fs.readFileSync('mutation.log', 'utf8'); } catch (e) {}
-            const tail = log.split('\n').slice(-60).join('\n');
-            const title = 'Mutation testing below threshold';
-            const body = [
-              `The nightly mutation run on \`${context.sha.slice(0, 7)}\` fell below the efficacy threshold.`,
+
+            const result = process.env.MUTATION_RESULT;
+            const headline = log === null
+              ? `The nightly mutation run on \`${context.sha.slice(0, 7)}\` produced no log at all (job result: \`${result}\`). The runner did not survive the run — the usual cause is a mutant that turns a loop unbounded until the kernel intervenes. Look for the last \`=== ./internal/…\` line in the run output: the package named there is where it died.`
+              : `The nightly mutation run on \`${context.sha.slice(0, 7)}\` did not pass (job result: \`${result}\`).`;
+
+            const guidance = [
+              'A **TIMED OUT** mutant is the urgent one. It means the flip made a loop stop advancing, and the per-mutant budget is generous by design, so the process gets minutes to allocate. Fix it by making the loop terminate by construction — bound the iteration count, or `range` a count instead of incrementing — never by shortening the budget.',
               '',
-              'A surviving mutant is a line the suite runs but does not check. Before writing a test for one, decide which it is:',
+              'A **LIVED** mutant is a line the suite runs but does not check. Before writing a test for one, decide which it is:',
               '',
               '- **A real gap** — write the test.',
               '- **An equivalent mutant** — the flip cannot change behaviour (e.g. `len(r) > 24` vs `>= 24` before truncating to 24). Unkillable by definition; document it next to the test.',
               '- **Covered elsewhere** — gremlins only runs the mutated package\'s own tests, so anything pinned in `internal/integration` shows up as surviving. Not a gap.',
+            ].join('\n');
+
+            const body = [
+              headline,
               '',
-              '<details><summary>Run output (tail)</summary>',
+              guidance,
               '',
-              '```',
-              tail,
-              '```',
-              '',
-              '</details>',
-              '',
+              ...(log === null ? [] : [
+                '<details><summary>Run output (tail)</summary>',
+                '',
+                '```',
+                log.split('\n').slice(-60).join('\n'),
+                '```',
+                '',
+                '</details>',
+                '',
+              ]),
               `[Full log](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
             ].join('\n');
 
@@ -103,7 +141,7 @@ jobs:
               await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title,
+                title: 'Mutation testing is failing',
                 body,
                 labels: ['mutation-testing'],
               });

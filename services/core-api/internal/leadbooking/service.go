@@ -19,6 +19,12 @@ var dayLabels = []string{"Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"}
 // maxWindowDays caps how far ahead availability is computed.
 const maxWindowDays = 45
 
+// maxSlotsPerDay bounds the slot loop by iteration count rather than trusting
+// the step to be positive. One slot per minute is already past absurd for a
+// consulting day, so this never clips a real configuration — it only guarantees
+// that daySlots returns.
+const maxSlotsPerDay = 24 * 60
+
 // ErrNotOffered is returned when a booking request targets a time outside the
 // configured working hours (or an inactive day / past slot).
 var ErrNotOffered = errors.New("leadbooking: slot not offered")
@@ -169,8 +175,26 @@ func daySlots(day time.Time, cfg Settings, tz *time.Location, busy []busyInterva
 		dur = step
 	}
 
+	// Counting the slots rather than walking the clock, so the iteration count
+	// cannot depend on `step` being positive. Not belt-and-braces: `step` comes
+	// from tenant settings, and the only thing between a zero there and a loop
+	// that never advances was the guard above.
+	//
+	// Both halves of this were taught by mutation testing. Flipping that guard's
+	// `<=` made the original `m += step` stop advancing while it kept
+	// allocating: the test binary grew past 9 GB and the kernel took the CI
+	// runner down with it, so the assertion already written to catch a broken
+	// guard never got to run. And the obvious repair — `for n := 0; n < max;
+	// n++` — only moved the hang, because `n++` flipped to `n--` never ends
+	// either. `range` has no increment to flip. Written this way every one of
+	// those mutants returns a wrong list instead of a dead machine, and the
+	// tests that were always there kill them.
 	var slots []string
-	for m := start; m+dur <= end; m += step {
+	for n := range maxSlotsPerDay {
+		m := start + n*step
+		if m+dur > end {
+			break
+		}
 		slotStart := time.Date(day.Year(), day.Month(), day.Day(), m/60, m%60, 0, 0, tz)
 		slotEnd := slotStart.Add(time.Duration(dur) * time.Minute)
 		if !slotStart.After(now) {
