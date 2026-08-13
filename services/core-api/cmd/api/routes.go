@@ -205,6 +205,11 @@ func (a *app) buildRouter() http.Handler {
 		aiDrafts := aidraftshandler.New(a.pool, a.km, a.rdb, a.cfg.AudioDir)
 		r.Mount("/api/v1/ai-drafts", aiDrafts.Routes())
 		r.Method(http.MethodPost, "/api/v1/appointments/{appointment_id}/audio", aiDrafts.AppointmentAudioRoute())
+		// Deliberately not in exceptAudioUpload's carve-out below: one part is a
+		// few hundred kilobytes and belongs under the same timeouts as every
+		// other route. Only the whole-session body needs the exemption.
+		r.Method(http.MethodPost, "/api/v1/appointments/{appointment_id}/audio/parts", aiDrafts.AppointmentAudioPartRoute())
+		r.Method(http.MethodPost, "/api/v1/appointments/{appointment_id}/audio/complete", aiDrafts.AppointmentAudioCompleteRoute())
 
 		r.Mount("/api/v1/patients/{patient_id}/ai", aisuggestionshandler.NewWithService(aiSugSvc).PatientRoutes())
 

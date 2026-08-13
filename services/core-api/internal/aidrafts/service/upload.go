@@ -24,7 +24,7 @@ func (s *Service) UploadAudio(ctx context.Context, in UploadAudioInput) (string,
 	if in.OrganizationID == "" || in.PatientID == "" || in.RequestedBy == "" {
 		return "", fmt.Errorf("%w: organization_id, patient_id and requested_by are required", aidrafts.ErrInvalidInput)
 	}
-	if in.Audio == nil {
+	if in.Audio == nil && in.UploadID == "" {
 		return "", fmt.Errorf("%w: audio file is required", aidrafts.ErrInvalidInput)
 	}
 
@@ -42,9 +42,13 @@ func (s *Service) UploadAudio(ctx context.Context, in UploadAudioInput) (string,
 		}
 	}
 
-	audioPath, err := s.saveAudio(in)
+	// Two ways the audio gets here, and only the first byte differs: either it
+	// arrived in parts while the session was being recorded, or the whole body
+	// came in this request (the manual file picker, and any client older than
+	// the parts route). Everything downstream is the same take on disk.
+	audioPath, err := s.materializeAudio(in)
 	if err != nil {
-		return "", fmt.Errorf("save audio: %w", err)
+		return "", err
 	}
 
 	plainDEK, encDEK, keySource, err := s.km.GenerateDEK()

@@ -11,6 +11,7 @@ import (
 
 type svcPort interface {
 	UploadAudio(ctx context.Context, in aidraftssvc.UploadAudioInput) (string, error)
+	AppendPart(in aidraftssvc.AppendPartInput) error
 	GetDraft(ctx context.Context, orgID, draftID string) (*aidrafts.AIDraft, error)
 	ListDrafts(ctx context.Context, orgID, status string) ([]*aidrafts.DraftMeta, error)
 	DecryptDraftContent(ctx context.Context, orgID, draftID string) (*aidrafts.AIDraft, string, error)

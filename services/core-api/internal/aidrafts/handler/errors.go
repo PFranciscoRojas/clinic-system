@@ -16,6 +16,11 @@ var draftErrors = httputil.ErrorMapper(func(err error) (int, string) {
 		return http.StatusForbidden, "access denied"
 	case errors.Is(err, aidrafts.ErrInvalidInput):
 		return http.StatusUnprocessableEntity, "invalid input"
+	case errors.Is(err, aidrafts.ErrTooLarge):
+		// 413 and not 422: the client can act on this one by splitting the
+		// session into takes, and only the status code tells it apart from a
+		// malformed request it should stop retrying.
+		return http.StatusRequestEntityTooLarge, "la grabación supera el tamaño máximo"
 	case errors.Is(err, aidrafts.ErrNotReady):
 		return http.StatusConflict, "draft is not ready for approval"
 	case errors.Is(err, aidrafts.ErrConflict):
