@@ -17,6 +17,10 @@ on:
         description: 'Minimum efficacy percentage'
         required: false
         default: '60'
+      report:
+        description: 'Open an issue if this run fails (use with threshold 100 to exercise the reporter)'
+        required: false
+        default: 'false'
 
 permissions:
   contents: read
@@ -64,9 +68,26 @@ jobs:
   #
   # A separate job gets its own runner. It survives the first one being killed,
   # which is exactly the case that has to be reported.
+  #
+  # The `report` input exists so this can be made to run on demand, because a
+  # reporter nobody has ever seen fire is the whole bug over again: this one only
+  # triggers on a nightly failure, so if the nightly is healthy it never runs,
+  # and the next time it is silently broken we find out the same way we did in
+  # August — by noticing months later that the Actions tab had been red all
+  # along. Exercise it with:
+  #
+  #   gh workflow run "Mutation testing" -f threshold=100 -f report=true
+  #
+  # which puts every package under the floor, fails the run on purpose, and
+  # should leave exactly one issue behind. Then close the issue.
+  #
+  # It is opt-in rather than "any failed dispatch" because dispatches are also
+  # how a package gets debugged by hand, and those failures are expected.
   report:
     needs: mutation
-    if: always() && github.event_name == 'schedule' && needs.mutation.result != 'success'
+    if: >-
+      always() && needs.mutation.result != 'success' &&
+      (github.event_name == 'schedule' || github.event.inputs.report == 'true')
     runs-on: ubuntu-latest
     steps:
       # The artifact may not exist: if the runner died, the upload step above
@@ -91,9 +112,22 @@ jobs:
             try { log = fs.readFileSync('mutation.log', 'utf8'); } catch (e) {}
 
             const result = process.env.MUTATION_RESULT;
+            const sha = context.sha.slice(0, 7);
+
+            // Say which kind of run this was. An on-demand one is almost always
+            // somebody exercising the reporter on purpose (see the comment on
+            // this job), and an issue that does not say so reads as a real
+            // regression to whoever finds it next week.
+            const scheduled = context.eventName === 'schedule';
+            const kind = scheduled ? 'nightly' : 'on-demand';
             const headline = log === null
-              ? `The nightly mutation run on \`${context.sha.slice(0, 7)}\` produced no log at all (job result: \`${result}\`). The runner did not survive the run — the usual cause is a mutant that turns a loop unbounded until the kernel intervenes. Look for the last \`=== ./internal/…\` line in the run output: the package named there is where it died.`
-              : `The nightly mutation run on \`${context.sha.slice(0, 7)}\` did not pass (job result: \`${result}\`).`;
+              ? `The ${kind} mutation run on \`${sha}\` produced no log at all (job result: \`${result}\`). The runner did not survive the run — the usual cause is a mutant that turns a loop unbounded until the kernel intervenes. Look for the last \`=== ./internal/…\` line in the run output: the package named there is where it died.`
+              : `The ${kind} mutation run on \`${sha}\` did not pass (job result: \`${result}\`).`;
+
+            const preamble = scheduled ? [] : [
+              '> This run was started by hand. If it was a drill to check that this reporter still fires, it worked — close the issue.',
+              '',
+            ];
 
             const guidance = [
               'A **TIMED OUT** mutant is the urgent one. It means the flip made a loop stop advancing, and the per-mutant budget is generous by design, so the process gets minutes to allocate. Fix it by making the loop terminate by construction — bound the iteration count, or `range` a count instead of incrementing — never by shortening the budget.',
@@ -106,6 +140,7 @@ jobs:
             ].join('\n');
 
             const body = [
+              ...preamble,
               headline,
               '',
               guidance,
