@@ -32,6 +32,10 @@ import (
 // by the service, which is the limit that actually matters.
 const maxPartSize = 8 << 20
 
+// maxCompleteSize bounds the completion request, which carries a handful of form
+// fields and no file at all.
+const maxCompleteSize = 64 << 10
+
 // POST /api/v1/appointments/{appointment_id}/audio/parts
 func (h *Handler) uploadAudioPart(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
@@ -87,10 +91,11 @@ func (h *Handler) completeAudioUpload(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusUnprocessableEntity, "invalid appointment id")
 		return
 	}
-	if err := r.ParseForm(); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "malformed form")
-		return
-	}
+	// No ParseForm here, deliberately. It does not parse a multipart body but
+	// does set r.Form, and FormValue below only reaches into the multipart when
+	// r.Form is still nil — so calling it first would leave every field empty
+	// for exactly the clients that send FormData, which is all of them.
+	r.Body = http.MaxBytesReader(w, r.Body, maxCompleteSize)
 
 	patientID := r.FormValue("patient_id")
 	if patientID == "" {
