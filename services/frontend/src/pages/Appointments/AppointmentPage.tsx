@@ -15,6 +15,7 @@ import { PatientSearchBox } from '@/components/patients/PatientSearchBox';
 import { calcAge } from '@/lib/age';
 import { fmtDateOnly } from '@/lib/dates';
 import { recordingStore } from '@/lib/recordingStore';
+import { createPartUploader, type PartUploader } from '@/lib/partUploader';
 import { AUDIO_BITS_PER_SECOND, AUDIO_CONSTRAINTS, CHUNK_MS } from '@/lib/recording';
 import { useIsCompact } from '@/lib/useMediaQuery';
 import { CLR_DANGER, CLR_WARN, CLR_SUCCESS, CLR_INFO, CLR_PROC, CLR_NEUTRAL } from '@/lib/tokens';
@@ -542,6 +543,10 @@ export function AppointmentPage() {
   // required), stops at "Finalizar sesión" and uploads to the AI pipeline.
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  // Uploads the session in parts while it is being recorded. Null whenever
+  // there is no live recording, or when the parts of one are no longer the
+  // upload that will be completed.
+  const uploaderRef = useRef<PartUploader | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   // Set once the professional confirms "Salir de todos modos" so the
   // back-button trap below stops re-arming itself on the exit's own
@@ -583,10 +588,23 @@ export function AppointmentPage() {
         audioBitsPerSecond: AUDIO_BITS_PER_SECOND,
       });
       chunksRef.current = [];
+
+      // The session starts travelling to the server now, a minute at a time,
+      // instead of all at once after "Finalizar sesión". IndexedDB is still the
+      // copy of record: if any part fails, finish() below returns false and the
+      // whole file goes up the old way.
+      let uploadId = '';
+      const uploader = createPartUploader((index, blob) =>
+        appointmentsApi.uploadAudioPart(id!, uploadId, index, blob),
+      );
+      uploadId = uploader.uploadId;
+      uploaderRef.current = uploader;
+
       rec.ondataavailable = e => {
         if (e.data.size > 0) {
           chunksRef.current.push(e.data);
           recordingStore.appendChunk(id!, e.data).catch(() => {});
+          uploader.add(e.data);
         }
       };
       rec.start(CHUNK_MS);
@@ -897,6 +915,30 @@ export function AppointmentPage() {
     await handleStatusChange('IN_PROGRESS');
   };
 
+  // Gets the finished session to the server, by whichever route still works.
+  //
+  // The happy path costs one small request: the audio already crossed the wire
+  // during the session and the server only has to assemble it. Everything else
+  // falls back to posting the whole file, because the recording in IndexedDB is
+  // the copy of record and an hour of a clinical session is not something to
+  // lose to a latency optimisation.
+  const uploadFinishedSession = async (audio: File, patientId: string) => {
+    const uploader = uploaderRef.current;
+    uploaderRef.current = null;
+    if (uploader && await uploader.finish()) {
+      try {
+        return await appointmentsApi.completeAudioUpload(
+          id!, uploader.uploadId, patientId, aiRecordType, aiTemplateId,
+        );
+      } catch {
+        // The parts are on the server but it would not assemble them — a gap it
+        // refused, a take already approved, anything. The professional cannot
+        // act on any of it and still has the whole recording here.
+      }
+    }
+    return appointmentsApi.uploadAudio(id!, patientId, audio, aiRecordType, aiTemplateId);
+  };
+
   const handleFinishSession = async () => {
     const wasRecording = !!mediaRef.current;
     if (wasRecording) setProcessingAudio(true);
@@ -908,6 +950,12 @@ export function AppointmentPage() {
     // recovery banner offers the upload once a format is chosen.
     if (audio && needsFormatForAudio) {
       setProcessingAudio(false);
+      // Whatever went up in parts is abandoned here and swept server-side: the
+      // upload that eventually happens comes from the recovery banner, with the
+      // format the professional is about to choose, and it carries the whole
+      // file. Paying for those bytes twice beats completing a draft in the
+      // wrong format.
+      uploaderRef.current = null;
       openSetup();
       setRecNote('La sesión finalizó y la grabación quedó guardada. Elige el formato de la nota y pulsa "Subir grabación" para generar el borrador en tu formato.');
       recordingStore.load(id!).then(chunks => {
@@ -917,7 +965,7 @@ export function AppointmentPage() {
     }
     if (audio && appt?.patient_id) {
       try {
-        const res = await appointmentsApi.uploadAudio(id!, appt.patient_id, audio, aiRecordType, aiTemplateId);
+        const res = await uploadFinishedSession(audio, appt.patient_id);
         handleDraftCreated(res.draft_id);
         recordingStore.clear(id!).catch(() => {});
         setRecoveredChunks([]);
@@ -946,6 +994,9 @@ export function AppointmentPage() {
   // recovery banner takes over: the professional decides to upload or discard
   // (e.g. to upload an external file instead).
   const handleStopRecording = async () => {
+    // Same reasoning as the missing-format branch: what follows is the recovery
+    // banner, which uploads the whole file. The parts already sent are swept.
+    uploaderRef.current = null;
     await stopRecording();
     recordingStore.load(id!).then(chunks => {
       if (chunks.length > 0) setRecoveredChunks(chunks);

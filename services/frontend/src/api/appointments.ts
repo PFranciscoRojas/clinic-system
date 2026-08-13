@@ -86,6 +86,34 @@ export const appointmentsApi = {
     return api.upload<{ draft_id: string }>(`/appointments/${appointmentId}/audio`, form);
   },
 
+  /** One part of a session being uploaded while it is still being recorded.
+   *  The parts are assembled server-side by completeAudioUpload below. */
+  uploadAudioPart: (appointmentId: string, uploadId: string, index: number, part: Blob) => {
+    const form = new FormData();
+    form.append('upload_id', uploadId);
+    form.append('index', String(index));
+    form.append('part', part, `${index}.webm`);
+    return api.upload<void>(`/appointments/${appointmentId}/audio/parts`, form);
+  },
+
+  /** Ends a parts upload: the server assembles the take and enqueues the draft.
+   *  Carries no audio — those bytes arrived during the session. */
+  completeAudioUpload: (
+    appointmentId: string,
+    uploadId: string,
+    patientId: string,
+    recordType?: string,
+    templateId?: string,
+  ) => {
+    const form = new FormData();
+    form.append('upload_id', uploadId);
+    form.append('patient_id', patientId);
+    form.append('ext', '.webm');
+    if (recordType) form.append('record_type', recordType);
+    if (templateId) form.append('template_id', templateId);
+    return api.upload<{ draft_id: string }>(`/appointments/${appointmentId}/audio/complete`, form);
+  },
+
   availability: (from: string, to: string, modality: string) =>
     api.get<{ days: { date: string; slots: string[] }[] }>(
       `/me/availability?from=${from}&to=${to}&modality=${modality}`
