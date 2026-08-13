@@ -26,6 +26,11 @@ type UploadAudioInput struct {
 	Ext       string
 	Audio     io.Reader
 	AudioSize int64
+	// UploadID names an upload that arrived in parts during the session. When
+	// set, Audio is ignored and the take is assembled from the parts already on
+	// disk. Empty means the whole body came in this one request, which is how
+	// the manual file-picker upload still works.
+	UploadID string
 	// UploadStartedAt is when the handler began reading the request body, used
 	// to record how long the audio took to arrive. The zero value means the
 	// caller did not measure, and the column stays NULL — "no medido" and "tardó

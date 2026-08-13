@@ -24,3 +24,15 @@ func (h *Handler) Routes() chi.Router {
 func (h *Handler) AppointmentAudioRoute() http.Handler {
 	return middleware.RequirePermission("ai_drafts:request")(http.HandlerFunc(h.uploadAudio))
 }
+
+// AppointmentAudioPartRoute handles POST /appointments/{appointment_id}/audio/parts —
+// one part of a session being uploaded while it is still being recorded.
+func (h *Handler) AppointmentAudioPartRoute() http.Handler {
+	return middleware.RequirePermission("ai_drafts:request")(http.HandlerFunc(h.uploadAudioPart))
+}
+
+// AppointmentAudioCompleteRoute handles POST /appointments/{appointment_id}/audio/complete —
+// assembles the parts into a take and enqueues the draft.
+func (h *Handler) AppointmentAudioCompleteRoute() http.Handler {
+	return middleware.RequirePermission("ai_drafts:request")(http.HandlerFunc(h.completeAudioUpload))
+}

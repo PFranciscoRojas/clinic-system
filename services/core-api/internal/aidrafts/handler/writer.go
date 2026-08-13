@@ -30,6 +30,31 @@ var allowedAudioExtensions = map[string]bool{
 	".wav": true, ".ogg": true, ".webm": true,
 }
 
+// aiPrefs reads the professional's AI preferences, falling back to the defaults
+// when there is no profile yet. Shared by both ways audio reaches the pipeline:
+// the whole-body upload and the parts upload's completion.
+func (h *Handler) aiPrefs(ctx context.Context, userID string) (noteStyle, tone, approach string) {
+	noteStyle, tone, approach = "structured", "formal", ""
+	var prefsRaw []byte
+	if err := h.db.QueryRow(ctx, `
+		SELECT COALESCE(ai_prefs, '{"note_style":"structured","tone":"formal"}'::jsonb)
+		FROM professional_profiles WHERE user_id = $1
+	`, userID).Scan(&prefsRaw); err != nil {
+		return noteStyle, tone, approach
+	}
+	var prefs map[string]string
+	if json.Unmarshal(prefsRaw, &prefs) != nil {
+		return noteStyle, tone, approach
+	}
+	if v := prefs["note_style"]; v != "" {
+		noteStyle = v
+	}
+	if v := prefs["tone"]; v != "" {
+		tone = v
+	}
+	return noteStyle, tone, prefs["approach"]
+}
+
 // POST /api/v1/appointments/{appointment_id}/audio
 func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
@@ -121,24 +146,7 @@ func (h *Handler) uploadAudio(w http.ResponseWriter, r *http.Request) {
 	// Optional custom template — drives the AI prompt and record section schema.
 	templateID := r.FormValue("template_id")
 
-	// Load professional's AI preferences; fall back to defaults if no profile yet
-	noteStyle, tone, approach := "structured", "formal", ""
-	var prefsRaw []byte
-	if err := h.db.QueryRow(r.Context(), `
-		SELECT COALESCE(ai_prefs, '{"note_style":"structured","tone":"formal"}'::jsonb)
-		FROM professional_profiles WHERE user_id = $1
-	`, claims.UserID).Scan(&prefsRaw); err == nil {
-		var prefs map[string]string
-		if json.Unmarshal(prefsRaw, &prefs) == nil {
-			if v := prefs["note_style"]; v != "" {
-				noteStyle = v
-			}
-			if v := prefs["tone"]; v != "" {
-				tone = v
-			}
-			approach = prefs["approach"]
-		}
-	}
+	noteStyle, tone, approach := h.aiPrefs(r.Context(), claims.UserID)
 
 	draftID, err := h.svc.UploadAudio(r.Context(), aidraftssvc.UploadAudioInput{
 		OrganizationID:  claims.OrganizationID,

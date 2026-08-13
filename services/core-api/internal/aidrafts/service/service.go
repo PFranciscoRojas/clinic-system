@@ -20,6 +20,9 @@ type Service struct {
 	rdb      *redis.Client
 	audioDir string
 	db       *pgxpool.Pool
+	// maxUploadBytes overrides MaxUploadBytes when non-zero. Only the tests set
+	// it; see uploadCap in parts.go for why it exists.
+	maxUploadBytes int64
 }
 
 func New(repo aidrafts.Repository, km *crypto.KeyManager, rdb *redis.Client, audioDir string, db *pgxpool.Pool) *Service {
