@@ -17,6 +17,7 @@ import { fmtDateOnly } from '@/lib/dates';
 import { recordingStore } from '@/lib/recordingStore';
 import { createPartUploader, type PartUploader } from '@/lib/partUploader';
 import { AUDIO_BITS_PER_SECOND, AUDIO_CONSTRAINTS, CHUNK_MS } from '@/lib/recording';
+import { uploadErrorMessage } from '@/lib/uploadBusy';
 import { useIsCompact } from '@/lib/useMediaQuery';
 import { CLR_DANGER, CLR_WARN, CLR_SUCCESS, CLR_INFO, CLR_PROC, CLR_NEUTRAL } from '@/lib/tokens';
 import { clinicalRecordsApi, consentsApi, type RecordMeta, type RecordType } from '@/api/clinicalRecords';
@@ -213,8 +214,9 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
     try {
       const res = await appointmentsApi.uploadAudio(appointmentId, patientId, file, recordType, templateId);
       onDraftCreated(res.draft_id);
-    } catch {
-      setUploadErr('Error al subir el audio. Verifica el formato (mp3, wav, m4a).');
+    } catch (e) {
+      setUploadErr(uploadErrorMessage(e,
+        'Error al subir el audio. Verifica el formato (mp3, wav, m4a).'));
     } finally {
       setUploading(false); onUploadingChange?.(false);
     }
@@ -969,9 +971,10 @@ export function AppointmentPage() {
         handleDraftCreated(res.draft_id);
         recordingStore.clear(id!).catch(() => {});
         setRecoveredChunks([]);
-      } catch {
+      } catch (e) {
         setProcessingAudio(false);
-        setRecNote('La grabación terminó pero no se pudo subir. Haz clic en "Subir grabación" para reintentar.');
+        setRecNote(uploadErrorMessage(e,
+          'La grabación terminó pero no se pudo subir. Haz clic en "Subir grabación" para reintentar.'));
         // The IndexedDB chunks are intact (cleared only on success). Reload them so
         // the recovery banner appears immediately without requiring a page refresh.
         recordingStore.load(id!).then(chunks => {
@@ -1020,8 +1023,8 @@ export function AppointmentPage() {
       handleDraftCreated(res.draft_id);
       recordingStore.clear(id!).catch(() => {});
       setRecoveredChunks([]);
-    } catch {
-      setRecNote('No se pudo subir la grabación recuperada — intenta de nuevo.');
+    } catch (e) {
+      setRecNote(uploadErrorMessage(e, 'No se pudo subir la grabación recuperada, intenta de nuevo.'));
     } finally {
       setUploadingRecovery(false);
     }

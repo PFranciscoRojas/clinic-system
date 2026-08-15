@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createPartUploader, CHUNKS_PER_PART } from './partUploader';
+import { createPartUploader, CHUNKS_PER_PART, PART_ATTEMPTS, PART_RETRY_DELAYS_MS } from './partUploader';
+import { ApiError } from '@/api/client';
 
 // Sending the session while it is being recorded instead of all at once at the
 // end.
@@ -11,6 +12,11 @@ import { createPartUploader, CHUNKS_PER_PART } from './partUploader';
 // session to an optimisation is not a trade that exists.
 
 const chunk = (text: string) => new Blob([text]);
+
+/** The retry backoff, not spent in real time. Every test that drives a part
+ *  through its retries passes this; the delays themselves are pinned by their
+ *  own test below, which reads the numbers instead of waiting for them. */
+const instant = async () => {};
 
 /** A sender that records what it was asked to send. */
 function recorder() {
@@ -105,7 +111,7 @@ describe('partUploader', () => {
       if (attempts === 1) throw new Error('network');
       await r.send(index, blob);
     };
-    const up = createPartUploader(flaky);
+    const up = createPartUploader(flaky, instant);
 
     fillOnePart(up, 'a');
     await expect(up.finish()).resolves.toBe(true);
@@ -114,7 +120,7 @@ describe('partUploader', () => {
 
   it('gives up after the retries and reports failure', async () => {
     const send = vi.fn().mockRejectedValue(new Error('offline'));
-    const up = createPartUploader(send);
+    const up = createPartUploader(send, instant);
 
     fillOnePart(up, 'a');
     // false is the whole contract: the caller has to fall back to uploading the
@@ -124,7 +130,7 @@ describe('partUploader', () => {
 
   it('stops sending once it has given up', async () => {
     const send = vi.fn().mockRejectedValue(new Error('offline'));
-    const up = createPartUploader(send);
+    const up = createPartUploader(send, instant);
 
     fillOnePart(up, 'a');
     await up.idle();
@@ -154,13 +160,58 @@ describe('partUploader', () => {
   it('never throws out of add, whatever the network is doing', async () => {
     const up = createPartUploader(() => {
       throw new Error('synchronous explosion');
-    });
+    }, instant);
 
     // add() runs inside MediaRecorder's ondataavailable. An exception escaping
     // it takes the recorder's event handler with it, and the session stops
     // being written to IndexedDB — the copy that the fallback depends on.
     expect(() => fillOnePart(up, 'a')).not.toThrow();
     await expect(up.finish()).resolves.toBe(false);
+  });
+
+  it('waits between attempts instead of asking a busy server three times at once', async () => {
+    const waited: number[] = [];
+    const send = vi.fn().mockRejectedValue(new ApiError(429, 'busy'));
+    const up = createPartUploader(send, async ms => { waited.push(ms); });
+
+    fillOnePart(up, 'a');
+    await up.idle();
+
+    // The server answers 429 when it is already holding as many part bodies as
+    // it will hold, and each of those clears in about a second. Three immediate
+    // attempts are one attempt with extra steps.
+    expect(send).toHaveBeenCalledTimes(PART_ATTEMPTS);
+    expect(waited).toEqual(PART_RETRY_DELAYS_MS);
+  });
+
+  it('does not wait after the last attempt', async () => {
+    const waited: number[] = [];
+    const send = vi.fn().mockRejectedValue(new Error('offline'));
+    const up = createPartUploader(send, async ms => { waited.push(ms); });
+
+    fillOnePart(up, 'a');
+    await expect(up.finish()).resolves.toBe(false);
+
+    // Sleeping after the decision to give up delays the fallback by the whole
+    // backoff, and the fallback is the part the professional is waiting on.
+    expect(waited).toHaveLength(PART_ATTEMPTS - 1);
+  });
+
+  it('recovers when the server frees up mid-backoff', async () => {
+    const r = recorder();
+    let attempts = 0;
+    const busyThenFree = async (index: number, blob: Blob) => {
+      attempts++;
+      if (attempts < PART_ATTEMPTS) throw new ApiError(429, 'busy');
+      await r.send(index, blob);
+    };
+    const up = createPartUploader(busyThenFree, instant);
+
+    fillOnePart(up, 'a');
+    // The whole reason the backoff exists: a burst of sessions closing at the
+    // same minute must not push this one onto the whole-file fallback.
+    await expect(up.finish()).resolves.toBe(true);
+    expect(r.sent.map(s => s.index)).toEqual([0]);
   });
 
   it('mints a distinct upload id per recording', () => {

@@ -23,7 +23,24 @@ export const CHUNKS_PER_PART = 12;
 /** Attempts per part, the first one included. */
 export const PART_ATTEMPTS = 3;
 
+/** Waits before the 2nd and 3rd attempts.
+ *
+ * These exist because of the concurrency limit on the parts route: when the
+ * server answers 429 it is because it is holding as many part bodies as it will
+ * hold, and each of those clears in about a second. An immediate retry asks the
+ * same busy server the same question and burns an attempt for nothing.
+ *
+ * Five seconds in total, against a part every sixty. The chain is serial, so
+ * this delays the parts behind it too — that is fine at this ratio and would
+ * stop being fine if it grew. */
+export const PART_RETRY_DELAYS_MS = [1_000, 4_000];
+
 export type PartSender = (index: number, blob: Blob) => Promise<void>;
+
+/** Injectable so tests do not spend the backoff in real time. */
+export type Sleeper = (ms: number) => Promise<void>;
+
+const realSleep: Sleeper = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 export interface PartUploader {
   /** Names this upload server-side; every part carries it. */
@@ -47,7 +64,7 @@ function newUploadId(): string {
   return `${hex(8)}-${hex(4)}-4${hex(3)}-a${hex(3)}-${hex(12)}`;
 }
 
-export function createPartUploader(send: PartSender): PartUploader {
+export function createPartUploader(send: PartSender, sleep: Sleeper = realSleep): PartUploader {
   const uploadId = newUploadId();
   let pending: Blob[] = [];
   let nextIndex = 0;
@@ -73,7 +90,16 @@ export function createPartUploader(send: PartSender): PartUploader {
           // professional has no idea any of this is happening; retrying every
           // part for the remaining forty minutes buys nothing and spends the
           // connection the fallback is going to need.
-          if (attempt === PART_ATTEMPTS) brokenPromise = true;
+          if (attempt === PART_ATTEMPTS) {
+            brokenPromise = true;
+            break;
+          }
+          await sleep(PART_RETRY_DELAYS_MS[attempt - 1] ?? 0);
+          // The recording may have been finished and abandoned while this part
+          // was waiting out its backoff. Nothing breaks if it sends anyway, but
+          // spending a clinic's uplink on a take nobody is going to assemble is
+          // the kind of thing that only shows up as an unexplained slow network.
+          if (brokenPromise) return;
         }
       }
     });

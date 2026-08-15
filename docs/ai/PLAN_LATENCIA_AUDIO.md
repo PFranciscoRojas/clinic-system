@@ -263,9 +263,8 @@ toda la optimización de latencia.
    de una constante única en vez de un número adivinado.
 3. **`CONSUMER_NAME` derivado del hostname** del contenedor, para que escalar
    réplicas deje de ser un pie de bala.
-4. **Semáforo de subidas concurrentes** en la ruta de audio, con 429 y mensaje en
-   español. *(Diferido: necesita manejo del 429 en el frontend para no empeorar la
-   experiencia que intenta proteger. Va con la Fase 2, que reescribe esa ruta.)*
+4. ✅ **Semáforo de subidas concurrentes** en la ruta de audio, con 429 y mensaje
+   en español. Hecho con la Fase 2, como estaba previsto. Detalle en la Fase 2.
 
 **Pruebas que acompañan** (son la respuesta a "¿cómo sabemos que funciona?"):
 
@@ -312,11 +311,11 @@ Notas de la implementación:
   él las aserciones de orden y contenido habrían pasado con cualquier
   implementación.
 
-### Fase 2 — Upload por partes durante la sesión
+### Fase 2 — Upload por partes durante la sesión ✅ (hecha, PRs #273, #274, #275)
 
-`POST /appointments/:id/audio/parts` (índice de parte, ~30–60 s cada una) +
-`POST .../audio/complete` que finaliza y encola. El servidor concatena en un
-`.part`. Efectos colaterales que valen tanto como la velocidad:
+`POST /appointments/:id/audio/parts` (una parte por minuto de sesión) +
+`POST .../audio/complete`, que ensambla y encola. Efectos colaterales que valen
+tanto como la velocidad:
 
 - Muere el "falló el upload, vuelve a subir la hora entera" y el banner de
   recuperación.
@@ -325,10 +324,50 @@ Notas de la implementación:
 - **Desaparece el límite de 100 MB de Cloudflare**, una de las dos razones por las
   que el DNS está en nube gris (`STATUS.md`). Habilita reconsiderar el proxy (el
   problema de ACME sigue aparte).
-- Requiere un barredor de `.part` huérfanos (sesión abandonada): PHI en disco sin
-  draft asociado.
+- ✅ Barredor de partes huérfanas (`PartSweeper`, cada hora, retención 12 h): PHI
+  en disco sin draft asociado.
 
 → Upload percibido ~20 s → ~2 s.
+
+Notas de la implementación:
+
+- **La grabación en IndexedDB sigue siendo la copia de referencia.** Si cualquier
+  parte falla sus reintentos, el subidor se apaga para el resto de la sesión y el
+  llamador sube el archivo entero como siempre. Perder una hora de sesión clínica
+  por una optimización de latencia no es un intercambio que exista.
+- El ensamblado es **por índice, no por orden de llegada**, y un hueco se rechaza:
+  el servidor prefiere no armar una toma antes que armar una a la que le falta un
+  minuto en medio y que nadie va a notar hasta leer el borrador.
+- La extensión de las partes es `.chunk`, no `.part`: `saveAudio` ya usaba `.part`
+  para su escritura atómica y compartir el sufijo habría hecho que el barredor de
+  una y la limpieza de la otra se pisaran.
+- `complete` **no** llama a `ParseForm`. No parsea un cuerpo multipart pero sí deja
+  `r.Form` puesto, y `FormValue` solo entra al multipart mientras `r.Form` es nil,
+  así que llamarlo dejaba todos los campos vacíos justo para los clientes que
+  mandan `FormData`, que son todos. Se coló en #273 y se arregló en #274.
+- `UploadMS` no se mide en la ruta de partes, a propósito: para una subida por
+  partes ese número es la última parte más esta petición, y anotar el tiempo de
+  ensamblado reescribiría en silencio la línea base contra la que se mide todo
+  este plan.
+
+**Semáforo de subidas concurrentes** (P3, lo que quedaba de la Fase 0.5), en #275:
+
+- Dos pools separados derivados de un presupuesto único de 128 MB: **2** ranuras
+  para la subida entera (32 MB residentes cada una, los de `ParseMultipartForm`) y
+  **8** para las partes (8 MB cada una). Un solo pool compartido dejaría que dos
+  subidas de respaldo, de hasta catorce minutos cada una, rechazaran todas las
+  partes de todas las sesiones que estén grabando en ese momento, que es
+  exactamente al revés: las empujaría al camino caro que las está bloqueando.
+- `/audio/complete` queda **sin límite** a propósito: no lleva audio y es la única
+  petición de la cadena que el profesional está esperando de verdad.
+- El limitador va **dentro** de `RequirePermission`. Fuera, cualquiera con sesión
+  válida podría cerrar la ruta a todos mandando peticiones que no le corresponden.
+- El grabador espera 1 s y 4 s entre reintentos de una parte. Sin esa espera los
+  tres intentos son uno con pasos extra: un 429 significa que el servidor está
+  sosteniendo todas las partes que sostiene, y cada una se libera en ~1 s.
+- El 429 tiene su propio mensaje, y no dice "no se pudo subir": la grabación no se
+  perdió y un mensaje que se lee como pérdida de datos es lo que hace que alguien
+  vuelva a teclear una hora de sesión a mano.
 
 ### Fase 3 — Cambiar el runtime de Whisper ✅ (hecha, falta medir)
 
@@ -469,14 +508,23 @@ núcleos.
 
 ~~`Fase 0`~~ ✅ → ~~`Fase 0.5`~~ ✅ → ~~`Fase 1`~~ ✅ → ~~`Fase 3`~~ ✅ →
 ~~`Fase 3.1` (troceo, arregla el OOM)~~ ✅ → ~~**medir en el VPS**~~ ✅ (§1.1) →
-`Fase 2` ← *aquí estamos* → `Fase 5` → decidir `Fase 4` contra upgrade de VPS.
+~~`Fase 2`~~ ✅ → `Fase 5` ← *aquí estamos* → decidir `Fase 4` contra upgrade de VPS.
 
 La Fase 3 iba antes que la 2 a propósito: se esperaba que fuera el cambio con más
 ganancia por línea tocada (8,5 min → ~2,2 min cambiando una dependencia). **Medida,
-dio 6,9 min, no 2,2** (§1.1). Ese puesto pasa ahora a la Fase 2: transcribir
-durante la sesión es lo único que ataca el 96,5 % del reloj sin comprar núcleos.
-La Fase 4 y el upgrade a CPX31 se deciden después de la Fase 2, cuando se sepa
-cuánto queda realmente por ganar.
+dio 6,9 min, no 2,2** (§1.1).
+
+Conviene decirlo sin adornos ahora que la Fase 2 está hecha: **la Fase 2 casi no
+mueve el total percibido.** Con la transcripción en el 96,5 % del reloj, quitar
+los ~20 s de subida de un total de ~7,4 min lo deja en ~7,1. Lo que compró es otra
+cosa, y vale igual: la subida deja de poder fallar entera, las partes viajan
+mientras hay ancho de banda de sobra, el pico de memoria de las subidas quedó
+acotado, y **el audio ya está en el servidor mientras la sesión sigue** — que es
+justo la precondición de la Fase 4, la única que ataca el 96,5 %.
+
+Sigue la Fase 5 (equidad en la cola: que un recap de 3 s deje de esperar detrás de
+una hora de audio), y después la decisión entre la Fase 4 y comprar núcleos, con
+los números del §1.1 sobre la mesa en vez de una proyección.
 
 ---
 
