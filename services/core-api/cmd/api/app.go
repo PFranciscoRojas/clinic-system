@@ -75,18 +75,33 @@ func newApp(cfg config.Config) (*app, error) {
 	a := &app{cfg: cfg, pool: pool, rdb: rdb, km: km}
 	a.wa = whatsapp.New(pool, km, slog.Default())
 	a.gcal = gcal.New(pool, km, cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.AppBaseURL, []byte(cfg.JWTSecret), slog.Default())
-	a.server = &http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: a.buildRouter(),
-		// Timeouts prevent slow clients from holding connections open indefinitely.
-		// Routes that legitimately read large bodies (session audio upload)
-		// extend their own deadline via http.ResponseController.
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}
+	a.server = newHTTPServer(":"+cfg.Port, a.buildRouter())
 
 	return a, nil
+}
+
+// newHTTPServer is where every deadline this process serves under is stated.
+// Split out of newApp so the numbers can be asserted without a database and a
+// Redis behind them: a timeout nobody can read in a test is a timeout that
+// quietly becomes zero.
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:    addr,
+		Handler: handler,
+		// Timeouts prevent slow clients from holding connections open indefinitely.
+		// Routes that legitimately read large bodies (session audio upload)
+		// extend their own deadline via http.ResponseController, from inside the
+		// handler — which runs after the headers are already in.
+		//
+		// ReadHeaderTimeout is stated rather than left to be derived from
+		// ReadTimeout. GO-2026-6089 was net/http skipping that derivation on the
+		// unencrypted HTTP/2 check path, and a deadline that only exists by
+		// inference is one a bug can drop without anything here noticing.
+		ReadHeaderTimeout: 15 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 }
 
 // run starts background workers and the HTTP server, then blocks until ctx is cancelled.
