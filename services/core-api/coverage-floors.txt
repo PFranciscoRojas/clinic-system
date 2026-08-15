@@ -15,7 +15,7 @@
 # because it exercises SQL through a raw pool rather than Go statements, so
 # counting it would inflate the number without reflecting tested logic.
 
-total 13.3
+total 14.5
 
 # Phase 1 packages — already at their target.
 sghcp/core-api/internal/shared/crypto 92.0
@@ -27,7 +27,7 @@ sghcp/core-api/internal/shared/hash 90.5
 # internal/integration/needtoknow_test.go. Those runs are excluded from this
 # measurement on purpose (see the header), so the floors are what unit tests
 # alone can reach — not the real coverage of these packages.
-sghcp/core-api/internal/shared/middleware 87.0
+sghcp/core-api/internal/shared/middleware 88.1
 sghcp/core-api/internal/shared/clinicalperm 72.7
 
 # Phase 2, step 3. What is left uncovered here is infrastructure failure:
