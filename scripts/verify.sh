@@ -103,8 +103,18 @@ else
   printf '   go install github.com/zricethezav/gitleaks/v8@v8.30.1\n'
 fi
 
+# Pinned to the toolchain in go.mod, which is the one CI scans and the one the
+# Dockerfile builds — not whatever Go the developer happens to have installed.
+#
+# This is not hygiene. On 2026-08-14 this step passed locally with seven live
+# standard-library vulnerabilities, because the local toolchain was newer than
+# the pinned one and already carried the fixes. CI, scanning go.mod's version,
+# failed. A Definition of Done that reports green on a build nobody ships is
+# worse than no check at all, so the local run now scans what gets shipped.
 if have govulncheck; then
-  step "vulns" bash -c 'cd services/core-api && govulncheck ./...'
+  step "vulns" bash -c '
+    cd services/core-api
+    GOTOOLCHAIN="go$(sed -n "s/^go //p" go.mod)" govulncheck ./...'
 else
   printf '\n\033[33m── vulns — govulncheck not installed\033[0m\n'
   printf '   go install golang.org/x/vuln/cmd/govulncheck@latest\n'
