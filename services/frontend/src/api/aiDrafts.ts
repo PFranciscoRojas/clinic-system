@@ -21,6 +21,11 @@ export interface AIDraft {
   /** Whisper transcription — always available once processed, even if sections are empty. */
   transcription?: string;
   error_message?: string;
+  /** Seconds still to wait, queue included. Only sent while PENDING/PROCESSING,
+   *  and absent when the server could not read the queue. */
+  eta_seconds?: number;
+  /** Recordings being transcribed before this one, across the whole worker. */
+  jobs_ahead?: number;
   processed_at?: string;
   resolved_at?: string;
   created_at: string;

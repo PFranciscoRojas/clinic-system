@@ -53,6 +53,10 @@ func (b *blockingSvc) GetDraft(context.Context, string, string) (*aidrafts.AIDra
 func (b *blockingSvc) ListDrafts(context.Context, string, string) ([]*aidrafts.DraftMeta, error) {
 	return nil, nil
 }
+func (b *blockingSvc) EstimateWait(context.Context, string, string, string) (*aidraftssvc.QueueETA, error) {
+	return nil, nil
+}
+
 func (b *blockingSvc) DecryptDraftContent(context.Context, string, string) (*aidrafts.AIDraft, string, error) {
 	return nil, "", nil
 }

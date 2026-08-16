@@ -14,6 +14,7 @@ type svcPort interface {
 	AppendPart(in aidraftssvc.AppendPartInput) error
 	GetDraft(ctx context.Context, orgID, draftID string) (*aidrafts.AIDraft, error)
 	ListDrafts(ctx context.Context, orgID, status string) ([]*aidrafts.DraftMeta, error)
+	EstimateWait(ctx context.Context, orgID, draftID, status string) (*aidraftssvc.QueueETA, error)
 	DecryptDraftContent(ctx context.Context, orgID, draftID string) (*aidrafts.AIDraft, string, error)
 	DecryptForReview(ctx context.Context, orgID, draftID string) (*aidrafts.AIDraft, string, string, error)
 	ResolveDraft(ctx context.Context, orgID, draftID, clinicalRecordID, resolvedBy string) error

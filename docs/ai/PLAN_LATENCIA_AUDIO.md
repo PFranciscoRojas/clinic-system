@@ -119,10 +119,65 @@ las que existe la recuperación.
 | RLS / DEK / cifrado | Cada draft con su DEK; GUC de tenant es `local=true` | No, correcto |
 
 No se corrompen datos entre profesionales, no se mezclan tenants, no se pierde
-ningún job. Lo que pasa es que el segundo espera el doble. Con sesiones que
-terminan en punto (lo normal), dos profesionales que cierran a las 10:00 hacen que
-el segundo vea su borrador a los ~22 min. Con cinco orgs activas, ~55 min. La UI
-solo dice "procesando grabación", sin posición en fila ni ETA.
+ningún job. Lo que pasa es que el segundo espera el doble.
+
+### 3.1.1 Capacidad, con los números de hoy
+
+*(Actualizado 2026-08-16. Esta sección decía "~22 min con dos" y "~55 min con
+cinco orgs", cifras derivadas de los 11 min por trabajo de antes de las
+optimizaciones. Las de abajo salen de los 7,4 min medidos en §1.1.)*
+
+Subida y transcripción tienen techos que se diferencian en dos órdenes de
+magnitud, y confundirlos lleva a optimizar lo que no toca.
+
+**Subir no es el cuello.** El grabador manda una parte por minuto de sesión,
+~180 KB, y cada parte ocupa su ranura ~1 s. Con 8 ranuras (`audio_limits.go`),
+15 sesiones grabando a la vez ofrecen una carga de 0,25 ranuras. El camino de
+subida se satura pasadas las ~100 sesiones simultáneas, y una parte rechazada no
+pierde nada: 429, reintento, y la copia sigue en IndexedDB.
+
+**Transcribir sí.** Una ranura, ~7,4 min por hora de audio (6,9 de Whisper + 28 s
+de Claude). De ahí sale todo:
+
+| Cierran a la vez | El último ve su borrador |
+|---|---|
+| 2 | ~15 min |
+| 5 | ~37 min |
+| 8 | ~1 h |
+| 15 | ~1 h 50 min |
+
+Sostenido, la caja absorbe **~8 horas de sesión por hora de reloj**. Cómodo son
+4–6 profesionales grabando a jornada completa; con 8 la utilización queda en 83 %
+y la cola empieza a crecer sola.
+
+El matiz que decide la Fase 4: **el problema no es la capacidad total, es que todo
+el trabajo se amontona en el peor momento.** Cinco profesionales grabando en
+paralelo generan 5 horas de audio por hora, contra las 8 que la caja procesa. Cabe
+de sobra. La cola existe solo porque esperamos a que todos terminen. Repartir ese
+trabajo durante la sesión (Fase 4) hace viable un escenario que ni comprar núcleos
+resuelve, porque comprar núcleos sube el techo y no cambia el amontonamiento.
+
+Estos números son aritmética sobre mediciones por trabajo, no una prueba de carga
+(§3.4 sigue abierto).
+
+### 3.1.2 Lo que ve el profesional mientras espera
+
+Resuelto (2026-08-16, migración 000076). La UI decía "procesando grabación", que
+se lee igual a los cuarenta segundos que a los cuarenta minutos, siendo dos
+decisiones distintas: esperar, o cerrar el portátil y revisar mañana.
+
+Ahora `GET /ai-drafts/{id}` devuelve `eta_seconds` y `jobs_ahead` mientras el
+borrador está PENDING o PROCESSING. La cuenta es
+`(audio propio + audio en cola) × RTF mediano + 30 s por trabajo`, con la cola y
+el RTF leídos por `ai_queue_estimate()`, una función SECURITY DEFINER que devuelve
+solo agregados — misma forma y mismo razonamiento que `platform_org_activation()`
+en 000073. Tiene que cruzar el tenant porque el worker es uno solo: contar la cola
+dentro de la org respondería "no hay nadie delante" y luego tardaría cuarenta
+minutos, que es peor que no decir nada.
+
+Un trabajo en curso se cobra entero (nada registra cuándo arrancó), así que la
+estimación tira a larga. Es la dirección correcta: un ETA que se cumple de más y
+deja el spinner girando es peor que uno que se adelanta.
 
 ### 3.2 Problemas reales encontrados
 
