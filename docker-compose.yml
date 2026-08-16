@@ -66,6 +66,28 @@ services:
       REDIS_PORT: "6379"
       DB_HOST: postgres
       DB_PORT: "5432"
+    # What this container is allowed to take from a 2-vCPU / 1915 MB box that
+    # also runs Postgres, Redis, Caddy and core-api.
+    #
+    # It had no limits at all, which was survivable only because Whisper ran
+    # between sessions: the box was idle, one job took everything, nobody was
+    # waiting on anything else. Transcribing *during* the session (fase 4 del
+    # plan de latencia) ends that. The professional whose CPU this is competing
+    # for is recording right now, and their parts have to land every minute.
+    #
+    # cpus 1.5 of 2: half a core is reserved for everything else. Whisper is the
+    # only thing here that will take whatever it is given, and core-api becoming
+    # unresponsive during a session is a worse failure than a draft arriving a
+    # minute later.
+    #
+    # mem_limit is a ceiling, not a budget. The container sits at ~665 MB with
+    # the model resident and the kernel has already killed it once for asking
+    # for more than the box had (§1.1 del plan). A limit does not make that
+    # cheaper, it makes it *deterministic*: the OOM killer stops choosing among
+    # Postgres, Redis and this, and always chooses this. Losing a transcription
+    # is recoverable; losing the database connection pool mid-session is not.
+    cpus: "1.5"
+    mem_limit: 1400m
     volumes:
       # rw: the worker deletes each audio file after transcription (privacy —
       # the encrypted transcript is the only copy that should persist). With

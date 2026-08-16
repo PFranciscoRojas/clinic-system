@@ -6,6 +6,11 @@ on:
     paths:
       - 'services/ai-service/**'
       - '.github/workflows/build-ai-service.yml'
+      # The deploy step does `git pull` on the VPS and then `compose up -d`,
+      # which recreates the container when its configuration changed. Without
+      # this line a change to the ai-service's cpu/memory limits lands on main,
+      # looks deployed, and never reaches the box that needed it.
+      - 'docker-compose.yml'
   # On a PR only the test job runs: it is the gate. The build/deploy job is
   # skipped (see its `if`), so a PR never touches GHCR or the VPS.
   #
