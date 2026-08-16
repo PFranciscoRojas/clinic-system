@@ -1,5 +1,6 @@
 import logging
 import re
+import threading
 import unicodedata
 from functools import lru_cache
 from typing import Iterable
@@ -8,6 +9,14 @@ import spacy
 from spacy.language import Language
 
 logger = logging.getLogger(__name__)
+
+# _load_model caches one Language object for the whole process, and spaCy makes
+# no thread-safety promise about calling a pipeline concurrently. anonymize now
+# runs off the event loop in a worker thread, and the worker runs several jobs
+# at once, so "one at a time" has to be said out loud. NER on a session's history
+# is on the order of a second: serialising it costs nothing worth measuring, and
+# the alternative is a corrupted parse of a clinical text.
+_MODEL_LOCK = threading.Lock()
 
 # Colombian document number patterns
 _DOC_PATTERN = re.compile(r"\b\d{6,10}\b")
@@ -81,7 +90,8 @@ def anonymize(text: str, known_names: Iterable[str] = ()) -> str:
             text = pattern.sub(REPLACEMENT_PERSON, text)
 
     nlp = _load_model()
-    doc = nlp(text)
+    with _MODEL_LOCK:
+        doc = nlp(text)
 
     # Build replacements from largest span to smallest to avoid offset issues
     replacements: list[tuple[int, int, str]] = []

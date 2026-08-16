@@ -11,7 +11,16 @@ import (
 )
 
 const (
-	aiStream = "ai_jobs"
+	// Suggestions go on their own stream, away from the audio.
+	//
+	// A recap is three seconds of waiting on the Claude API; a draft is minutes
+	// of Whisper on two shared cores. On one stream the worker's consumer group
+	// hands out whatever entry is next and cannot tell the two apart, so a recap
+	// requested during a session waited for the session's audio to finish
+	// transcribing. The worker reads both streams with a slot budget each, and
+	// the only place the two kinds can be told apart before they are read is
+	// here, where they are written.
+	aiStream = "ai_jobs_fast"
 	aiModel  = "claude-sonnet-4-6"
 )
 

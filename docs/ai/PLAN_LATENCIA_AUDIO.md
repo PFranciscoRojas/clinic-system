@@ -162,6 +162,11 @@ así que escalar réplicas hoy no es una opción de configuración.
 > dispara sobre un job todavía corriendo y lo procesa dos veces: doble
 > transcripción, doble draft, doble costo de Claude. P2 es **prerequisito** de la
 > Fase 5, no un detalle posterior.
+>
+> Cumplido: la Fase 5 llegó con la ventana ya derivada del peor trabajo legítimo,
+> y además con `_reclaim_stale` saltando explícitamente lo que el proceso tiene en
+> vuelo. La ventana sola no bastaba: cuenta desde la entrega, no desde la última
+> señal de vida.
 
 **P3 — El upload de audio no tiene tope de concurrencia.**
 `ParseMultipartForm(32 << 20)` (`writer.go:64`) reserva hasta 32 MB en memoria por
@@ -191,8 +196,10 @@ La mitad peligrosa está cubierta, y bien:
 - ~~**Cero tests de `worker.py`**~~ — ya hay
   `tests/test_worker_queue_safety.py`, los primeros del archivo. Pinean las
   invariantes de la cola (ventana de reclaim, umbral del sweep, identidad del
-  consumidor). Sigue sin cubrirse la **semántica** de la cola: consolidación de
-  tomas, borrado de audio, dos jobs a la vez de extremo a extremo.
+  consumidor). La **semántica** de la cola llegó con la Fase 5
+  (`tests/test_worker_lanes.py`): dos jobs a la vez, backpressure por carril, ack
+  en el stream correcto, y qué se reclama y qué no. Siguen sin cubrirse la
+  consolidación de tomas y el borrado de audio de un job frente al de otro.
 - ~~**Ningún test de subida de audio concurrente**~~ — cubierto en
   `aidrafts/service/upload_test.go`: dos tomas de la misma cita (secuenciales y
   concurrentes), separación por org y por cita, y limpieza del parcial cuando el
@@ -278,12 +285,10 @@ toda la optimización de latencia.
   que la ventana de reclaim supera el peor trabajo legítimo, que el umbral del
   sweep no es más corto que ella, y que dos procesos no comparten identidad de
   consumidor.
-- ⬜ **Diferido a la Fase 5**: tests de semántica de cola de extremo a extremo (dos
-  jobs a la vez salen ambos `DRAFT_READY`; un job largo no se procesa dos veces;
-  el borrado de audio de un job no toca el de otro). Necesitan `fakeredis` y que
-  `AIWorker` acepte inyección de cliente en vez de construirlo desde la URL en
-  `start()`. Ese refactor pertenece a la fase que de verdad introduce
-  concurrencia; hacerlo aquí sería pagarlo dos veces.
+- ✅ **Llegaron con la Fase 5**, como estaba previsto: tests de semántica de cola
+  de extremo a extremo en `tests/test_worker_lanes.py`, con la inyección de
+  cliente de Redis en `AIWorker` que hacían falta. El doble de streams se escribió
+  a mano (`tests/fake_streams.py`) en vez de usar `fakeredis`.
 - ⬜ `scripts/e2e_audio/`: escenario de 3 sesiones cerrando simultáneamente, con
   p50/p95 por etapa usando las columnas de la Fase 0.
 
@@ -460,10 +465,59 @@ mismo draft, no crean drafts hermanos. Compite por CPU **durante** la sesión: e
 límite de CPU al contenedor `ai-service` (hoy no tiene ninguno en el compose) o más
 núcleos.
 
-### Fase 5 — Carriles en el worker *(bloqueada por Fase 0.5 punto 2)*
+### Fase 5 — Carriles en el worker ✅ (hecha)
 
-Separar jobs de transcripción (CPU-bound, 1 slot) de recap/plan/riesgo (IO-bound
-contra la API de Claude, N slots) con un semáforo o dos consumer groups.
+Separar jobs de transcripción (CPU-bound, 1 cupo) de recap/plan/riesgo (IO-bound
+contra la API de Claude, N cupos).
+
+Lo que se hizo, y por qué no fue un semáforo dentro de un solo stream: un grupo
+de consumidores entrega la entrada que sigue y no puede enrutar por contenido.
+Con un solo stream, el lector tendría que leer el job para saber de qué carril es,
+y un job leído sin cupo se queda aparcado con el reloj de inactividad de su
+entrada en el PEL corriendo — que es exactamente el reloj que decide si el job se
+reclama y se transcribe dos veces. El reparto se hace entonces donde los dos
+tipos sí se distinguen antes de leerse: en el productor.
+
+- **Dos streams, dos grupos, dos lectores**: `ai_jobs` (borradores) y
+  `ai_jobs_fast` (recap/plan/riesgo, encolados por `aisuggestions/service.go`).
+- **Los cupos se aplican no leyendo de más**, no con un semáforo detrás de la
+  lectura: `count=lane.free()` en el `XREADGROUP` y en el `xpending_range`.
+- **`_reclaim_stale` salta lo que este proceso tiene en vuelo.** `RECLAIM_IDLE_MS`
+  cuenta desde la entrega, no desde la última señal de vida; lo que hacía seguro
+  reclamar era que `_handle` se esperaba en línea, y eso es justo lo que esta fase
+  termina.
+- **Transcripción = 1 cupo, sugerencias = 2.** El primero por §6 (dos
+  transcripciones en 2 vCPU tardan el doble cada una) y por memoria (~530 MB de
+  pico contra ~1,37 GB libres). El segundo es lo que ese mismo presupuesto admite
+  al lado de una transcripción viva.
+- **`anonymize` sale del event loop.** spaCy corría síncrono dentro de una
+  corrutina: invisible con un job a la vez, y con varios habría bloqueado a los
+  demás carriles y al propio lector. Va a un hilo, con un lock alrededor del
+  modelo (`_load_model` cachea un único `Language` para todo el proceso).
+- **Despliegue sin coordinación**: el grupo nuevo se crea en `id="0"`, así que lo
+  que core-api encole antes de que arranque el worker no se pierde; y las
+  sugerencias que queden en `ai_jobs` de la versión anterior se siguen atendiendo
+  por el carril de transcripción hasta drenarse.
+
+**Pruebas** (las de semántica de cola que la Fase 0.5 dejó diferidas aquí):
+
+- ✅ Python: el recap corre mientras la transcripción sigue; ningún carril lee más
+  de lo que puede correr; cada carril ackea en su propio stream; un job en vuelo
+  no se reclama y uno realmente huérfano sí; una sugerencia dejada en el stream
+  viejo se sigue atendiendo. Sobre un doble de streams (`tests/fake_streams.py`)
+  en vez de `fakeredis`: una dependencia menos que instalar en cada máquina y en
+  CI, y control determinista del entrelazado, que es de lo que están hechas estas
+  pruebas.
+- ✅ Go: `internal/invariants` lee el `worker.py` y compara los nombres de stream
+  y el conjunto de `kind`s con los del productor. Si dejan de coincidir no falla
+  nada en ninguno de los dos lados — core-api encola contra un stream que nadie
+  consume y la sugerencia se queda en PENDING hasta que alguien la busque.
+- ⬜ Sigue pendiente: `scripts/e2e_audio/` con 3 sesiones cerrando a la vez y
+  p50/p95 por etapa (§3.4).
+
+**Lo que no compró**: nada de tiempo total. La transcripción sigue siendo el
+96,5 % del reloj y sigue tardando lo mismo. Lo que compró es que deje de ser la
+única cosa que puede pasar en el servicio a la vez.
 
 ---
 
@@ -508,7 +562,8 @@ núcleos.
 
 ~~`Fase 0`~~ ✅ → ~~`Fase 0.5`~~ ✅ → ~~`Fase 1`~~ ✅ → ~~`Fase 3`~~ ✅ →
 ~~`Fase 3.1` (troceo, arregla el OOM)~~ ✅ → ~~**medir en el VPS**~~ ✅ (§1.1) →
-~~`Fase 2`~~ ✅ → `Fase 5` ← *aquí estamos* → decidir `Fase 4` contra upgrade de VPS.
+~~`Fase 2`~~ ✅ → ~~`Fase 5`~~ ✅ → decidir `Fase 4` contra upgrade de VPS
+← *aquí estamos*.
 
 La Fase 3 iba antes que la 2 a propósito: se esperaba que fuera el cambio con más
 ganancia por línea tocada (8,5 min → ~2,2 min cambiando una dependencia). **Medida,
@@ -522,9 +577,15 @@ mientras hay ancho de banda de sobra, el pico de memoria de las subidas quedó
 acotado, y **el audio ya está en el servidor mientras la sesión sigue** — que es
 justo la precondición de la Fase 4, la única que ataca el 96,5 %.
 
-Sigue la Fase 5 (equidad en la cola: que un recap de 3 s deje de esperar detrás de
-una hora de audio), y después la decisión entre la Fase 4 y comprar núcleos, con
-los números del §1.1 sobre la mesa en vez de una proyección.
+Hecha la Fase 5, lo que queda es una decisión, no una implementación pendiente:
+**Fase 4 contra comprar núcleos.** Los números del §1.1 dicen que la
+transcripción es el 96,5 % del reloj, así que las dos atacan lo mismo por
+caminos distintos — la Fase 4 con arquitectura (transcribir ventanas mientras la
+sesión ocurre, con todo lo que eso trae: cortar en silencio, deduplicar solapes,
+no confundir ventanas con tomas, y competir por CPU *durante* la sesión), y el
+CPX31 con €8/mes. Conviene medir primero cuánto da el hardware antes de escribir
+la Fase 4: si 4 vCPU dejan el total en ~3 min, la complejidad de la Fase 4 tiene
+que justificarse contra ese número y no contra los 7,4 min de hoy.
 
 ---
 
