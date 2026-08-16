@@ -14,6 +14,7 @@ import { EditPatientModal } from '@/components/patients/EditPatientModal';
 import { PatientSearchBox } from '@/components/patients/PatientSearchBox';
 import { calcAge } from '@/lib/age';
 import { fmtDateOnly } from '@/lib/dates';
+import { formatWait, formatQueue } from '@/lib/eta';
 import { recordingStore } from '@/lib/recordingStore';
 import { createPartUploader, type PartUploader } from '@/lib/partUploader';
 import { AUDIO_BITS_PER_SECOND, AUDIO_CONSTRAINTS, CHUNK_MS } from '@/lib/recording';
@@ -266,6 +267,11 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
     };
     const cfg = statusCfg[draft.status] ?? statusCfg.PENDING;
     const isProcessing = draft.status === 'PENDING' || draft.status === 'PROCESSING';
+    // The wait is mostly the queue, not this recording, so saying "unos minutos"
+    // reads the same at forty seconds and at forty minutes. Those are different
+    // decisions: wait for it, or close the laptop and review tomorrow.
+    const waitText = formatWait(draft.eta_seconds);
+    const queueText = formatQueue(draft.jobs_ahead);
 
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'var(--s50)', borderRadius: 10, border: '1px solid var(--s200)' }}>
@@ -284,6 +290,11 @@ function AudioSection({ appointmentId, patientId, draftId, recordType, templateI
               </span>
             )}
           </div>
+          {isProcessing && waitText && (
+            <p style={{ margin: '6px 0 0', fontSize: 11.5, color: 'var(--s500)', lineHeight: 1.5 }}>
+              Listo en {waitText}. {queueText} Puedes cerrar esta página o empezar la siguiente sesión: el borrador te espera.
+            </p>
+          )}
           {hasFinalizedNote && draft.status === 'DRAFT_READY' && (
             <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--s500)', lineHeight: 1.5 }}>
               Esta sesión ya tiene un registro guardado — al aprobar, el borrador se vinculará a ese registro (no se creará otro).

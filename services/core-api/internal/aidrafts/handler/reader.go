@@ -99,6 +99,15 @@ func (h *Handler) getDraft(w http.ResponseWriter, r *http.Request) {
 	if draft.ClinicalRecordID != "" {
 		resp["clinical_record_id"] = draft.ClinicalRecordID
 	}
+	// How much longer the professional has to wait, and how much of that is
+	// other people's recordings. Absent once the draft is finished, and absent
+	// (rather than zero) when the queue could not be read: a wait the server is
+	// unsure about is better shown as the old "unos minutos" than as a number
+	// that turns out to be a lie.
+	if eta, err := h.svc.EstimateWait(r.Context(), claims.OrganizationID, draft.ID, draft.Status); err == nil && eta != nil {
+		resp["eta_seconds"] = eta.Seconds
+		resp["jobs_ahead"] = eta.JobsAhead
+	}
 	// A SUPERSEDED draft was folded into a later take — the review page uses this
 	// to redirect the professional to the single, consolidated draft.
 	if draft.SupersededBy != "" {

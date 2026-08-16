@@ -51,6 +51,12 @@ func (s *Service) UploadAudio(ctx context.Context, in UploadAudioInput) (string,
 		return "", err
 	}
 
+	// The size of the take is the only measure of how long the recording is
+	// that exists before the worker probes it, and the queue ETA is built from
+	// it. Read here, where the file has just been written and is certainly
+	// still there.
+	audioBytes := sizeOf(audioPath)
+
 	plainDEK, encDEK, keySource, err := s.km.GenerateDEK()
 	if err != nil {
 		return "", err
@@ -81,7 +87,8 @@ func (s *Service) UploadAudio(ctx context.Context, in UploadAudioInput) (string,
 		// point before the row exists: the body has been received and the file
 		// is already on disk, which is exactly what the professional waits for
 		// while the progress bar moves.
-		UploadMS: uploadMillis(in.UploadStartedAt, time.Now()),
+		UploadMS:   uploadMillis(in.UploadStartedAt, time.Now()),
+		AudioBytes: audioBytes,
 	})
 	if err != nil {
 		return "", err
@@ -94,6 +101,22 @@ func (s *Service) UploadAudio(ctx context.Context, in UploadAudioInput) (string,
 	}
 
 	return draftID, nil
+}
+
+// sizeOf is the take's size on disk, or nil when it cannot be read.
+//
+// Nil rather than 0 for the same reason uploadMillis returns nil: a draft whose
+// size was never measured must not be quoted as an instantaneous transcription.
+// A failure here never fails the upload — the audio is safe on disk and the
+// professional is waiting on it; losing an estimate is not a reason to lose a
+// session.
+func sizeOf(path string) *int64 {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil
+	}
+	size := info.Size()
+	return &size
 }
 
 // uploadMillis reports how long the request spent receiving the audio body and
