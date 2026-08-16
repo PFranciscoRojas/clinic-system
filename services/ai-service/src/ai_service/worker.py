@@ -26,8 +26,20 @@ from ai_service.suggestions.history import render_history
 
 logger = logging.getLogger(__name__)
 
+# Two lanes, two streams.
+#
+# Transcription is CPU- and memory-bound and runs one at a time; recap, plan and
+# risk spend their whole life waiting on the Claude API and have no business
+# queueing behind an hour of audio. A consumer group hands out whatever entry is
+# next and cannot route by content, so the split is made at the producer:
+# core-api enqueues suggestions on the fast stream, and each lane reads only the
+# jobs it can run.
 STREAM_NAME = "ai_jobs"
 CONSUMER_GROUP = "ai-service"
+FAST_STREAM_NAME = "ai_jobs_fast"
+FAST_CONSUMER_GROUP = "ai-service-fast"
+
+SUGGESTION_KINDS = frozenset({"recap", "treatment_plan", "risk_detection"})
 
 
 def _consumer_name() -> str:
@@ -47,6 +59,19 @@ CONSUMER_NAME = _consumer_name()
 # even with socket_timeout=None, so BLOCK >= 5000 raises TimeoutError
 BLOCK_MS = 4_000
 BATCH_SIZE = 5
+
+# Slots per lane.
+#
+# Transcription stays at one. Two at once buy no throughput on 2 vCPU — both
+# halve, the total is identical — and the memory says it louder than the CPU
+# does: the chunked transcriber peaks at ~530 MB against ~1.37 GB free. Two of
+# those peaks is the OOM kill of 2026-08-11 with extra steps.
+TRANSCRIPTION_SLOTS = 1
+
+# Suggestions wait on the Claude API, but they are not free: each one holds up
+# to HISTORY_MAX_CHARS of decrypted history and runs it through spaCy. Two is
+# what the same memory budget admits next to a live transcription.
+SUGGESTION_SLOTS = 2
 
 # The longest job the pipeline can legitimately be handed, used to size the
 # reclaim window below. MAX_AUDIO_SECONDS sits comfortably above what core-api's
@@ -93,26 +118,68 @@ class SuggestionGone(Exception):
     """
 
 
+class _Lane:
+    """One class of job: its stream, its consumer group, and how many of it may
+    run at once.
+
+    The slot budget is enforced by not reading past it rather than by a
+    semaphore behind the read. A job read and then parked waiting for a slot
+    would keep its PEL entry's idle clock running while it waits, and that clock
+    is what decides whether the job gets reclaimed and processed a second time.
+    Backpressure here is not politeness; it is what keeps the reclaim window
+    meaning what it says.
+    """
+
+    def __init__(self, name: str, stream: str, group: str, slots: int) -> None:
+        self.name = name
+        self.stream = stream
+        self.group = group
+        self.slots = slots
+        self.in_flight: set[str] = set()
+        self.tasks: set[asyncio.Task[None]] = set()
+
+    def free(self) -> int:
+        return self.slots - len(self.in_flight)
+
+
 class AIWorker:
     """Consumes ai_jobs from Redis Streams and processes audio through the AI pipeline."""
 
-    def __init__(self, redis_url: str, database_url: str, master_key_hex: str) -> None:
+    def __init__(
+        self,
+        redis_url: str,
+        database_url: str,
+        master_key_hex: str,
+        redis_client: aioredis.Redis | None = None,
+    ) -> None:
         self._redis_url = redis_url
         self._database_url = database_url
         self._master_key = binascii.unhexlify(master_key_hex)
-        self._redis: aioredis.Redis | None = None
+        # Injected by the queue tests, which drive both lanes against a stream
+        # double. Production passes nothing and start() builds the real client.
+        self._redis: aioredis.Redis | None = redis_client
         self._db: asyncpg.Pool | None = None
         self._task: asyncio.Task[None] | None = None
+        self._lanes: tuple[_Lane, ...] = (
+            _Lane("transcription", STREAM_NAME, CONSUMER_GROUP, TRANSCRIPTION_SLOTS),
+            _Lane("suggestion", FAST_STREAM_NAME, FAST_CONSUMER_GROUP, SUGGESTION_SLOTS),
+        )
 
     async def start(self) -> None:
-        self._redis = aioredis.from_url(self._redis_url, decode_responses=True)
+        if self._redis is None:
+            self._redis = aioredis.from_url(self._redis_url, decode_responses=True)
         self._db = await asyncpg.create_pool(self._database_url, min_size=1, max_size=5)
 
-        try:
-            await self._redis.xgroup_create(STREAM_NAME, CONSUMER_GROUP, id="0", mkstream=True)
-        except aioredis.ResponseError as e:
-            if "BUSYGROUP" not in str(e):
-                raise
+        # id="0" on both, including the fast stream on its first boot: it starts
+        # empty, so there is no history to replay, and if core-api ships before
+        # this service does, the suggestions it enqueued in the meantime are
+        # still there to be picked up. "$" would silently drop them.
+        for lane in self._lanes:
+            try:
+                await self._redis.xgroup_create(lane.stream, lane.group, id="0", mkstream=True)
+            except aioredis.ResponseError as e:
+                if "BUSYGROUP" not in str(e):
+                    raise
 
         self._task = asyncio.create_task(self._run())
 
@@ -123,13 +190,24 @@ class AIWorker:
                 await self._task
             except asyncio.CancelledError:
                 pass
+        # Jobs are their own tasks now, so cancelling the readers does not touch
+        # them. Leaving them running past stop() means writing a draft against a
+        # pool that is about to close, on every restart.
+        for lane in self._lanes:
+            for task in list(lane.tasks):
+                task.cancel()
+            if lane.tasks:
+                await asyncio.gather(*lane.tasks, return_exceptions=True)
         if self._redis:
             await self._redis.aclose()
         if self._db:
             await self._db.close()
 
     async def _run(self) -> None:
-        logger.info("ai worker started", extra={"stream": STREAM_NAME, "group": CONSUMER_GROUP})
+        logger.info(
+            "ai worker started",
+            extra={"lanes": {lane.name: lane.slots for lane in self._lanes}},
+        )
         try:
             await self._sweep_stuck()
         except Exception as exc:
@@ -143,35 +221,73 @@ class AIWorker:
             sweep_orphaned_pieces(settings.audio_base_path)
         except Exception as exc:
             logger.exception("orphaned audio sweep failed", exc_info=exc)
+        await asyncio.gather(*(self._read_lane(lane) for lane in self._lanes))
+
+    async def _read_lane(self, lane: _Lane) -> None:
+        """One reader per lane, each reading at most what its lane can start."""
         while True:
             try:
-                await self._reclaim_stale()
+                if lane.free() <= 0:
+                    # Nothing to do until a job finishes. Waiting on the tasks
+                    # themselves rather than polling keeps an idle lane off the
+                    # CPU that the busy one is using.
+                    await asyncio.wait(lane.tasks, return_when=asyncio.FIRST_COMPLETED)
+                    continue
+                await self._reclaim_stale(lane)
+                if lane.free() <= 0:
+                    continue
                 messages = await self._redis.xreadgroup(  # type: ignore[union-attr]
-                    groupname=CONSUMER_GROUP,
+                    groupname=lane.group,
                     consumername=CONSUMER_NAME,
-                    streams={STREAM_NAME: ">"},
-                    count=BATCH_SIZE,
+                    streams={lane.stream: ">"},
+                    count=lane.free(),
                     block=BLOCK_MS,
                 )
                 if not messages:
                     continue
                 for _stream, entries in messages:
                     for message_id, fields in entries:
-                        await self._handle(message_id, fields)
+                        self._dispatch(lane, message_id, fields)
             except asyncio.CancelledError:
                 return
             except Exception as exc:
-                logger.exception("worker error", exc_info=exc)
+                logger.exception("worker error", exc_info=exc, extra={"lane": lane.name})
                 await asyncio.sleep(5)
 
-    async def _handle(self, message_id: str, fields: dict[str, Any]) -> None:
-        kind = fields.get("kind")
-        if kind in ("recap", "treatment_plan", "risk_detection"):
-            await self._handle_suggestion(message_id, kind, fields)
-            return
-        await self._handle_draft(message_id, fields)
+    def _dispatch(self, lane: _Lane, message_id: str, fields: dict[str, Any]) -> None:
+        """Start a job without waiting for it. The lane's slot is taken here, not
+        when the job gets around to running, so the reader cannot read past it."""
+        lane.in_flight.add(message_id)
+        task = asyncio.create_task(self._run_job(lane, message_id, fields))
+        lane.tasks.add(task)
+        task.add_done_callback(lane.tasks.discard)
 
-    async def _handle_draft(self, message_id: str, fields: dict[str, Any]) -> None:
+    async def _run_job(self, lane: _Lane, message_id: str, fields: dict[str, Any]) -> None:
+        try:
+            await self._handle(lane, message_id, fields)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            # _handle turns every expected failure into an error row and leaves
+            # the entry in the PEL. Anything arriving here is a bug in the
+            # dispatch path, and inside a bare task it would vanish silently.
+            logger.exception("job task failed", exc_info=exc, extra={"message_id": message_id})
+        finally:
+            lane.in_flight.discard(message_id)
+
+    async def _handle(self, lane: _Lane, message_id: str, fields: dict[str, Any]) -> None:
+        kind = fields.get("kind")
+        if kind in SUGGESTION_KINDS:
+            # On the fast stream this is every job. On the transcription stream
+            # it is a suggestion enqueued by a core-api from before the split —
+            # it runs here rather than being handed back, which costs the
+            # transcription slot for the few seconds it takes and stops mattering
+            # once the older entries drain.
+            await self._handle_suggestion(lane, message_id, kind, fields)
+            return
+        await self._handle_draft(lane, message_id, fields)
+
+    async def _handle_draft(self, lane: _Lane, message_id: str, fields: dict[str, Any]) -> None:
         draft_id = fields.get("draft_id")
         audio_path = fields.get("audio_path")
         record_type = fields.get("record_type") or "EVOLUTION"
@@ -185,20 +301,22 @@ class AIWorker:
 
         if not draft_id or not audio_path:
             logger.warning("ai_job missing fields", extra={"message_id": message_id, "fields": list(fields.keys())})
-            await self._ack(message_id)
+            await self._ack(lane, message_id)
             return
 
         logger.info("processing ai draft", extra={"draft_id": draft_id, "template_id": template_id})
         try:
             await self._set_status(draft_id, "PROCESSING")
             await self._process_draft(draft_id, audio_path, record_type, note_style, tone, template_id, sections_schema, approach)
-            await self._ack(message_id)
+            await self._ack(lane, message_id)
         except Exception as exc:
             logger.error("draft processing failed", extra={"draft_id": draft_id, "err": str(exc)})
             await self._set_error(draft_id, str(exc))
             # Do NOT ack — message stays in PEL for retry or manual inspection
 
-    async def _handle_suggestion(self, message_id: str, kind: str, fields: dict[str, Any]) -> None:
+    async def _handle_suggestion(
+        self, lane: _Lane, message_id: str, kind: str, fields: dict[str, Any]
+    ) -> None:
         suggestion_id = fields.get("suggestion_id")
         patient_id = fields.get("patient_id")
         org_id = fields.get("org_id")
@@ -206,20 +324,20 @@ class AIWorker:
 
         if not suggestion_id or not patient_id or not org_id:
             logger.warning("ai_suggestion job missing fields", extra={"message_id": message_id, "fields": list(fields.keys())})
-            await self._ack(message_id)
+            await self._ack(lane, message_id)
             return
 
         logger.info("processing ai suggestion", extra={"suggestion_id": suggestion_id, "kind": kind})
         try:
             await self._set_suggestion_status(suggestion_id, "PROCESSING")
             await self._process_suggestion(suggestion_id, org_id, patient_id, kind, approach)
-            await self._ack(message_id)
+            await self._ack(lane, message_id)
         except SuggestionGone:
             # Terminal: the suggestion row was rolled back or deleted (e.g. a
             # data reset) before we ran. Retrying can never find it, so ack and
             # drop instead of spinning to a dead-letter.
             logger.info("ai suggestion gone, dropping job", extra={"suggestion_id": suggestion_id, "kind": kind})
-            await self._ack(message_id)
+            await self._ack(lane, message_id)
         except Exception as exc:
             logger.error("suggestion processing failed", extra={"suggestion_id": suggestion_id, "err": str(exc)})
             await self._set_suggestion_error(suggestion_id, str(exc))
@@ -399,7 +517,7 @@ class AIWorker:
         # 3. Anonymize — the patient's real name parts (decrypted here) are
         #    replaced literally, then NER/regex strip everything else
         known_names = await self._patient_known_names(row["patient_id"])
-        anonymized = anonymize(transcription, known_names)
+        anonymized = await asyncio.to_thread(anonymize, transcription, known_names)
 
         # 4. Resolve the section schema that drives the AI prompt: a custom
         #    template (from DB) or the integrated-format schema shipped in the
@@ -590,7 +708,7 @@ class AIWorker:
             )
         source_hash = hashlib.sha256(history.encode()).hexdigest()
         known_names = await self._patient_known_names(patient_id)
-        anonymized = anonymize(history, known_names)
+        anonymized = await asyncio.to_thread(anonymize, history, known_names)
 
         if kind == "recap":
             content = await generate_recap(anonymized, approach)
@@ -666,18 +784,30 @@ class AIWorker:
         draft["suggested_icd10"] = None
         return json.dumps(draft, ensure_ascii=False)
 
-    async def _reclaim_stale(self) -> None:
+    async def _reclaim_stale(self, lane: _Lane) -> None:
         """Recover PEL entries whose consumer died mid-job or whose failure path
-        skipped the ack; dead-letter after MAX_DELIVERIES attempts."""
+        skipped the ack; dead-letter after MAX_DELIVERIES attempts.
+
+        Bounded by the lane's free slots for the same reason the read is: a
+        reclaimed job parked waiting for a slot is a job whose idle clock has
+        started over."""
         assert self._redis is not None
         pending = await self._redis.xpending_range(
-            STREAM_NAME, CONSUMER_GROUP,
-            min="-", max="+", count=BATCH_SIZE, idle=RECLAIM_IDLE_MS,
+            lane.stream, lane.group,
+            min="-", max="+", count=lane.free(), idle=RECLAIM_IDLE_MS,
         )
         for entry in pending:
+            if lane.free() <= 0:
+                return
             message_id = entry["message_id"]
+            if message_id in lane.in_flight:
+                # This process is running it right now. Only the idle clock says
+                # otherwise, and that clock counts from delivery, not from the
+                # last sign of life — which is precisely what made reclaiming
+                # safe only while jobs were handled inline in the read loop.
+                continue
             claimed = await self._redis.xclaim(
-                STREAM_NAME, CONSUMER_GROUP, CONSUMER_NAME,
+                lane.stream, lane.group, CONSUMER_NAME,
                 min_idle_time=RECLAIM_IDLE_MS, message_ids=[message_id],
             )
             if not claimed:
@@ -685,23 +815,25 @@ class AIWorker:
             mid, fields = claimed[0]
             if fields is None:
                 # Entry was trimmed from the stream; nothing left to process.
-                await self._ack(mid)
+                await self._ack(lane, mid)
                 continue
             if entry["times_delivered"] >= MAX_DELIVERIES:
-                await self._dead_letter(mid, fields, entry["times_delivered"])
+                await self._dead_letter(lane, mid, fields, entry["times_delivered"])
             else:
                 logger.info(
                     "reclaiming stale job",
                     extra={"message_id": mid, "deliveries": entry["times_delivered"]},
                 )
-                await self._handle(mid, fields)
+                self._dispatch(lane, mid, fields)
 
-    async def _dead_letter(self, message_id: str, fields: dict[str, Any], deliveries: int) -> None:
+    async def _dead_letter(
+        self, lane: _Lane, message_id: str, fields: dict[str, Any], deliveries: int
+    ) -> None:
         """Mark the job's row as failed (visible in the UI) and ack the entry
         so it stops cycling through the PEL."""
         reason = f"processing failed after {deliveries} attempts"
         kind = fields.get("kind")
-        if kind in ("recap", "treatment_plan", "risk_detection"):
+        if kind in SUGGESTION_KINDS:
             suggestion_id = fields.get("suggestion_id")
             if suggestion_id:
                 await self._set_suggestion_error(suggestion_id, reason)
@@ -713,7 +845,7 @@ class AIWorker:
             "job dead-lettered",
             extra={"message_id": message_id, "kind": kind or "draft", "deliveries": deliveries},
         )
-        await self._ack(message_id)
+        await self._ack(lane, message_id)
 
     async def _sweep_stuck(self) -> None:
         """Startup sweep: rows left in PROCESSING with no live job (e.g. the
@@ -773,5 +905,5 @@ class AIWorker:
             draft_id, message,
         )
 
-    async def _ack(self, message_id: str) -> None:
-        await self._redis.xack(STREAM_NAME, CONSUMER_GROUP, message_id)  # type: ignore[union-attr]
+    async def _ack(self, lane: _Lane, message_id: str) -> None:
+        await self._redis.xack(lane.stream, lane.group, message_id)  # type: ignore[union-attr]
