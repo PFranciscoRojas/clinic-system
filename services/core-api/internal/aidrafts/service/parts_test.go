@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -39,7 +40,7 @@ func timeLongAgo() time.Time { return time.Now().Add(-30 * 24 * time.Hour) }
 
 func appendPart(t *testing.T, svc *Service, index int, body string) error {
 	t.Helper()
-	return svc.AppendPart(AppendPartInput{
+	return svc.AppendPart(context.Background(), AppendPartInput{
 		OrganizationID: testOrg,
 		AppointmentID:  testAppt,
 		UploadID:       testUp,
@@ -59,7 +60,7 @@ func assemble(t *testing.T, svc *Service) (string, error) {
 }
 
 func TestPartsAssembleInIndexOrderNotArrivalOrder(t *testing.T) {
-	svc := &Service{audioDir: t.TempDir()}
+	svc := partsService(t, t.TempDir())
 
 	// Deliberately backwards. A part is a slice of a clinical session: assembled
 	// in the wrong order the audio is still a valid file, still transcribes, and
@@ -85,7 +86,7 @@ func TestPartsAssembleInIndexOrderNotArrivalOrder(t *testing.T) {
 // result is a shorter file that transcribes perfectly well — so the failure is
 // silent unless it is refused here.
 func TestAssembleRefusesAGapInTheParts(t *testing.T) {
-	svc := &Service{audioDir: t.TempDir()}
+	svc := partsService(t, t.TempDir())
 	for _, i := range []int{0, 1, 3} {
 		if err := appendPart(t, svc, i, fmt.Sprintf("part-%d ", i)); err != nil {
 			t.Fatalf("append part %d: %v", i, err)
@@ -98,7 +99,7 @@ func TestAssembleRefusesAGapInTheParts(t *testing.T) {
 }
 
 func TestAssembleRefusesAnUploadWithNoParts(t *testing.T) {
-	svc := &Service{audioDir: t.TempDir()}
+	svc := partsService(t, t.TempDir())
 	if _, err := assemble(t, svc); !errors.Is(err, aidrafts.ErrInvalidInput) {
 		t.Fatalf("got %v, want ErrInvalidInput", err)
 	}
@@ -108,7 +109,7 @@ func TestAssembleRefusesAnUploadWithNoParts(t *testing.T) {
 // second time would double those seconds of audio, which is the same class of
 // damage as losing them.
 func TestRetryingAPartReplacesItInsteadOfDuplicating(t *testing.T) {
-	svc := &Service{audioDir: t.TempDir()}
+	svc := partsService(t, t.TempDir())
 	if err := appendPart(t, svc, 0, "first attempt"); err != nil {
 		t.Fatalf("append: %v", err)
 	}
@@ -127,7 +128,7 @@ func TestRetryingAPartReplacesItInsteadOfDuplicating(t *testing.T) {
 // on a slow uplink. Under -race this also pins that AppendPart keeps no shared
 // state across calls.
 func TestPartsArriveConcurrently(t *testing.T) {
-	svc := &Service{audioDir: t.TempDir()}
+	svc := partsService(t, t.TempDir())
 	const parts = 12
 
 	var wg sync.WaitGroup
@@ -142,7 +143,7 @@ func TestPartsArriveConcurrently(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errs[i] = svc.AppendPart(AppendPartInput{
+			errs[i] = svc.AppendPart(context.Background(), AppendPartInput{
 				OrganizationID: testOrg,
 				AppointmentID:  testAppt,
 				UploadID:       testUp,
@@ -169,7 +170,7 @@ func TestPartsArriveConcurrently(t *testing.T) {
 // point the only file anybody is tracking is the assembled take.
 func TestAssemblyLeavesNoPartsBehind(t *testing.T) {
 	dir := t.TempDir()
-	svc := &Service{audioDir: dir}
+	svc := partsService(t, dir)
 	for i := range 4 {
 		if err := appendPart(t, svc, i, "audio "); err != nil {
 			t.Fatalf("append: %v", err)
@@ -205,7 +206,8 @@ func TestPartsAreCappedByTheirTotal(t *testing.T) {
 	// A few kilobytes, not the real 200 MB: proving the arithmetic does not
 	// require writing the limit to disk on every run, and a test that costs that
 	// much is a test somebody eventually deletes.
-	svc := &Service{audioDir: t.TempDir(), maxUploadBytes: 4096}
+	svc := partsService(t, t.TempDir())
+	svc.maxUploadBytes = 4096
 	kb := strings.Repeat("x", 1024)
 
 	var lastErr error
@@ -225,7 +227,8 @@ func TestPartsAreCappedByTheirTotal(t *testing.T) {
 // total reads as zero and the write proceeds.
 func TestOneOversizedPartIsCutOffMidBody(t *testing.T) {
 	dir := t.TempDir()
-	svc := &Service{audioDir: dir, maxUploadBytes: 4096}
+	svc := partsService(t, dir)
+	svc.maxUploadBytes = 4096
 
 	err := appendPart(t, svc, 0, strings.Repeat("x", 64*1024))
 	if !errors.Is(err, aidrafts.ErrTooLarge) {
@@ -251,13 +254,13 @@ func TestOneOversizedPartIsCutOffMidBody(t *testing.T) {
 // Both ids reach the filesystem. The upload id is minted by the browser, which
 // makes it the one piece of this path that an attacker controls outright.
 func TestPartsRejectIdsAndIndexesTheyCannotTrust(t *testing.T) {
-	svc := &Service{audioDir: t.TempDir()}
+	svc := partsService(t, t.TempDir())
 
 	for _, uploadID := range []string{
 		"", "..", "../../etc/passwd", "not-a-uuid",
 		"33333333-3333-3333-3333-333333333333/../../x",
 	} {
-		err := svc.AppendPart(AppendPartInput{
+		err := svc.AppendPart(context.Background(), AppendPartInput{
 			OrganizationID: testOrg, AppointmentID: testAppt,
 			UploadID: uploadID, Index: 0, Part: strings.NewReader("x"),
 		})
@@ -267,7 +270,7 @@ func TestPartsRejectIdsAndIndexesTheyCannotTrust(t *testing.T) {
 	}
 
 	for _, index := range []int{-1, MaxParts, MaxParts + 1} {
-		err := svc.AppendPart(AppendPartInput{
+		err := svc.AppendPart(context.Background(), AppendPartInput{
 			OrganizationID: testOrg, AppointmentID: testAppt,
 			UploadID: testUp, Index: index, Part: strings.NewReader("x"),
 		})
@@ -281,13 +284,13 @@ func TestPartsRejectIdsAndIndexesTheyCannotTrust(t *testing.T) {
 // with the same upload id — the id comes from the client and nothing stops two
 // of them colliding, by accident or otherwise.
 func TestPartsAreScopedByOrgAndAppointment(t *testing.T) {
-	svc := &Service{audioDir: t.TempDir()}
+	svc := partsService(t, t.TempDir())
 	const otherOrg = "44444444-4444-4444-4444-444444444444"
 
 	if err := appendPart(t, svc, 0, "org A session"); err != nil {
 		t.Fatalf("append: %v", err)
 	}
-	if err := svc.AppendPart(AppendPartInput{
+	if err := svc.AppendPart(context.Background(), AppendPartInput{
 		OrganizationID: otherOrg, AppointmentID: testAppt,
 		UploadID: testUp, Index: 0, Part: strings.NewReader("org B session"),
 	}); err != nil {
@@ -315,9 +318,9 @@ func TestPartsAreScopedByOrgAndAppointment(t *testing.T) {
 // client, having seen a failure, would send the part again on top of it.
 func TestAFailedPartLeavesNothingAssemblable(t *testing.T) {
 	dir := t.TempDir()
-	svc := &Service{audioDir: dir}
+	svc := partsService(t, dir)
 
-	err := svc.AppendPart(AppendPartInput{
+	err := svc.AppendPart(context.Background(), AppendPartInput{
 		OrganizationID: testOrg, AppointmentID: testAppt,
 		UploadID: testUp, Index: 0,
 		Part: io.MultiReader(strings.NewReader("half a part"), failingReader{}),
@@ -351,7 +354,7 @@ func TestAFailedPartLeavesNothingAssemblable(t *testing.T) {
 // PHI and no draft row points at them, so nothing else is ever going to look.
 func TestSweepRemovesAbandonedPartsAndKeepsFreshOnes(t *testing.T) {
 	dir := t.TempDir()
-	svc := &Service{audioDir: dir}
+	svc := partsService(t, dir)
 
 	if err := appendPart(t, svc, 0, "abandoned"); err != nil {
 		t.Fatalf("append: %v", err)

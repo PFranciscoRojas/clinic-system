@@ -83,3 +83,43 @@ type EncKeyRow struct {
 	EncryptedDEK []byte
 	KeySource    string
 }
+
+// PartialTranscript is the transcript of a recording session that is still
+// being recorded — what the window jobs have got through so far, so that the
+// job at "Finalizar sesión" only has the tail left. See migration 000077 for
+// why it is a table of its own and not a column on AIDraft.
+//
+// It carries its own wrapped DEK rather than a reference to fetch later: every
+// caller that has a use for the ciphertext needs the key in the same breath,
+// and a second round trip for it is a second chance to get the pairing wrong.
+type PartialTranscript struct {
+	ID             string
+	OrganizationID string
+	AppointmentID  string
+	UploadID       string
+	DEKID          string
+	// TranscriptEnc is nil until the first window finishes.
+	TranscriptEnc []byte
+	// CoveredParts is how many parts existed when the last window ran.
+	CoveredParts int
+	// CoveredMS is how many milliseconds of the session TranscriptEnc covers.
+	// This is the cut point the next window starts from, not CoveredParts: a
+	// window is cut at silence, which does not land on a part boundary.
+	CoveredMS int64
+	UpdatedAt time.Time
+
+	// The DEK as stored, still wrapped. Open with KeyManager.DecryptDEK.
+	EncryptedDEK []byte
+	KeySource    string
+}
+
+// EnsurePartialParams creates the scratch row for one upload in progress. The
+// DEK is minted by the caller (core-api holds the KeyManager) and stored
+// wrapped, so the worker only ever has to decrypt one.
+type EnsurePartialParams struct {
+	OrganizationID string
+	AppointmentID  string
+	UploadID       string
+	EncryptedDEK   []byte
+	KeySource      string
+}

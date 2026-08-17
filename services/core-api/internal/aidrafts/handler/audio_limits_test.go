@@ -38,7 +38,7 @@ type blockingSvc struct {
 	release chan struct{}
 }
 
-func (b *blockingSvc) AppendPart(aidraftssvc.AppendPartInput) error {
+func (b *blockingSvc) AppendPart(context.Context, aidraftssvc.AppendPartInput) error {
 	b.entered <- struct{}{}
 	<-b.release
 	return nil
