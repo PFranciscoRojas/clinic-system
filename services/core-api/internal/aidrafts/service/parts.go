@@ -150,6 +150,7 @@ func (s *Service) AppendPart(ctx context.Context, in AppendPartInput) error {
 	// that has not happened yet, so it never runs ahead of the bytes it is
 	// about and it never reports a problem back up here.
 	s.ensurePartialTranscript(ctx, in)
+	s.enqueueWindow(ctx, in)
 	return nil
 }
 

@@ -249,3 +249,106 @@ func TestTheSweepTakesOnlyWhatIsPastTheDeadline(t *testing.T) {
 		t.Fatal("the sweep took a session that is still being recorded")
 	}
 }
+
+// ── A partial transcript may only move forward (migration 000078) ────────────
+
+// advance is the guarded UPDATE the worker runs: it claims the session up to
+// coveredMS, and is a no-op if somebody already claimed further.
+func advance(t *testing.T, orgID, upload string, coveredMS int64, text string) int64 {
+	t.Helper()
+	tag, err := adminPool.Exec(context.Background(), `
+		UPDATE partial_transcripts
+		   SET transcript_enc = $4, covered_parts = covered_parts + 1, covered_ms = $3
+		 WHERE organization_id = $1 AND upload_id = $2
+		   AND covered_ms < $3`,
+		orgID, upload, coveredMS, []byte(text))
+	if err != nil {
+		t.Fatalf("advance to %d ms: %v", coveredMS, err)
+	}
+	return tag.RowsAffected()
+}
+
+func TestALateWindowCannotRewindTheSession(t *testing.T) {
+	skipIfShort(t)
+	tn := seedTenant(t, "partial-rewind-"+uuid.NewString()[:8])
+	appt := apptOf(t, tn)
+	upload := uuid.NewString()
+	ensure(t, scoped(t, tn.OrgID), tn.OrgID, appt, upload)
+
+	if n := advance(t, tn.OrgID, upload, 1_200_000, "veinte minutos"); n != 1 {
+		t.Fatalf("the first window did not land: %d rows", n)
+	}
+
+	// A window that covered the first five minutes, reclaimed from the PEL and
+	// re-run after the one that covered twenty already finished. Redelivery in
+	// a consumer group is not ordered, so this is a Tuesday, not a disaster
+	// scenario.
+	if n := advance(t, tn.OrgID, upload, 300_000, "cinco minutos"); n != 0 {
+		t.Fatalf("a late window rewound the session: %d rows updated", n)
+	}
+
+	var coveredMS int64
+	var text []byte
+	err := adminPool.QueryRow(context.Background(),
+		`SELECT covered_ms, transcript_enc FROM partial_transcripts WHERE upload_id = $1`,
+		upload).Scan(&coveredMS, &text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if coveredMS != 1_200_000 || string(text) != "veinte minutos" {
+		t.Fatalf("the session lost ground: covered_ms=%d text=%q", coveredMS, text)
+	}
+}
+
+func TestAWriterThatDropsTheGuardIsStoppedByTheDatabase(t *testing.T) {
+	skipIfShort(t)
+	tn := seedTenant(t, "partial-trigger-"+uuid.NewString()[:8])
+	appt := apptOf(t, tn)
+	upload := uuid.NewString()
+	ensure(t, scoped(t, tn.OrgID), tn.OrgID, appt, upload)
+	advance(t, tn.OrgID, upload, 1_200_000, "veinte minutos")
+
+	// The guarded UPDATE above makes the ordinary losing job a silent no-op,
+	// which is the right shape for it. This is for the writer that does not
+	// have the guard — the second one somebody adds, in a hurry, six months
+	// from now. Replacing twenty minutes of session with five produces a note
+	// that reads perfectly and is missing the middle.
+	_, err := adminPool.Exec(context.Background(), `
+		UPDATE partial_transcripts SET covered_ms = 300000, transcript_enc = $2
+		 WHERE upload_id = $1`, upload, []byte("cinco minutos"))
+	if err == nil {
+		t.Fatal("an unguarded rewind was accepted")
+	}
+	if !strings.Contains(err.Error(), "would go backwards") {
+		t.Fatalf("rejected for the wrong reason: %v", err)
+	}
+}
+
+func TestASessionMakingProgressIsNotSweptAway(t *testing.T) {
+	skipIfShort(t)
+	tn := seedTenant(t, "partial-touch-"+uuid.NewString()[:8])
+	appt := apptOf(t, tn)
+	upload := uuid.NewString()
+	ensure(t, scoped(t, tn.OrgID), tn.OrgID, appt, upload)
+
+	// A session recorded across a long afternoon keeps producing windows. If
+	// updated_at only meant "created", the sweep would delete the transcript of
+	// a session still being recorded and the professional would never know why
+	// the draft took the old eleven minutes.
+	if _, err := adminPool.Exec(context.Background(),
+		`UPDATE partial_transcripts SET updated_at = now() - interval '20 hours'
+		  WHERE upload_id = $1`, upload); err != nil {
+		t.Fatal(err)
+	}
+	advance(t, tn.OrgID, upload, 600_000, "media hora")
+
+	var age time.Duration
+	if err := adminPool.QueryRow(context.Background(),
+		`SELECT now() - updated_at FROM partial_transcripts WHERE upload_id = $1`,
+		upload).Scan(&age); err != nil {
+		t.Fatal(err)
+	}
+	if age > time.Minute {
+		t.Fatalf("a window landed and updated_at stayed %v old", age)
+	}
+}

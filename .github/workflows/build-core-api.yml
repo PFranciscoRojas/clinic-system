@@ -6,6 +6,12 @@ on:
     paths:
       - 'services/core-api/**'
       - '.github/workflows/build-core-api.yml'
+      # The deploy job pulls this repo on the VPS and runs `compose up -d`, so
+      # this file is part of what it ships. Without it here, a change to
+      # core-api's environment merges green and never reaches the box: no
+      # failure, no deploy, and the setting simply is not there. Same gap the
+      # ai-service workflow had (PR #280).
+      - 'docker-compose.yml'
   # On a PR only test+lint run: they are the gate. The build/deploy jobs are
   # skipped (see their `if`), so a PR never touches GHCR or the VPS.
   #

@@ -31,6 +31,17 @@ type Config struct {
 	AIServiceURL string
 	AudioDir     string
 
+	// WindowTranscription enqueues a transcription job every few parts, so the
+	// session is being transcribed while it is still being recorded (Fase 4 of
+	// docs/ai/PLAN_LATENCIA_AUDIO.md). Off by default: it puts Whisper on the
+	// CPU at the moment the professional is in the room, which is a change that
+	// has to be turned on deliberately, on a box whose limits were measured.
+	//
+	// Off is never a degraded mode. /audio/complete transcribes the whole take
+	// from scratch either way; this only decides how much of that work has
+	// already happened by then.
+	WindowTranscription bool
+
 	CORSAllowedOrigins []string
 
 	ResendAPIKey string
@@ -102,8 +113,9 @@ func Load() Config {
 		JWTAccessTTLMin:   getEnvInt("JWT_ACCESS_TTL_MINUTES", 60),
 		JWTRefreshTTLDays: getEnvInt("JWT_REFRESH_TTL_DAYS", 7),
 
-		AIServiceURL: getEnv("AI_SERVICE_URL", "http://ai-service:8000"),
-		AudioDir:     getEnv("AUDIO_DIR", "/data/audio"),
+		AIServiceURL:        getEnv("AI_SERVICE_URL", "http://ai-service:8000"),
+		AudioDir:            getEnv("AUDIO_DIR", "/data/audio"),
+		WindowTranscription: getEnvBool("AI_WINDOW_TRANSCRIPTION", false),
 
 		CORSAllowedOrigins: getEnvSlice("CORS_ALLOWED_ORIGINS", []string{
 			"http://localhost:5173",
@@ -122,8 +134,8 @@ func Load() Config {
 		MPAccessToken:    mpAccessToken,
 		MPWebhookSecret:  mpWebhookSecret,
 		MPWebhookEnforce: getEnvBool("MP_WEBHOOK_ENFORCE", true),
-		MPPlanAmount:    getEnvInt("MP_PLAN_AMOUNT", 79000),
-		MPPlanReason:    getEnv("MP_PLAN_REASON", "Chapni · Plan mensual"),
+		MPPlanAmount:     getEnvInt("MP_PLAN_AMOUNT", 79000),
+		MPPlanReason:     getEnv("MP_PLAN_REASON", "Chapni · Plan mensual"),
 
 		BookingSessionPrice: getEnvInt("BOOKING_SESSION_PRICE", 180000),
 

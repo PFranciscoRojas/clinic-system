@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/redis/go-redis/v9"
+
 	"sghcp/core-api/internal/aidrafts"
 	"sghcp/core-api/internal/shared/crypto"
 )
@@ -45,5 +47,62 @@ func (s *Service) ensurePartialTranscript(ctx context.Context, in AppendPartInpu
 	}); err != nil {
 		slog.Default().Warn("partial transcript: cannot create row",
 			"appointment", in.AppointmentID, "err", err)
+	}
+}
+
+// windowEveryParts is how much of the recording accumulates before a window job
+// is enqueued. At the recorder's 60 s parts this is five minutes of audio, which
+// is the same size the chunked transcriber already uses inside one job.
+//
+// Smaller windows would spread the work more evenly, and each one would pay the
+// decode of everything before it again — the concatenation has to start at part
+// zero, because a webm chunk that is not the first carries no header. Five is
+// where that overhead stays a rounding error against the transcription itself.
+const windowEveryParts = 5
+
+// enqueueWindow asks for the session so far to be transcribed, up to the last
+// silence the worker can find.
+//
+// Silent about its own failures, like everything else on this path. A window
+// that is never enqueued costs nothing but the time it would have saved: the
+// job at "Finalizar sesión" reads how far the partial got, which is zero, and
+// transcribes the whole take exactly as it does today.
+func (s *Service) enqueueWindow(ctx context.Context, in AppendPartInput) {
+	if !s.windowTranscription {
+		return
+	}
+	// Parts are numbered from zero, so this closes a window on the 5th, 10th,
+	// 15th part. A part that is retried re-enqueues, which is harmless: the
+	// worker refuses to redo work the partial already covers.
+	if (in.Index+1)%windowEveryParts != 0 {
+		return
+	}
+
+	dir, err := s.uploadDir(in.OrganizationID, in.AppointmentID, in.UploadID)
+	if err != nil {
+		return
+	}
+
+	err = s.rdb.XAdd(ctx, &redis.XAddArgs{
+		Stream: windowStream,
+		ID:     "*",
+		Values: map[string]any{
+			"kind":           "window",
+			"org_id":         in.OrganizationID,
+			"appointment_id": in.AppointmentID,
+			"upload_id":      in.UploadID,
+			// How many parts exist, not the index of the last one. The worker
+			// needs a count to compare against covered_parts, and off-by-one
+			// here would make every window redo the previous one's last minute.
+			"parts": in.Index + 1,
+			// The directory rather than a convention the worker rebuilds. It
+			// still has to know the part filenames; that shared shape is pinned
+			// by TestTheWorkerAndCoreAPIAgreeOnPartFilenames.
+			"parts_dir": dir,
+		},
+	}).Err()
+	if err != nil {
+		slog.Default().Warn("window transcription: cannot enqueue",
+			"appointment", in.AppointmentID, "parts", in.Index+1, "err", err)
 	}
 }

@@ -27,10 +27,10 @@ type Handler struct {
 	limitPartUpload  func(http.Handler) http.Handler
 }
 
-func New(db *pgxpool.Pool, km *crypto.KeyManager, rdb *redis.Client, audioDir string) *Handler {
+func New(db *pgxpool.Pool, km *crypto.KeyManager, rdb *redis.Client, audioDir string, windowTranscription bool) *Handler {
 	repo := aidraftsrepo.New(db)
 	return &Handler{
-		svc: aidraftssvc.New(repo, km, rdb, audioDir, db),
+		svc: aidraftssvc.New(repo, km, rdb, audioDir, db).WithWindowTranscription(windowTranscription),
 
 		limitWholeUpload: middleware.MaxInFlight(
 			maxConcurrentWholeUploads, wholeUploadRetryAfter, busyMessage),
