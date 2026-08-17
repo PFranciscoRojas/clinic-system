@@ -94,3 +94,58 @@ func TestTheEstimateIsNeverZero(t *testing.T) {
 		t.Fatalf("seconds = %d, want more than zero", got.Seconds)
 	}
 }
+
+// ── What the windows already transcribed does not get quoted again ───────────
+
+func TestASessionAlreadyTranscribedQuotesOnlyItsTail(t *testing.T) {
+	whole := waitFrom(&aidrafts.QueueEstimate{OwnBytes: hourOfAudio, P50RTF: f(0.1224)})
+	// Fifty-five of the sixty minutes turned into text while the session was
+	// being recorded. What is left is five minutes.
+	tail := waitFrom(&aidrafts.QueueEstimate{
+		OwnBytes: hourOfAudio, OwnCoveredMS: 55 * 60 * 1000, P50RTF: f(0.1224),
+	})
+	if tail.Seconds >= whole.Seconds {
+		t.Fatalf("a session that transcribed itself quotes %d s, the same as the untouched %d s",
+			tail.Seconds, whole.Seconds)
+	}
+	// 300 s * 0,1224 = 36,7 s, plus the ~30 s Claude takes.
+	if tail.Seconds < 60 || tail.Seconds > 75 {
+		t.Fatalf("seconds = %d, want ~67 (five minutes at RTF 0,1224 plus the draft)", tail.Seconds)
+	}
+}
+
+func TestTheQueueAheadIsChargedForWhatIsLeftOfIt(t *testing.T) {
+	// This is the half that matters most. Three hours of recordings ahead, all
+	// of them nearly finished transcribing themselves — a professional behind
+	// them should not be told to come back after lunch.
+	got := waitFrom(&aidrafts.QueueEstimate{
+		OwnBytes:       hourOfAudio,
+		JobsAhead:      3,
+		BytesAhead:     3 * hourOfAudio,
+		CoveredMSAhead: 3 * 55 * 60 * 1000,
+		OwnCoveredMS:   55 * 60 * 1000,
+		P50RTF:         f(0.1224),
+	})
+	// Four tails of five minutes: 1200 s * 0,1224 = 147 s, plus four drafts.
+	if got.Seconds > 300 {
+		t.Fatalf("seconds = %d, want ~267: the queue ahead is nearly done, not starting", got.Seconds)
+	}
+}
+
+func TestCoveredAudioIsNeverCreditedToSomebodyElsesRecording(t *testing.T) {
+	// A draft whose covered audio exceeds its own size is a bug somewhere, and
+	// the shape of the bug decides who pays for it. Subtracting on the total
+	// would let the surplus cancel the queue ahead and quote a wait of nothing
+	// to a professional with three hours in front of them.
+	got := waitFrom(&aidrafts.QueueEstimate{
+		OwnBytes:     hourOfAudio,
+		OwnCoveredMS: 10 * 60 * 60 * 1000, // ten hours of "covered" on a one-hour take
+		JobsAhead:    3,
+		BytesAhead:   3 * hourOfAudio,
+		P50RTF:       f(0.1224),
+	})
+	// The three hours ahead are untouched and still have to be transcribed.
+	if got.Seconds < 1300 {
+		t.Fatalf("seconds = %d, want ~1442: the queue ahead was not covered by anything", got.Seconds)
+	}
+}

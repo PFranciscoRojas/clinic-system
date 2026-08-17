@@ -22,9 +22,11 @@ import (
 func (r *Repository) QueueEstimate(ctx context.Context, draftID string) (*aidrafts.QueueEstimate, error) {
 	var q aidrafts.QueueEstimate
 	err := dbctx.From(ctx, r.db).QueryRow(ctx,
-		`SELECT jobs_ahead, bytes_ahead, unknown_ahead, own_bytes, p50_rtf
+		`SELECT jobs_ahead, bytes_ahead, unknown_ahead, own_bytes, p50_rtf,
+		        covered_ms_ahead, own_covered_ms
 		   FROM ai_queue_estimate($1)`, draftID,
-	).Scan(&q.JobsAhead, &q.BytesAhead, &q.UnknownAhead, &q.OwnBytes, &q.P50RTF)
+	).Scan(&q.JobsAhead, &q.BytesAhead, &q.UnknownAhead, &q.OwnBytes, &q.P50RTF,
+		&q.CoveredMSAhead, &q.OwnCoveredMS)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// The function returns no row for a draft id it cannot find. The caller
 		// has already read the draft under RLS, so this means it was deleted

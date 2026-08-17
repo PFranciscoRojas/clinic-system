@@ -25,8 +25,8 @@ func (r *Repository) Create(ctx context.Context, p aidrafts.CreateParams) (strin
 		INSERT INTO ai_drafts
 		       (organization_id, appointment_id, patient_id, requested_by, dek_id,
 		        audio_path_enc, ai_model_version, whisper_model, template_id,
-		        upload_ms, audio_bytes)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		        upload_ms, audio_bytes, upload_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING id`
 
 	var id string
@@ -42,6 +42,7 @@ func (r *Repository) Create(ctx context.Context, p aidrafts.CreateParams) (strin
 		nullableStr(p.TemplateID),
 		p.UploadMS,
 		p.AudioBytes,
+		nullableStr(p.UploadID),
 	).Scan(&id)
 	return id, err
 }

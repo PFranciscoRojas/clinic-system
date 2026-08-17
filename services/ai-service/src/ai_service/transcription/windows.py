@@ -112,7 +112,7 @@ def cut_point(audio_path: str, after_ms: int) -> int | None:
     return int(max(usable) * 1000)
 
 
-def extract(audio_path: str, start_ms: int, end_ms: int, dest: str) -> bool:
+def extract(audio_path: str, start_ms: int, end_ms: int | None, dest: str) -> bool:
     """Decode one stretch of the recording into a file Whisper can read.
 
     -ss and -to go after -i on purpose: on the input side ffmpeg seeks by
@@ -124,7 +124,8 @@ def extract(audio_path: str, start_ms: int, end_ms: int, dest: str) -> bool:
         subprocess.run(  # noqa: S603 — ffmpeg off PATH, fixed argv, no shell
             [  # noqa: S607
                 "ffmpeg", "-nostdin", "-loglevel", "error", "-i", audio_path,
-                "-ss", f"{start_ms / 1000.0:.3f}", "-to", f"{end_ms / 1000.0:.3f}",
+                "-ss", f"{start_ms / 1000.0:.3f}",
+                *(() if end_ms is None else ("-to", f"{end_ms / 1000.0:.3f}")),
                 "-vn", "-ac", "1", "-ar", "16000", "-y", dest,
             ],
             capture_output=True, text=True, timeout=_FFMPEG_TIMEOUT_S, check=True,
@@ -180,3 +181,32 @@ def transcribe_window(
         },
     )
     return Window(text=text, end_ms=end_ms, transcribe_ms=result.transcribe_ms)
+
+
+def transcribe_tail(audio_path: str, from_ms: int) -> Transcription | None:
+    """Everything after what the windows already turned into text.
+
+    This is where Fase 4 is actually paid: the professional presses "Finalizar
+    sesión" and the only audio left to put through Whisper is the few minutes
+    since the last window, instead of the whole hour.
+
+    The offset is valid because the take is byte for byte the concatenation of
+    its parts — assembleParts joins them in order and writes nothing else — so a
+    millisecond measured against the growing recording means the same thing
+    against the finished one.
+
+    Returns None when the tail cannot be extracted, and None is not a failure:
+    the caller falls back to transcribing the whole take, which is what it did
+    before any of this existed.
+    """
+    with tempfile.TemporaryDirectory(
+        prefix=f"tail-{os.getpid()}-", dir=os.path.dirname(audio_path) or None
+    ) as workdir:
+        tail = os.path.join(workdir, "tail.wav")
+        if not extract(audio_path, from_ms, None, tail):
+            logger.warning(
+                "could not extract the tail; falling back to the whole take",
+                extra={"path": audio_path, "from_ms": from_ms},
+            )
+            return None
+        return transcribe_audio(tail)

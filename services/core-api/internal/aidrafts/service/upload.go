@@ -89,6 +89,7 @@ func (s *Service) UploadAudio(ctx context.Context, in UploadAudioInput) (string,
 		// while the progress bar moves.
 		UploadMS:   uploadMillis(in.UploadStartedAt, time.Now()),
 		AudioBytes: audioBytes,
+		UploadID:   in.UploadID,
 	})
 	if err != nil {
 		return "", err

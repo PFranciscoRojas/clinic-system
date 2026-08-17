@@ -83,8 +83,17 @@ func waitFrom(est *aidrafts.QueueEstimate) *QueueETA {
 		rtf = *est.P50RTF
 	}
 
-	audio := durationOf(est.OwnBytes) +
-		float64(est.BytesAhead)/recorderBytesPerSecond +
+	// What is left to transcribe, not what was recorded. With window
+	// transcription on (Fase 4) most of a session is already text by the time
+	// it reaches the queue, and charging the whole recording would quote a wait
+	// several times the real one — for this draft and, worse, for everyone
+	// behind a queue of sessions that are nearly done.
+	//
+	// Clamped at zero per side rather than on the total: a draft whose covered
+	// audio somehow exceeds its own size must not lend the surplus to the queue
+	// ahead of it and make somebody else's wait read as instantaneous.
+	audio := remaining(durationOf(est.OwnBytes), est.OwnCoveredMS) +
+		remaining(float64(est.BytesAhead)/recorderBytesPerSecond, est.CoveredMSAhead) +
 		float64(est.UnknownAhead)*unknownSessionSeconds
 
 	seconds := audio*rtf + float64(est.JobsAhead+1)*draftOverheadSeconds
@@ -92,6 +101,16 @@ func waitFrom(est *aidrafts.QueueEstimate) *QueueETA {
 	// Ceil rather than round: quoting 0 for a job that has not started is the
 	// one answer that is always wrong.
 	return &QueueETA{Seconds: int(math.Ceil(seconds)), JobsAhead: est.JobsAhead}
+}
+
+// remaining is audio seconds minus the seconds already turned into text, never
+// below zero.
+func remaining(seconds float64, coveredMS int64) float64 {
+	left := seconds - float64(coveredMS)/1000
+	if left < 0 {
+		return 0
+	}
+	return left
 }
 
 // durationOf converts a take's size to seconds, charging the default session

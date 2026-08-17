@@ -15,7 +15,7 @@ import redis.asyncio as aioredis
 from ai_service.config import settings
 from ai_service.crypto import open_, seal
 from ai_service.transcription.whisper import sweep_orphaned_pieces, transcribe_audio
-from ai_service.transcription.windows import transcribe_window
+from ai_service.transcription.windows import transcribe_tail, transcribe_window
 from ai_service.anonymization.ner import anonymize
 from ai_service.drafts.claude import generate_clinical_draft
 from ai_service.suggestions.claude import (
@@ -546,6 +546,82 @@ class AIWorker:
                 ids.append(str(r["id"]))
         return ("\n\n".join(parts), ids)
 
+    async def _absorbed_partial(self, row: Any) -> tuple[int, str]:
+        """What the windows already transcribed of this session, if anything.
+
+        Returns (0, "") for every reason there could be not to trust it, and
+        that list is the design: no upload id (a file picked by hand), no
+        partial row, no text yet, a DEK that will not open. Each one falls back
+        to transcribing the whole take, which is what happened before Fase 4 and
+        is never wrong — only slower.
+        """
+        upload_id = row["upload_id"]
+        appointment_id = row["appointment_id"]
+        if not upload_id or not appointment_id:
+            return 0, ""
+
+        assert self._db is not None
+        try:
+            partial = await self._db.fetchrow(
+                """
+                SELECT p.covered_ms, p.transcript_enc, k.encrypted_dek, k.key_source
+                  FROM partial_transcripts p
+                  JOIN encryption_keys k ON k.id = p.dek_id
+                 WHERE p.organization_id = $1 AND p.appointment_id = $2 AND p.upload_id = $3
+                """,
+                row["organization_id"], appointment_id, upload_id,
+            )
+            if partial is None or int(partial["covered_ms"]) <= 0:
+                return 0, ""
+            if partial["transcript_enc"] is None:
+                # The CHECK in migration 000077 forbids this combination, so
+                # reaching it means the constraint went away. Transcribe the
+                # whole take rather than skip audio there are no words for.
+                logger.warning("partial covers audio but holds no text", extra={"upload_id": str(upload_id)})
+                return 0, ""
+
+            # The partial's own DEK, not the draft's. They are different keys on
+            # purpose: the partial exists before the draft does.
+            dek = self._decrypt_dek(partial["key_source"], bytes(partial["encrypted_dek"]))
+            text = open_(dek, bytes(partial["transcript_enc"])).decode()
+        except Exception as exc:  # noqa: BLE001 — every failure means "transcribe it all"
+            logger.warning(
+                "cannot use the partial transcript; transcribing the whole take",
+                extra={"upload_id": str(upload_id), "err": str(exc)},
+            )
+            return 0, ""
+
+        covered_ms = int(partial["covered_ms"])
+        logger.info(
+            "absorbing the session transcribed so far",
+            extra={"upload_id": str(upload_id), "covered_ms": covered_ms, "chars": len(text)},
+        )
+        return covered_ms, text
+
+    async def _discard_partial(self, row: Any) -> None:
+        """Drop the partial and the key that only it named, once the draft has
+        the text.
+
+        After the draft is stored, never before: a crash between the two costs a
+        re-transcription, and a crash the other way round costs the session.
+        """
+        upload_id = row["upload_id"]
+        appointment_id = row["appointment_id"]
+        if not upload_id or not appointment_id:
+            return
+        assert self._db is not None
+        await self._db.execute(
+            """
+            WITH gone AS (
+                DELETE FROM partial_transcripts
+                 WHERE organization_id = $1 AND appointment_id = $2 AND upload_id = $3
+                RETURNING dek_id
+            )
+            DELETE FROM encryption_keys WHERE id IN (SELECT dek_id FROM gone)
+            """,
+            row["organization_id"], appointment_id, upload_id,
+        )
+
     async def _supersede_drafts(self, draft_ids: list[str], consolidated_id: str) -> None:
         """Mark earlier takes SUPERSEDED and point them at the consolidated draft.
         Their transcription/content is nulled out — it now lives (folded in) on the
@@ -581,7 +657,7 @@ class AIWorker:
         row = await self._db.fetchrow(
             """
             SELECT d.patient_id, d.dek_id, d.organization_id, d.requested_by,
-                   d.appointment_id, k.encrypted_dek, k.key_source
+                   d.appointment_id, d.upload_id, k.encrypted_dek, k.key_source
             FROM ai_drafts d
             JOIN encryption_keys k ON k.id = d.dek_id
             WHERE d.id = $1
@@ -591,9 +667,34 @@ class AIWorker:
         if row is None:
             raise RuntimeError(f"ai_draft {draft_id} not found")
 
-        # 2. Transcribe locally — audio never leaves the server
-        result = await asyncio.to_thread(transcribe_audio, audio_path)
-        transcription = result.text
+        # 2. Transcribe locally — audio never leaves the server.
+        #
+        # Most of this session may already be text: the windows of Fase 4 have
+        # been running since the recording started, and what is left is the few
+        # minutes since the last one. Falling back to the whole take is always
+        # available and is what happens when anything about the partial is not
+        # exactly right, which is the property that lets the rest of Fase 4 be
+        # an optimisation rather than a dependency.
+        covered_ms, prior_text = await self._absorbed_partial(row)
+        result = None
+        if covered_ms > 0:
+            result = await asyncio.to_thread(transcribe_tail, audio_path, covered_ms)
+            if result is None:
+                covered_ms, prior_text = 0, ""
+        if result is None:
+            result = await asyncio.to_thread(transcribe_audio, audio_path)
+
+        transcription = "\n\n".join(
+            piece for piece in (prior_text.strip(), result.text.strip()) if piece
+        )
+        # audio_seconds keeps meaning the length of the recording, which is what
+        # every measurement in the latency plan was taken with. transcribed_
+        # seconds is what this run put through Whisper — see migration 000079
+        # for why the RTF has to divide by the second one.
+        transcribed_seconds = result.audio_seconds
+        whole_seconds = (
+            None if transcribed_seconds is None else transcribed_seconds + covered_ms / 1000
+        )
 
         # 2b. Consolidate: a session can be recorded in several takes (a power cut
         #     mid-session, an F5, then a fresh recording). Fold the earlier takes'
@@ -629,13 +730,15 @@ class AIWorker:
                 """
                 UPDATE ai_drafts
                 SET status = 'EMPTY', processed_at = NOW(),
-                    transcribe_ms = $2, audio_seconds = $3, whisper_model = $4
+                    transcribe_ms = $2, audio_seconds = $3, whisper_model = $4,
+                    transcribed_seconds = $5
                 WHERE id = $1
                 """,
                 draft_id,
                 result.transcribe_ms,
-                result.audio_seconds,
+                whole_seconds,
                 result.model,
+                transcribed_seconds,
             )
             try:
                 await self._notify(
@@ -651,6 +754,14 @@ class AIWorker:
                 pathlib.Path(audio_path).unlink(missing_ok=True)
             except OSError as exc:
                 logger.warning("could not delete audio file", extra={"audio_path": audio_path, "err": str(exc)})
+            # The take is gone and there is no draft to absorb into, so the
+            # partial is text belonging to nothing. Dropped here rather than
+            # waiting twelve hours for the sweep.
+            try:
+                await self._discard_partial(row)
+            except Exception as exc:  # noqa: BLE001 — best-effort, the sweep gets it
+                logger.warning("could not delete the partial transcript",
+                               extra={"draft_id": draft_id, "err": str(exc)})
             logger.info("draft marked EMPTY — no transcribable content", extra={"draft_id": draft_id})
             return
 
@@ -694,6 +805,7 @@ class AIWorker:
                 processed_at = NOW(),
                 transcribe_ms = $4,
                 audio_seconds = $5,
+                transcribed_seconds = $8,
                 llm_ms = $6,
                 -- core-api wrote a constant here at upload time that has no way
                 -- of knowing which model this service is configured to run.
@@ -710,9 +822,10 @@ class AIWorker:
             # audio these two describe — the RTF stays per-take, which is the
             # figure worth comparing across runs.
             result.transcribe_ms,
-            result.audio_seconds,
+            whole_seconds,
             llm_ms,
             result.model,
+            transcribed_seconds,
         )
 
         # Mark the earlier takes SUPERSEDED now that this draft carries their
@@ -726,6 +839,18 @@ class AIWorker:
                     "could not mark prior takes superseded",
                     extra={"draft_id": draft_id, "err": str(exc)},
                 )
+
+        # The partial's text is now on the draft, encrypted under the draft's
+        # own key. Keeping the second copy is only dead PHI at rest, and it
+        # would make a window job that arrives late go looking for parts that
+        # assembleParts already deleted.
+        try:
+            await self._discard_partial(row)
+        except Exception as exc:  # noqa: BLE001 — best-effort, the sweep gets it
+            logger.warning(
+                "could not delete the partial transcript",
+                extra={"draft_id": draft_id, "err": str(exc)},
+            )
 
         # Notify the professional who requested the draft that it's ready to
         # review (the topbar bell). The notifications table is not encrypted, so
