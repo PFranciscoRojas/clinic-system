@@ -515,10 +515,83 @@ archivo parcial (ffmpeg decodifica un webm que crece). Al finalizar solo queda l
 
 Cuidados: cortar en silencio (VAD) o solapar 3–5 s y deduplicar, para no partir
 palabras; y la consolidación de tomas (`_prior_transcriptions`) no debe confundir
-ventanas de una misma toma con tomas distintas — las ventanas se acumulan en el
-mismo draft, no crean drafts hermanos. Compite por CPU **durante** la sesión: exige
-límite de CPU al contenedor `ai-service` (hoy no tiene ninguno en el compose) o más
-núcleos.
+ventanas de una misma toma con tomas distintas.
+
+#### Por qué esto y no más hardware
+
+La caja transcribe ~8 horas de audio por hora de reloj (§3.1.1) y cinco
+profesionales simultáneos sólo generan 5. No falta capacidad: todo el trabajo
+está amontonado en el instante en que cada uno pulsa "Finalizar". Comprar
+núcleos sube un techo que no estamos tocando; repartir el trabajo a lo largo de
+la sesión lo arregla en el hardware que ya está pagado.
+
+#### Rebanadas
+
+**1. Límite de CPU y memoria al contenedor ✅ (hecha, PR #280)**
+
+Prerrequisito, no detalle. El `ai-service` no tenía ningún límite: `docker
+inspect` devolvía `NanoCpus 0, Memory 0`. Sobrevivible mientras Whisper corría
+entre sesiones con la caja ociosa; en cuanto corre *durante* la sesión, el
+profesional al que le quita CPU está grabando en ese momento. Sin límite nada
+falla de forma legible — las peticiones se ponen lentas, una parte agota su
+timeout, y el kernel elige víctima entre los contenedores sin que nada apunte a
+la transcripción que lo causó. Ahora 1,5 núcleos de 2 y 1400 MB.
+
+El de memoria es un techo, no un presupuesto: el kernel ya mató este contenedor
+una vez, y el límite no hace eso más barato, lo hace determinista. Perder una
+transcripción se recupera; perder el pool de conexiones a mitad de sesión, no.
+
+Salió de aquí un fallo latente aparte: el workflow del ai-service sólo se
+disparaba con cambios bajo `services/ai-service/`, pero su deploy hace `git
+pull` y `compose up -d`. El archivo que define los límites del contenedor no
+estaba en la lista de lo que dispara su propio despliegue.
+
+**2. Dónde vive la transcripción parcial ✅ (hecha, PR #281)**
+
+Tabla `partial_transcripts` (migración 000077), creada al llegar la primera
+parte de una subida y borrada cuando el borrador la absorbe.
+
+Tabla aparte y no una columna en `ai_drafts`, por dos motivos que bastan cada
+uno por su lado: la fila del borrador no existe hasta `/audio/complete`, una
+hora después de la primera parte; y `_prior_transcriptions` recorre los
+borradores `DRAFT_READY` de la cita para plegarlos en el más nuevo, así que
+media sesión sentada en algo con forma de borrador es justo lo que esa lógica
+confundiría con una toma anterior y metería dos veces en la nota.
+
+Decisiones que no se leen solas en el diff:
+
+- La DEK la acuña core-api, que ya tiene el `KeyManager`, y se guarda envuelta.
+  El worker sólo la abre, así que nada en Python aprende a acuñar una.
+- `EnsurePartial` es una sola sentencia. La forma obvia dejaría una
+  `encryption_keys` huérfana por cada parte: sesenta a la hora, por sesión.
+- El `EXISTS` sobre `appointments` es lo que hace segura a la clave foránea: sin
+  él, la FK le respondería a cualquiera si una cita existe.
+- No devuelve error hacia arriba. En cuanto una fila de trabajo sucio puede
+  tumbar la subida de una parte, deja de ser una optimización.
+- El CHECK `covered_audio_has_text` es el que protege la nota: una fila que
+  dijera tener audio cubierto sin texto haría que la pasada final arrancara
+  después de minutos de los que no tiene palabras, y lo que sale es una nota
+  impecable describiendo una conversación con un hueco.
+- El barrido va en el `PartSweeper` que ya limpia las partes: son los dos restos
+  del mismo suceso y comparten plazo (12 h).
+
+**3. El trabajo por ventanas** (pendiente)
+
+core-api encola un job cada ~5 partes en un tercer carril con un cupo
+(`ai_jobs_window`), siguiendo el patrón de la Fase 5. El detalle que da forma a
+todo: un trozo de webm que no es el primero **no se puede decodificar solo**,
+porque MediaRecorder pone la cabecera únicamente en el primero. La ventana se
+saca decodificando de la parte 0 a la N y saltando al último corte, no abriendo
+el trozo suelto. Decodificar es barato: 7,2 s para una hora completa (§1.1).
+
+**4. El final sólo transcribe la cola** (pendiente)
+
+`/audio/complete` lee lo parcial, transcribe lo que falta, concatena, Claude.
+
+Regla que no se negocia en 3 ni en 4: **si algo de esto falla o se atrasa,
+`/audio/complete` transcribe todo desde cero como hoy.** Optimización, nunca
+dependencia de corrección — el mismo principio que ya gobierna la subida por
+partes, donde IndexedDB es la copia de verdad.
 
 ### Fase 5 — Carriles en el worker ✅ (hecha)
 
