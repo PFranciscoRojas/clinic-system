@@ -44,6 +44,11 @@ type CreateParams struct {
 	// could not be read: the ETA then treats this draft the way it treats every
 	// other draft of unknown length instead of quoting it as instantaneous.
 	AudioBytes *int64
+	// UploadID is the recording session this take came out of, and the link to
+	// the partial transcript the worker should absorb instead of redoing. Empty
+	// for a file picked by hand, which really is a whole recording with nothing
+	// done to it yet.
+	UploadID string
 }
 
 // QueueEstimate is what the shared worker queue looks like from one draft's
@@ -64,6 +69,12 @@ type QueueEstimate struct {
 	// P50RTF is the median real-time factor observed on this box, nil until
 	// enough drafts have finished to have measured one.
 	P50RTF *float64
+	// CoveredMSAhead is how much of the audio ahead is already text, from the
+	// windows that ran during those sessions. Counted only for drafts whose
+	// size is known — see migration 000079.
+	CoveredMSAhead int64
+	// OwnCoveredMS is how much of this draft's own audio is already text.
+	OwnCoveredMS int64
 }
 
 // DraftMeta is the lightweight row returned by the list endpoint (no decryption).

@@ -50,11 +50,13 @@ func enqueueDraft(t *testing.T, tn tenant, status string, createdAt time.Time, a
 }
 
 type queueEstimate struct {
-	JobsAhead    int
-	BytesAhead   int64
-	UnknownAhead int
-	OwnBytes     int64
-	P50RTF       *float64
+	JobsAhead      int
+	BytesAhead     int64
+	UnknownAhead   int
+	OwnBytes       int64
+	P50RTF         *float64
+	CoveredMSAhead int64
+	OwnCoveredMS   int64
 }
 
 // estimateAsOrg calls the function the way core-api does: as sghcp_app, on a
@@ -63,9 +65,11 @@ func estimateAsOrg(t *testing.T, orgID, draftID string) queueEstimate {
 	t.Helper()
 	var q queueEstimate
 	err := asOrg(t, orgID).QueryRow(context.Background(),
-		`SELECT jobs_ahead, bytes_ahead, unknown_ahead, own_bytes, p50_rtf
+		`SELECT jobs_ahead, bytes_ahead, unknown_ahead, own_bytes, p50_rtf,
+		        covered_ms_ahead, own_covered_ms
 		   FROM ai_queue_estimate($1)`, draftID,
-	).Scan(&q.JobsAhead, &q.BytesAhead, &q.UnknownAhead, &q.OwnBytes, &q.P50RTF)
+	).Scan(&q.JobsAhead, &q.BytesAhead, &q.UnknownAhead, &q.OwnBytes, &q.P50RTF,
+		&q.CoveredMSAhead, &q.OwnCoveredMS)
 	if err != nil {
 		t.Fatalf("ai_queue_estimate: %v", err)
 	}
@@ -210,6 +214,7 @@ func TestTheEstimateCarriesNoTenantData(t *testing.T) {
 	want := map[string]bool{
 		"jobs_ahead": true, "bytes_ahead": true, "unknown_ahead": true,
 		"own_bytes": true, "p50_rtf": true,
+		"covered_ms_ahead": true, "own_covered_ms": true,
 	}
 	for _, fd := range rows.FieldDescriptions() {
 		if !want[string(fd.Name)] {
@@ -220,5 +225,170 @@ func TestTheEstimateCarriesNoTenantData(t *testing.T) {
 	}
 	if len(want) != 0 {
 		t.Fatalf("missing columns: %v", want)
+	}
+}
+
+// ── What the windows already transcribed (migration 000079) ─────────────────
+
+// enqueueUpload is enqueueDraft plus the recording session the take came from,
+// so the draft can be joined to a partial transcript.
+func enqueueUpload(t *testing.T, tn tenant, apptID, uploadID string, createdAt time.Time, audioBytes *int64) string {
+	t.Helper()
+	var id string
+	err := adminPool.QueryRow(context.Background(), `
+		INSERT INTO ai_drafts (
+		    organization_id, patient_id, requested_by, dek_id,
+		    ai_model_version, whisper_model, status, created_at, audio_bytes,
+		    appointment_id, upload_id
+		) VALUES ($1, $2, $3, $4, 'test-model', 'base', 'PENDING', $5, $6, $7, $8)
+		RETURNING id`,
+		tn.OrgID, tn.PatientID, tn.UserID, tn.DekID, createdAt, audioBytes, apptID, uploadID,
+	).Scan(&id)
+	if err != nil {
+		t.Fatalf("enqueue ai_draft with upload: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = adminPool.Exec(context.Background(), `DELETE FROM ai_drafts WHERE id = $1`, id)
+	})
+	return id
+}
+
+func seedCoveredPartial(t *testing.T, tn tenant, apptID, uploadID string, coveredMS int64) {
+	t.Helper()
+	ctx := context.Background()
+	var dekID string
+	if err := adminPool.QueryRow(ctx,
+		`INSERT INTO encryption_keys (encrypted_dek, key_source)
+		 VALUES ($1, 'env:MASTER_KEY') RETURNING id`, []byte("dek-"+uploadID)).Scan(&dekID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := adminPool.Exec(ctx, `
+		INSERT INTO partial_transcripts
+		       (organization_id, appointment_id, upload_id, dek_id, transcript_enc,
+		        covered_parts, covered_ms)
+		VALUES ($1, $2, $3, $4, $5, 5, $6)`,
+		tn.OrgID, apptID, uploadID, dekID, []byte("cipher"), coveredMS); err != nil {
+		t.Fatalf("seed partial: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = adminPool.Exec(ctx, `DELETE FROM partial_transcripts WHERE upload_id = $1`, uploadID)
+		_, _ = adminPool.Exec(ctx, `DELETE FROM encryption_keys WHERE id = $1`, dekID)
+	})
+}
+
+func TestTheQueueKnowsHowMuchOfEachRecordingIsAlreadyText(t *testing.T) {
+	skipIfShort(t)
+	tn := seedTenant(t, "queue-covered")
+	var appt string
+	if err := adminPool.QueryRow(context.Background(),
+		`SELECT id FROM appointments WHERE organization_id = $1 LIMIT 1`, tn.OrgID).Scan(&appt); err != nil {
+		t.Fatal(err)
+	}
+
+	upload := "44444444-4444-4444-4444-444444444444"
+	seedCoveredPartial(t, tn, appt, upload, 3_300_000) // 55 minutes
+	me := enqueueUpload(t, tn, appt, upload, queueEpoch.Add(time.Minute), bytesPtr(10_800_000))
+
+	got := estimateAsOrg(t, tn.OrgID, me)
+	if got.OwnCoveredMS != 3_300_000 {
+		t.Fatalf("own_covered_ms = %d, want 3300000: the session transcribed itself and the "+
+			"estimate is about to quote the whole hour again", got.OwnCoveredMS)
+	}
+}
+
+func TestARecordingAheadIsChargedForWhatIsLeftOfIt(t *testing.T) {
+	skipIfShort(t)
+	tn := seedTenant(t, "queue-covered-ahead")
+	var appt string
+	if err := adminPool.QueryRow(context.Background(),
+		`SELECT id FROM appointments WHERE organization_id = $1 LIMIT 1`, tn.OrgID).Scan(&appt); err != nil {
+		t.Fatal(err)
+	}
+
+	upload := "55555555-5555-5555-5555-555555555555"
+	seedCoveredPartial(t, tn, appt, upload, 3_300_000)
+	enqueueUpload(t, tn, appt, upload, queueEpoch.Add(time.Minute), bytesPtr(10_800_000))
+	me := enqueueDraft(t, tn, "PENDING", queueEpoch.Add(2*time.Minute), bytesPtr(600_000))
+
+	got := estimateAsOrg(t, tn.OrgID, me)
+	if got.JobsAhead != 1 {
+		t.Fatalf("jobs ahead = %d, want 1", got.JobsAhead)
+	}
+	if got.CoveredMSAhead != 3_300_000 {
+		t.Fatalf("covered_ms_ahead = %d, want 3300000: the recording ahead is nearly done "+
+			"and this professional is being told to come back after lunch", got.CoveredMSAhead)
+	}
+}
+
+func TestADraftOfUnknownLengthLendsNoCoveredAudioToTheQueue(t *testing.T) {
+	skipIfShort(t)
+	tn := seedTenant(t, "queue-covered-unknown")
+	var appt string
+	if err := adminPool.QueryRow(context.Background(),
+		`SELECT id FROM appointments WHERE organization_id = $1 LIMIT 1`, tn.OrgID).Scan(&appt); err != nil {
+		t.Fatal(err)
+	}
+
+	// A draft with no byte count is charged the default session length, and
+	// that charge already stands for the whole of it. Subtracting covered audio
+	// from a guess takes the estimate below the work that is actually left.
+	upload := "66666666-6666-6666-6666-666666666666"
+	seedCoveredPartial(t, tn, appt, upload, 3_300_000)
+	enqueueUpload(t, tn, appt, upload, queueEpoch.Add(time.Minute), nil)
+	me := enqueueDraft(t, tn, "PENDING", queueEpoch.Add(2*time.Minute), bytesPtr(600_000))
+
+	got := estimateAsOrg(t, tn.OrgID, me)
+	if got.UnknownAhead != 1 {
+		t.Fatalf("unknown ahead = %d, want 1", got.UnknownAhead)
+	}
+	if got.CoveredMSAhead != 0 {
+		t.Fatalf("covered_ms_ahead = %d, want 0 for a draft charged the default length", got.CoveredMSAhead)
+	}
+}
+
+func TestTheRTFDividesByTheAudioThatWasActuallyTranscribed(t *testing.T) {
+	skipIfShort(t)
+	tn := seedTenant(t, "rtf-tail")
+	id := enqueueDraft(t, tn, "DRAFT_READY", queueEpoch.Add(time.Minute), bytesPtr(10_800_000))
+
+	// An hour of session, of which only the last five minutes reached Whisper.
+	if _, err := adminPool.Exec(context.Background(), `
+		UPDATE ai_drafts SET transcribe_ms = 36000, audio_seconds = 3600,
+		                     transcribed_seconds = 300
+		 WHERE id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+
+	var rtf float64
+	if err := adminPool.QueryRow(context.Background(),
+		`SELECT rtf FROM ai_drafts WHERE id = $1`, id).Scan(&rtf); err != nil {
+		t.Fatal(err)
+	}
+	// 36 s of CPU on 300 s of audio is 0,12 — the box's real speed. Dividing by
+	// the hour instead would report 0,01 and every ETA on screen would inherit
+	// it and quote a tenth of the true wait.
+	if rtf < 0.11 || rtf > 0.13 {
+		t.Fatalf("rtf = %v, want ~0,12: the estimate is about to promise a tenth of the real wait", rtf)
+	}
+}
+
+func TestARecordingTranscribedWholeStillMeasuresItsRTF(t *testing.T) {
+	skipIfShort(t)
+	tn := seedTenant(t, "rtf-whole")
+	id := enqueueDraft(t, tn, "DRAFT_READY", queueEpoch.Add(time.Minute), bytesPtr(10_800_000))
+
+	// Every draft from before this migration, and every file picked by hand.
+	if _, err := adminPool.Exec(context.Background(), `
+		UPDATE ai_drafts SET transcribe_ms = 440000, audio_seconds = 3600 WHERE id = $1`,
+		id); err != nil {
+		t.Fatal(err)
+	}
+	var rtf float64
+	if err := adminPool.QueryRow(context.Background(),
+		`SELECT rtf FROM ai_drafts WHERE id = $1`, id).Scan(&rtf); err != nil {
+		t.Fatal(err)
+	}
+	if rtf < 0.11 || rtf > 0.13 {
+		t.Fatalf("rtf = %v, want ~0,122 from audio_seconds alone", rtf)
 	}
 }

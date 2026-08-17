@@ -217,3 +217,56 @@ async def test_the_stored_update_refuses_to_move_the_cut_backwards(monkeypatch):
     # migration 000078 for the trigger that catches a writer who drops it.
     assert "covered_ms < $6" in query
     assert args[-1] == 300_000
+
+
+# ── Absorbing what the windows already did (rebanada 4) ──────────────────────
+
+
+def a_partial(covered_ms: int, blob: bytes | None = b"cipher"):
+    return {"covered_ms": covered_ms, "transcript_enc": blob,
+            "encrypted_dek": b"x", "key_source": "env:MASTER_KEY"}
+
+
+def a_draft(upload_id: str | None = "up", appointment_id: str | None = "appt"):
+    return {"upload_id": upload_id, "appointment_id": appointment_id,
+            "organization_id": "org"}
+
+
+@pytest.mark.asyncio
+async def test_a_recording_picked_by_hand_has_nothing_to_absorb():
+    # No upload id means no parts and no windows: a whole file the professional
+    # chose, which really does need transcribing end to end.
+    w = make_worker(FakeDB([]))
+    assert await w._absorbed_partial(a_draft(upload_id=None)) == (0, "")
+
+
+@pytest.mark.asyncio
+async def test_a_session_with_no_windows_yet_is_transcribed_whole():
+    w = make_worker(FakeDB([a_partial(covered_ms=0, blob=None)]))
+    assert await w._absorbed_partial(a_draft()) == (0, "")
+
+
+@pytest.mark.asyncio
+async def test_covered_audio_with_no_text_is_never_skipped_over():
+    # The CHECK in migration 000077 forbids this, so reaching it means the
+    # constraint is gone. Trusting covered_ms here would start the tail after
+    # minutes there are no words for, and the note would read perfectly.
+    w = make_worker(FakeDB([a_partial(covered_ms=300_000, blob=None)]))
+    assert await w._absorbed_partial(a_draft()) == (0, "")
+
+
+@pytest.mark.asyncio
+async def test_a_key_that_will_not_open_falls_back_to_the_whole_take(monkeypatch):
+    w = make_worker(FakeDB([a_partial(covered_ms=300_000)]))
+    monkeypatch.setattr(w, "_decrypt_dek", lambda *a: (_ for _ in ()).throw(ValueError("nope")))
+    assert await w._absorbed_partial(a_draft()) == (0, "")
+
+
+@pytest.mark.asyncio
+async def test_what_the_windows_transcribed_is_handed_back_with_its_cut(monkeypatch):
+    from ai_service import worker as worker_mod
+
+    w = make_worker(FakeDB([a_partial(covered_ms=300_000)]))
+    monkeypatch.setattr(w, "_decrypt_dek", lambda *a: b"k" * 32)
+    monkeypatch.setattr(worker_mod, "open_", lambda dek, blob: b"la sesion hasta aqui")
+    assert await w._absorbed_partial(a_draft()) == (300_000, "la sesion hasta aqui")
