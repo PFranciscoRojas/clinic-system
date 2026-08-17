@@ -575,23 +575,70 @@ Decisiones que no se leen solas en el diff:
 - El barrido va en el `PartSweeper` que ya limpia las partes: son los dos restos
   del mismo suceso y comparten plazo (12 h).
 
-**3. El trabajo por ventanas** (pendiente)
+**3. El trabajo por ventanas ✅ (hecha, PR #283, apagada)**
 
-core-api encola un job cada ~5 partes en un tercer carril con un cupo
-(`ai_jobs_window`), siguiendo el patrón de la Fase 5. El detalle que da forma a
-todo: un trozo de webm que no es el primero **no se puede decodificar solo**,
-porque MediaRecorder pone la cabecera únicamente en el primero. La ventana se
-saca decodificando de la parte 0 a la N y saltando al último corte, no abriendo
-el trozo suelto. Decodificar es barato: 7,2 s para una hora completa (§1.1).
+core-api encola un job cada 5 partes en un tercer carril con un cupo
+(`ai_jobs_window`), siguiendo el patrón de la Fase 5. Detrás del flag
+`AI_WINDOW_TRANSCRIPTION`, apagado: por sí sola esta rebanada adelanta trabajo
+sin cobrarlo todavía (la pasada final sigue transcribiendo la toma entera), así
+que encenderla antes de la rebanada 4 sólo gasta CPU durante la consulta.
+
+El detalle que da forma a todo: un trozo de webm que no es el primero **no se
+puede decodificar solo**, porque MediaRecorder escribe la cabecera EBML una
+vez, en el trozo cero. La ventana no se saca abriendo la parte que interesa: el
+archivo se reconstruye desde la parte 0 cada vez y después se busca el tramo.
+Decodificar es barato — 7,2 s para una hora completa (§1.1) — contra minutos de
+transcripción. Por lo mismo `-ss`/`-to` van *después* de `-i`: en el lado de la
+entrada ffmpeg busca por keyframe, que sobre una concatenación de trozos webm
+cae cerca del punto correcto y no en él.
+
+El corte va siempre en silencio, reusando la pasada de `silencedetect` de la
+Fase 3.1. Si no hay silencio donde cortar, la ventana no corre: esperar es
+gratis y la cola se la lleva la pasada final igual. Cortar en cualquier otro
+punto parte una palabra entre dos ventanas, y las dos mitades las transcribe por
+separado un modelo que con gusto inventa una entera con cada una.
+
+Lo que el código se niega a hacer, que es la mitad del diseño: no concatena por
+encima de una parte que falta (produciría una nota describiendo una conversación
+sin un pedazo); no repite trabajo ya cubierto por una parte reintentada o una
+entrada reclamada del PEL; descarta su propio trabajo si la sesión avanzó
+mientras la ventana corría; y nada de esto puede tumbar la subida de una parte
+ni dejar una entrada en el PEL sobre audio que ya se borró.
+
+La migración 000078 es el cinturón. La redelivery de un consumer group no está
+ordenada: una ventana que cubrió cinco minutos puede re-entregarse después de la
+que cubrió veinte, y si se le deja escribir reemplaza veinte minutos de sesión
+por cinco y mueve el corte hacia atrás para que cuadre. La siguiente arranca de
+ahí y vuelve a transcribir lo que ya tenía, así que el texto hasta parece
+correcto: lo que falta son quince minutos del medio. El escritor se guarda con
+`WHERE covered_ms < $n`; el trigger es para el escritor que no lo lleve.
+
+Dos invariantes cruzados nuevos, porque ninguna de las dos cosas que Go y Python
+comparten la revisa un compilador y ninguna falla ruidosamente: el sufijo de las
+partes en disco (si se separa, cada ventana no encuentra nada y lo dice con el
+mismo mensaje que una subida lenta) y el nombre del stream (si se separa, los
+jobs se acumulan en una clave de Redis que nadie lee).
+
+Y el mismo hueco de despliegue que tenía el ai-service: `docker-compose.yml` no
+disparaba el workflow de core-api, aunque el deploy hace `git pull` y `compose
+up -d`.
 
 **4. El final sólo transcribe la cola** (pendiente)
 
 `/audio/complete` lee lo parcial, transcribe lo que falta, concatena, Claude.
+Es la que convierte la rebanada 3 en el ahorro de tiempo, y la que justifica
+encender el flag.
 
 Regla que no se negocia en 3 ni en 4: **si algo de esto falla o se atrasa,
 `/audio/complete` transcribe todo desde cero como hoy.** Optimización, nunca
 dependencia de corrección — el mismo principio que ya gobierna la subida por
 partes, donde IndexedDB es la copia de verdad.
+
+#### Cómo encenderlo
+
+`AI_WINDOW_TRANSCRIPTION=true` en el `.env` del VPS y recrear el contenedor de
+core-api. No antes de la rebanada 4, y no sin una ventana para cargar la caja
+sin pisar una sesión real.
 
 ### Fase 5 — Carriles en el worker ✅ (hecha)
 
