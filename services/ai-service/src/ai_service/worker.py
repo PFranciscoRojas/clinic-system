@@ -15,6 +15,7 @@ import redis.asyncio as aioredis
 from ai_service.config import settings
 from ai_service.crypto import open_, seal
 from ai_service.transcription.whisper import sweep_orphaned_pieces, transcribe_audio
+from ai_service.transcription.windows import transcribe_window
 from ai_service.anonymization.ner import anonymize
 from ai_service.drafts.claude import generate_clinical_draft
 from ai_service.suggestions.claude import (
@@ -39,7 +40,15 @@ CONSUMER_GROUP = "ai-service"
 FAST_STREAM_NAME = "ai_jobs_fast"
 FAST_CONSUMER_GROUP = "ai-service-fast"
 
+# A third lane, for transcribing a session while it is still being recorded
+# (Fase 4). It cannot share the transcription lane: a window job that queued
+# behind a finished session's full hour of audio would arrive after the moment
+# it exists to get ahead of.
+WINDOW_STREAM_NAME = "ai_jobs_window"
+WINDOW_CONSUMER_GROUP = "ai-service-window"
+
 SUGGESTION_KINDS = frozenset({"recap", "treatment_plan", "risk_detection"})
+WINDOW_KIND = "window"
 
 
 def _consumer_name() -> str:
@@ -72,6 +81,14 @@ TRANSCRIPTION_SLOTS = 1
 # to HISTORY_MAX_CHARS of decrypted history and runs it through spaCy. Two is
 # what the same memory budget admits next to a live transcription.
 SUGGESTION_SLOTS = 2
+
+# Windows run one at a time for the same reason transcription does — it is the
+# same model on the same two cores — and the slot is separate so that a window
+# and a finished session cannot both be inside faster-whisper at once. Two
+# concurrent spectrograms is the OOM kill of 2026-08-11 with extra steps, and
+# the container's memory limit (PR #280) turns that from a mystery into a
+# deterministic one.
+WINDOW_SLOTS = 1
 
 # The longest job the pipeline can legitimately be handed, used to size the
 # reclaim window below. MAX_AUDIO_SECONDS sits comfortably above what core-api's
@@ -163,6 +180,7 @@ class AIWorker:
         self._lanes: tuple[_Lane, ...] = (
             _Lane("transcription", STREAM_NAME, CONSUMER_GROUP, TRANSCRIPTION_SLOTS),
             _Lane("suggestion", FAST_STREAM_NAME, FAST_CONSUMER_GROUP, SUGGESTION_SLOTS),
+            _Lane("window", WINDOW_STREAM_NAME, WINDOW_CONSUMER_GROUP, WINDOW_SLOTS),
         )
 
     async def start(self) -> None:
@@ -277,6 +295,9 @@ class AIWorker:
 
     async def _handle(self, lane: _Lane, message_id: str, fields: dict[str, Any]) -> None:
         kind = fields.get("kind")
+        if kind == WINDOW_KIND:
+            await self._handle_window(lane, message_id, fields)
+            return
         if kind in SUGGESTION_KINDS:
             # On the fast stream this is every job. On the transcription stream
             # it is a suggestion enqueued by a core-api from before the split —
@@ -313,6 +334,125 @@ class AIWorker:
             logger.error("draft processing failed", extra={"draft_id": draft_id, "err": str(exc)})
             await self._set_error(draft_id, str(exc))
             # Do NOT ack — message stays in PEL for retry or manual inspection
+
+    async def _handle_window(self, lane: _Lane, message_id: str, fields: dict[str, Any]) -> None:
+        """Transcribe what has landed of a session that is still being recorded.
+
+        Every failure path here ends in an ack. There is no draft to mark ERROR
+        and nobody is waiting on this job: the professional is in a room with a
+        patient, and the thing they will press in an hour transcribes the whole
+        take regardless of whether any of this ran. Leaving the entry in the PEL
+        so it can be reclaimed later would re-run a window over audio that has
+        since been finished and deleted.
+        """
+        org_id = fields.get("org_id")
+        appointment_id = fields.get("appointment_id")
+        upload_id = fields.get("upload_id")
+        parts_dir = fields.get("parts_dir")
+        try:
+            parts = int(fields.get("parts", 0))
+        except (TypeError, ValueError):
+            parts = 0
+
+        if not org_id or not appointment_id or not upload_id or not parts_dir or parts <= 0:
+            logger.warning(
+                "window job missing fields",
+                extra={"message_id": message_id, "fields": list(fields.keys())},
+            )
+            await self._ack(lane, message_id)
+            return
+
+        try:
+            await self._process_window(org_id, appointment_id, upload_id, parts_dir, parts)
+        except Exception as exc:
+            logger.warning(
+                "window transcription failed",
+                extra={"upload_id": upload_id, "parts": parts, "err": str(exc)},
+            )
+        await self._ack(lane, message_id)
+
+    async def _process_window(
+        self, org_id: str, appointment_id: str, upload_id: str, parts_dir: str, parts: int
+    ) -> None:
+        assert self._db is not None
+        row = await self._db.fetchrow(
+            """
+            SELECT p.covered_parts, p.covered_ms, k.encrypted_dek, k.key_source
+              FROM partial_transcripts p
+              JOIN encryption_keys k ON k.id = p.dek_id
+             WHERE p.organization_id = $1 AND p.appointment_id = $2 AND p.upload_id = $3
+            """,
+            org_id, appointment_id, upload_id,
+        )
+        if row is None:
+            # The session was finished (the draft absorbed the partial) or
+            # abandoned long enough ago to be swept. Either way there is nothing
+            # left to transcribe into.
+            logger.info("window skipped: no partial transcript", extra={"upload_id": upload_id})
+            return
+
+        if row["covered_parts"] >= parts:
+            # A retried part re-enqueues its window, and a reclaimed entry
+            # re-delivers one. Both land here, and neither is worth minutes of
+            # CPU during a live session.
+            logger.info(
+                "window skipped: already covered",
+                extra={"upload_id": upload_id, "parts": parts, "covered": row["covered_parts"]},
+            )
+            return
+
+        covered_ms = int(row["covered_ms"])
+        window = await asyncio.to_thread(
+            transcribe_window, parts_dir, upload_id, parts, covered_ms
+        )
+        if window is None:
+            return
+
+        dek = self._decrypt_dek(row["key_source"], bytes(row["encrypted_dek"]))
+
+        # Re-read the text now rather than reusing what was fetched above. The
+        # transcription took minutes, and appending to a snapshot from before it
+        # would drop whatever landed in between. The UPDATE's own guard makes
+        # this belt and braces; the guard alone would silently discard this
+        # window's work instead of noticing.
+        current = await self._db.fetchrow(
+            """
+            SELECT transcript_enc, covered_ms FROM partial_transcripts
+             WHERE organization_id = $1 AND appointment_id = $2 AND upload_id = $3
+            """,
+            org_id, appointment_id, upload_id,
+        )
+        if current is None or int(current["covered_ms"]) != covered_ms:
+            logger.info(
+                "window discarded: the session moved on while it ran",
+                extra={"upload_id": upload_id, "started_from_ms": covered_ms},
+            )
+            return
+
+        previous = ""
+        if current["transcript_enc"] is not None:
+            previous = open_(dek, bytes(current["transcript_enc"])).decode()
+        combined = "\n\n".join(part for part in (previous.strip(), window.text) if part)
+
+        # covered_ms < $6 is what makes a late redelivery a no-op instead of a
+        # rewind. See migration 000078 for what a rewind does to the note.
+        await self._db.execute(
+            """
+            UPDATE partial_transcripts
+               SET transcript_enc = $4, covered_parts = $5, covered_ms = $6
+             WHERE organization_id = $1 AND appointment_id = $2 AND upload_id = $3
+               AND covered_ms < $6
+            """,
+            org_id, appointment_id, upload_id,
+            seal(dek, combined.encode()), parts, window.end_ms,
+        )
+        logger.info(
+            "window stored",
+            extra={
+                "upload_id": upload_id, "parts": parts,
+                "covered_ms": window.end_ms, "chars": len(combined),
+            },
+        )
 
     async def _handle_suggestion(
         self, lane: _Lane, message_id: str, kind: str, fields: dict[str, Any]

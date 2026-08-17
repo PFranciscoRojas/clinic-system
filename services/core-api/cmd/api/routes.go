@@ -202,7 +202,7 @@ func (a *app) buildRouter() http.Handler {
 		r.Mount("/api/v1/me/availability", availabilityH.PrivateRoutes())
 		r.Mount("/api/v1/me/google", a.gcal.Routes())
 
-		aiDrafts := aidraftshandler.New(a.pool, a.km, a.rdb, a.cfg.AudioDir)
+		aiDrafts := aidraftshandler.New(a.pool, a.km, a.rdb, a.cfg.AudioDir, a.cfg.WindowTranscription)
 		r.Mount("/api/v1/ai-drafts", aiDrafts.Routes())
 		r.Method(http.MethodPost, "/api/v1/appointments/{appointment_id}/audio", aiDrafts.AppointmentAudioRoute())
 		// Deliberately not in exceptAudioUpload's carve-out below: one part is a
