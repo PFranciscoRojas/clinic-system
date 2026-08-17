@@ -12,8 +12,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"sghcp/core-api/internal/aidrafts"
+	"sghcp/core-api/internal/shared/dbctx"
 )
 
 // Uploading a session in parts while it is still being recorded.
@@ -86,7 +88,7 @@ type AssemblePartsInput struct {
 }
 
 // AppendPart stores one part of an in-progress upload.
-func (s *Service) AppendPart(in AppendPartInput) error {
+func (s *Service) AppendPart(ctx context.Context, in AppendPartInput) error {
 	dir, err := s.uploadDir(in.OrganizationID, in.AppointmentID, in.UploadID)
 	if err != nil {
 		return err
@@ -143,6 +145,11 @@ func (s *Service) AppendPart(in AppendPartInput) error {
 		_ = os.Remove(tmp)
 		return fmt.Errorf("finalize audio part: %w", err)
 	}
+
+	// Only after the part is safely in place. This is scratch space for work
+	// that has not happened yet, so it never runs ahead of the bytes it is
+	// about and it never reports a problem back up here.
+	s.ensurePartialTranscript(ctx, in)
 	return nil
 }
 
@@ -274,13 +281,23 @@ func (s *Service) SweepAbandonedParts() (int, error) {
 
 // PartSweeper runs SweepAbandonedParts on a ticker, one goroutine inside
 // core-api, mirroring the retention sweeper next to it.
+//
+// It also sweeps the partial transcripts of the same unfinished uploads. Both
+// are the debris of one event — a tab that closed — and both are PHI that no
+// ai_draft row will ever come looking for, so they get one deadline and one
+// place that applies it. Splitting them across two sweepers is how the two
+// deadlines drift apart and a transcript outlives the audio it describes.
 type PartSweeper struct {
 	svc    *Service
+	pool   *pgxpool.Pool
 	logger *slog.Logger
 }
 
-func NewPartSweeper(audioDir string, logger *slog.Logger) *PartSweeper {
-	return &PartSweeper{svc: &Service{audioDir: audioDir}, logger: logger}
+// NewPartSweeper takes the pool as well as the directory. A nil pool sweeps
+// files only, which is what the filesystem tests want and what core-api never
+// passes.
+func NewPartSweeper(audioDir string, pool *pgxpool.Pool, repo aidrafts.Repository, logger *slog.Logger) *PartSweeper {
+	return &PartSweeper{svc: &Service{audioDir: audioDir, repo: repo}, pool: pool, logger: logger}
 }
 
 // partSweepInterval is well under abandonedPartAge: the interval decides how
@@ -291,25 +308,68 @@ func (p *PartSweeper) Run(ctx context.Context) {
 	p.logger.Info("audio part sweeper started", "interval", partSweepInterval, "keep_for", abandonedPartAge)
 	ticker := time.NewTicker(partSweepInterval)
 	defer ticker.Stop()
-	p.sweep()
+	p.sweep(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			p.logger.Info("audio part sweeper stopped")
 			return
 		case <-ticker.C:
-			p.sweep()
+			p.sweep(ctx)
 		}
 	}
 }
 
-func (p *PartSweeper) sweep() {
+func (p *PartSweeper) sweep(ctx context.Context) {
 	removed, err := p.svc.SweepAbandonedParts()
 	if err != nil {
 		p.logger.Error("audio part sweep failed", "err", err)
 	}
 	if removed > 0 {
 		p.logger.Info("deleted parts of unfinished uploads", "count", removed)
+	}
+	p.sweepPartials(ctx)
+}
+
+// sweepPartials deletes the transcript rows of the same unfinished uploads.
+//
+// One pass per organization, because partial_transcripts has FORCE RLS and
+// core-api connects as sghcp_app: a single cross-tenant DELETE would silently
+// match nothing. Same shape as the retention sweeper — list the tenants, then
+// work inside each one's scope.
+func (p *PartSweeper) sweepPartials(ctx context.Context) {
+	if p.pool == nil || p.svc.repo == nil {
+		return
+	}
+	cutoff := time.Now().Add(-abandonedPartAge)
+
+	rows, err := p.pool.Query(ctx, `SELECT id FROM organizations WHERE is_active`)
+	if err != nil {
+		p.logger.Error("partial transcript sweep: list orgs", "err", err)
+		return
+	}
+	var orgIDs []string
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil {
+			orgIDs = append(orgIDs, id)
+		}
+	}
+	rows.Close()
+
+	var total int64
+	for _, orgID := range orgIDs {
+		err := dbctx.WithOrgScope(ctx, p.pool, orgID, func(scoped context.Context) error {
+			n, err := p.svc.repo.SweepPartials(scoped, cutoff)
+			total += n
+			return err
+		})
+		if err != nil {
+			p.logger.Error("partial transcript sweep failed", "org", orgID, "err", err)
+		}
+	}
+	if total > 0 {
+		p.logger.Info("deleted partial transcripts of unfinished uploads", "count", total)
 	}
 }
 

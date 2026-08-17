@@ -65,7 +65,7 @@ func (h *Handler) uploadAudioPart(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	if err := h.svc.AppendPart(aidraftssvc.AppendPartInput{
+	if err := h.svc.AppendPart(r.Context(), aidraftssvc.AppendPartInput{
 		OrganizationID: claims.OrganizationID,
 		AppointmentID:  appointmentID,
 		UploadID:       r.FormValue("upload_id"),

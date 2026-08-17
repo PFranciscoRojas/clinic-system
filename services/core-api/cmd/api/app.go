@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	aidraftsrepo "sghcp/core-api/internal/aidrafts/repository"
 	"sghcp/core-api/internal/aidrafts/retention"
 	aidraftssvc "sghcp/core-api/internal/aidrafts/service"
 	"sghcp/core-api/internal/gcal"
@@ -127,8 +128,12 @@ func (a *app) run(ctx context.Context) error {
 	go retention.New(a.pool, slog.Default()).Run(ctx)
 	// Parts of session uploads nobody finished — the tab closed, "Finalizar
 	// sesión" never pressed. Unencrypted PHI that no ai_draft row points at, so
-	// nothing else is ever going to come looking for it.
-	go aidraftssvc.NewPartSweeper(a.cfg.AudioDir, slog.Default()).Run(ctx)
+	// nothing else is ever going to come looking for it. Same pass drops the
+	// partial transcripts of those uploads, which are the other half of the
+	// same debris.
+	go aidraftssvc.NewPartSweeper(
+		a.cfg.AudioDir, a.pool, aidraftsrepo.New(a.pool), slog.Default(),
+	).Run(ctx)
 	// Trial lifecycle emails (day-3 nudge, ends-soon, ended) for self-serve
 	// tenants. Noop notifier ⇒ effectively disabled in dev/CI.
 	go trial.New(a.pool, notifier, a.cfg.AppBaseURL, a.cfg.SupportWhatsApp, slog.Default()).Run(ctx)
