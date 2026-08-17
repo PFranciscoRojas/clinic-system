@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -313,4 +314,87 @@ func TestTenantScopedTablesHaveRLSPolicy(t *testing.T) {
 
 	t.Logf("verified %d tenant-scoped tables (%d exempt from policy, %d exempt from FORCE)",
 		len(checked), len(rlsExemptTables), len(forceRLSExemptTables))
+}
+
+// TestEveryTableHoldingADEKIsInBothPurgePaths is the guard for the mistake this
+// migration nearly shipped: partial_transcripts names an encryption_keys row,
+// and the admin purge decides which keys to drop by listing, by hand, the
+// tables that reference one. A table missing from that list leaves a wrapped
+// key behind for every row it ever held, in an organization that is supposed to
+// be gone.
+//
+// Self-discovering rather than a list, for the same reason as the rest of
+// schema_invariants_test.go: the next table to hold a dek_id is covered without
+// anyone remembering this file exists.
+func TestEveryTableHoldingADEKIsInBothPurgePaths(t *testing.T) {
+	skipIfShort(t)
+
+	rows, err := adminPool.Query(context.Background(), `
+		SELECT c.table_name
+		  FROM information_schema.columns c
+		  JOIN information_schema.tables t
+		    ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+		 WHERE c.table_schema = 'public'
+		   AND t.table_type = 'BASE TABLE'
+		   AND c.column_name LIKE '%dek_id'
+		 ORDER BY c.table_name`)
+	if err != nil {
+		t.Fatalf("query information_schema: %v", err)
+	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatal(err)
+		}
+		tables = append(tables, name)
+	}
+	if len(tables) < 5 {
+		t.Fatalf("only found %d tables with a dek_id; the query is wrong", len(tables))
+	}
+
+	// reset.go wipes a test org's clinical data; orgdelete.go removes the org
+	// entirely. Both build the doomed_deks list themselves, so both can be
+	// wrong independently.
+	for _, path := range []string{
+		"../admin/handler/orgdelete.go",
+		"../admin/handler/reset.go",
+	} {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		doomed := between(string(src), "CREATE TEMP TABLE doomed_deks", "`, orgID)")
+		if doomed == "" {
+			t.Fatalf("%s: could not find the doomed_deks query", path)
+		}
+		for _, table := range tables {
+			// Only tables this path actually empties. reset.go leaves users and
+			// their professional_profiles alone on purpose — it wipes a test
+			// org's clinical data, not the org — so its signature DEK is a key
+			// somebody still needs, not one left behind.
+			if !strings.Contains(string(src), "DELETE FROM "+table+" ") {
+				continue
+			}
+			if !strings.Contains(doomed, " "+table+" ") {
+				t.Errorf("%s: rows are deleted from %q, which holds a DEK, but the "+
+					"table is not in doomed_deks: the wrapped keys survive the purge", path, table)
+			}
+		}
+	}
+}
+
+func between(s, start, end string) string {
+	i := strings.Index(s, start)
+	if i < 0 {
+		return ""
+	}
+	rest := s[i:]
+	j := strings.Index(rest, end)
+	if j < 0 {
+		return ""
+	}
+	return rest[:j]
 }

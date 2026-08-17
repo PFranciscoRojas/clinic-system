@@ -166,6 +166,9 @@ func (h *Handler) deleteOrgCascade(ctx context.Context, orgID string) (map[strin
 		  UNION SELECT dek_id FROM clinical_records    WHERE organization_id = $1 AND dek_id IS NOT NULL
 		  UNION SELECT dek_id FROM consents            WHERE organization_id = $1 AND dek_id IS NOT NULL
 		  UNION SELECT dek_id FROM ai_drafts           WHERE organization_id = $1 AND dek_id IS NOT NULL
+		  UNION SELECT dek_id FROM ai_suggestions      WHERE organization_id = $1 AND dek_id IS NOT NULL
+		  UNION SELECT dek_id FROM patient_billing_profiles WHERE organization_id = $1 AND dek_id IS NOT NULL
+		  UNION SELECT dek_id FROM partial_transcripts WHERE organization_id = $1
 		  UNION SELECT dek_id FROM treatment_plans     WHERE organization_id = $1 AND dek_id IS NOT NULL
 		  UNION SELECT dek_id FROM patient_assessments WHERE organization_id = $1 AND dek_id IS NOT NULL
 		  UNION SELECT dek_id FROM invoices            WHERE organization_id = $1 AND dek_id IS NOT NULL
@@ -187,6 +190,9 @@ func (h *Handler) deleteOrgCascade(ctx context.Context, orgID string) (map[strin
 		{"patient_diagnoses", `DELETE FROM patient_diagnoses WHERE organization_id = $1`},
 		{"ai_suggestions", `DELETE FROM ai_suggestions WHERE organization_id = $1`},
 		{"ai_drafts", `DELETE FROM ai_drafts WHERE organization_id = $1`},
+		// Scratch transcripts of recordings in progress. Cascades from
+		// appointments too; explicit so their DEKs above are not left dangling.
+		{"partial_transcripts", `DELETE FROM partial_transcripts WHERE organization_id = $1`},
 		{"consent_sign_tokens", `DELETE FROM consent_sign_tokens WHERE organization_id = $1`},
 		{"consents", `DELETE FROM consents WHERE organization_id = $1`},
 		{"patient_staff_rel", `DELETE FROM patient_staff_rel WHERE organization_id = $1`},
