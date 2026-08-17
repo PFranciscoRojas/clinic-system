@@ -505,7 +505,7 @@ producción y la mejora es esperada, no observada. La medición sale de correr
 `scripts/e2e_audio/` y leer `rtf` de la fila, que es precisamente para lo que se
 hizo la Fase 0.
 
-### Fase 4 — Transcribir durante la sesión
+### Fase 4 — Transcribir durante la sesión ✅ (hecha, apagada)
 
 Con las partes ya en el servidor, un job transcribe ventanas de ~5 min sobre el
 archivo parcial (ffmpeg decodifica un webm que crece). Al finalizar solo queda la
@@ -623,11 +623,38 @@ Y el mismo hueco de despliegue que tenía el ai-service: `docker-compose.yml` no
 disparaba el workflow de core-api, aunque el deploy hace `git pull` y `compose
 up -d`.
 
-**4. El final sólo transcribe la cola** (pendiente)
+**4. El final sólo transcribe la cola ✅ (hecha, PR #285, apagada)**
 
-`/audio/complete` lee lo parcial, transcribe lo que falta, concatena, Claude.
-Es la que convierte la rebanada 3 en el ahorro de tiempo, y la que justifica
-encender el flag.
+El job que arranca al pulsar "Finalizar sesión" lee lo que las ventanas ya
+transcribieron y a Whisper sólo le da los minutos desde la última ventana. El
+desplazamiento vale porque la toma es byte por byte la concatenación de sus
+partes: `assembleParts` las une en orden y no escribe nada más, así que un
+milisegundo medido contra la grabación que crecía significa lo mismo contra la
+terminada.
+
+Todo camino que no sea exactamente el esperado transcribe la toma completa: sin
+`upload_id` (un archivo elegido a mano), sin fila parcial, sin texto todavía,
+una DEK que no abre, un ffmpeg que no pudo extraer la cola.
+
+**Los dos números que dejaban de significar lo que significaban.**
+`audio_seconds` sigue siendo cuánto dura la grabación, porque es el número con
+el que se tomó cada medición de §1.1 y redefinirlo en silencio haría que la
+comparación de antes y después comparara dos cosas distintas.
+`transcribed_seconds` (migración 000079) es el nuevo: los segundos que este run
+le dio a Whisper.
+
+El RTF divide por el segundo. Dividiendo por `audio_seconds`, un run de sólo la
+cola reportaría haber transcrito una hora en cuarenta segundos — RTF 0,01 — y
+cada ETA en pantalla heredaría ese número y prometería la décima parte de la
+espera real. El test lo mide: sin el cambio sale exactamente 0,01.
+
+**Y la estimación tenía que restar lo que ya es texto.** `ai_queue_estimate()`
+hace LEFT JOIN con `partial_transcripts` y reporta los milisegundos ya
+transcritos, los propios y los de las que van delante. La segunda mitad importa
+más: un profesional detrás de tres sesiones casi terminadas no puede recibir
+"vuelve después de almorzar". La función devuelve milisegundos y no bytes
+porque los bytes por segundo del grabador son una constante que vive en Go, y
+una segunda copia en SQL es una segunda copia que mantener sincronizada.
 
 Regla que no se negocia en 3 ni en 4: **si algo de esto falla o se atrasa,
 `/audio/complete` transcribe todo desde cero como hoy.** Optimización, nunca
@@ -637,8 +664,19 @@ partes, donde IndexedDB es la copia de verdad.
 #### Cómo encenderlo
 
 `AI_WINDOW_TRANSCRIPTION=true` en el `.env` del VPS y recrear el contenedor de
-core-api. No antes de la rebanada 4, y no sin una ventana para cargar la caja
-sin pisar una sesión real.
+core-api. Las cuatro rebanadas están en producción, así que encenderlo ya tiene
+sentido; falta la ventana para cargar la caja sin pisar una sesión real (§3.4
+sigue abierta: no hay prueba de carga, la tabla de capacidad es aritmética).
+
+Qué mirar al encenderlo, en este orden:
+
+1. `docker logs sghcp_ai_service | grep "window transcribed"` — que las
+   ventanas corran y cuánto tardan.
+2. `SELECT transcribed_seconds, audio_seconds, rtf FROM ai_drafts ORDER BY
+   created_at DESC LIMIT 5` — que `transcribed_seconds` sea la cola y no la
+   sesión entera, y que el RTF siga rondando 0,115.
+3. El tiempo percibido entre "Finalizar" y el borrador, que es la única cifra
+   que le importa a alguien fuera de este documento.
 
 ### Fase 5 — Carriles en el worker ✅ (hecha)
 
