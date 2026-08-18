@@ -157,8 +157,8 @@ de sobra. La cola existe solo porque esperamos a que todos terminen. Repartir es
 trabajo durante la sesión (Fase 4) hace viable un escenario que ni comprar núcleos
 resuelve, porque comprar núcleos sube el techo y no cambia el amontonamiento.
 
-Estos números son aritmética sobre mediciones por trabajo, no una prueba de carga
-(§3.4 sigue abierto).
+Estos números eran aritmética sobre mediciones por trabajo. La prueba de carga
+que faltaba se corrió el 2026-08-18 contra producción y está en §3.4.1.
 
 ### 3.1.2 Lo que ve el profesional mientras espera
 
@@ -259,9 +259,57 @@ La mitad peligrosa está cubierta, y bien:
   `aidrafts/service/upload_test.go`: dos tomas de la misma cita (secuenciales y
   concurrentes), separación por org y por cita, y limpieza del parcial cuando el
   cuerpo falla.
-- **Ninguna prueba de carga.** Sigue abierto: no hay forma de responder "¿aguanta
-  5 sesiones cerrando a la vez?" con datos en vez de con opinión. Depende de las
-  columnas de tiempos de la Fase 0.
+- ~~**Ninguna prueba de carga**~~ — corrida el 2026-08-18 contra producción, con
+  la Fase 4 encendida. Los números están en §3.4.1.
+
+### 3.4.1 La prueba de carga (2026-08-18, producción, Fase 4 encendida)
+
+Audio real de una sesión en español generado con piper-tts, subido por el mismo
+camino que usa el grabador: una parte por minuto de sesión, `/audio/parts`, y
+`/audio/complete` al final. Marcó a 3x tiempo real, o sea que a cada ventana se
+le dio un tercio del margen que tiene en una sesión de verdad. Lo que aguante
+ahí, sobra en producción.
+
+**Una sesión sola** (28,7 min de audio):
+
+| | |
+|---|---|
+| Ventanas durante la sesión | 5, de 262 a 322 s de audio cada una |
+| CPU por ventana | 34,4 / 39,0 / 37,5 / 35,0 / 41,4 s |
+| Cubierto al pulsar "Finalizar" | 1.485 s de 1.723 (86 %) |
+| Se transcribió al final | solo la cola: 238 s en 29,9 s |
+| **Espera entre "Finalizar" y borrador** | **58,4 s** |
+| ETA que se le prometió | 80 s |
+
+**Tres sesiones cerrando en el mismo instante** (23,3 min de audio cada una, que
+en tiempo real equivale a nueve profesionales grabando a la vez):
+
+| Sesión | Cubierto antes de cerrar | Cola transcrita | Espera |
+|---|---|---|---|
+| 1ª | 882 s (14.605 chars) | 378,7 s en 60,7 s | **87,1 s** |
+| 2ª | 882 s | 378,7 s en 45,3 s | **155,1 s** |
+| 3ª | 882 s | 378,7 s en 45,5 s | **220,7 s** |
+
+Las doce ventanas del run corrieron seriadas en el único cupo del carril y
+ninguna se atrasó: la cola nunca creció. El RTF se sostuvo en 0,12 salvo en la
+primera cola (0,16), que compartió CPU con una ventana todavía en vuelo — los
+carriles de transcripción y de ventana tienen un cupo cada uno, así que Whisper
+puede correr dos veces a la vez y ahí se nota.
+
+Sin ventanas, esas mismas tres sesiones habrían esperado ~200 / ~400 / ~600 s.
+
+La ETA quedó por encima de lo real en los tres casos (90 vs 87, 180 vs 155, 269
+vs 221), que es la dirección segura: nadie se queda esperando más de lo que se le
+dijo.
+
+Lo que la prueba dejó limpio: `partial_transcripts` en 0 al terminar, cero llaves
+de cifrado huérfanas creadas por el run, y las carpetas de partes vaciadas en
+cuanto cerró cada toma.
+
+Lo único que quedó por afinar, y no es un fallo: si una ventana está en vuelo
+cuando el profesional pulsa "Finalizar", su resultado llega tarde y se descarta.
+La primera sesión transcribió 379 s de cola en vez de 98 s por eso. Corrección
+por diseño, desperdicio por oportunidad.
 
 ### 3.5 Hallazgo colateral, fuera del alcance de este plan
 
@@ -664,9 +712,8 @@ partes, donde IndexedDB es la copia de verdad.
 #### Cómo encenderlo
 
 `AI_WINDOW_TRANSCRIPTION=true` en el `.env` del VPS y recrear el contenedor de
-core-api. Las cuatro rebanadas están en producción, así que encenderlo ya tiene
-sentido; falta la ventana para cargar la caja sin pisar una sesión real (§3.4
-sigue abierta: no hay prueba de carga, la tabla de capacidad es aritmética).
+core-api. Encendido en producción el 2026-08-18 y medido bajo carga el mismo día
+(§3.4.1). Se queda encendido.
 
 Qué mirar al encenderlo, en este orden:
 
@@ -725,8 +772,9 @@ tipos sí se distinguen antes de leerse: en el productor.
   y el conjunto de `kind`s con los del productor. Si dejan de coincidir no falla
   nada en ninguno de los dos lados — core-api encola contra un stream que nadie
   consume y la sugerencia se queda en PENDING hasta que alguien la busque.
-- ⬜ Sigue pendiente: `scripts/e2e_audio/` con 3 sesiones cerrando a la vez y
-  p50/p95 por etapa (§3.4).
+- ✅ 3 sesiones cerrando a la vez, medidas contra producción el 2026-08-18
+  (§3.4.1). Sigue sin automatizarse dentro de `scripts/e2e_audio/`: el run fue
+  manual y los p50/p95 por etapa salen de los logs, no de un reporte.
 
 **Lo que no compró**: nada de tiempo total. La transcripción sigue siendo el
 96,5 % del reloj y sigue tardando lo mismo. Lo que compró es que deje de ser la
