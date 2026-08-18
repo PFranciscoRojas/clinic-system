@@ -384,7 +384,12 @@ func (h *Handler) reconcile(w http.ResponseWriter, r *http.Request) {
 
 	pre, err := mp.FindPreapprovalByPlan(ctx, planID)
 	if err != nil {
-		slog.Warn("billing.reconcile: preapproval not found", "plan_id", planID, "err", err)
+		// "could not look up" rather than "not found": for months this line
+		// said the tenant had no subscription while MercadoPago was refusing
+		// the query itself, and the difference between "they never paid" and
+		// "we asked wrong" is where the whole investigation goes.
+		slog.Warn("billing.reconcile: could not look up the preapproval",
+			"plan_id", planID, "err", err)
 		httputil.WriteError(w, http.StatusNotFound, "suscripción no encontrada en MercadoPago")
 		return
 	}

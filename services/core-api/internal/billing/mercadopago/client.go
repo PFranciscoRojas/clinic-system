@@ -81,10 +81,22 @@ func VerifyWebhook(secret, xSignature, xRequestID, dataID string) (bool, string)
 type Client struct {
 	accessToken string
 	http        *http.Client
+	baseURL     string
 }
 
 func New(accessToken string) *Client {
-	return &Client{accessToken: accessToken, http: &http.Client{Timeout: 15 * time.Second}}
+	return newAt(accessToken, base)
+}
+
+// newAt points a client at another host. Only the tests use it, and they exist
+// because the bug of 2026-08-18 was in the query string itself: nothing short
+// of watching the request go out could have caught it.
+func newAt(accessToken, baseURL string) *Client {
+	return &Client{
+		accessToken: accessToken,
+		http:        &http.Client{Timeout: 15 * time.Second},
+		baseURL:     baseURL,
+	}
 }
 
 // Enabled reports whether billing is configured (a token is present).
@@ -145,8 +157,13 @@ func (c *Client) FindPreapprovalByPlan(ctx context.Context, planID string) (*Pre
 	var out struct {
 		Results []Preapproval `json:"results"`
 	}
+	// sort is "field:direction" here. The separate sort/criteria pair is the
+	// /v1/payments/search convention, and this endpoint answers it with
+	// 400 "Invalid sorting value format." — which is what it did, every time,
+	// from the day this was written until 2026-08-18.
 	if err := c.do(ctx, http.MethodGet,
-		"/preapproval/search?preapproval_plan_id="+planID+"&sort=date_created&criteria=desc&limit=1",
+		"/preapproval/search?preapproval_plan_id="+url.QueryEscape(planID)+
+			"&sort=date_created:desc&limit=1",
 		nil, &out); err != nil {
 		return nil, err
 	}
@@ -264,7 +281,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	} else {
 		reader = bytes.NewReader(nil)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, base+path, reader)
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reader)
 	if err != nil {
 		return err
 	}
