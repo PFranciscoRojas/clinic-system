@@ -136,9 +136,16 @@ func (c *Client) CreatePlan(ctx context.Context, orgID, reason string, amountCOP
 
 // Preapproval is a subscriber's subscription as returned by the API.
 type Preapproval struct {
-	ID                string `json:"id"`
-	Status            string `json:"status"` // pending | authorized | paused | cancelled
+	ID     string `json:"id"`
+	Status string `json:"status"` // pending | authorized | paused | cancelled
+	// ExternalReference is empty on every preapproval born from a
+	// preapproval_plan: MercadoPago does not copy the plan's onto the
+	// subscription it creates. Verified against the live API on 2026-08-18,
+	// after months of it being the only thing used to find the tenant.
 	ExternalReference string `json:"external_reference"`
+	// PreapprovalPlanID is the link that does survive. The org row has held it
+	// in provider_customer_id since its checkout was created.
+	PreapprovalPlanID string `json:"preapproval_plan_id"`
 	NextPaymentDate   string `json:"next_payment_date"` // RFC3339-ish
 	PayerEmail        string `json:"payer_email"`
 }

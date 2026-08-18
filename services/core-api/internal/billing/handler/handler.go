@@ -8,6 +8,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -329,10 +330,16 @@ func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
 	default:
 		// The subscription itself (created/authorized/paused/cancelled).
 		pre, err := mp.GetPreapproval(ctx, id)
-		if err != nil || pre.ExternalReference == "" {
+		if err != nil {
 			return
 		}
-		h.applyPreapproval(ctx, pre)
+		orgID, err := h.orgForPreapproval(ctx, pre)
+		if err != nil {
+			slog.Error("billing.webhook: subscription belongs to no known tenant",
+				"preapproval", pre.ID, "err", err)
+			break
+		}
+		h.applyPreapproval(ctx, orgID, pre)
 	}
 }
 
@@ -394,7 +401,9 @@ func (h *Handler) reconcile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.applyPreapproval(ctx, pre)
+	// The tenant is the one holding the session, not whatever the subscription
+	// says: this preapproval was looked up through that tenant's own plan id.
+	h.applyPreapproval(ctx, claims.OrganizationID, pre)
 
 	// Always patch notification_url so that future status changes (authorized,
 	// renewal, cancellation) reach the webhook — even if the current status is
@@ -411,8 +420,38 @@ func (h *Handler) reconcile(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"subscription_status": status})
 }
 
+// orgForPreapproval says which organization a subscription belongs to.
+//
+// external_reference first, because when MercadoPago does send one it is
+// authoritative; the plan id second, because on this flow it never sends one.
+// Not finding an org is an error and not a no-op: a paid subscription that
+// belongs to nobody is the single most expensive thing this file can be quiet
+// about, and being quiet about it is exactly what happened.
+func (h *Handler) orgForPreapproval(ctx context.Context, pre *mercadopago.Preapproval) (string, error) {
+	if pre.ExternalReference != "" {
+		return pre.ExternalReference, nil
+	}
+	if pre.PreapprovalPlanID == "" {
+		return "", fmt.Errorf("preapproval %s carries neither an external reference nor a plan id", pre.ID)
+	}
+	var orgID string
+	err := h.pool.QueryRow(ctx,
+		`SELECT id FROM organizations WHERE provider_customer_id = $1`,
+		pre.PreapprovalPlanID).Scan(&orgID)
+	if err != nil {
+		return "", fmt.Errorf("no organization holds plan %s: %w", pre.PreapprovalPlanID, err)
+	}
+	return orgID, nil
+}
+
 // applyPreapproval maps a subscription's status onto the org's billing columns.
-func (h *Handler) applyPreapproval(ctx context.Context, pre *mercadopago.Preapproval) {
+// The org is passed in rather than read off the subscription: see
+// orgForPreapproval for why the subscription is not a reliable place to find it.
+func (h *Handler) applyPreapproval(ctx context.Context, orgID string, pre *mercadopago.Preapproval) {
+	var (
+		sql  string
+		args []any
+	)
 	switch pre.Status {
 	case "authorized":
 		until := time.Now().AddDate(0, 1, 0)
@@ -420,20 +459,34 @@ func (h *Handler) applyPreapproval(ctx context.Context, pre *mercadopago.Preappr
 			until = t
 		}
 		// Promote the seats the checkout was priced for into the paid limit.
-		_, _ = h.pool.Exec(ctx, `
+		sql = `
 			UPDATE organizations
 			SET subscription_status = 'active', current_period_end = $2,
 			    seat_limit = GREATEST(COALESCE(pending_seats, seat_limit), 1),
 			    pending_seats = NULL, updated_at = NOW()
-			WHERE id = $1`, pre.ExternalReference, until)
+			WHERE id = $1`
+		args = []any{orgID, until}
 	case "cancelled":
-		_, _ = h.pool.Exec(ctx, `
-			UPDATE organizations SET subscription_status = 'canceled', updated_at = NOW() WHERE id = $1`,
-			pre.ExternalReference)
+		sql = `UPDATE organizations SET subscription_status = 'canceled', updated_at = NOW() WHERE id = $1`
+		args = []any{orgID}
 	case "paused":
-		_, _ = h.pool.Exec(ctx, `
-			UPDATE organizations SET subscription_status = 'past_due', updated_at = NOW() WHERE id = $1`,
-			pre.ExternalReference)
+		sql = `UPDATE organizations SET subscription_status = 'past_due', updated_at = NOW() WHERE id = $1`
+		args = []any{orgID}
+	default:
+		return
+	}
+
+	// The rows affected are read, not discarded. An UPDATE that changes nothing
+	// is how a paid tenant sat in "trialing" for hours with a 200 on the way
+	// out and not one line about it anywhere.
+	tag, err := h.pool.Exec(ctx, sql, args...)
+	if err != nil {
+		slog.Error("billing: could not apply the subscription", "org", orgID, "status", pre.Status, "err", err)
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		slog.Error("billing: the subscription matched no organization",
+			"org", orgID, "preapproval", pre.ID, "status", pre.Status)
 	}
 }
 
