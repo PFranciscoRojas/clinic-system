@@ -1,0 +1,20 @@
+-- A window that is already running when the professional presses "Finalizar".
+--
+-- Measured in production on 2026-08-18 (§3.4.1 of docs/ai/PLAN_LATENCIA_AUDIO.md):
+-- the window covering parts 16-20 was 16 seconds into its run when the take was
+-- completed. Its result landed 40 seconds later, by which time the draft had
+-- already read the partial and committed to transcribing everything after
+-- 882 s. So the tail was 379 s of audio instead of the 98 s that were actually
+-- left, and the window's 56 s of CPU went in the bin.
+--
+-- Waiting those 40 seconds is cheaper than re-transcribing the same five
+-- minutes, and it is not the transcription lane sitting idle for nothing: the
+-- audio it would have spent that time on is the audio the window is already
+-- decoding. What was missing was any way for the draft to know a window was in
+-- flight, which is what this column is.
+--
+-- NULL means nothing is running. A timestamp older than the worker's staleness
+-- cap means the worker died holding it, and is ignored rather than trusted —
+-- fail-closed here would mean every later take waiting out the cap for a window
+-- that is never coming.
+ALTER TABLE partial_transcripts ADD COLUMN window_started_at TIMESTAMPTZ;

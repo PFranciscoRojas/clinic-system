@@ -117,17 +117,31 @@ class FakeDB:
     `rows` is what the next fetchrow returns, popped in order, so a test can say
     what the database looked like before the transcription and what it looked
     like after.
+
+    `claims` answers the probe for a window in flight (migration 000080)
+    separately, so that a test about anything else does not have to queue a row
+    for it. Empty means no window is running, which is what every test written
+    before that column assumed.
     """
 
-    def __init__(self, rows: list[dict | None]) -> None:
+    def __init__(self, rows: list[dict | None], claims: list[dict] | None = None) -> None:
         self.rows = list(rows)
+        self.claims = list(claims or [])
         self.executed: list[tuple] = []
 
     async def fetchrow(self, _query: str, *args):
+        if "window_started_at" in _query and "transcript_enc" not in _query:
+            return self.claims.pop(0) if self.claims else {"window_started_at": None, "age_s": None}
         return self.rows.pop(0) if self.rows else None
 
     async def execute(self, query: str, *args):
         self.executed.append((query, args))
+
+
+def stores(db: FakeDB) -> list[tuple]:
+    """The statements that write transcript text — what these tests are about.
+    Claiming the take and giving it back is bookkeeping around them."""
+    return [(q, a) for q, a in db.executed if "transcript_enc" in q]
 
 
 def make_worker(db) -> "worker_mod.AIWorker":
@@ -189,7 +203,8 @@ async def test_a_window_is_discarded_when_the_session_moved_on_while_it_ran(monk
     w = make_worker(db)
     monkeypatch.setattr(w, "_decrypt_dek", lambda source, blob: b"k" * 32)
     await w._process_window("org", "appt", "up", "/tmp", 5)
-    assert db.executed == []
+    assert stores(db) == []
+    assert "NULL" in db.executed[-1][0], "the claim outlived the window that took it"
 
 
 @pytest.mark.asyncio
@@ -210,8 +225,8 @@ async def test_the_stored_update_refuses_to_move_the_cut_backwards(monkeypatch):
     monkeypatch.setattr(w, "_decrypt_dek", lambda source, blob: b"k" * 32)
     await w._process_window("org", "appt", "up", "/tmp", 5)
 
-    assert len(db.executed) == 1
-    query, args = db.executed[0]
+    assert len(stores(db)) == 1
+    query, args = stores(db)[0]
     # Without this the late redelivery of an earlier window replaces twenty
     # minutes of session with five and moves the cut back to match. See
     # migration 000078 for the trigger that catches a writer who drops it.
@@ -270,3 +285,143 @@ async def test_what_the_windows_transcribed_is_handed_back_with_its_cut(monkeypa
     monkeypatch.setattr(w, "_decrypt_dek", lambda *a: b"k" * 32)
     monkeypatch.setattr(worker_mod, "open_", lambda dek, blob: b"la sesion hasta aqui")
     assert await w._absorbed_partial(a_draft()) == (300_000, "la sesion hasta aqui")
+
+
+# ── The window that is already running when the take is completed ────────────
+
+
+@pytest.mark.asyncio
+async def test_the_tail_waits_for_a_window_that_is_already_running(monkeypatch):
+    """§3.4.1 of the plan, measured 2026-08-18.
+
+    The draft read the partial 40 s before the running window stored its result,
+    so it transcribed 379 s of tail where 98 s were left. Waiting costs the lane
+    less than re-decoding the same audio the window is decoding right now.
+    """
+    from ai_service import worker as worker_mod
+
+    monkeypatch.setattr(worker_mod, "WINDOW_POLL_S", 0.01)
+    db = FakeDB(
+        [{"covered_ms": 1_163_459, "transcript_enc": b"sealed",
+          "encrypted_dek": b"x", "key_source": "env:MASTER_KEY"}],
+        claims=[
+            {"window_started_at": "not null", "age_s": 12.0},  # still running
+            {"window_started_at": None, "age_s": None},        # it just landed
+        ],
+    )
+    w = make_worker(db)
+    monkeypatch.setattr(w, "_decrypt_dek", lambda source, blob: b"k" * 32)
+    monkeypatch.setattr(worker_mod, "open_", lambda dek, blob: b"lo que va de sesion")
+
+    covered_ms, text = await w._absorbed_partial({
+        "organization_id": "org", "appointment_id": "appt", "upload_id": "up",
+    })
+    assert covered_ms == 1_163_459, "the tail did not wait for the window in flight"
+    assert text == "lo que va de sesion"
+
+
+@pytest.mark.asyncio
+async def test_a_claim_left_by_a_worker_that_died_does_not_hold_the_tail(monkeypatch):
+    """Fail-closed is wrong here. A worker killed mid-window leaves the claim
+    set for good, and trusting it would make every later take wait out the cap
+    for a window that is never coming."""
+    from ai_service import worker as worker_mod
+
+    monkeypatch.setattr(worker_mod, "WINDOW_POLL_S", 0.01)
+    slept: list[float] = []
+    monkeypatch.setattr(worker_mod.asyncio, "sleep", lambda s: slept.append(s))
+    db = FakeDB(
+        [{"covered_ms": 882_454, "transcript_enc": b"sealed",
+          "encrypted_dek": b"x", "key_source": "env:MASTER_KEY"}],
+        claims=[{"window_started_at": "not null",
+                 "age_s": worker_mod.WINDOW_CLAIM_STALE_S + 1}],
+    )
+    w = make_worker(db)
+    monkeypatch.setattr(w, "_decrypt_dek", lambda source, blob: b"k" * 32)
+    monkeypatch.setattr(worker_mod, "open_", lambda dek, blob: b"hasta aqui")
+
+    covered_ms, _ = await w._absorbed_partial({
+        "organization_id": "org", "appointment_id": "appt", "upload_id": "up",
+    })
+    assert covered_ms == 882_454
+    assert slept == [], "it waited on a claim nobody is holding"
+
+
+@pytest.mark.asyncio
+async def test_the_wait_for_a_window_is_bounded(monkeypatch):
+    """The lane this waits in is the one every other professional is queued
+    behind. A window that never reports back must cost seconds, not the queue."""
+    from ai_service import worker as worker_mod
+
+    monkeypatch.setattr(worker_mod, "WINDOW_POLL_S", 0.001)
+    monkeypatch.setattr(worker_mod, "WINDOW_WAIT_CAP_S", 0.05)
+
+    class ForeverRunning(FakeDB):
+        def __init__(self):
+            super().__init__([])
+            self.polls = 0
+
+        async def fetchrow(self, _query: str, *args):
+            if "window_started_at" in _query and "covered_ms" not in _query:
+                self.polls += 1
+                return {"window_started_at": "not null", "age_s": 1.0}
+            return {"covered_ms": 0, "transcript_enc": None,
+                    "encrypted_dek": b"x", "key_source": "env:MASTER_KEY"}
+
+    db = ForeverRunning()
+    w = make_worker(db)
+    covered_ms, text = await w._absorbed_partial({
+        "organization_id": "org", "appointment_id": "appt", "upload_id": "up",
+    })
+    assert (covered_ms, text) == (0, "")
+    assert db.polls > 1, "it never polled"
+
+
+@pytest.mark.asyncio
+async def test_a_window_releases_its_claim_even_when_it_transcribes_nothing(monkeypatch):
+    """A claim is only useful if it is always given back. The paths that return
+    early — a hole in the parts, ffmpeg failing, no cut point yet — are the ones
+    that leave it behind."""
+    from ai_service import worker as worker_mod
+
+    monkeypatch.setattr(worker_mod, "transcribe_window", lambda *a, **k: None)
+    db = FakeDB([{"covered_parts": 0, "covered_ms": 0,
+                  "encrypted_dek": b"x", "key_source": "env:MASTER_KEY"}])
+    await make_worker(db)._process_window("org", "appt", "up", "/tmp", 5)
+
+    claims = [q for q, _ in db.executed if "window_started_at" in q]
+    assert len(claims) == 2, f"expected a claim and a release, got {len(claims)}"
+    assert "NULL" in claims[-1], "the claim was never released"
+
+
+@pytest.mark.asyncio
+async def test_the_claim_outlives_the_decode_and_ends_with_the_write(monkeypatch):
+    """Releasing as soon as ffmpeg and whisper are done is a gap, not a release.
+
+    Between the decode finishing and the row being written there is a re-read, a
+    DEK to open and a seal, and a tail that stopped waiting during those would
+    read the covered_ms from before this window — which is the whole thing the
+    claim exists to prevent.
+    """
+    from ai_service import worker as worker_mod
+    from ai_service.transcription.windows import Window
+
+    monkeypatch.setattr(
+        worker_mod, "transcribe_window",
+        lambda *a, **k: Window(text="lo ultimo", end_ms=300_000, transcribe_ms=10),
+    )
+    db = FakeDB([
+        {"covered_parts": 0, "covered_ms": 0,
+         "encrypted_dek": b"x", "key_source": "env:MASTER_KEY"},
+        {"transcript_enc": None, "covered_ms": 0},
+    ])
+    w = make_worker(db)
+    monkeypatch.setattr(w, "_decrypt_dek", lambda source, blob: b"k" * 32)
+    monkeypatch.setattr(worker_mod, "seal", lambda dek, blob: b"sealed")
+    await w._process_window("org", "appt", "up", "/tmp", 5)
+
+    order = [q for q, _ in db.executed]
+    assert len(order) == 3, order
+    assert "window_started_at = now()" in order[0]
+    assert "transcript_enc" in order[1]
+    assert "window_started_at = NULL" in order[2], "the claim was given back before the write"
