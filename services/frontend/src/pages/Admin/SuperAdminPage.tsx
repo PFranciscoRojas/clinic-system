@@ -17,6 +17,11 @@ import { Markdown } from '@/components/common/Markdown';
 import { useIsMobile } from '@/lib/useMediaQuery';
 import { orgAccess } from '@/lib/subscription';
 
+// El piso de MercadoPago para un cobro en Colombia. Vive también en Go
+// (mercadopago.MinChargeCOP), que es quien lo hace cumplir; esta copia solo
+// existe para no mandar una petición que ya se sabe que va a fallar.
+const MP_MIN_CHARGE_COP = 1600;
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function fmtDate(s: string | null) {
@@ -1136,6 +1141,13 @@ function PlataformaTab() {
     try {
       const n = parseInt(amount, 10);
       if (isNaN(n) || n <= 0) throw new Error('Monto inválido');
+      // MercadoPago no cobra menos de esto, y por debajo el checkout falla con
+      // un 400 que le llega al cliente como "no se pudo iniciar el pago". El
+      // backend lo rechaza igual; esto es para que el operador se entere antes
+      // de guardar y no cuando alguien intente pagar.
+      if (n < MP_MIN_CHARGE_COP) {
+        throw new Error(`MercadoPago no cobra menos de $${MP_MIN_CHARGE_COP.toLocaleString('es-CO')} COP`);
+      }
       await adminApi.updatePlatformMP({ plan_amount: n, plan_reason: reason, webhook_enforce: enforce });
       qc.invalidateQueries({ queryKey: ['admin', 'platform-mp'] });
       setSaveOk(true);
