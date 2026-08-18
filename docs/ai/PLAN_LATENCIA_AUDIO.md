@@ -290,6 +290,26 @@ en tiempo real equivale a nueve profesionales grabando a la vez):
 | 2ª | 882 s | 378,7 s en 45,3 s | **155,1 s** |
 | 3ª | 882 s | 378,7 s en 45,5 s | **220,7 s** |
 
+Repetida el mismo día con los dos arreglos de §3.4.2 puestos, mismo audio, misma
+caja, mismo 3x:
+
+| Sesión | Cubierto antes de cerrar | Cola transcrita | Espera | Antes |
+|---|---|---|---|---|
+| 1ª | 1.163 s (19.030 chars) | 97,7 s en 12,4 s | **61,2 s** | 87,1 s |
+| 2ª | 882 s | 378,7 s en 46,2 s | **131,1 s** | 155,1 s |
+| 3ª | 882 s | 378,7 s en 45,6 s | **197,8 s** | 220,7 s |
+
+La primera esperó 22,0 s a la ventana que tenía en vuelo y se ahorró transcribir
+281 s de audio. La segunda y la tercera cerraron con lo mismo cubierto que antes
+—sus últimas ventanas ya no corrieron, porque el carril había cedido— y aun así
+bajaron veintitantos segundos cada una, que es la contención de CPU que dejó de
+existir. Mediana 155,1 → 131,1 s, peor caso 220,7 → 197,8 s.
+
+Las costuras del texto se revisaron una por una en el borrador resultante: las
+cuatro caen en fin de frase, sin palabras partidas, sin texto repetido y sin
+huecos. Es lo que tiene que pasar cuando el corte se hace en un silencio
+detectado, pero hasta esta corrida nadie lo había leído.
+
 Las doce ventanas del run corrieron seriadas en el único cupo del carril y
 ninguna se atrasó: la cola nunca creció. El RTF se sostuvo en 0,12 salvo en la
 primera cola (0,16), que compartió CPU con una ventana todavía en vuelo — los
@@ -316,22 +336,29 @@ leyó el parcial y se comprometió a transcribir todo lo que había después de 
 882 s. La primera sesión transcribió 379 s de cola en vez de los 98 s que
 quedaban, y los 56 s de CPU de esa ventana se perdieron.
 
-Arreglado con la migración 000080: la ventana marca la toma mientras decodifica
-(`window_started_at`) y la suelta cuando ya escribió el resultado, no cuando
-termina de decodificar. El trabajo de la cola espera esa marca, con tope de 90 s
-y descreyendo de una marca vieja, que es lo que deja un worker que murió con
-ella puesta. Esperar sale más barato que volver a decodificar los mismos minutos
-que la ventana está decodificando ahora mismo.
+Arreglado con la migración 000080 (PR #288): la ventana marca la toma mientras
+decodifica (`window_started_at`) y la suelta cuando ya escribió el resultado, no
+cuando termina de decodificar. El trabajo de la cola espera esa marca, con tope
+de 90 s y descreyendo de una marca vieja, que es lo que deja un worker que murió
+con ella puesta. Esperar sale más barato que volver a decodificar los mismos
+minutos que la ventana está decodificando ahora mismo.
+
+Medido: 22,0 s de espera a cambio de 281 s de audio que no hubo que transcribir.
 
 **Los dos carriles peleaban por la CPU.** El comentario de `WINDOW_SLOTS` decía
 que un carril aparte impedía que una ventana y una sesión terminada estuvieran
 dentro de faster-whisper a la vez. No lo impedía: un cupo en cada carril siguen
 siendo dos, y la medición lo mostró — 60,7 s para una cola que sola tarda 45,3 s.
 
-Arreglado en `_Lane.free()`: el carril de ventanas cede mientras el de
+Arreglado en `_Lane.free()` (PR #288): el carril de ventanas cede mientras el de
 transcripción tiene algo en vuelo. No es rendimiento que se regala, es el orden
 en que se gasta la espera. La cola es lo que alguien está mirando; la ventana es
 trabajo especulativo de una sesión a la que todavía le sobran minutos.
+
+Tiene un costo y la re-medición lo muestra: cediendo, las últimas ventanas de
+las sesiones que todavía no habían cerrado dejan de correr, así que cierran con
+menos cubierto del que habrían tenido. Aun así las tres bajaron, porque lo que
+se ahorra en contención pesa más que lo que se pierde en cobertura.
 
 ### 3.5 Hallazgo colateral, fuera del alcance de este plan
 
