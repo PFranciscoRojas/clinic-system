@@ -82,13 +82,34 @@ TRANSCRIPTION_SLOTS = 1
 # what the same memory budget admits next to a live transcription.
 SUGGESTION_SLOTS = 2
 
-# Windows run one at a time for the same reason transcription does — it is the
-# same model on the same two cores — and the slot is separate so that a window
-# and a finished session cannot both be inside faster-whisper at once. Two
-# concurrent spectrograms is the OOM kill of 2026-08-11 with extra steps, and
-# the container's memory limit (PR #280) turns that from a mystery into a
-# deterministic one.
+# Windows run one at a time for the same reason transcription does: it is the
+# same model on the same two cores. Two concurrent spectrograms is the OOM kill
+# of 2026-08-11 with extra steps, and the container's memory limit (PR #280)
+# turns that from a mystery into a deterministic one.
+#
+# A separate lane with its own slot was never enough to keep a window and a
+# finished session out of faster-whisper at the same time — one slot each is
+# still two — and on 2026-08-18 production showed exactly that: a tail that
+# takes 45,3 s alone took 60,7 s sharing the box with a window. What keeps them
+# apart is the window lane yielding to the transcription lane (_Lane.free()),
+# not the slot count.
 WINDOW_SLOTS = 1
+
+# A window claims its take in partial_transcripts while it decodes, so a draft
+# that arrives mid-window can wait for it instead of re-transcribing the same
+# audio (migration 000080).
+#
+# WINDOW_WAIT_CAP_S is the promise made to everyone queued behind: whatever goes
+# wrong with a window, the tail behind it moves on within this many seconds. A
+# window covers at most ~5 min of audio at RTF ~0.15, so ~45 s of work; 90 is
+# room for a slow one without being room for a lost one.
+#
+# WINDOW_CLAIM_STALE_S is how a claim from a worker that died gets ignored. It
+# sits above the cap so that a claim is disbelieved for being old, never for the
+# tail having waited long enough.
+WINDOW_WAIT_CAP_S = 90.0
+WINDOW_CLAIM_STALE_S = 180.0
+WINDOW_POLL_S = 2.0
 
 # The longest job the pipeline can legitimately be handed, used to size the
 # reclaim window below. MAX_AUDIO_SECONDS sits comfortably above what core-api's
@@ -154,8 +175,20 @@ class _Lane:
         self.slots = slots
         self.in_flight: set[str] = set()
         self.tasks: set[asyncio.Task[None]] = set()
+        # Set after construction for the window lane. See free().
+        self.yields_to: "_Lane | None" = None
 
     def free(self) -> int:
+        if self.yields_to is not None and self.yields_to.in_flight:
+            # One slot per lane means Whisper can be decoding twice at once, and
+            # measured on 2026-08-18 that cost the tail 60,7 s against the
+            # 45,3 s the same work took alone (§3.4.1 of the plan). The two jobs
+            # are not worth the same: a tail is what a professional is watching
+            # a spinner for, a window is speculative work for a session that
+            # still has minutes of slack before anyone needs it. So the window
+            # stands aside — it is not throughput being traded away, it is the
+            # order the wait is spent in.
+            return 0
         return self.slots - len(self.in_flight)
 
 
@@ -177,10 +210,13 @@ class AIWorker:
         self._redis: aioredis.Redis | None = redis_client
         self._db: asyncpg.Pool | None = None
         self._task: asyncio.Task[None] | None = None
+        transcription = _Lane("transcription", STREAM_NAME, CONSUMER_GROUP, TRANSCRIPTION_SLOTS)
+        window = _Lane("window", WINDOW_STREAM_NAME, WINDOW_CONSUMER_GROUP, WINDOW_SLOTS)
+        window.yields_to = transcription
         self._lanes: tuple[_Lane, ...] = (
-            _Lane("transcription", STREAM_NAME, CONSUMER_GROUP, TRANSCRIPTION_SLOTS),
+            transcription,
             _Lane("suggestion", FAST_STREAM_NAME, FAST_CONSUMER_GROUP, SUGGESTION_SLOTS),
-            _Lane("window", WINDOW_STREAM_NAME, WINDOW_CONSUMER_GROUP, WINDOW_SLOTS),
+            window,
         )
 
     async def start(self) -> None:
@@ -248,8 +284,19 @@ class AIWorker:
                 if lane.free() <= 0:
                     # Nothing to do until a job finishes. Waiting on the tasks
                     # themselves rather than polling keeps an idle lane off the
-                    # CPU that the busy one is using.
-                    await asyncio.wait(lane.tasks, return_when=asyncio.FIRST_COMPLETED)
+                    # CPU that the busy one is using — and when this lane is
+                    # standing aside for another one, the tasks worth waiting on
+                    # are that other lane's.
+                    blocking = lane.tasks or (
+                        lane.yields_to.tasks if lane.yields_to is not None else set()
+                    )
+                    if blocking:
+                        await asyncio.wait(blocking, return_when=asyncio.FIRST_COMPLETED)
+                    else:
+                        # Both sets empty: the lane it yields to took its slot
+                        # between the check and here. Nothing to await, so give
+                        # the loop back rather than spin on it.
+                        await asyncio.sleep(0.05)
                     continue
                 await self._reclaim_stale(lane)
                 if lane.free() <= 0:
@@ -402,57 +449,137 @@ class AIWorker:
             return
 
         covered_ms = int(row["covered_ms"])
-        window = await asyncio.to_thread(
-            transcribe_window, parts_dir, upload_id, parts, covered_ms
-        )
-        if window is None:
-            return
 
-        dek = self._decrypt_dek(row["key_source"], bytes(row["encrypted_dek"]))
-
-        # Re-read the text now rather than reusing what was fetched above. The
-        # transcription took minutes, and appending to a snapshot from before it
-        # would drop whatever landed in between. The UPDATE's own guard makes
-        # this belt and braces; the guard alone would silently discard this
-        # window's work instead of noticing.
-        current = await self._db.fetchrow(
-            """
-            SELECT transcript_enc, covered_ms FROM partial_transcripts
-             WHERE organization_id = $1 AND appointment_id = $2 AND upload_id = $3
-            """,
-            org_id, appointment_id, upload_id,
-        )
-        if current is None or int(current["covered_ms"]) != covered_ms:
-            logger.info(
-                "window discarded: the session moved on while it ran",
-                extra={"upload_id": upload_id, "started_from_ms": covered_ms},
+        # Claimed before the decode and given back only once the row is written,
+        # on every path out. A draft that arrives while this runs waits for it
+        # rather than transcribing the same minutes a second time (migration
+        # 000080), and releasing at the end of the decode instead of at the end
+        # of the write would hand that draft the covered_ms from before this
+        # window — the exact thing the claim exists to prevent.
+        #
+        # The release is in a finally because the paths that return early — a
+        # hole in the parts, ffmpeg failing, no cut point yet, the session
+        # moving on — are exactly the ones that would leave the claim behind.
+        await self._claim_window(org_id, appointment_id, upload_id)
+        try:
+            window = await asyncio.to_thread(
+                transcribe_window, parts_dir, upload_id, parts, covered_ms
             )
-            return
+            if window is None:
+                return
 
-        previous = ""
-        if current["transcript_enc"] is not None:
-            previous = open_(dek, bytes(current["transcript_enc"])).decode()
-        combined = "\n\n".join(part for part in (previous.strip(), window.text) if part)
+            dek = self._decrypt_dek(row["key_source"], bytes(row["encrypted_dek"]))
 
-        # covered_ms < $6 is what makes a late redelivery a no-op instead of a
-        # rewind. See migration 000078 for what a rewind does to the note.
+            # Re-read the text now rather than reusing what was fetched above. The
+            # transcription took minutes, and appending to a snapshot from before it
+            # would drop whatever landed in between. The UPDATE's own guard makes
+            # this belt and braces; the guard alone would silently discard this
+            # window's work instead of noticing.
+            current = await self._db.fetchrow(
+                """
+                SELECT transcript_enc, covered_ms FROM partial_transcripts
+                 WHERE organization_id = $1 AND appointment_id = $2 AND upload_id = $3
+                """,
+                org_id, appointment_id, upload_id,
+            )
+            if current is None or int(current["covered_ms"]) != covered_ms:
+                logger.info(
+                    "window discarded: the session moved on while it ran",
+                    extra={"upload_id": upload_id, "started_from_ms": covered_ms},
+                )
+                return
+
+            previous = ""
+            if current["transcript_enc"] is not None:
+                previous = open_(dek, bytes(current["transcript_enc"])).decode()
+            combined = "\n\n".join(part for part in (previous.strip(), window.text) if part)
+
+            # covered_ms < $6 is what makes a late redelivery a no-op instead of a
+            # rewind. See migration 000078 for what a rewind does to the note.
+            await self._db.execute(
+                """
+                UPDATE partial_transcripts
+                   SET transcript_enc = $4, covered_parts = $5, covered_ms = $6
+                 WHERE organization_id = $1 AND appointment_id = $2 AND upload_id = $3
+                   AND covered_ms < $6
+                """,
+                org_id, appointment_id, upload_id,
+                seal(dek, combined.encode()), parts, window.end_ms,
+            )
+            logger.info(
+                "window stored",
+                extra={
+                    "upload_id": upload_id, "parts": parts,
+                    "covered_ms": window.end_ms, "chars": len(combined),
+                },
+            )
+        finally:
+            await self._release_window(org_id, appointment_id, upload_id)
+
+    async def _claim_window(self, org_id: str, appointment_id: str, upload_id: str) -> None:
+        assert self._db is not None
         await self._db.execute(
             """
-            UPDATE partial_transcripts
-               SET transcript_enc = $4, covered_parts = $5, covered_ms = $6
+            UPDATE partial_transcripts SET window_started_at = now()
              WHERE organization_id = $1 AND appointment_id = $2 AND upload_id = $3
-               AND covered_ms < $6
             """,
             org_id, appointment_id, upload_id,
-            seal(dek, combined.encode()), parts, window.end_ms,
         )
-        logger.info(
-            "window stored",
-            extra={
-                "upload_id": upload_id, "parts": parts,
-                "covered_ms": window.end_ms, "chars": len(combined),
-            },
+
+    async def _release_window(self, org_id: str, appointment_id: str, upload_id: str) -> None:
+        assert self._db is not None
+        await self._db.execute(
+            """
+            UPDATE partial_transcripts SET window_started_at = NULL
+             WHERE organization_id = $1 AND appointment_id = $2 AND upload_id = $3
+            """,
+            org_id, appointment_id, upload_id,
         )
+
+    async def _await_window_in_flight(
+        self, org_id: str, appointment_id: str, upload_id: str
+    ) -> None:
+        """Hold the tail while a window is decoding the same take.
+
+        Idling the transcription lane sounds like the wrong trade until you name
+        what the alternative is: decoding, on the same two cores, the same
+        minutes of audio the window is decoding right now. The wait is bounded
+        by WINDOW_WAIT_CAP_S because this lane is where everyone else is queued.
+        """
+        assert self._db is not None
+        deadline = time.monotonic() + WINDOW_WAIT_CAP_S
+        waited = 0.0
+        while True:
+            row = await self._db.fetchrow(
+                """
+                SELECT window_started_at,
+                       EXTRACT(EPOCH FROM (now() - window_started_at)) AS age_s
+                  FROM partial_transcripts
+                 WHERE organization_id = $1 AND appointment_id = $2 AND upload_id = $3
+                """,
+                org_id, appointment_id, upload_id,
+            )
+            if row is None or row["window_started_at"] is None:
+                break
+            if float(row["age_s"]) > WINDOW_CLAIM_STALE_S:
+                logger.info(
+                    "ignoring a window claim nobody is holding",
+                    extra={"upload_id": str(upload_id), "age_s": float(row["age_s"])},
+                )
+                break
+            if time.monotonic() >= deadline:
+                logger.warning(
+                    "gave up waiting for the window in flight",
+                    extra={"upload_id": str(upload_id), "waited_s": round(waited, 1)},
+                )
+                break
+            await asyncio.sleep(WINDOW_POLL_S)
+            waited += WINDOW_POLL_S
+        if waited:
+            logger.info(
+                "waited for the window that was still running",
+                extra={"upload_id": str(upload_id), "waited_s": round(waited, 1)},
+            )
 
     async def _handle_suggestion(
         self, lane: _Lane, message_id: str, kind: str, fields: dict[str, Any]
@@ -562,6 +689,9 @@ class AIWorker:
 
         assert self._db is not None
         try:
+            await self._await_window_in_flight(
+                row["organization_id"], appointment_id, upload_id
+            )
             partial = await self._db.fetchrow(
                 """
                 SELECT p.covered_ms, p.transcript_enc, k.encrypted_dek, k.key_source

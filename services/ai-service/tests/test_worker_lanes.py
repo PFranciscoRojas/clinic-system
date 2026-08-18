@@ -385,3 +385,92 @@ async def test_every_suggestion_kind_is_handled_as_a_suggestion(kind):
     await w._handle(lane, "1-0", {"kind": kind, "suggestion_id": "s1"})
 
     assert routed == [kind]
+
+
+async def test_a_window_stands_aside_while_someone_waits_for_a_draft():
+    """Fase 4, measured 2026-08-18 (§3.4.1 of the plan).
+
+    A window and a tail can both be running Whisper at the same instant — one
+    slot per lane means two — and when they were, the tail took 60,7 s instead
+    of the 45,3 s the same work took alone. The tail is what a professional is
+    watching a spinner for; the window is speculative work for a session that
+    still has minutes of slack. So the window waits.
+    """
+    redis = FakeStreams()
+    w = make_worker(redis)
+    await open_groups(w, redis)
+
+    together = 0
+    peak_together = 0
+    draft_running = 0
+    window_done = asyncio.Event()
+    release_draft = asyncio.Event()
+
+    async def handle(lane, message_id, fields):
+        nonlocal together, peak_together, draft_running
+        if lane.name == "transcription":
+            draft_running += 1
+            together += 1
+            peak_together = max(peak_together, together)
+            await release_draft.wait()
+            together -= 1
+            draft_running -= 1
+        else:
+            together += 1
+            peak_together = max(peak_together, together)
+            await asyncio.sleep(0.01)
+            together -= 1
+            window_done.set()
+        await w._ack(lane, message_id)
+
+    w._handle = handle  # type: ignore[method-assign]
+
+    redis.xadd_sync(DRAFT_STREAM, {"kind": "draft", "draft_id": "d1"})
+    readers = [asyncio.create_task(w._read_lane(lane)) for lane in w._lanes]
+    try:
+        # Let the draft take the transcription lane first, then ask for a window.
+        for _ in range(200):
+            if draft_running:
+                break
+            await asyncio.sleep(0.005)
+        assert draft_running, "the draft never started"
+
+        redis.xadd_sync(worker_mod.WINDOW_STREAM_NAME, {
+            "kind": "window", "org_id": "o", "appointment_id": "a",
+            "upload_id": "u", "parts": "5", "parts_dir": "/tmp",
+        })
+        await asyncio.sleep(0.05)
+        assert not window_done.is_set(), "the window ran while a draft was being transcribed"
+
+        release_draft.set()
+        await asyncio.wait_for(window_done.wait(), timeout=2)
+    finally:
+        release_draft.set()
+        for task in readers:
+            task.cancel()
+        await asyncio.gather(*readers, return_exceptions=True)
+
+    assert peak_together == 1, f"a window and a tail ran at the same time ({peak_together})"
+
+
+async def test_a_window_still_runs_when_nothing_is_being_transcribed():
+    """Standing aside must not become never running. Outside the moments a draft
+    is on the box, a window is exactly the work that should be happening."""
+    redis = FakeStreams()
+    w = make_worker(redis)
+    await open_groups(w, redis)
+
+    done = asyncio.Event()
+
+    async def handle(lane, message_id, fields):
+        await w._ack(lane, message_id)
+        done.set()
+
+    w._handle = handle  # type: ignore[method-assign]
+    redis.xadd_sync(worker_mod.WINDOW_STREAM_NAME, {
+        "kind": "window", "org_id": "o", "appointment_id": "a",
+        "upload_id": "u", "parts": "5", "parts_dir": "/tmp",
+    })
+
+    await run_readers(w, done)
+    assert done.is_set()

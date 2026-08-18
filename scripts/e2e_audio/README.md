@@ -63,3 +63,53 @@ PR #178 (read deadline del upload), #179 (timeout de contexto) y
 
 El worker de IA es secuencial: mientras transcribe 1 h de audio (~9 min), los
 jobs de otras orgs esperan en cola. Correr la prueba fuera de horario de uso.
+
+---
+
+# Prueba de carga: N sesiones grabando y cerrando a la vez
+
+`load_sessions.py` mide lo único que se nota desde fuera: los segundos entre
+pulsar "Finalizar" y tener un borrador. Sube por el mismo camino que el grabador
+(una parte por minuto, `/audio/parts`, `/audio/complete`) en vez de mandar la
+toma entera, así que ejercita las ventanas de la Fase 4.
+
+Solo biblioteca estándar. La primera versión vivía fuera del repo y hubo que
+reconstruirla entera cuando se borró el directorio temporal donde estaba.
+
+## Correrla
+
+```bash
+LOAD_PASSWORD='...' python3 load_sessions.py \
+    --sessions 3 --pace 3 --parts-dir ./parts --email tu-usuario@demo.clinica.co
+```
+
+`--pace 3` es deliberado: una parte llega de verdad una vez por minuto, lo que
+le da a cada ventana cinco minutos para hacer ~35 s de trabajo. A 3x le quedan
+100 s para lo mismo. Lo que aguanta ahí, sobra en producción.
+
+Las partes salen de una grabación real (`<upload_id>.<n>.chunk`, tal cual las
+manda el navegador). Si no tienes, `--source session.webm` corta una toma
+terminada por tamaño; sirve para medir tiempos, no para juzgar la calidad del
+texto, porque los cortes no caen donde MediaRecorder los pondría.
+
+La cuenta tiene que ser de una organización `is_internal`, porque `--reset`
+termina llamando a `/admin/reset-clinical-data`, que se niega con cualquier otra.
+
+## Qué mirar mientras corre
+
+```bash
+ssh root@$VPS 'docker logs sghcp_ai_service --since 20m 2>&1 | grep -aE \
+  "window transcribed|window stored|absorbing|waited for the window"'
+```
+
+Y al terminar, que no quede nada colgando:
+
+```sql
+SELECT count(*) FROM partial_transcripts;              -- 0
+SELECT status, transcribe_ms, transcribed_seconds, audio_seconds, round(rtf,4)
+  FROM ai_drafts ORDER BY created_at DESC LIMIT 5;     -- transcribed_seconds = la cola
+```
+
+## Resultados de referencia
+
+Ver §3.4.1 de `docs/ai/PLAN_LATENCIA_AUDIO.md`.

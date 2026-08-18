@@ -306,10 +306,32 @@ Lo que la prueba dejó limpio: `partial_transcripts` en 0 al terminar, cero llav
 de cifrado huérfanas creadas por el run, y las carpetas de partes vaciadas en
 cuanto cerró cada toma.
 
-Lo único que quedó por afinar, y no es un fallo: si una ventana está en vuelo
-cuando el profesional pulsa "Finalizar", su resultado llega tarde y se descarta.
-La primera sesión transcribió 379 s de cola en vez de 98 s por eso. Corrección
-por diseño, desperdicio por oportunidad.
+### 3.4.2 Lo que la prueba destapó, y qué se hizo con ello
+
+Dos cosas, ninguna un fallo de corrección, las dos medibles en segundos.
+
+**La ventana en vuelo se tiraba a la basura.** Si el profesional pulsa
+"Finalizar" mientras una ventana corre, su resultado llega tarde: el borrador ya
+leyó el parcial y se comprometió a transcribir todo lo que había después de los
+882 s. La primera sesión transcribió 379 s de cola en vez de los 98 s que
+quedaban, y los 56 s de CPU de esa ventana se perdieron.
+
+Arreglado con la migración 000080: la ventana marca la toma mientras decodifica
+(`window_started_at`) y la suelta cuando ya escribió el resultado, no cuando
+termina de decodificar. El trabajo de la cola espera esa marca, con tope de 90 s
+y descreyendo de una marca vieja, que es lo que deja un worker que murió con
+ella puesta. Esperar sale más barato que volver a decodificar los mismos minutos
+que la ventana está decodificando ahora mismo.
+
+**Los dos carriles peleaban por la CPU.** El comentario de `WINDOW_SLOTS` decía
+que un carril aparte impedía que una ventana y una sesión terminada estuvieran
+dentro de faster-whisper a la vez. No lo impedía: un cupo en cada carril siguen
+siendo dos, y la medición lo mostró — 60,7 s para una cola que sola tarda 45,3 s.
+
+Arreglado en `_Lane.free()`: el carril de ventanas cede mientras el de
+transcripción tiene algo en vuelo. No es rendimiento que se regala, es el orden
+en que se gasta la espera. La cola es lo que alguien está mirando; la ventana es
+trabajo especulativo de una sesión a la que todavía le sobran minutos.
 
 ### 3.5 Hallazgo colateral, fuera del alcance de este plan
 
@@ -773,8 +795,10 @@ tipos sí se distinguen antes de leerse: en el productor.
   nada en ninguno de los dos lados — core-api encola contra un stream que nadie
   consume y la sugerencia se queda en PENDING hasta que alguien la busque.
 - ✅ 3 sesiones cerrando a la vez, medidas contra producción el 2026-08-18
-  (§3.4.1). Sigue sin automatizarse dentro de `scripts/e2e_audio/`: el run fue
-  manual y los p50/p95 por etapa salen de los logs, no de un reporte.
+  (§3.4.1) y automatizadas en `scripts/e2e_audio/load_sessions.py`, que sube por
+  el camino de partes y reporta la mediana y la peor espera. Solo biblioteca
+  estándar, porque la primera versión vivía fuera del repo y hubo que
+  reconstruirla entera cuando se borró el directorio temporal donde estaba.
 
 **Lo que no compró**: nada de tiempo total. La transcripción sigue siendo el
 96,5 % del reloj y sigue tardando lo mismo. Lo que compró es que deje de ser la
