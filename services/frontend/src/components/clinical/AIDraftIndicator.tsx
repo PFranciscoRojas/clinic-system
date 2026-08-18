@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Brain } from 'lucide-react';
 import { aiDraftsApi, type DraftMeta } from '@/api/aiDrafts';
+import { formatWait } from '@/lib/eta';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/context/AuthContext';
 import { isPureAdmin } from '@/lib/clinicalAccess';
@@ -32,8 +33,6 @@ export function AIDraftIndicator() {
     },
   });
 
-  if (skip) return null;
-
   const inFlight = drafts.filter(d => d.status === 'PENDING' || d.status === 'PROCESSING');
   // Unresolved errors from the last 24h — old failures shouldn't nag forever.
   // Age is measured against the fetch timestamp (pure per render); the query
@@ -42,6 +41,25 @@ export function AIDraftIndicator() {
     d.status === 'ERROR' && !d.clinical_record_id &&
     dataUpdatedAt - new Date(d.created_at).getTime() < DAY_MS);
 
+  // The chip says how long only when there is exactly one recording in flight.
+  // With several, no single number is true for all of them, and the honest
+  // place for each one's estimate is its own page — which is where the chip
+  // sends you anyway. The list endpoint deliberately stays free of estimates:
+  // computing one per row would put a queue query behind every poll of every
+  // clinical list, to answer a question only the in-flight rows are asking.
+  const only = inFlight.length === 1 ? inFlight[0] : undefined;
+  const { data: detail } = useQuery({
+    queryKey: ['ai-draft-eta', only?.id],
+    queryFn: () => aiDraftsApi.get(only!.id),
+    enabled: !!only,
+    refetchInterval: 15_000,
+  });
+  const wait = only && detail?.status === only.status ? formatWait(detail.eta_seconds) : '';
+
+  // Both hooks above run on every render, before any early return: the chip
+  // appears and disappears with the queue, and a hook that only sometimes runs
+  // is a crash the first time that happens.
+  if (skip) return null;
   if (inFlight.length === 0 && failed.length === 0) return null;
 
   const isError = inFlight.length === 0;
@@ -54,7 +72,9 @@ export function AIDraftIndicator() {
       onClick={() => (items.length === 1 ? goTo(items[0]) : navigate('/clinical'))}
       title={isError
         ? 'Un borrador de IA falló — haz clic para ver el detalle'
-        : 'La IA está generando un borrador — haz clic para verlo'}
+        : wait
+          ? `Listo en ${wait} — haz clic para verlo`
+          : 'La IA está generando un borrador — haz clic para verlo'}
       style={{
         display: 'flex', alignItems: 'center', gap: 7,
         padding: '8px 13px', borderRadius: 10, cursor: 'pointer',
@@ -68,7 +88,11 @@ export function AIDraftIndicator() {
       <Brain size={14} />
       {isError
         ? `Borrador con error${failed.length > 1 ? ` (${failed.length})` : ''}`
-        : `Generando borrador${inFlight.length > 1 ? ` (${inFlight.length})` : '…'}`}
+        : inFlight.length > 1
+          ? `Generando borrador (${inFlight.length})`
+          : wait
+            ? `Borrador en ${wait}`
+            : 'Generando borrador…'}
     </button>
   );
 }
