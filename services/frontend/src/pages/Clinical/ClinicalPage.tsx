@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { Brain, FileText, FileWarning, Clock, CheckCircle2, AlertTriangle, Loader2, XCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { aiDraftsApi, type DraftMeta, type DraftStatus } from '@/api/aiDrafts';
 import { clinicalRecordsApi, type RecordMeta, type RecordStatus } from '@/api/clinicalRecords';
-import { fmtDateOnly } from '@/lib/dates';
+import { patientsApi } from '@/api/patients';
+import { fmtDateOnly, fmtDateTime } from '@/lib/dates';
+import { NAME_LOADING, patientName } from '@/lib/patientName';
 import { useIsMobile } from '@/lib/useMediaQuery';
 import { PendingNotesList, usePendingNotes } from '@/pages/Dashboard/PendingNotesCard';
 
@@ -15,8 +17,41 @@ function fmtCode(code: number | null) {
   return code != null ? `HC-${String(code).padStart(6, '0')}` : '—';
 }
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+// Who the row is about, with the code kept underneath. The name is what a
+// professional recognises; the code is what they quote. Losing the code to
+// make room for the name would trade one unreadable list for another.
+function PatientCell({ name, code }: { name: string; code: number | null }) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={{
+        fontSize: 13.5, fontWeight: 600, color: 'var(--s700)',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {name || NAME_LOADING}
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--teal)', fontFamily: "'DM Mono', monospace" }}>
+        {fmtCode(code)}
+      </div>
+    </div>
+  );
+}
+
+// One lookup per patient on screen, deduplicated by react-query's cache — the
+// same ['patient', id] key the dashboard uses, so a patient already read there
+// costs nothing here. Names are encrypted per patient, so no list endpoint can
+// carry them and there is no batch to ask for.
+function usePatientNames(ids: (string | undefined)[]): Record<string, string> {
+  const unique = Array.from(new Set(ids.filter((id): id is string => !!id)));
+  const results = useQueries({
+    queries: unique.map(id => ({
+      queryKey: ['patient', id],
+      queryFn: () => patientsApi.get(id),
+      staleTime: 5 * 60_000,
+    })),
+  });
+  const byId: Record<string, string> = {};
+  unique.forEach((id, i) => { byId[id] = patientName(results[i]?.data); });
+  return byId;
 }
 
 // ── Draft status badge ────────────────────────────────────────────────────────
@@ -72,7 +107,7 @@ const RISK_COLOR: Record<string, string> = {
 
 // ── Row components ────────────────────────────────────────────────────────────
 
-function DraftRow({ d, onClick }: { d: DraftMeta; onClick: () => void }) {
+function DraftRow({ d, name, onClick }: { d: DraftMeta; name: string; onClick: () => void }) {
   const isMobile = useIsMobile();
   // Every state has a destination now: the draft page live-polls the
   // generating states and explains errors — this is how the professional
@@ -94,9 +129,9 @@ function DraftRow({ d, onClick }: { d: DraftMeta; onClick: () => void }) {
       onClick={actionable ? onClick : undefined}
       style={{
         ...(isMobile
-          // Two-line card: code + date on top, badge + action below.
+          // Two-line card: patient + date on top, badge + action below.
           ? { display: 'flex', flexWrap: 'wrap', gap: 8 }
-          : { display: 'grid', gridTemplateColumns: '110px 1fr auto auto', gap: 16 }),
+          : { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto auto auto', gap: 16 }),
         alignItems: 'center',
         padding: '12px 16px',
         borderBottom: '1px solid var(--s100)',
@@ -107,12 +142,10 @@ function DraftRow({ d, onClick }: { d: DraftMeta; onClick: () => void }) {
       onMouseEnter={e => actionable && ((e.currentTarget as HTMLElement).style.background = 'var(--s100)')}
       onMouseLeave={e => actionable && ((e.currentTarget as HTMLElement).style.background = 'var(--s50)')}
     >
-      <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--teal)', fontFamily: "'DM Mono', monospace" }}>
-        {fmtCode(d.patient_code)}
-      </span>
+      <PatientCell name={name} code={d.patient_code} />
       {isMobile ? (
         <>
-          <span style={{ fontSize: 12, color: 'var(--s400)', marginLeft: 'auto' }}>{fmtDate(d.created_at)}</span>
+          <span style={{ fontSize: 12, color: 'var(--s400)', marginLeft: 'auto' }}>{fmtDateTime(d.created_at)}</span>
           <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <DraftBadge status={d.status} />
             {actionChip}
@@ -121,7 +154,7 @@ function DraftRow({ d, onClick }: { d: DraftMeta; onClick: () => void }) {
       ) : (
         <>
           <DraftBadge status={d.status} />
-          <span style={{ fontSize: 12, color: 'var(--s400)' }}>{fmtDate(d.created_at)}</span>
+          <span style={{ fontSize: 12, color: 'var(--s400)', whiteSpace: 'nowrap' }}>{fmtDateTime(d.created_at)}</span>
           {actionChip}
         </>
       )}
@@ -129,7 +162,7 @@ function DraftRow({ d, onClick }: { d: DraftMeta; onClick: () => void }) {
   );
 }
 
-function RecordRow({ m, onClick }: { m: RecordMeta; onClick: () => void }) {
+function RecordRow({ m, name, onClick }: { m: RecordMeta; name: string; onClick: () => void }) {
   const isMobile = useIsMobile();
   const s = RECORD_STATUS[m.status];
   const riskChip = m.risk_level && m.risk_level !== 'NONE' && (
@@ -151,9 +184,9 @@ function RecordRow({ m, onClick }: { m: RecordMeta; onClick: () => void }) {
       onClick={onClick}
       style={{
         ...(isMobile
-          // Two-line card: code + date on top; type, risk and status below.
+          // Two-line card: patient + date on top; type, risk and status below.
           ? { display: 'flex', flexWrap: 'wrap', gap: 8 }
-          : { display: 'grid', gridTemplateColumns: '110px 120px 1fr auto auto', gap: 16 }),
+          : { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 120px auto auto auto', gap: 16 }),
         alignItems: 'center',
         padding: '12px 16px',
         borderBottom: '1px solid var(--s100)',
@@ -164,9 +197,7 @@ function RecordRow({ m, onClick }: { m: RecordMeta; onClick: () => void }) {
       onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = 'var(--s50)')}
       onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = '#fff')}
     >
-      <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--teal)', fontFamily: "'DM Mono', monospace" }}>
-        {fmtCode(m.patient_code)}
-      </span>
+      <PatientCell name={name} code={m.patient_code} />
       {isMobile ? (
         <>
           <span style={{ fontSize: 12, color: 'var(--s400)', marginLeft: 'auto' }}>{fmtDateOnly(m.session_date)}</span>
@@ -234,6 +265,13 @@ export function ClinicalPage() {
   // status: 'DRAFT' with normal drafts, so this list would otherwise be
   // polluted with notes nobody actually saved.
   const records = allRecords.filter(r => r.finalized !== false);
+
+  // Both tabs at once rather than per tab: switching tabs then keeps the names
+  // already on screen instead of blanking them back to the placeholder.
+  const names = usePatientNames([
+    ...drafts.map(d => d.patient_id),
+    ...records.map(r => r.patient_id),
+  ]);
 
   const pendingDrafts = drafts.filter(d => d.status === 'DRAFT_READY').length;
 
@@ -332,17 +370,17 @@ export function ClinicalPage() {
         {/* Column headers — hidden on mobile, where rows render as stacked cards */}
         {isMobile || tab === 'pending' ? null : tab === 'drafts' ? (
           <div style={{
-            display: 'grid', gridTemplateColumns: '110px 1fr auto auto',
+            display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto auto auto',
             gap: 16, padding: '8px 16px',
             fontSize: 11, fontWeight: 600, color: 'var(--s400)',
             textTransform: 'uppercase', letterSpacing: '.05em',
             borderBottom: '1px solid var(--s100)',
           }}>
-            <span>Paciente</span><span>Estado</span><span>Fecha</span><span></span>
+            <span>Paciente</span><span>Estado</span><span>Fecha y hora</span><span></span>
           </div>
         ) : (
           <div style={{
-            display: 'grid', gridTemplateColumns: '110px 120px 1fr auto auto',
+            display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 120px auto auto auto',
             gap: 16, padding: '8px 16px',
             fontSize: 11, fontWeight: 600, color: 'var(--s400)',
             textTransform: 'uppercase', letterSpacing: '.05em',
@@ -359,7 +397,12 @@ export function ClinicalPage() {
             : drafts.length === 0
               ? <Empty msg={draftFilter === 'DRAFT_READY' ? 'No hay borradores pendientes de revisión.' : 'No hay borradores.'} />
               : drafts.map(d => (
-                  <DraftRow key={d.id} d={d} onClick={() => navigate(`/ai-drafts/${d.id}${d.appointment_id ? `?appointment_id=${d.appointment_id}` : ''}`)} />
+                  <DraftRow
+                    key={d.id}
+                    d={d}
+                    name={names[d.patient_id] ?? ''}
+                    onClick={() => navigate(`/ai-drafts/${d.id}${d.appointment_id ? `?appointment_id=${d.appointment_id}` : ''}`)}
+                  />
                 ))
         )}
 
@@ -369,7 +412,12 @@ export function ClinicalPage() {
             : records.length === 0
               ? <Empty msg={recordFilter === 'DRAFT' ? 'No hay registros en borrador.' : 'No hay registros clínicos.'} />
               : records.map(m => (
-                  <RecordRow key={m.id} m={m} onClick={() => navigate(`/clinical-records/${m.id}`)} />
+                  <RecordRow
+                    key={m.id}
+                    m={m}
+                    name={names[m.patient_id] ?? ''}
+                    onClick={() => navigate(`/clinical-records/${m.id}`)}
+                  />
                 ))
         )}
 

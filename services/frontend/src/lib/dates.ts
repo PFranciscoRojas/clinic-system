@@ -21,3 +21,14 @@ export function todayLocalISO(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+
+// A real timestamp with its time of day. Several drafts land on the same day,
+// and the day alone does not tell two of them apart in a list. No anchoring
+// here, deliberately: a timestamp means the instant it says, and shifting it
+// to local noon the way parseDateOnly does would be a lie about when it
+// happened.
+export function fmtDateTime(iso: string): string {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}, ${
+    d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}`;
+}
