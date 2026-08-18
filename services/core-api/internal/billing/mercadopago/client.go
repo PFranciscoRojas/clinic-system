@@ -23,6 +23,17 @@ import (
 
 const base = "https://api.mercadopago.com"
 
+// MinChargeCOP is the smallest amount MercadoPago accepts on a Colombian
+// preapproval. Below it, checkout is refused with "Cannot pay an amount lower
+// than $ 1600.00" — their 400, our 502, and "no se pudo iniciar el pago" in
+// front of somebody with their card out. Production met this on 2026-08-18
+// with the plan set to $1.000.
+//
+// MercadoPago owns this number and can move it, so the checkout path still has
+// to handle being refused. This constant exists so that being refused is not
+// how anyone finds out.
+const MinChargeCOP = 1600
+
 // VerifyWebhook validates a MercadoPago webhook's x-signature against the
 // configured webhook secret. The signed manifest is
 // "id:<data.id>;request-id:<x-request-id>;ts:<ts>;" hashed with HMAC-SHA256.

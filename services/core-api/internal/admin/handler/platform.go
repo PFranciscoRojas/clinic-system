@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
+	"sghcp/core-api/internal/billing/mercadopago"
 	"sghcp/core-api/internal/shared/crypto"
 	"sghcp/core-api/internal/shared/httputil"
 )
@@ -13,7 +15,7 @@ type platformMPResponse struct {
 	PlanReason          string `json:"plan_reason"`
 	WebhookEnforce      bool   `json:"webhook_enforce"`
 	AccessTokenSet      bool   `json:"access_token_set"`
-	AccessTokenSource   string `json:"access_token_source"`   // "db" | "env" | "none"
+	AccessTokenSource   string `json:"access_token_source"` // "db" | "env" | "none"
 	WebhookSecretSet    bool   `json:"webhook_secret_set"`
 	WebhookSecretSource string `json:"webhook_secret_source"` // "db" | "env" | "none"
 }
@@ -103,6 +105,10 @@ func (h *Handler) updatePlatformMP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if body.PlanAmount != nil {
+		if msg := planAmountError(*body.PlanAmount); msg != "" {
+			httputil.WriteError(w, http.StatusBadRequest, msg)
+			return
+		}
 		if err := upsertSetting(r, h, "mp_plan_amount", strconv.Itoa(*body.PlanAmount)); err != nil {
 			httputil.WriteError(w, http.StatusInternalServerError, "error saving plan_amount")
 			return
@@ -171,6 +177,21 @@ func (h *Handler) updatePlatformTokens(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// planAmountError says why an amount cannot be the plan price, or "" when it
+// can be. Saving is the last moment this is cheap: after it, the next thing
+// that reads the number is a customer's checkout.
+func planAmountError(amount int) string {
+	switch {
+	case amount <= 0:
+		return "el monto del plan debe ser mayor que cero"
+	case amount < mercadopago.MinChargeCOP:
+		return fmt.Sprintf(
+			"MercadoPago no cobra menos de $%d COP, así que un plan de $%d fallaría en el pago",
+			mercadopago.MinChargeCOP, amount)
+	}
+	return ""
 }
 
 func upsertSetting(r *http.Request, h *Handler, key, value string) error {
