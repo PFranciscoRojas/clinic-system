@@ -12,6 +12,13 @@ export interface PlanInfo {
 }
 
 export const billingApi = {
+  /** Asks MercadoPago again whether this tenant's subscription is paid, and
+   *  applies whatever it answers. The checkout return page calls it once; the
+   *  expired-subscription screen calls it for anyone whose payment went
+   *  through without reaching us. */
+  reconcile: () =>
+    api.post<{ subscription_status: string }>('/billing/reconcile', {}),
+
   // Creates the tenant's MercadoPago checkout and returns the hosted URL to
   // redirect to. Allowed even when the trial has lapsed. seats is optional —
   // the backend never charges for fewer seats than the org's current active
