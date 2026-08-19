@@ -39,9 +39,15 @@ en notas clínicas.
 En el host, no dentro de la aplicación. Un chequeo que se muere con la cosa que
 vigila no reporta nada justo en el único momento en que alguien lo necesitaba.
 
+`/etc/cron.d/sghcp-monitor`, no el crontab de root:
+
 ```
-*/5 * * * * /root/clinic-system/scripts/monitor.sh >> /var/log/sghcp-monitor.log 2>&1
+*/5 * * * * root /root/clinic-system/scripts/monitor.sh >> /var/log/sghcp-monitor.log 2>&1
 ```
+
+Un archivo aparte es aditivo y no puede pisar el respaldo diario ni el prune
+semanal que ya viven en el crontab. El log rota semanal
+(`/etc/logrotate.d/sghcp-monitor`, 8 semanas, comprimido).
 
 Configuración en `/etc/sghcp/monitor.env`, modo 600:
 
@@ -72,6 +78,11 @@ consultorio real.
 
 El estado vive en `/var/lib/sghcp/monitor/<chequeo>.state`. Borrar ese
 directorio hace que el siguiente ciclo vuelva a avisar de todo lo que siga roto.
+
+Si Resend rechaza el envío, el aviso **no** se anota como enviado y el siguiente
+ciclo lo reintenta. La primera versión tiraba la respuesta de la API: una llave
+rotada o un dominio suspendido habrían dejado al monitor escribiendo "avisado"
+en su archivo de estado cada cinco minutos sin que nadie se enterara de nada.
 
 ## Qué hacer con cada aviso
 

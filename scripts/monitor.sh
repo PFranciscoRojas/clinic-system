@@ -163,6 +163,19 @@ containers_verdict() {
     echo "${out:-ok}"
 }
 
+# resend_accepted <response body> — did the mail actually get taken?
+#
+# Resend answers a successful send with an id and a failure with an error
+# object, both 200-shaped enough that curl is happy either way. Throwing that
+# answer away and recording the alert as sent is how an alerting path goes
+# quiet: a rotated key, a suspended domain or a rate limit would leave the
+# monitor writing "told them" into its state file every five minutes while
+# nobody was told anything.
+resend_accepted() {
+    [[ "$1" == *'"id"'* ]] && { echo yes; return; }
+    echo no
+}
+
 # alert_decision <previous_verdict> <last_sent_epoch> <now_epoch> <verdict> <repeat_after_s>
 # Whether this reading reaches a human. The checks above are worth nothing if
 # this is wrong in either direction: too eager and the alarm becomes noise
@@ -320,11 +333,17 @@ send_alert() { # send_alert <check> <verdict> <detail> <decision>
         echo "[monitor] no puedo avisar: falta RESEND_API_KEY o ALERT_EMAIL" >&2
         return 1
     fi
-    curl -s -o /dev/null --max-time 20 -X POST https://api.resend.com/emails \
+    local answer
+    answer="$(curl -s --max-time 20 -X POST https://api.resend.com/emails \
         -H "Authorization: Bearer $RESEND_API_KEY" \
         -H 'Content-Type: application/json' \
         -d "$(printf '{"from":"%s","to":"%s","subject":"%s","html":"%s"}' \
-              "${RESEND_FROM:-Chapni <no-reply@chapni.com>}" "$ALERT_EMAIL" "$subject" "$body")"
+              "${RESEND_FROM:-Chapni <no-reply@chapni.com>}" "$ALERT_EMAIL" "$subject" "$body")")"
+
+    if [[ "$(resend_accepted "$answer")" != yes ]]; then
+        echo "[monitor] Resend rechazó el aviso: $answer" >&2
+        return 1
+    fi
 }
 
 run_check() { # run_check <name> <verdict-tab-detail>
@@ -344,8 +363,14 @@ run_check() { # run_check <name> <verdict-tab-detail>
 
     case "$decision" in
         send|repeat|recovered)
-            send_alert "$name" "$verdict" "$detail" "$decision"
-            printf '%s|%s\n' "$verdict" "$now" > "$state"
+            if send_alert "$name" "$verdict" "$detail" "$decision"; then
+                printf '%s|%s\n' "$verdict" "$now" > "$state"
+            else
+                # Not sent, so not recorded as sent. Keeping the old send time
+                # makes the next cycle try again instead of counting this as
+                # told and falling into the hour of silence.
+                printf '%s|%s\n' "$verdict" "${last_sent:-0}" > "$state"
+            fi
             ;;
         *)
             printf '%s|%s\n' "$verdict" "${last_sent:-0}" > "$state"

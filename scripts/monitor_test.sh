@@ -207,6 +207,29 @@ check "the very first failure is sent" \
 check "the very first ok is not a recovery" \
     nothing "$(alert_decision "" x 2000 ok 3600)"
 
+echo "==> monitor.sh delivery"
+
+# Verified against the live API on 2026-08-19: three alerts sent from the VPS
+# and three arrived. What was missing was the other half — the script threw the
+# answer away, so a rotated key or a suspended domain would have left it writing
+# "told them" into the state file every five minutes with nobody told.
+
+check "an accepted send is accepted" \
+    yes "$(resend_accepted '{"id":"c5950e1c-5686-4e50-8166-b61fd4a6adbc"}')"
+
+check "a rejected send is not" \
+    no "$(resend_accepted '{"statusCode":401,"message":"API key is invalid","name":"validation_error"}')"
+
+# curl got nothing at all: no network, no DNS, Resend down. Empty must not read
+# as success, which is the direction this whole file leans.
+check "no answer is not an accepted send" \
+    no "$(resend_accepted '')"
+
+# The word appears, but not as the field. A body that merely mentions an id is
+# not a receipt for one.
+check "the word id in prose is not a receipt" \
+    no "$(resend_accepted '{"message":"missing id parameter"}')"
+
 if [[ $failures -ne 0 ]]; then
     echo
     echo "The monitor is misreading production. It decides whether an outage"
