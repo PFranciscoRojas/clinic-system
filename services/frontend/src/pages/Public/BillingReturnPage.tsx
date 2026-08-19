@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
-import { api } from '@/api/client';
+import { billingApi } from '@/api/billing';
 
 type State = 'loading' | 'active' | 'pending' | 'error';
 
@@ -11,7 +11,7 @@ export function BillingReturnPage() {
 
   useEffect(() => {
     let cancelled = false;
-    api.post<{ subscription_status: string }>('/billing/reconcile', {})
+    billingApi.reconcile()
       .then(data => { if (!cancelled) setState(data.subscription_status === 'active' ? 'active' : 'pending'); })
       .catch(() => { if (!cancelled) setState('error'); });
     return () => { cancelled = true; };

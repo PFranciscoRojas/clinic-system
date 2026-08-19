@@ -16,6 +16,7 @@ import { profilesApi } from '@/api/profiles';
 import { getLockConfig, onLockConfigChange } from '@/lib/screenLock';
 import { authApi } from '@/api/auth';
 import { legalApi } from '@/api/legal';
+import { billingApi } from '@/api/billing';
 import { Markdown } from '@/components/common/Markdown';
 import { hasPendingUpdate, onSwUpdate, reloadNow } from '@/lib/swUpdate';
 import { AIDraftIndicator } from '@/components/clinical/AIDraftIndicator';
@@ -623,14 +624,41 @@ function TrialBanner({ status, daysLeft }: { status?: string; daysLeft?: number 
 // mensual (card, recurring) or anual (card/PSE/Efecty/Nequi, one-time) before
 // checkout — calling startCheckout() directly here would always default to
 // "monthly" and skip that choice.
-function SubscriptionExpired({ onLogout }: { onLogout: () => void }) {
+// Exported so the screen can be rendered on its own: the way back in for
+// somebody who already paid is worth a test that does not need the whole shell.
+export function SubscriptionExpired({ onLogout }: { onLogout: () => void }) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [checking, setChecking] = useState(false);
+  const [checkMsg, setCheckMsg] = useState('');
   // Only CLINIC_ADMIN can see the billing section (SettingsPage filters it out
   // for other roles) and only CLINIC_ADMIN holds organization:configure, the
   // permission checkout requires — other roles have to ask the admin instead.
   const canPay = (user?.roles ?? []).includes('CLINIC_ADMIN');
   const go = () => navigate('/settings/billing');
+
+  // Somebody who already paid and was not activated had no way back in: the
+  // only thing that asks MercadoPago again lives on the checkout return page,
+  // and missing it once was final. That happened on 2026-08-18 — the charge
+  // went through, three bugs in a row swallowed it, and the screen kept
+  // offering to take a payment that had already been made.
+  const recheck = async () => {
+    setChecking(true); setCheckMsg('');
+    try {
+      const { subscription_status } = await billingApi.reconcile();
+      if (subscription_status === 'active') {
+        // The gate reads the database on every request, so there is nothing to
+        // refresh but the page itself.
+        window.location.reload();
+        return;
+      }
+      setCheckMsg('MercadoPago todavía no reporta el pago. Si acabas de pagar, espera un minuto y vuelve a intentar.');
+    } catch {
+      setCheckMsg('No pudimos consultar tu pago ahora mismo. Inténtalo de nuevo en un momento.');
+    } finally {
+      setChecking(false);
+    }
+  };
   // A clinic that already paid once and let the period lapse is not on a trial;
   // telling it "tu período de prueba terminó" reads as a mistake on our side.
   const title = user?.subscription_status === 'trialing'
@@ -650,9 +678,17 @@ function SubscriptionExpired({ onLogout }: { onLogout: () => void }) {
           Tus historias clínicas siguen seguras y puedes exportarlas en cualquier momento.
         </div>
         {canPay ? (
-          <button onClick={go} style={{ width: '100%', boxSizing: 'border-box', padding: 13, borderRadius: 12, border: 'none', background: 'var(--teal)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 12 }}>
-            Activar mi plan
-          </button>
+          <>
+            <button onClick={go} style={{ width: '100%', boxSizing: 'border-box', padding: 13, borderRadius: 12, border: 'none', background: 'var(--teal)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}>
+              Activar mi plan
+            </button>
+            <button onClick={recheck} disabled={checking} style={{ width: '100%', boxSizing: 'border-box', padding: 12, borderRadius: 12, border: '1.5px solid var(--s200)', background: '#fff', color: 'var(--s600)', fontSize: 14, fontWeight: 600, cursor: checking ? 'default' : 'pointer', marginBottom: 12 }}>
+              {checking ? 'Consultando tu pago…' : 'Ya pagué, verificar'}
+            </button>
+            {checkMsg && (
+              <div style={{ fontSize: 12.5, color: 'var(--s500)', lineHeight: 1.5, marginBottom: 12 }}>{checkMsg}</div>
+            )}
+          </>
         ) : (
           <div style={{ fontSize: 12.5, color: 'var(--s500)', marginBottom: 12, lineHeight: 1.5 }}>
             Pide al administrador de tu consultorio que active el plan.
