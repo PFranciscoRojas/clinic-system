@@ -32,6 +32,15 @@ export interface SystemHealth {
     migration_version: number;
     migration_dirty: boolean;
   };
+  deploy: {
+    active_colour: string;
+    active_sha: string;
+    switched_at: string | null;
+    fallback_colour: string;
+    fallback_sha: string;
+    fallback_running: boolean;
+    history: { at: string; colour: string; sha: string }[];
+  };
   cpu_pct: number;
   disk: { total_gb: number; used_gb: number; free_gb: number; used_pct: number };
   mem: { total_gb: number; used_gb: number; free_gb: number; used_pct: number };

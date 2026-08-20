@@ -110,6 +110,38 @@ apply_verdict() {
     echo stale
 }
 
+# image_sha <image reference> — the build inside a colour, as the tag says.
+# The tag is the only place the SHA survives outside the binary, and `latest`
+# means "whatever CI pushed last", which names no particular build at all.
+image_sha() {
+    local ref="$1" tag
+    [[ -z "$ref" ]] && { echo ""; return; }
+    tag="${ref##*:}"
+    [[ "$tag" == "$ref" ]] && { echo ""; return; }   # sin dos puntos: sin etiqueta
+    # A registry with a port has a colon that is not the tag separator, and
+    # everything after it is a path. A tag never contains a slash.
+    [[ "$tag" == */* ]] && { echo ""; return; }
+    [[ "$tag" == latest ]] && { echo latest; return; }
+    echo "${tag:0:40}"
+}
+
+# state_line — one snapshot of who is serving and what is left to fall back to.
+#
+# Written to /var/lib/sghcp, which core-api already mounts read-only, the same
+# way scripts/backup.sh reports the nightly dump. The application cannot see
+# Docker and must not: giving it the socket is what PR #107 removed. So the host
+# writes down what it knows and the console reads it.
+state_line() {
+    printf '%s|%s|%s|%s|%s|%s\n' "$1" "$2" "$3" "$4" "$5" "$6"
+}
+
+# history_line — one deploy, for the record. The point is not nostalgia: the
+# images stay in GHCR tagged by SHA, so a line here is a build you can still go
+# back to with `deploy_switch.sh deploy <sha>`, long after its colour was reused.
+history_line() {
+    printf '%s|%s|%s\n' "$1" "$2" "$3"
+}
+
 # rollback_target <active colour> <state of the other colour from docker ps>
 # Going back is only free while the previous colour is still up. Once it has
 # been retired there is nothing to point at, and the honest answer is to say so
@@ -200,6 +232,40 @@ point_caddy_at() { # point_caddy_at <colour>
     fi
 }
 
+STATE_DIR_HOST="${DEPLOY_STATE_DIR:-/var/lib/sghcp}"
+HISTORY_MAX="${DEPLOY_HISTORY_MAX:-20}"
+
+colour_sha() { # colour_sha <colour>
+    image_sha "$(docker inspect -f '{{.Config.Image}}' "sghcp_core_api_$1" 2>/dev/null || echo '')"
+}
+
+# Records what is serving so the superadmin console can show it. Best effort on
+# purpose: a console that cannot be updated is not a reason to abort a deploy
+# that already worked.
+record_state() {
+    local active other now
+    active="$(active_colour)"
+    other="$(other_colour "$active")"
+    now="$(date +%s)"
+    [[ -z "$active" ]] && return 0
+    mkdir -p "$STATE_DIR_HOST" 2>/dev/null || return 0
+
+    state_line "$now" "$active" "$(colour_sha "$active")" \
+               "$other" "$(colour_sha "$other")" \
+               "$(container_state "$other")" \
+        > "$STATE_DIR_HOST/deploy_state" 2>/dev/null || return 0
+    chmod 644 "$STATE_DIR_HOST/deploy_state" 2>/dev/null
+}
+
+record_history() { # record_history <colour> <sha>
+    local f="$STATE_DIR_HOST/deploy_history"
+    mkdir -p "$STATE_DIR_HOST" 2>/dev/null || return 0
+    history_line "$(date +%s)" "$1" "$2" >> "$f" 2>/dev/null || return 0
+    # Newest last, so the tail is what survives.
+    tail -n "$HISTORY_MAX" "$f" > "$f.trim" 2>/dev/null && mv "$f.trim" "$f"
+    chmod 644 "$f" 2>/dev/null
+}
+
 cmd_status() {
     local active
     active="$(active_colour)"
@@ -241,6 +307,8 @@ cmd_deploy() {
     fi
 
     point_caddy_at "$target" || { echo "[deploy] falló el reload de Caddy" >&2; return 1; }
+    record_history "$target" "$tag"
+    record_state
     echo "[deploy] tráfico en $target. $active sigue encendido para volver atrás."
 }
 
@@ -254,6 +322,8 @@ cmd_rollback() {
     esac
     echo "[rollback] $active → $target"
     point_caddy_at "$target" || return 1
+    record_history "$target" "$(colour_sha "$target")"
+    record_state
     echo "[rollback] tráfico en $target"
 }
 
@@ -264,6 +334,9 @@ cmd_retire() {
     [[ -z "$other" ]] && { echo "[retire] no sé qué color sirve" >&2; return 1; }
     echo "[retire] apagando $other (sirviendo: $active)"
     compose stop "core-api-$other"
+    # The fallback just disappeared, and the console should say so rather than
+    # keep showing a rollback that would no longer work.
+    record_state
 }
 
 main() {

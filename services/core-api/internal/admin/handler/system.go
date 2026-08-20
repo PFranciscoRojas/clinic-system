@@ -122,8 +122,42 @@ type buildInfo struct {
 	MigrationDirty   bool   `json:"migration_dirty"`   // a migration that failed halfway
 }
 
+// Qué se ha desplegado y a qué se puede volver, según lo que el host anotó.
+//
+// La aplicación no ve Docker y no debe verlo: darle el socket es lo que se
+// quitó en el PR #107. Así que scripts/deploy_switch.sh escribe lo que sabe en
+// /var/lib/sghcp — el mismo sitio y el mismo estilo con que backup.sh reporta
+// el volcado nocturno — y la consola lo lee de ahí.
+type deployEvent struct {
+	At     time.Time `json:"at"`
+	Colour string    `json:"colour"`
+	SHA    string    `json:"sha"`
+}
+
+type deployState struct {
+	// Lo que el host cree que está sirviendo. Puede no coincidir con
+	// build.version, que sale del binario que contesta esta petición; cuando
+	// difieren, algo se rompió a mitad de un despliegue.
+	ActiveColour string     `json:"active_colour"`
+	ActiveSHA    string     `json:"active_sha"`
+	SwitchedAt   *time.Time `json:"switched_at"`
+
+	// La vuelta atrás de un clic. Solo existe mientras el color anterior siga
+	// encendido: el siguiente despliegue lo apaga para reutilizarlo.
+	FallbackColour  string `json:"fallback_colour"`
+	FallbackSHA     string `json:"fallback_sha"`
+	FallbackRunning bool   `json:"fallback_running"`
+
+	// Despliegues anteriores, del más reciente al más antiguo. Las imágenes
+	// siguen en GHCR etiquetadas por SHA, así que cada línea es un build al que
+	// todavía se puede volver con `deploy_switch.sh deploy <sha>`, mucho después
+	// de que su color se reutilizara.
+	History []deployEvent `json:"history"`
+}
+
 type systemHealthResponse struct {
 	Build       buildInfo    `json:"build"`
+	Deploy      deployState  `json:"deploy"`
 	CPUPct      float64      `json:"cpu_pct"`
 	Disk        diskStats    `json:"disk"`
 	Mem         memStats     `json:"mem"`
@@ -162,6 +196,7 @@ func (h *Handler) systemHealth(w http.ResponseWriter, r *http.Request) {
 	).Scan(&build.MigrationVersion, &build.MigrationDirty)
 	out := systemHealthResponse{
 		Build:       build,
+		Deploy:      readDeployState(),
 		UptimeSec:   int64(time.Since(h.startedAt).Seconds()),
 		CollectedAt: time.Now().UTC(),
 	}
@@ -535,6 +570,66 @@ func sampleCPU() float64 {
 }
 
 // ── backup status helper ───────────────────────────────────────────────────────
+
+// readDeployState lee lo que scripts/deploy_switch.sh anotó en /var/lib/sghcp,
+// montado aquí como /backup-status de solo lectura.
+//
+//	deploy_state    epoch|activo|sha|reserva|sha|estado-de-la-reserva
+//	deploy_history  epoch|color|sha   (una línea por despliegue, la más nueva al final)
+//
+// Falta de fichero devuelve el cero, no un error: un despliegue anterior a esta
+// función es un caso normal, y una consola sin esta sección es preferible a una
+// consola que no carga.
+func readDeployState() deployState {
+	stateRaw, _ := os.ReadFile("/backup-status/deploy_state")
+	historyRaw, _ := os.ReadFile("/backup-status/deploy_history")
+	return parseDeployState(string(stateRaw), string(historyRaw))
+}
+
+// parseDeployState es la lectura, separada de los ficheros a propósito: lo que
+// puede salir mal aquí es cómo se interpreta una línea a medio escribir, y eso
+// se prueba sin tocar el disco.
+func parseDeployState(stateRaw, historyRaw string) deployState {
+	var d deployState
+
+	{
+		parts := strings.Split(strings.TrimSpace(stateRaw), "|")
+		if len(parts) >= 6 {
+			if epoch, err := strconv.ParseInt(parts[0], 10, 64); err == nil {
+				t := time.Unix(epoch, 0)
+				d.SwitchedAt = &t
+			}
+			d.ActiveColour, d.ActiveSHA = parts[1], parts[2]
+			d.FallbackColour, d.FallbackSHA = parts[3], parts[4]
+			// Cualquier cosa que no sea "running" es una reserva que ya no
+			// está: ofrecer una vuelta atrás que fallaría es peor que no
+			// ofrecer ninguna.
+			d.FallbackRunning = parts[5] == "running"
+		}
+	}
+
+	d.History = []deployEvent{}
+	if strings.TrimSpace(historyRaw) != "" {
+		lines := strings.Split(strings.TrimSpace(historyRaw), "\n")
+		// Del más reciente al más antiguo: el fichero crece por el final.
+		for i := len(lines) - 1; i >= 0; i-- {
+			parts := strings.Split(strings.TrimSpace(lines[i]), "|")
+			if len(parts) < 3 {
+				continue
+			}
+			epoch, err := strconv.ParseInt(parts[0], 10, 64)
+			if err != nil {
+				continue
+			}
+			d.History = append(d.History, deployEvent{
+				At:     time.Unix(epoch, 0).UTC(),
+				Colour: parts[1],
+				SHA:    parts[2],
+			})
+		}
+	}
+	return d
+}
 
 // readBackupStatus lee /backup-status/last_backup_ok (montado desde el host
 // /var/lib/sghcp). El script backup.sh escribe "epoch|size" al finalizar con

@@ -111,6 +111,42 @@ check "asked for blue and Caddy still says green is stale too" \
 check "a container we cannot read from is not a success either" \
     unreadable "$(apply_verdict green '')"
 
+echo "==> deploy_switch.sh what it writes down for the console"
+
+# The console cannot see Docker and must not — giving the application the
+# socket is what PR #107 removed. So the host writes down what it knows, and
+# these are the readings the console will show.
+check "a SHA tag is the build"        bcfc0b5 "$(image_sha ghcr.io/x/core-api:bcfc0b5)"
+check "latest names no build in particular" \
+    latest "$(image_sha ghcr.io/x/core-api:latest)"
+check "an image with no tag yields nothing" \
+    "" "$(image_sha ghcr.io/x/core-api)"
+check "no image at all yields nothing"  "" "$(image_sha '')"
+
+# A registry with a port in it has a colon that is not the tag separator. Cutting
+# at the first colon would report "5000/x/core-api:abc" as the build.
+check "a registry port is not mistaken for a tag" \
+    abc123 "$(image_sha localhost:5000/x/core-api:abc123)"
+
+# And the same reference with no tag at all. Everything after the last colon is
+# "5000/x/core-api", which is a path, not a build — a tag never contains a slash.
+check "a registry port with no tag yields nothing, not the port" \
+    "" "$(image_sha localhost:5000/x/core-api)"
+
+check "a state line carries everything the console needs" \
+    "1787000000|green|bcfc0b5|blue|12d6fd0|running" \
+    "$(state_line 1787000000 green bcfc0b5 blue 12d6fd0 running)"
+
+# A retired fallback must be visible as such. A console that keeps offering a
+# rollback that would no longer work is worse than one that offers none.
+check "a retired fallback is recorded as not running" \
+    "1787000000|green|bcfc0b5|blue|12d6fd0|exited" \
+    "$(state_line 1787000000 green bcfc0b5 blue 12d6fd0 exited)"
+
+check "a history line is a build you can still go back to" \
+    "1787000000|green|bcfc0b5" \
+    "$(history_line 1787000000 green bcfc0b5)"
+
 echo "==> deploy_switch.sh going back"
 
 check "going back is free while the old colour is up" \
