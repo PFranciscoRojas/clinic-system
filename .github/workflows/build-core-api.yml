@@ -107,7 +107,14 @@ jobs:
         with:
           context: ./services/core-api
           push: true
-          tags: ghcr.io/pfranciscorojas/clinic-system-core-api:latest
+          # Two tags on purpose. `latest` is what a fresh box pulls; the SHA is
+          # what makes a rollback possible at all. Until 2026-08-20 only `latest`
+          # existed and the deploy pruned the previous image, so going back to
+          # the version from ten minutes ago meant reverting the commit and
+          # waiting for a 2.19 GB rebuild while people were locked out.
+          tags: |
+            ghcr.io/pfranciscorojas/clinic-system-core-api:latest
+            ghcr.io/pfranciscorojas/clinic-system-core-api:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -166,8 +173,21 @@ jobs:
             fi
             echo "schema version: $(docker compose exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -tAc 'SELECT version FROM schema_migrations')"
 
-            docker compose up -d core-api
-            docker image prune -f
+            # Blue/green, since 2026-08-20. The colour that is NOT serving gets
+            # the new image, has to report healthy on its own, and only then does
+            # Caddy get pointed at it. If it never comes up the script leaves the
+            # old colour serving and fails this step: no gap, and going back is a
+            # config reload rather than a rebuild.
+            #
+            # The old colour stays up on purpose — that is the rollback. It gets
+            # retired by the next deploy, which is what makes it the target.
+            ./scripts/deploy_switch.sh retire || true
+            ./scripts/deploy_switch.sh deploy "${{ github.sha }}"
+            ./scripts/deploy_switch.sh status
+
+            # Only images nothing has used for a week. A bare `prune -f` is what
+            # deleted the previous version and left no way back.
+            docker image prune -f --filter "until=168h"
 
   smoke:
     needs: build
