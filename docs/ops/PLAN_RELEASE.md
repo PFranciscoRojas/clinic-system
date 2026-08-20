@@ -173,10 +173,18 @@ ese mismo estado. Quien pueda leer el dump puede leer los ficheros de la base qu
 tiene al lado. Lo que el fichero sí añade es una copia que sobrevive a un `DROP`,
 y por eso es de root, `0600`, y se barre a los siete días.
 
-**0.3 Simulacro de restauración con las llaves de hoy (una hora).** El último fue
-en julio y desde entonces rotaron llaves. Restaurar el dump de anoche en una BD
-desechable, verificar que se descifra una historia clínica de verdad, y anotar la
-fecha en `DR_RUNBOOK.md`. Un respaldo que nunca se restauró no es un respaldo.
+**0.3 Simulacro de restauración con las llaves de hoy. ✅ HECHO 2026-08-20.** El anterior fue en
+julio, antes de la rotación de llave, así que hasta hoy nadie había comprobado
+que los respaldos actuales se pudieran leer.
+
+Restauración desde B2, no desde la copia local del VPS, que es la prueba más
+estricta. 50 tablas, 0 errores, **7 segundos**, y el contenido idéntico a
+producción. La cadena de sobre completa quedó verificada extremo a extremo:
+`MASTER_KEY` descifra la DEK del paciente, la DEK descifra el campo, y el
+apellido recuperado se re-hashea con `SEARCH_PEPPER` y coincide con el hash
+guardado en los tres pacientes probados. Detalle y método en `DR_RUNBOOK.md`.
+
+Un respaldo que nunca se restauró no es un respaldo; ahora sí lo es.
 
 **0.4 Poder ver qué está corriendo (medio día).** Dos mitades que se verifican
 entre sí:
@@ -303,7 +311,7 @@ cerrar la Fase 0.
 |---|---|---|---|
 | 1 | 0.1 blue/green + rollback ✅ | 1 día | sí |
 | 2 | 0.2 respaldo pre-migración ✅ | 1 h | sí |
-| 3 | 0.3 simulacro de restauración | 1 h | sí |
+| 3 | 0.3 simulacro de restauración ✅ | 1 h | sí |
 | 4 | 0.4 Environments + tarjeta de versión | medio día | sí |
 | 5 | 1.c ensayo de migración sobre copia | medio día | no, pero antes de la 1ª migración con externos |
 | 6 | 2.3 ventana de despliegue | 0 | no |
