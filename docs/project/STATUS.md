@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-08-07)
+## Estado actual (2026-08-19)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -56,6 +56,48 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 | 4 — Plataforma/perf | ✅ resuelto | cache `SubscriptionGate` con TTL 60s (`middleware/subscription.go`); staticcheck en CI (`build-core-api.yml`) |
 | 5 — Tests | ✅ resuelto | testcontainers + tests de aislamiento RLS (`internal/integration/{infra,rls,needtoknow}_test.go`); vitest para `client.ts` y `RecordForm` |
 | 6 — Frontend refactor | ✅ resuelto | `SettingsPage` partido en 10 secciones bajo `components/settings/` (191 líneas, solo orquesta); `logout` hace `flushClinicalDrafts()` antes de invalidar el token (`AuthContext.tsx`) |
+
+### Sesión 2026-08-18/19 — latencia de audio y el camino de cobro
+
+**Fase 4 de la latencia de audio, medida y afinada** (`#287`–`#290`). La prueba
+de carga con tres sesiones simultáneas destapó dos cosas que el diseño daba por
+ciertas y no lo eran: un carril propio para las ventanas **no** impedía que
+Whisper decodificara dos veces a la vez (60,7 s de cola contra 45,3 s del mismo
+trabajo a solas), y la ventana en vuelo se soltaba antes de escribirse. Con las
+dos arregladas, las tres sesiones esperan 61/131/198 s donde antes esperaban
+87/155/221, y sin ventanas esperarían ~200/~400/~600. Migración `000080`
+(`partial_transcripts.window_started_at`, el reclamo de la ventana en vuelo).
+
+**Barrido de producción:** el `PartSweeper` de 12 h borró los 63 trozos huérfanos
+de una subida abortada, y se purgaron **206 llaves de cifrado huérfanas** (el
+conjunto se construyó desde `pg_constraint`, 11 claves foráneas, con respaldo en
+`/root/orphan_keys_backup_20260818.csv`). Ninguna era de ese día: las corridas de
+prueba no filtran llaves.
+
+**Cuatro fallos apilados en el camino de cobro** (`#292`–`#295`), todos vivos
+desde que se escribió ese código, y la razón por la que ninguna organización
+había quedado nunca registrada como cobrada:
+
+| PR | Qué estaba mal |
+|---|---|
+| `#292` | `plan_amount` se guardaba sin validar nada. $1.000 está por debajo del piso de MercadoPago ($1.600 COP), así que cada checkout devolvía 400 → 502 → "no se pudo iniciar el pago". Un precio impagable ahora se rechaza al guardarlo, que es el último momento en que sale barato |
+| `#293` | `/preapproval/search` mandaba `sort=date_created&criteria=desc`, que es la convención de `/v1/payments/search`, y este endpoint contesta `400 Invalid sorting value format` — todas las veces, desde el día que se escribió. Como `reconcile` es también lo que parcha el `notification_url`, el webhook tampoco podía quedar enganchado nunca |
+| `#294` | `applyPreapproval` buscaba la organización por `external_reference`, que viene **null** cuando la suscripción nace de un `preapproval_plan`, y `_, _ = h.pool.Exec` tiraba las dos devoluciones: el UPDATE que no tocaba ninguna fila era silencioso. Ahora resuelve por `provider_customer_id` y grita si no encontró a nadie |
+| `#295` | Quien pagó y no se le activó **no tenía cómo reintentar**: el único sitio que llamaba a `reconcile` era la página de regreso del checkout. Si te la perdías una vez, se acabó. Botón "Ya pagué, verificar" en la propia pantalla de plan vencido |
+
+Los cuatro salieron de probar el pago con dinero real. Ninguno se habría visto de
+otra forma hasta que una psicóloga pagara y se quedara afuera — que es
+exactamente lo que pasó el 18 de agosto a las 16:58.
+
+**Verificado en producción (2026-08-19):** `fbf1fb3d` (MarcelaChapues) en
+`active` con `current_period_end 2026-09-18`, activada desde el botón nuevo.
+
+**Vigilancia** (`docs/ops/MONITORING.md`): `scripts/monitor.sh` corre en el host
+cada 5 minutos, se registra como profesional y pide `/auth/me` y la lista de
+pacientes. La lección del 18 de agosto es que `/healthz` respondió 200 durante
+todo el incidente: medir si el proceso vive no es medir si se puede trabajar.
+Lo que el monitor *decide* se prueba en `scripts/monitor_test.sh` y entra en
+`make verify`.
 
 ### Últimos PRs a `main` (sesión 2026-08-07 tarde, todos desplegados por CI)
 
@@ -112,8 +154,9 @@ Antes la apertura tenía 27 campos con 16 de texto libre. `TestReconstructedForm
 | ID | Descripción | Estado |
 |---|---|---|
 | **WhatsApp Meta API** | Cargo COP $90.675 pagado. **Verificado en BD 2026-07-25**: la config de la única org ya tiene `phone_number_id` y las tres plantillas escritas (`recordatorio_cita_24h`, `recordatorio_cita_2h`, `cita_confirmada`, `lang=es_CO`) — lo que falta **no** es configurarlas, es que `org_whatsapp_config.enabled` sigue en `false`. Queda: confirmar que Meta desbloqueó y encender el toggle en Ajustes → Integraciones. | 🟡 configurado, apagado |
+| **Dead man's switch** | `scripts/monitor.sh` vigila la producción desde el host cada 5 minutos, pero **si el propio monitor se muere nadie avisa**: el cron puede desaparecer y el silencio se lee igual que la salud. Cerrarlo pide un observador fuera de este servidor. Ver `docs/ops/MONITORING.md`. | 🔴 sin iniciar |
 | **Validación de demanda** | Conseguir 2-3 psicólogas externas en beta de diseño (acceso gratis 2 semanas, acompañamiento 1ª sesión en vivo). Sin esto, el go-live 1.0.0 carece de señal de mercado. 2 contactos disponibles (colegas de la esposa). Fases 1-2 de la auditoría deben cerrarse antes de la beta (logout/pérdida de borrador ya resueltos). | 🔴 sin iniciar |
-| **Primer cobro real sin confirmar** | El embudo (2026-08-07) muestra a Marcela como `checkout` y no `charged`: hay `provider_customer_id` (pasó por el checkout de MercadoPago) pero `last_billing_payment_id` está vacío, o sea **ningún webhook de pago ha cobrado**. O el cobro recurrente todavía no entra, o el webhook nunca llegó. Verificar en el panel de MercadoPago antes de contar ese mes como facturado. | 🟡 por verificar |
+| **Primer cobro real** | ✅ **Cerrado el 2026-08-19.** No era que el cobro no hubiera entrado: eran cuatro fallos apilados en el camino de cobro, todos vivos desde que se escribió ese código, y por eso ninguna organización había quedado nunca registrada como cobrada. Ver el bloque de la sesión 2026-08-18/19. El cobro de `fbf1fb3d` (MarcelaChapues) está confirmado: `active`, `current_period_end 2026-09-18`. | ✅ resuelto |
 | **Validación de demanda B2B (clínicas)** | Señal orgánica en producción: ninguna aún — tras la limpieza del 2026-08-07 la cohorte del embudo es **1 organización real**; el único signup externo que hubo (Alma Vélez) canceló sin registrar un solo paciente y se eliminó. Señal de mercado (2026-07-06): sí existe — competidores colombianos (Psiris, MedSystem, RIPS/CIE10/Res. 1888) e IPS de salud mental reales en Bogotá/Medellín ya operan sin solución especializada en psicología+cifrado. Pendiente decidir: entrevistas directas con 3-5 IPS/clínicas antes del plan B2B completo, o construirlo ya con esta señal. | 🟡 en evaluación |
 | **Formatos reconstruidos — revisión clínica** | Los 4 formatos ya están en prod sin corrupción, pero al reconstruirlos se tomaron 2 decisiones que Marcela debe validar: (a) **consumo de SPA** quedó como un multiselect de sustancias con las frecuencias plegadas, en vez del "Sí/No" + casillas por sustancia del papel; (b) **ideación suicida e intento previo** siguen como campos del formato aunque el sistema ya tiene su control fijo de nivel de riesgo (posible duplicación). Ambas se ajustan desde el builder visual, sin tocar BD. | 🟡 pendiente de revisión |
 | **MCP `cloudflare-api` — scope del token** | ✅ **OAuth ya autorizado** (verificado 2026-07-25: lista las zonas `chapni.com` y `marcelachapues.com`). Pero el token concedido es de lectura acotada: `GET /zones/:id/rulesets` devuelve *request is not authorized* y `bot_management` da *Authentication error* — o sea, reglas de redirección y política de bots **siguen siendo manuales por el panel**. Cabo suelto heredado: confirmar si *JavaScript Detections* está apagado (no verificable por API con este token; el HTML se sirve cacheado y haría falta purgar). Cosmético: ese script es inline y el CSP del sitio (`script-src 'self'`) ya lo bloquea. | 🟡 conectado, sin permisos de escritura |
@@ -153,7 +196,8 @@ Antes la apertura tenía 27 campos con 16 de texto libre. `TestReconstructedForm
 | `ai-service` | ✅ producción — CI deploy (último: PR #208, 2026-07-21: `risk` pasa a control fijo del sistema, ya no widget de plantilla). Pipeline validado E2E con audio de 58 min (2026-07-11). |
 | `frontend` (Caddy :80/:443) | ✅ producción — **CI deploy automático desde PR #185** (`build-frontend.yml`: build en Actions + rsync in-place al bind mount, sin restart de Caddy). Último: PR #258 (2026-08-08 02:06 UTC, pestaña de activación). **Caddy recreado a mano** el 2026-07-21 tras PR #211 (bind-mount de archivo: `reload` no basta). **Dominio:** `https://app.chapni.com` (DNS en nube gris a propósito: en proxy se rompe el ACME de Caddy, y Cloudflare corta las subidas en 100 MB — bloqueante para audio de sesión); `api.marcelachapues.com` legacy (mantiene `/api` para webhooks, redirige 308 el resto). |
 | Backups | `pg_dump` diario cifrado GPG → Backblaze B2 + **snapshot cifrado del `.env`** (desde 2026-07-13). Llave GPG rotada 2026-07-13: `backups@chapni.com` (privada en máquina del operador + LastPass; la vieja solo lee dumps ≤ 2026-07-13). **Restore probado**: RTO datos ~15 s — runbook en `docs/ops/DR_RUNBOOK.md`. |
-| **Disco** | ~27% (9,4/38 GB — reverificado 2026-07-25, estable desde el barrido de audios PHI del 2026-07-13) — cron semanal en el **host**: `0 4 * * 0 docker system prune -af` → `/var/log/docker-prune.log`. Alerta email si >80% |
+| **Disco** | 22% (7,7/38 GB — reverificado 2026-08-19) — cron semanal en el **host**: `0 4 * * 0 docker system prune -af` → `/var/log/docker-prune.log`. **Alerta por correo si ≥80% desde el 2026-08-19** (`scripts/monitor.sh`); antes de esa fecha este documento afirmaba tener esa alerta y no existía ninguna |
+| **Vigilancia** | `scripts/monitor.sh` cada 5 min desde el host → `/var/log/sghcp-monitor.log`, avisos por Resend. Se registra con un canario `PROFESSIONAL` de la org demo y pide `/auth/me` y la lista de pacientes: mide si **se puede entrar**, no si el proceso vive. Runbook en `docs/ops/MONITORING.md` |
 
 **Env crítico en VPS:**
 - `MASTER_KEY` — clave maestra de cifrado PII
@@ -176,7 +220,7 @@ Antes la apertura tenía 27 campos con 16 de texto libre. `TestReconstructedForm
 | `core-api` | `services/core-api/` | ✅ Go 1.25, prod |
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
-| Migrations | `services/core-api/migrations/` | Última: `000074_activation_paid_source` (evidencia de cobro para el embudo, PR #258) — aplicada en prod (`schema_migrations` = 74). Las aplica el deploy desde PR #255, así que **tienen que ser aditivas**. Ojo: 000052 ya existía (`org_signup_lead`), por eso el salto de numeración |
+| Migrations | `services/core-api/migrations/` | Última: `000080_window_in_flight` (reclamo de ventana en vuelo, PR #288) — aplicada en prod (`schema_migrations` = 80, verificado 2026-08-19). Las aplica el deploy desde PR #255, así que **tienen que ser aditivas**. Ojo: 000052 ya existía (`org_signup_lead`), por eso el salto de numeración |
 | CI/CD | `.github/workflows/build-ai-service.yml` + `build-core-api.yml` | Build+push ghcr.io + deploy SSH al VPS (secrets: `VPS_HOST`, `VPS_SSH_KEY`, `GHCR_TOKEN`) |
 | Claude skills | `~/.claude/commands/` + `~/.claude/skills/` | `chapni-social` (NO sincronizada al repo `claude-skills`) es ahora un sistema de content-ops completo: auditoría de estado (paso 0, comandos `estado`/`semana`), log con confirmación de publicación en el repo chapni, sinergia con el hub `/recursos`, política de slots perdidos, ritual dominical en batch, generador de banners (`render_banner.py`) y bios/perfiles oficiales documentados. Supervisada por rutina cloud dominical (reporte a Gmail). `ui-ux-pro-max` instalada; `ui-styling` desinstalada 2026-06-28 |
 

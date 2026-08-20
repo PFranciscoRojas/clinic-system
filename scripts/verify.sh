@@ -96,6 +96,13 @@ step "fuzz-classifier" ./scripts/run_fuzz_test.sh
 # noticing, because its only symptom was a number that looked fine.
 step "mutation-reader" ./scripts/run_mutation_test.sh
 
+# And once more, for the piece that only speaks when something is already wrong.
+# The production monitor reaches out to the network, so what runs here is its
+# reading: what it concludes from the codes that came back, and whether that
+# conclusion reaches a human. Nothing else in the suite fails when a monitor
+# goes quiet — that is the whole reason to test it from here.
+step "monitor" ./scripts/monitor_test.sh
+
 if have gitleaks; then
   step "secrets" gitleaks git . --no-banner --redact --config .gitleaks.toml
 else
