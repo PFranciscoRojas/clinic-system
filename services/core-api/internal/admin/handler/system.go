@@ -117,6 +117,7 @@ type alertItem struct {
 // invisible from outside.
 type buildInfo struct {
 	Version          string `json:"version"`           // git SHA, injected at link time
+	Release          string `json:"release"`           // v0.9.4, vacío en un build local
 	Colour           string `json:"colour"`            // blue | green | unknown
 	MigrationVersion int64  `json:"migration_version"` // schema_migrations
 	MigrationDirty   bool   `json:"migration_dirty"`   // a migration that failed halfway
@@ -129,23 +130,32 @@ type buildInfo struct {
 // /var/lib/sghcp — el mismo sitio y el mismo estilo con que backup.sh reporta
 // el volcado nocturno — y la consola lo lee de ahí.
 type deployEvent struct {
-	At     time.Time `json:"at"`
-	Colour string    `json:"colour"`
-	SHA    string    `json:"sha"`
+	At      time.Time `json:"at"`
+	Colour  string    `json:"colour"`
+	SHA     string    `json:"sha"`
+	Version string    `json:"version"` // v0.9.3, si el despliegue la calculó
+	// El asunto del commit. Es lo que de verdad contesta "¿a qué estoy
+	// volviendo?": un hash no dice nada y un número dice poco, pero
+	// "fix(billing): que quien ya pagó pueda reintentar" sí.
+	Subject string `json:"subject"`
 }
 
 type deployState struct {
 	// Lo que el host cree que está sirviendo. Puede no coincidir con
 	// build.version, que sale del binario que contesta esta petición; cuando
 	// difieren, algo se rompió a mitad de un despliegue.
-	ActiveColour string     `json:"active_colour"`
-	ActiveSHA    string     `json:"active_sha"`
-	SwitchedAt   *time.Time `json:"switched_at"`
+	ActiveColour  string     `json:"active_colour"`
+	ActiveSHA     string     `json:"active_sha"`
+	ActiveVersion string     `json:"active_version"`
+	ActiveSubject string     `json:"active_subject"`
+	SwitchedAt    *time.Time `json:"switched_at"`
 
 	// La vuelta atrás de un clic. Solo existe mientras el color anterior siga
 	// encendido: el siguiente despliegue lo apaga para reutilizarlo.
 	FallbackColour  string `json:"fallback_colour"`
 	FallbackSHA     string `json:"fallback_sha"`
+	FallbackVersion string `json:"fallback_version"`
+	FallbackSubject string `json:"fallback_subject"`
 	FallbackRunning bool   `json:"fallback_running"`
 
 	// Despliegues anteriores, del más reciente al más antiguo. Las imágenes
@@ -185,6 +195,7 @@ func (h *Handler) systemHealth(w http.ResponseWriter, r *http.Request) {
 	// needs and the cheapest thing to answer.
 	build := buildInfo{
 		Version: buildinfo.Version,
+		Release: buildinfo.Release,
 		Colour:  buildinfo.Colour(),
 	}
 	// A dirty row means a migration stopped halfway and golang-migrate will
@@ -613,7 +624,9 @@ func parseDeployState(stateRaw, historyRaw string) deployState {
 		lines := strings.Split(strings.TrimSpace(historyRaw), "\n")
 		// Del más reciente al más antiguo: el fichero crece por el final.
 		for i := len(lines) - 1; i >= 0; i-- {
-			parts := strings.Split(strings.TrimSpace(lines[i]), "|")
+			// SplitN con límite: el asunto va al final y puede traer el
+			// separador, así que el resto se queda entero.
+			parts := strings.SplitN(strings.TrimSpace(lines[i]), "|", 5)
 			if len(parts) < 3 {
 				continue
 			}
@@ -621,14 +634,51 @@ func parseDeployState(stateRaw, historyRaw string) deployState {
 			if err != nil {
 				continue
 			}
-			d.History = append(d.History, deployEvent{
+			ev := deployEvent{
 				At:     time.Unix(epoch, 0).UTC(),
 				Colour: parts[1],
 				SHA:    parts[2],
-			})
+			}
+			// Campos añadidos después: una línea antigua sigue siendo legible.
+			if len(parts) > 3 {
+				ev.Version = parts[3]
+			}
+			if len(parts) > 4 {
+				ev.Subject = parts[4]
+			}
+			d.History = append(d.History, ev)
 		}
 	}
+	// La versión y el asunto de cada color se buscan en el historial por SHA en
+	// vez de repetirse en el fichero de estado: un solo sitio donde se escriben,
+	// así que no pueden discrepar entre sí.
+	d.ActiveVersion, d.ActiveSubject = describeSHA(d.History, d.ActiveSHA)
+	d.FallbackVersion, d.FallbackSubject = describeSHA(d.History, d.FallbackSHA)
 	return d
+}
+
+// describeSHA busca el despliegue más reciente de ese build. Más reciente y no
+// el primero porque un rollback vuelve a escribir el mismo SHA sin versión, y lo
+// que interesa es la línea que sí la trae.
+func describeSHA(history []deployEvent, sha string) (version, subject string) {
+	if sha == "" {
+		return "", ""
+	}
+	for _, e := range history {
+		if e.SHA != sha {
+			continue
+		}
+		if version == "" {
+			version = e.Version
+		}
+		if subject == "" {
+			subject = e.Subject
+		}
+		if version != "" && subject != "" {
+			return version, subject
+		}
+	}
+	return version, subject
 }
 
 // readBackupStatus lee /backup-status/last_backup_ok (montado desde el host

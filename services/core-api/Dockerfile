@@ -14,8 +14,13 @@ COPY . .
 # to "dev", which is what a local build should say: an operator who sees "dev" in
 # the console is looking at something that never went through CI.
 ARG VERSION=dev
+# Y el número que un humano puede leer. Va junto al SHA, no en su lugar: la
+# versión sirve para hablar de un build y el SHA para señalarlo sin ambigüedad.
+ARG RELEASE=
 RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-s -w -X sghcp/core-api/internal/shared/buildinfo.Version=${VERSION}" \
+    -ldflags="-s -w \
+      -X sghcp/core-api/internal/shared/buildinfo.Version=${VERSION} \
+      -X sghcp/core-api/internal/shared/buildinfo.Release=${RELEASE}" \
     -o /bin/core-api ./cmd/api
 # One-shot search-hash migration, run manually via `docker compose exec core-api ./rehash`
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/rehash ./cmd/rehash

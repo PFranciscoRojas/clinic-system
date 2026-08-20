@@ -141,6 +141,7 @@ function BuildBadge({ build }: { build: SystemHealth['build'] }) {
       >
         {dev ? 'dev (sin CI)' : build.version.slice(0, 7)}
       </span>
+      {build.release && <Release value={build.release} />}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--s500)' }}>
         <span style={{ width: 7, height: 7, borderRadius: '50%', background: colour, display: 'inline-block' }} />
         {build.colour}
@@ -172,6 +173,29 @@ function shortSha(sha: string) {
   if (!sha) return '—';
   if (sha === 'latest' || sha === 'dev') return sha;
   return sha.slice(0, 7);
+}
+
+// El número legible. Se muestra al lado del SHA, no en su lugar: la versión
+// sirve para hablar de un build y el SHA para señalarlo sin ambigüedad.
+function Release({ value }: { value: string }) {
+  if (!value) return null;
+  return (
+    <span style={{
+      fontSize: 12, fontWeight: 600, padding: '1px 7px', borderRadius: 5,
+      background: '#eef2ff', color: '#4338ca', border: '1px solid #c7d2fe',
+    }}>{value}</span>
+  );
+}
+
+// Lo que de verdad contesta "¿a qué estoy volviendo?". Un hash no dice nada y un
+// número dice poco; el asunto del commit sí.
+function Subject({ text }: { text: string }) {
+  if (!text) return null;
+  return (
+    <div style={{ fontSize: 12, color: 'var(--s500)', paddingLeft: 130, marginTop: -4, marginBottom: 2 }}>
+      {text}
+    </div>
+  );
 }
 
 function Sha({ value }: { value: string }) {
@@ -233,9 +257,11 @@ function DeploySection({ deploy: d, runningVersion }: {
         <span style={{ minWidth: 120, color: 'var(--s400)' }}>Sirviendo</span>
         <ColourDot colour={d.active_colour} />
         <span style={{ color: 'var(--s700)' }}>{d.active_colour}</span>
+        <Release value={d.active_version} />
         <Sha value={d.active_sha} />
         <span style={{ color: 'var(--s400)', fontSize: 12 }}>{fmtAgo(d.switched_at)}</span>
       </div>
+      <Subject text={d.active_subject} />
 
       <div style={row}>
         <span style={{ minWidth: 120, color: 'var(--s400)' }}>Vuelta atrás</span>
@@ -243,6 +269,7 @@ function DeploySection({ deploy: d, runningVersion }: {
           <>
             <ColourDot colour={d.fallback_colour} />
             <span style={{ color: 'var(--s700)' }}>{d.fallback_colour}</span>
+            <Release value={d.fallback_version} />
             <Sha value={d.fallback_sha} />
             <span style={{ color: '#059669', fontSize: 12 }}>sigue encendida</span>
             <a
@@ -260,10 +287,12 @@ function DeploySection({ deploy: d, runningVersion }: {
           </>
         ) : (
           <span style={{ color: 'var(--s400)', fontSize: 12.5 }}>
-            La versión anterior ya se apagó. Volver exige desplegar un SHA del historial.
+            La versión anterior ya se apagó. Volver exige desplegar una del historial.
           </span>
         )}
       </div>
+
+      <Subject text={d.fallback_running ? d.fallback_subject : ''} />
 
       {/* Por qué el botón se va a otra pestaña en vez de estar aquí. Sin esta
           línea la pregunta vuelve cada seis meses, y la respuesta importa. */}
@@ -281,15 +310,22 @@ function DeploySection({ deploy: d, runningVersion }: {
           </summary>
           <div style={{ marginTop: 8 }}>
             <div style={{ fontSize: 11.5, color: 'var(--s400)', marginBottom: 6 }}>
-              Las imágenes siguen en GHCR etiquetadas por SHA, así que a cualquiera de
-              estas se puede volver con <code>deploy_switch.sh deploy &lt;sha&gt;</code>.
+              Las imágenes siguen en GHCR etiquetadas por versión y por SHA, así que a
+              cualquiera de estas se puede volver con{' '}
+              <code>deploy_switch.sh deploy v0.9.2</code>.
             </div>
             {d.history.map((e, i) => (
-              <div key={`${e.at}-${i}`} style={{ ...row, padding: '6px 0' }}>
+              <div key={`${e.at}-${i}`} style={{ ...row, padding: '6px 0', flexWrap: 'wrap' }}>
                 <span style={{ minWidth: 120, color: 'var(--s400)', fontSize: 12 }}>{fmtAgo(e.at)}</span>
                 <ColourDot colour={e.colour} />
                 <span style={{ color: 'var(--s500)', fontSize: 12 }}>{e.colour}</span>
+                <Release value={e.version} />
                 <Sha value={e.sha} />
+                {e.subject && (
+                  <span style={{ fontSize: 12, color: 'var(--s500)', flexBasis: '100%', paddingLeft: 130 }}>
+                    {e.subject}
+                  </span>
+                )}
               </div>
             ))}
           </div>

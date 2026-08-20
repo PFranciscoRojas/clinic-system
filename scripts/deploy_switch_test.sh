@@ -144,8 +144,26 @@ check "a retired fallback is recorded as not running" \
     "$(state_line 1787000000 green bcfc0b5 blue 12d6fd0 exited)"
 
 check "a history line is a build you can still go back to" \
-    "1787000000|green|bcfc0b5" \
-    "$(history_line 1787000000 green bcfc0b5)"
+    "1787000000|green|bcfc0b5|v0.9.3|fix(billing): que quien ya pagó pueda reintentar" \
+    "$(history_line 1787000000 green bcfc0b5 v0.9.3 "fix(billing): que quien ya pagó pueda reintentar")"
+
+# El asunto va al final porque puede traer el separador. Si se colara a mitad,
+# el lector partiría la línea por el sitio equivocado y el historial mostraría
+# basura justo cuando alguien lo está leyendo para decidir a qué volver.
+check "un asunto con el separador no parte la línea" \
+    "1787000000|green|bcfc0b5|v0.9.3|feat: a   b   c" \
+    "$(history_line 1787000000 green bcfc0b5 v0.9.3 "feat: a | b | c")"
+
+# Un mensaje de commit es texto que controla quien abre el PR. Aquí solo se
+# guarda, pero un salto de línea partiría el fichero en dos entradas.
+check "un asunto con salto de línea sigue siendo una sola línea" \
+    "1787000000|green|bcfc0b5|v0.9.3|feat: uno dos" \
+    "$(history_line 1787000000 green bcfc0b5 v0.9.3 "feat: uno
+dos")"
+
+check "un rollback puede no traer versión y la línea sigue siendo válida" \
+    "1787000000|blue|639aa2d||vuelta atrás" \
+    "$(history_line 1787000000 blue 639aa2d "" "vuelta atrás")"
 
 echo "==> deploy_switch.sh going back"
 

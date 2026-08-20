@@ -28,6 +28,7 @@ export interface AdminOrg {
 export interface SystemHealth {
   build: {
     version: string;          // SHA de git, o "dev" si no pasó por CI
+    release: string;          // v0.9.4, vacío en un build local
     colour: string;           // blue | green | unknown
     migration_version: number;
     migration_dirty: boolean;
@@ -35,11 +36,15 @@ export interface SystemHealth {
   deploy: {
     active_colour: string;
     active_sha: string;
+    active_version: string;
+    active_subject: string;
     switched_at: string | null;
     fallback_colour: string;
     fallback_sha: string;
+    fallback_version: string;
+    fallback_subject: string;
     fallback_running: boolean;
-    history: { at: string; colour: string; sha: string }[];
+    history: { at: string; colour: string; sha: string; version: string; subject: string }[];
   };
   cpu_pct: number;
   disk: { total_gb: number; used_gb: number; free_gb: number; used_pct: number };
