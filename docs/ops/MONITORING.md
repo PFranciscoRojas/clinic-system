@@ -49,6 +49,14 @@ Un archivo aparte es aditivo y no puede pisar el respaldo diario ni el prune
 semanal que ya viven en el crontab. El log rota semanal
 (`/etc/logrotate.d/sghcp-monitor`, 8 semanas, comprimido).
 
+Cron ejecuta el script por ruta, así que el bit de ejecución importa tanto como
+el contenido. El repo tiene `core.fileMode = false`, de modo que git no mira el
+modo del disco: un script creado con `chmod +x` local se commitea 100644 y nadie
+se entera. Pasó el 2026-08-19 — al reemplazar la copia manual por la rastreada,
+cron empezó a recibir "permission denied" cada cinco minutos y el log, que era
+donde se habría quejado, fue el mismo log que se quedó callado. Lo pinea
+`scripts/check_exec_bits.sh`, dentro de `make verify`.
+
 Configuración en `/etc/sghcp/monitor.env`, modo 600:
 
 ```
