@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-08-20
+
+- feat(ops): **la vigilancia pregunta si se puede entrar, no si el proceso vive** (PR #296). `scripts/monitor.sh` corre en el host cada 5 minutos y se registra como un canario `PROFESSIONAL` de solo lectura: `/healthz` → `POST /auth/login` → `GET /auth/me` → `GET /patients`. El motivo está fechado: durante todo el encierro del 18 de agosto `/healthz` respondió 200, porque el proceso estaba perfectamente vivo y lo que estaba cerrado era la puerta. La credencial del canario vive en `/etc/sghcp/monitor.env` (600) y **no** en el `.env` de los contenedores, para que la llave del vigilante no esté dentro de la aplicación que vigila. Todo el juicio del script son funciones puras probadas en `monitor_test.sh` (47 casos, dentro de `make verify`); los tres primeros tests salieron rojos y destaparon un fallo real de diseño — un `000` corriente abajo tapaba la causa, así que ahora decide la primera etapa que no sea 200. Además: healthchecks de compose para `core-api` y `ai-service`, y `docs/ops/MONITORING.md`.
+- fix(ops): **el vigilante llegó al servidor sin permiso de ejecutarse** (PR #297). `monitor.sh` se commiteó `100644`; mientras el VPS tuvo la copia subida a mano no se notó, y al hacer `git pull` tras mergear #296 cron pasó a recibir `permission denied` cada cinco minutos. El vigilante no se cayó, nunca arrancó, y el único sitio donde se habría quejado es el log que se quedó vacío — que se lee igual que "todo bien". La causa: este repo tiene `core.fileMode = false`, así que git no mira el modo del disco y `make verify` seguía verde con la copia de trabajo conservando el bit que el índice no tenía. `scripts/check_exec_bits.sh` lo pinea contra el índice y salió rojo con **cuatro** archivos: `run_fuzz_test.sh` y `run_mutation_test.sh` llevaban así desde que se escribieron, y `verify.sh` también los ejecuta por ruta.
+- docs(ops): el **dead man's switch** pasa de 🔴 sin iniciar a ⏸️ diferido a propósito hasta tener usuarios reales (PR #298), con el diseño escrito en `BACKLOG.md` para no volver a derivarlo: el VPS lata contra un receptor externo, y el `/fail` de esa lata sería además un segundo canal de aviso independiente de Resend — hoy, si Resend rechaza el correo, la queja se va al log que nadie lee.
+- ops: siete worktrees eliminados (`wt-fix`, `wt-mem`, `wt-mut`, `wt-lanes` y tres de agente). Se verificó commit por commit que su contenido ya estaba en `main` vía squash (#269, #275, #277, #130/#193/#245); los diffs sin commitear de los tres de agente quedaron respaldados en `$BASE/worktree-agent-diffs-2026-08-20.patch`. `wt-fix` tenía tomado `main`, que era lo que hacía fallar el checkout local en cada merge.
+
+---
+
 ## 2026-08-07
 
 - feat(admin): **embudo de activación** en la consola de operador (PR #256, migración `000073`) — ocho pasos derivados de datos que ya existían, sin pixel ni tabla nueva: cuenta creada, correo verificado, puesta en marcha, primer paciente, primera cita, primera historia firmada, primer borrador IA, pago. Los pasos **no** están anidados a propósito (quien se salta el onboarding y registra un paciente cuenta igual) y la historia cuenta al **firmarse** (`finalized_at`), no al cerrarse. Escribir el escenario de aceptación destapó un bug vivo desde la migración 000018: los endpoints de admin consultan sobre el pool crudo sin `app.current_org`, así que con FORCE RLS **la consola llevaba meses mostrando "0 pacientes" en todos los tenants** y el panel de salud la cola de IA siempre vacía. El escenario falló primero en rojo (`la consola muestra "Consultorio Nuevo" con 0 pacientes y tiene 1`) y el arreglo no toca la política: dos funciones `SECURITY DEFINER` de solo agregados (`platform_org_activation()`, `platform_ai_draft_status()`), que no añaden privilegio alcanzable porque quien ya ejecuta SQL como `sghcp_app` puede fijar el GUC y leer las filas igual.
@@ -57,56 +66,11 @@
 
 ---
 
-## 2026-07-19
+## 2026-07-09 — 2026-07-19 (resumen, compactado 2026-08-20)
 
-- feat(marketing): **guía "Secreto profesional Ley 1090" publicada en chapni.com/recursos** (`c1c4dbe` en `../chapni`, deploy wrangler + smoke 200) — 5ª guía del hub, cadencia quincenal al día; estreno en el slot educativo de LinkedIn del lunes 07-27. Pendiente en BACKLOG: verificación humana de la numeración de artículos citados.
-- chore(marketing): **batch semanal `chapni-social` completo** — 5 slots (07-20→24) generados con 3 rondas de ajuste de copy, renderizados (fix de líneas huérfanas en titulares vía re-split, el template limita a ~15ch) y confirmados programados ✅ (`cf7e482`/`d89029f`); Artifact con captions copiables. Reglas nuevas en `strategy.md`: vocabulario cotidiano colombiano (veto a "aparato"/"escarbar"/"colega" vocativo/etc.) y sin jerga SOAP en copy social.
-- docs: registradas retroactivamente las sesiones 2026-07-17→18 que no corrieron `/actualizar-contexto` (PRs #202–#206: métricas draft_feedback fase 1, fix hard-delete org vs audit_log, retiro de widgets bespoke con `risk` único AI-fillable, cierre backlog ai_schema + hallazgo `record_type`, builder visual de plantillas).
-
----
-
-## 2026-07-15
-
-- enhancement(clinical): **tipos genéricos `multiselect`/`{pills}`/`{allow_other}` para plantillas custom** (PR #199) — disparado por que la IA no llenaba "Evaluación del cierre de sesión" en la Nota de Evolución real de Marcela; se encontró que el `ai_schema` de varios widgets (`session_evaluation`, `task_adherence`, `functionality`, `formulation_5f`, `spa_history`, `functional_analysis`) llevaba desincronizado del componente React desde que se construyeron. En vez de reparar 6 contratos bespoke uno a uno, se agregaron tipos genéricos al parser (Go) + render (React) + prompt (Python) + PDF, cuyo ai_schema se deriva de `options` automáticamente; los 4 formatos de Marcela se reescribieron con la sintaxis nueva (`mental_exam`/`task_checklist`/`risk` se mantienen como widget).
-- fix(clinical): **plantillas: editar ya no muta en sitio** (PR #200) — al editar los 4 templates en vivo se destapó que `recordtemplates.Update` sobrescribía la misma fila (bug preexistente): rompía borradores en curso (422 en autosave/finalize) y habría dejado que un PDF de un registro ya firmado se re-renderizara con el schema de hoy en vez del vigente al aprobarse (violaba Res. 1995/1999). Ahora cada edición archiva la fila vieja y crea una versión nueva activa; validar "continuar" un registro/borrador acepta plantilla archivada, "crear nuevo" exige activa.
-- ops: borrador de prueba huérfano (roto por el bug de #200) eliminado directo en BD del VPS tras confirmar 0 filas dependientes.
-
----
-
-## 2026-07-13
-
-- enhancement: **batch "todos los pendientes técnicos + mejoras del sistema"** (PRs #183–#186): cierre DISCHARGE con plantilla custom reparado (motivo de egreso en el flujo templado + approve que lo descartaba en todos los formatos); ai-service endurecido (validación de shape por widget, logs con `extra` visibles, NER `md` con fallback, pytest gateando el build); **frontend con CI de deploy** (build en Actions + rsync in-place, smoke reutilizable/dispatch, favicon modo oscuro); **DR probado de verdad** (restore real desde B2, RTO datos ~15 s, snapshot cifrado diario del `.env` a B2, runbook en `docs/ops/DR_RUNBOOK.md`).
-- fix(clinical): **2 rondas de pruebas de usuario del flujo de audio** (PRs #188–#189): formato obligatorio antes de subir/grabar (causa raíz de drafts sin template_id), dropzone bloqueada al grabar, botón "Detener" sin finalizar sesión, guardas de salida cubren subidas, aprobar draft con nota ya guardada vincula en vez de duplicar historia, formato visible en todos los estados, y tarjeta "Sesiones sin registro clínico" en el Dashboard (`GET /appointments/pending-notes`).
-- ops: rotación de la llave GPG de backups (#187, expuesta fuera del keyring → `backups@chapni.com`, ambas en LastPass); barrido de 53 audios PHI (128 MB) que el mount `:ro` nunca dejó borrar; contenedor huérfano eliminado; Resend con dominio chapni.com verificado (usuario); audio de prueba de 60 min regenerado y entregado en Descargas.
-- fix(clinical): **3ª ronda de pruebas** (PR #191, migración 000064): el repick de formato revertía tras recargar (el RecordForm saliente re-guardaba el formato viejo sobre el lock del picker — el lock ahora gana y el contenido de otro formato no se restaura); grabaciones sin contenido → estado terminal `EMPTY` (notificación "sin contenido clínico" con link a la cita, audio borrado, excluido de la lista de borradores, tarjeta "Subir otro audio", y la sesión cuenta como "Sin nota" en el Dashboard); la vista de sesión finalizada recibió las props de las rondas 1-2 que le faltaban.
-
----
-
-## 2026-07-11
-
-- fix(clinical): **grabaciones de 1 hora funcionan de punta a punta — validado en prod** (PRs #178–#181). Tres bugs mortales encontrados por una prueba E2E real (audio TTS de 57,7 min / 61 MB, subido throttled a 500 KB/s con clon del formato de Marcela): el upload moría a los 15 s (`ReadTimeout` global → deadline de 20 min solo en la ruta de audio, #178), el contexto del request expiraba a los 30 s durante la subida (middleware exento + contexto propio, #179), y el guard anti-alucinación descartaba transcripciones largas reales por frases repetidas legítimas (ahora solo dispara con loop consecutivo o ≥50% duplicadas, #180). Bonus #180: el volumen de audio estaba `:ro` — el borrado post-transcripción nunca había funcionado (PHI acumulado); ya es rw y verificado. Resultado final: Whisper `base` transcribe 58 min en 8m39s y Claude prellena los 7 campos del template custom con shapes de widget válidos. Runbook repetible en `scripts/e2e_audio/` (#181).
-
----
-
-## 2026-07-10
-
-- fix(clinical): ola de formatos org-only (PRs #167–#171, #175) — picker de sesión ofrece solo formatos configurados por la org (sin "integrado"); `TemplatedSectionsForm` reescrito con los estilos reales de la app (estaba en Tailwind inexistente); el `record_type` se deriva de la etapa del proceso y la plantilla solo pone los campos; selector de tipo en el editor (antes clavado a EVOLUTION); caché React Query limpiada en login/logout (fuga entre tenants); "Cambiar formato" con modal in-app (PWA móvil); aprobar borrador IA con plantilla reparado (faltaba `WithTemplateRepo` en aidrafts).
-- feat(admin): orgs de prueba + eliminación total de tenants (PRs #172–#174, migración 000062) — chip/toggle "Prueba" en Tenants, DELETE transaccional de las 30+ tablas + usuarios + DEKs + audios; las orgs reales nunca son eliminables (retención legal Res. 1995/1999); métricas excluyen orgs de prueba.
-- feat(patients): búsqueda inteligente sobre PII cifrada (PR #176, migración 000063) — índice `patient_search_tokens` de hashes peppered por prefijo de palabra, sin tildes; `?q=` matchea cualquier palabra del nombre mientras se escribe; backfill vía `rehash` corrido en prod. Todo desplegado (CI + rebuild manual frontend).
-
----
-
-## 2026-07-09
-
-- fix(frontend): scroll horizontal de página en móvil eliminado (PRs #159, #161) — causa raíz hallada con Playwright contra prod (grids `1fr` creciendo a min-content + tabs sin wrap); `minmax(0,1fr)` en los layouts, `overflowX:hidden` en el `<main>` como respaldo, filas clínicas como tarjetas apiladas en móvil. Verificado post-deploy en las 7 rutas.
-- fix(clinical): auditoría 360° **cerrada al 100%** — guarda estructural anti prompt-injection en el pipeline de IA (PR #162, `prompt_guard.py` + tests) y visor de borrador bloqueado cubriendo plantillas personalizadas (PR #163). Limpieza: seed 000040 rebrandeado a Chapni, legal muerto eliminado, correo personal fuera de RFC-001.
-- refactor(frontend): reglas react-hooks `set-state-in-effect`/`exhaustive-deps` a `error` (PR #164) — 32 findings refactorizados, 7 disables justificados. Smoke de navegador real contra prod OK.
-- ops: branch protection activa en `main` (require PR, enforce_admins, 0 approvals) · password del demo `consultorio-aurora` reseteada a la del seed para diagnóstico.
-- feat(marketing): hub `chapni.com/recursos` construido y desplegado (`b9c6fd7` en `../chapni`) — 4 guías/plantillas con schema Article+FAQPage, el multiplicador SEO/GEO pendiente del plan.
-- feat(marketing): sistema de content-ops social completo — skill `chapni-social` con auditoría de estado, ritual dominical en batch, log con confirmación de publicación en el repo chapni, sinergia con `/recursos` y política de slots perdidos; rutina cloud dominical (8am Bogotá) que audita el log y reporta a Gmail, probada end-to-end (requirió instalar la GitHub App).
-- chore(marketing): perfiles sociales terminados — FB `chapniapp` con NAP completo, LinkedIn corregido (tipo, lema con keywords, About con "la IA sugiere, tú firmas"), banners oficiales generados (`render_banner.py`) y subidos. Posts reales: jueves LinkedIn publicado, viernes IG+FB programado (estreno del perfil de IG).
-
----
+- **Semana del 07-09:** auditoría 360° cerrada al 100% (guarda anti prompt-injection en el pipeline de IA, PR #162; visor de borrador bloqueado, #163), reglas `react-hooks` a `error` con 32 findings refactorizados (#164), branch protection activa en `main`, y el arranque del marketing: hub `chapni.com/recursos`, skill `chapni-social` con su ritual dominical, perfiles sociales terminados.
+- **Semana del 07-10 al 07-13:** formatos org-only (#167–#176, migraciones 000062/000063) con búsqueda sobre PII cifrada por hashes peppered de prefijo; grabaciones de **una hora funcionando de punta a punta en producción**, con tres bugs mortales que solo apareció una prueba E2E real de 57,7 min (#178–#181); tres rondas de pruebas de usuario del flujo de audio (#183–#191, migración 000064); rotación de la llave GPG de backups y barrido de 53 audios PHI que el mount `:ro` nunca dejó borrar.
+- **Semana del 07-15 al 07-19:** tipos genéricos `multiselect`/`{pills}` para plantillas (#199), disparado por que la IA no llenaba una sección de la plantilla real de Marcela; y el fix de fondo del versionado (#200) — editar una plantilla mutaba la fila en sitio, rompiendo borradores en curso y dejando que un PDF ya firmado se re-renderizara con el schema de hoy. Quinta guía del hub publicada (Ley 1090).
 
 ## 2026-07-02 — 2026-07-07 (resumen)
 
