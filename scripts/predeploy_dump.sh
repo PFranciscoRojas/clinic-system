@@ -102,6 +102,12 @@ main() {
     fi
     echo "[predeploy] copia lista: $dest ($(numfmt --to=iec "$bytes" 2>/dev/null || echo "${bytes}B"))"
 
+    # Dónde quedó, para quien venga detrás. El ensayo de migración la restaura
+    # en una base desechable antes de que nada toque la real, y buscar "el más
+    # reciente" por fecha de fichero es adivinar en un directorio compartido.
+    printf '%s\n' "$dest" > "$DUMP_DIR/.last" 2>/dev/null
+    chmod 600 "$DUMP_DIR/.last" 2>/dev/null
+
     # Sweep, after the new one is safely on disk and never before it.
     local f age
     for f in "$DUMP_DIR"/predeploy-*.sql.gz; do

@@ -255,12 +255,39 @@ consultorio real.
 correr la suite de aceptación contra él. Atrapa dos cosas que hoy nadie atrapa:
 un compose roto y una migración que no aplica sobre una base limpia.
 
-**1.c Validar migraciones contra datos reales → ensayo sobre una copia.** Esta es
-la pieza de más valor y no cuesta RAM. Antes de tocar la base de verdad, el
+**1.c Validar migraciones contra datos reales → ensayo sobre una copia. ✅ HECHO
+2026-08-20.** Era la pieza de más valor y no cuesta RAM. Antes de tocar la base de verdad, el
 despliegue restaura el último dump en una base desechable **dentro del mismo
 Postgres**, corre `migrate up` ahí, verifica que termina limpia, y la borra. Solo
 si el ensayo pasa se migra la base real. Los datos nunca salen del servidor y no
 hace falta un segundo contenedor.
+
+Usa la copia que `predeploy_dump.sh` acaba de tomar, así que las dos piezas de la
+Fase 0.2 y ésta encajan sin trabajo extra: se toma una copia, se ensaya sobre
+ella, y solo entonces se estrena.
+
+Probado contra el Postgres de producción antes de mergearlo, con los tres casos:
+
+| Caso | Resultado |
+|---|---|
+| Sin migraciones pendientes | `no change`, ensayo limpio en la versión 80 |
+| Una migración válida nueva | Aplicada sobre datos reales, llega a la 81 |
+| Una migración que revienta a mitad | `dirty=t`, el despliegue **se detiene antes de tocar la base real** |
+
+En los tres, la base de ensayo se borró al terminar —también al fallar— y la real
+quedó intacta en la versión 80 con `dirty=f`.
+
+Lo que protege es concreto: las migraciones son aditivas por regla, lo que cubre
+el esquema, pero no cubre un backfill con un `UPDATE` mal filtrado. Y ése no
+fracasa ruidosamente: termina bien, deja la base en un estado que nadie pidió, y
+se descubre días después porque una psicóloga dice que un dato está raro.
+
+La función más importante del script no es el ensayo sino `drop_guard`. El ensayo
+termina borrando una base de datos y corre desatendido dentro de un despliegue:
+si una variable llegara vacía o mal, el `DROP` caería sobre historias clínicas
+reales. Siete casos lo fijan en `make verify`, incluido el de las dos variables
+vacías — donde un guardián descuidado diría que los nombres coinciden y
+autorizaría.
 
 **Lo que NO propongo todavía: un VPS de staging.** Costaría unos €5 al mes y sí
 resolvería el soak de varios días, pero con 1.c y 1.b cubierto el riesgo que
@@ -326,7 +353,7 @@ cerrar la Fase 0.
 | 2 | 0.2 respaldo pre-migración ✅ | 1 h | sí |
 | 3 | 0.3 simulacro de restauración ✅ | 1 h | sí |
 | 4 | 0.4 Environments + tarjeta de versión ✅ | medio día | sí |
-| 5 | 1.c ensayo de migración sobre copia | medio día | no, pero antes de la 1ª migración con externos |
+| 5 | 1.c ensayo de migración sobre copia ✅ | medio día | no, pero antes de la 1ª migración con externos |
 | 6 | 2.3 ventana de despliegue | 0 | no |
 | 7 | 3.1 tasa de 5xx | medio día | no |
 | 8 | 2.1 separar merge de deploy | medio día | no |

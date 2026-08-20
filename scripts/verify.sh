@@ -122,6 +122,12 @@ step "next-version" ./scripts/next_version_test.sh
 # believing it can go back.
 step "predeploy-dump" ./scripts/predeploy_dump_test.sh
 
+# Y el ensayo que corre esa migración sobre una copia antes de que toque a nadie.
+# Dos decisiones desatendidas dentro de un despliegue: si la migración puede
+# seguir, y si una base de datos se puede borrar. La segunda es lo único que
+# separa un DROP de las historias clínicas reales.
+step "migration-rehearsal" ./scripts/migration_rehearsal_test.sh
+
 # And the mode of the scripts themselves. Every step above this line runs a
 # .sh by path, so a script committed without its exec bit is a step that
 # vanishes on any clone that did not create it — including the VPS.
