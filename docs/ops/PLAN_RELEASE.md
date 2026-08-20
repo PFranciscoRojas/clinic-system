@@ -80,7 +80,7 @@ en segundos.
 
 Bloqueante. Sin esto no se entrega el sistema.
 
-**0.1 Blue/green en `core-api`, que trae el rollback dentro (un día).** En vez de
+**0.1 Blue/green en `core-api`, que trae el rollback dentro. ✅ HECHO 2026-08-20** (PRs #300 y #301).** En vez de
 recrear el contenedor en sitio, se levanta la versión nueva **al lado** de la
 vieja, se espera a que reporte `healthy`, y solo entonces Caddy cambia de
 upstream. La vieja se queda encendida unos minutos.
@@ -102,6 +102,44 @@ Da tres cosas de un golpe:
 Requisito que ya está cumplido: durante la transición las dos versiones hablan
 con la misma base a la vez, así que las migraciones tienen que ser aditivas. Esa
 regla existe en el repo desde el PR #255.
+
+#### Cómo se opera
+
+```
+scripts/deploy_switch.sh status     qué color sirve y qué imagen tiene cada uno
+scripts/deploy_switch.sh rollback   volver al color anterior (mide 1,6 s)
+scripts/deploy_switch.sh retire     apagar el color que no sirve
+```
+
+El botón de volver atrás también está en Actions → *Rollback (prod)*, escribiendo
+`volver` para confirmar. Correr el rollback dos veces devuelve al color de
+partida: la operación es simétrica.
+
+#### La trampa que casi lo deja inservible
+
+Docker monta un fichero suelto **por inodo**. La primera versión escribía el
+cambio de color con `mv` — el rename atómico de siempre — y eso crea un inodo
+nuevo: el host quedaba con el fichero nuevo y Caddy seguía leyendo el viejo.
+`caddy reload` parseaba lo que veía, lo aceptaba y salía 0. Se comprobó en
+producción: el host decía `green`, Caddy tenía montado el fichero anterior, y las
+peticiones reales seguían llegando a `blue`.
+
+Dos consecuencias, las dos ya aplicadas:
+
+- El fichero se escribe **en sitio**, nunca renombrado a su posición.
+- El script no se fía del código de salida del reload: lee desde dentro del
+  contenedor qué color reporta Caddy, y si no es el pedido falla en voz alta. Un
+  cambio que no se ve desde adentro no ocurrió.
+
+Y el fichero vivo **no se versiona** (`caddy-upstream.conf.example` es la
+plantilla). Estaba en git y a la vez lo reescribía el servidor, mientras el
+propio despliegue hacía `git pull` sobre ese directorio: git quería restaurarlo,
+el runtime quería cambiarlo, y cada reemplazo rompía el montaje otra vez.
+
+Si alguna vez el fichero se borra y se recrea en el host — un `git checkout`, una
+restauración a mano — hay que recrear Caddy una vez
+(`docker compose up -d --force-recreate caddy`). La guarda lo detecta y lo dice
+en el mensaje de error.
 
 **No aplica a `ai-service`,** y no hace falta. Su imagen pesa 2,19 GB y Whisper
 carga modelos en memoria, así que dos no caben. Pero sus trabajos viajan por
