@@ -109,6 +109,13 @@ step "monitor" ./scripts/monitor_test.sh
 # ways to take production down without writing a line that looks wrong.
 step "deploy-switch" ./scripts/deploy_switch_test.sh
 
+# Y el número que va a llevar ese despliegue. Se deriva de las etiquetas en vez
+# de anotarse a mano, porque las etiquetas de este repo ya se abandonaron una vez
+# (la última es de junio, con 475 commits encima) y un número que exige un acto
+# humano por despliegue no sobrevive al primer día ocupado. Lo único que puede
+# fallar es la aritmética, y una versión mal calculada nombra un build que no existe.
+step "next-version" ./scripts/next_version_test.sh
+
 # And the copy taken before a migration. Same shape again: the dump itself needs
 # a database, but whether what came back counts as a backup is pure — and a
 # false yes there is worse than no check at all, because the deploy proceeds

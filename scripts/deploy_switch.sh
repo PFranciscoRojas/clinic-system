@@ -135,11 +135,29 @@ state_line() {
     printf '%s|%s|%s|%s|%s|%s\n' "$1" "$2" "$3" "$4" "$5" "$6"
 }
 
-# history_line — one deploy, for the record. The point is not nostalgia: the
-# images stay in GHCR tagged by SHA, so a line here is a build you can still go
-# back to with `deploy_switch.sh deploy <sha>`, long after its colour was reused.
+# history_line <epoch> <colour> <sha> <version> <subject>
+#
+# One deploy, for the record. The point is not nostalgia: the images stay in
+# GHCR tagged by SHA and by version, so a line here is a build you can still go
+# back to long after its colour was reused.
+#
+# The subject goes last and on purpose. Deciding what to roll back to is not
+# helped by a hash and barely helped by a number — what answers the question is
+# "fix(billing): que quien ya pagó pueda pedir que se verifique otra vez". It is
+# last because a commit subject may contain the separator, so the reader splits
+# with a limit and the remainder stays whole.
 history_line() {
-    printf '%s|%s|%s\n' "$1" "$2" "$3"
+    printf '%s|%s|%s|%s|%s\n' "$1" "$2" "$3" "${4:-}" "$(sanitise_subject "${5:-}")"
+}
+
+# sanitise_subject — one line, no separators of its own, and bounded.
+#
+# Read from git on the server rather than passed in from the workflow: a commit
+# message is attacker-controlled text, and interpolating it into a remote shell
+# command is how `$(…)` in a branch name becomes code execution on the box that
+# holds the clinical records.
+sanitise_subject() {
+    printf '%s' "$1" | tr '\n|' '  ' | cut -c1-160
 }
 
 # rollback_target <active colour> <state of the other colour from docker ps>
@@ -257,10 +275,12 @@ record_state() {
     chmod 644 "$STATE_DIR_HOST/deploy_state" 2>/dev/null
 }
 
-record_history() { # record_history <colour> <sha>
-    local f="$STATE_DIR_HOST/deploy_history"
+record_history() { # record_history <colour> <sha> [version]
+    local f="$STATE_DIR_HOST/deploy_history" subject
     mkdir -p "$STATE_DIR_HOST" 2>/dev/null || return 0
-    history_line "$(date +%s)" "$1" "$2" >> "$f" 2>/dev/null || return 0
+    # From the clone on this machine, never from an argument. See sanitise_subject.
+    subject="$(git -C "$COMPOSE_DIR" log -1 --format=%s "$2" 2>/dev/null || echo '')"
+    history_line "$(date +%s)" "$1" "$2" "${3:-}" "$subject" >> "$f" 2>/dev/null || return 0
     # Newest last, so the tail is what survives.
     tail -n "$HISTORY_MAX" "$f" > "$f.trim" 2>/dev/null && mv "$f.trim" "$f"
     chmod 644 "$f" 2>/dev/null
@@ -307,7 +327,7 @@ cmd_deploy() {
     fi
 
     point_caddy_at "$target" || { echo "[deploy] falló el reload de Caddy" >&2; return 1; }
-    record_history "$target" "$tag"
+    record_history "$target" "$tag" "${DEPLOY_VERSION:-}"
     record_state
     echo "[deploy] tráfico en $target. $active sigue encendido para volver atrás."
 }
@@ -322,7 +342,10 @@ cmd_rollback() {
     esac
     echo "[rollback] $active → $target"
     point_caddy_at "$target" || return 1
-    record_history "$target" "$(colour_sha "$target")"
+    # Sin versión: la de este build ya está escrita en su línea original del
+    # historial, y el lector la busca por SHA. Inventar una aquí daría dos
+    # números distintos para el mismo binario.
+    record_history "$target" "$(colour_sha "$target")" ""
     record_state
     echo "[rollback] tráfico en $target"
 }

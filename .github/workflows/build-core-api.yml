@@ -85,6 +85,8 @@ jobs:
 
   build:
     needs: [core-api-test, core-api-lint, core-api-coverage]
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     # Registra cada despliegue en Actions → Environments: qué SHA salió, cuándo,
     # quién lo lanzó y con qué resultado, con botón para volver a desplegarlo.
     # Antes eso solo existía leyendo registros de workflow uno por uno.
@@ -100,7 +102,15 @@ jobs:
       packages: write
 
     steps:
+      # fetch-depth 0 porque la versión se deriva de las etiquetas y de cuántos
+      # commits hay encima de la última, y un clon superficial no las trae.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Número de versión
+        id: version
+        run: echo "version=$(./scripts/next_version.sh "${{ github.ref }}")" >> "$GITHUB_OUTPUT"
 
       - uses: docker/login-action@v4
         with:
@@ -118,14 +128,19 @@ jobs:
           # that is actually answering rather than the one we believe we shipped.
           build-args: |
             VERSION=${{ github.sha }}
+            RELEASE=${{ steps.version.outputs.version }}
           # Two tags on purpose. `latest` is what a fresh box pulls; the SHA is
           # what makes a rollback possible at all. Until 2026-08-20 only `latest`
           # existed and the deploy pruned the previous image, so going back to
           # the version from ten minutes ago meant reverting the commit and
           # waiting for a 2.19 GB rebuild while people were locked out.
+          # Tres etiquetas. `latest` es lo que se lleva un servidor nuevo; el SHA
+          # es lo que hace posible volver atrás; la versión es lo que un humano
+          # puede leer y decir en voz alta cuando decide a qué volver.
           tags: |
             ghcr.io/pfranciscorojas/clinic-system-core-api:latest
             ghcr.io/pfranciscorojas/clinic-system-core-api:${{ github.sha }}
+            ghcr.io/pfranciscorojas/clinic-system-core-api:${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -203,7 +218,8 @@ jobs:
             # The old colour stays up on purpose — that is the rollback. It gets
             # retired by the next deploy, which is what makes it the target.
             ./scripts/deploy_switch.sh retire || true
-            ./scripts/deploy_switch.sh deploy "${{ github.sha }}"
+            DEPLOY_VERSION="${{ steps.version.outputs.version }}" \
+              ./scripts/deploy_switch.sh deploy "${{ github.sha }}"
             ./scripts/deploy_switch.sh status
 
             # Only images nothing has used for a week. A bare `prune -f` is what

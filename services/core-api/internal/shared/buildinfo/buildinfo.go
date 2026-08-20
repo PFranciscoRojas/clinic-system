@@ -19,6 +19,12 @@ import "os"
 // via -ldflags. "dev" means a local build that never went through CI.
 var Version = "dev"
 
+// Release is the readable number for the same build — v0.9.4 — derived by
+// scripts/next_version.sh from the latest tag plus the commits above it. Empty
+// for a local build, and empty is shown as empty: a version invented at runtime
+// would name a release nobody can go back to.
+var Release = ""
+
 // Colour reports which half of the blue/green pair this process is, as told by
 // the container's own environment. Unlike Version this one is configuration,
 // because a colour is a fact about where the binary was placed, not about how
