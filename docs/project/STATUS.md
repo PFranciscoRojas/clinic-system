@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-08-19)
+## Estado actual (2026-08-20)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -57,7 +57,7 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 | 5 — Tests | ✅ resuelto | testcontainers + tests de aislamiento RLS (`internal/integration/{infra,rls,needtoknow}_test.go`); vitest para `client.ts` y `RecordForm` |
 | 6 — Frontend refactor | ✅ resuelto | `SettingsPage` partido en 10 secciones bajo `components/settings/` (191 líneas, solo orquesta); `logout` hace `flushClinicalDrafts()` antes de invalidar el token (`AuthContext.tsx`) |
 
-### Sesión 2026-08-18/19 — latencia de audio y el camino de cobro
+### Sesión 2026-08-18/20 — latencia de audio, el camino de cobro y la vigilancia
 
 **Fase 4 de la latencia de audio, medida y afinada** (`#287`–`#290`). La prueba
 de carga con tres sesiones simultáneas destapó dos cosas que el diseño daba por
@@ -92,22 +92,50 @@ exactamente lo que pasó el 18 de agosto a las 16:58.
 **Verificado en producción (2026-08-19):** `fbf1fb3d` (MarcelaChapues) en
 `active` con `current_period_end 2026-09-18`, activada desde el botón nuevo.
 
-**Vigilancia** (`docs/ops/MONITORING.md`): `scripts/monitor.sh` corre en el host
-cada 5 minutos, se registra como profesional y pide `/auth/me` y la lista de
-pacientes. La lección del 18 de agosto es que `/healthz` respondió 200 durante
+**Vigilancia** (`#296`, `docs/ops/MONITORING.md`): `scripts/monitor.sh` corre en
+el host cada 5 minutos, se registra como profesional y pide `/auth/me` y la lista
+de pacientes. La lección del 18 de agosto es que `/healthz` respondió 200 durante
 todo el incidente: medir si el proceso vive no es medir si se puede trabajar.
-Lo que el monitor *decide* se prueba en `scripts/monitor_test.sh` y entra en
-`make verify`.
+Lo que el monitor *decide* se prueba en `scripts/monitor_test.sh` (47 casos) y
+entra en `make verify`. El canario es un `PROFESSIONAL` de solo lectura de la org
+demo interna, con su credencial en `/etc/sghcp/monitor.env` (600) y **no** en el
+`.env` de los contenedores: la credencial del vigilante no vive dentro de la
+aplicación que vigila.
 
-### Últimos PRs a `main` (sesión 2026-08-07 tarde, todos desplegados por CI)
+**El propio despliegue de la vigilancia la rompió, y fue el bug de la sesión**
+(`#297`). `monitor.sh` se commiteó `100644`. Mientras el VPS tuvo la copia subida
+a mano por scp no se notó nada; al mergear `#296` y hacer `git pull` en el
+servidor, la copia rastreada reemplazó a la manual y cron pasó a recibir
+`permission denied` cada cinco minutos. El vigilante no se cayó: nunca arrancó, y
+el único sitio donde se habría quejado es el log que se quedó vacío — que se lee
+igual que "todo bien". La causa es que este repo tiene `core.fileMode = false`,
+así que git no mira el modo del disco y `make verify` seguía verde con la copia
+de trabajo conservando el bit que el índice no tenía. Lo pinea
+`scripts/check_exec_bits.sh` (paso `exec-bits` en `make verify`): todo `.sh`
+rastreado debe ser `100755`. Salió rojo con **cuatro** archivos, no uno —
+`run_fuzz_test.sh` y `run_mutation_test.sh` llevaban así desde que se escribieron
+y `verify.sh` también los ejecuta por ruta.
 
-- `#256` feat(admin): **embudo de activación** (`/admin?tab=activacion` + `GET /admin/metrics/activation`, solo SYSTEM_ADMIN). Ocho pasos derivados de datos que ya existían — sin pixel, sin tabla nueva, sin nada que el tenant acepte. Dos decisiones explícitas: los pasos **no** están anidados (quien se salta la puesta en marcha y registra un paciente cuenta igual), y la historia cuenta al **firmarse** (`finalized_at`), no al cerrarse (`approved_at`), porque son dos actos distintos y el primero es el que muestra confianza en el sistema. **Destapó un bug vivo desde la migración 000018:** los endpoints de admin consultan sobre el pool crudo sin `app.current_org`, así que con FORCE RLS la consola mostraba **"0 pacientes" en todos los tenants** y el panel de salud la **cola de IA siempre vacía**. Arreglado sin tocar la política, con dos funciones `SECURITY DEFINER` de solo agregados (migración `000073`: `platform_org_activation()` y `platform_ai_draft_status()`, EXECUTE a `sghcp_app`). El escenario de aceptación falló en rojo primero (`la consola muestra "Consultorio Nuevo" con 0 pacientes y tiene 1`).
-- `#257` enhancement(auth): el **registro de accesos pasa al pie de Seguridad** en vez de ser entrada propia del menú de Ajustes — dos ítems rojos seguidos se leían como alarma, y el rastro se consulta, no se configura. Mismo permiso (`audit_log:read`); `/settings/audit` redirige a Seguridad para no romper marcadores.
-- `#258` enhancement(admin): el embudo **dice cuándo no se puede leer y de dónde salió el dinero**. `min_readable_cohort` (5) con aviso, porcentajes y barras atenuados por debajo del umbral. El paso de pago se parte en `charged` / `checkout` / `manual` con evidencia que una activación manual nunca escribe (`last_billing_payment_id`, `provider_customer_id`, migración `000074`): activar un tenant a mano desde la consola no es una venta. El caso `checkout` existe porque el preapproval de MercadoPago activa sin escribir id de pago (solo el cobro recurrente lo hace), y sin él un suscriptor nuevo se leería como "manual" durante un mes.
+**Dead man's switch: diferido a propósito** (`#298`). Si el monitor se muere,
+nadie avisa. El diseño quedó decidido y escrito en `BACKLOG.md` para no volver a
+derivarlo — el VPS lata cada 5 minutos contra un servicio de afuera; ciclo limpio
+→ `curl $HEARTBEAT_URL`, algún chequeo rojo → `/fail`, que de paso sería un
+segundo canal de aviso independiente de Resend. Se implementa cuando haya
+usuarios reales; lo único que bloquea es crear la cuenta del receptor.
 
-**Verificación en producción (2026-08-07):** `schema_migrations` = **74**, dirty=f; las dos funciones existen con `prosecdef = t`; el embudo devuelve datos reales por SQL. Cohorte real = **1 organización** (Marcela Chapués) tras marcar Valentina Ríos y MarcelaChapues como `is_test` y **eliminar por completo Alma Vélez** (único signup externo que hubo, 0 pacientes; sin usuarios huérfanos tras el borrado). Marcela figura como `checkout`, **no** `charged`: suscrita por MercadoPago sin ningún cobro registrado en `last_billing_payment_id` — pendiente de verificar en el panel de MP.
+### Últimos PRs a `main` (sesión 2026-08-18/20, todos desplegados por CI)
 
-**En el repo `../chapni` (misma sesión):** la guía se enlaza ahora **desde el cuerpo** del home (tras el cierre de la jornada en `HowItWorks.astro`) y de `/precios` (bajo la tarjeta de precio), no solo desde nav y pie; `qa:visual` en verde en los siete anchos; desplegado y verificado en vivo (commit `fa4e665`).
+- `#292`–`#295` fix(billing): los cuatro fallos del camino de cobro, en la tabla de arriba.
+- `#296` feat(ops): la vigilancia firmada — `scripts/monitor.sh` + `monitor_test.sh` (47 casos en `make verify`), healthchecks de compose para `core-api` y `ai-service`, y `docs/ops/MONITORING.md`.
+- `#297` fix(ops): `check_exec_bits.sh` y los cuatro `.sh` commiteados sin bit de ejecución. Rojo antes del arreglo.
+- `#298` docs(ops): el dead man's switch pasa de "sin iniciar" a "diferido a propósito", con el diseño escrito.
+
+**Verificación en producción (2026-08-20):** cinco contenedores arriba, `core-api`
+y `ai-service` ahora reportando `(healthy)`; el ciclo del monitor sale limpio por
+cron (`entry ok · containers ok · queue ok · disk ok`) leyendo la copia rastreada
+tras un `git pull` real, que es el escenario que había fallado. La máquina de
+avisos se ejercitó en vivo bajando el umbral de disco: `send` → `silent` →
+`recovered`, los tres correos confirmados en la bandeja.
 
 ### PRs de la sesión anterior (2026-07-23/25)
 
@@ -125,6 +153,7 @@ Lo que el monitor *decide* se prueba en `scripts/monitor_test.sh` y entra en
 ### Sesiones anteriores, comprimidas
 
 - **2026-07-21/22:** `#211` la app entera era rastreable (Caddy responde `X-Robots-Tag: noindex` salvo la allowlist; **solo `/book/marcela-chapues` es indexable**, cada profesional nuevo se agrega al matcher a mano). `#213` el parser de plantillas falla en cerrado ante un `##` en una pista. `#214` emails de ciclo de trial + primeros pasos + referidos v1 (migración `000068`). `#215` reconstrucción de los 4 formatos clínicos (ver bloque siguiente).
+- **2026-08-07 — embudo de activación (`#256`–`#258`):** `/admin?tab=activacion`, ocho pasos derivados de datos existentes, con aviso cuando la cohorte es demasiado chica para leer porcentajes y evidencia que distingue un cobro real de una activación manual (migración `000074`). Destapó un bug vivo desde la migración 000018: los endpoints de admin consultan sin `app.current_org`, así que con FORCE RLS la consola mostraba "0 pacientes" en todos los tenants — arreglado con dos funciones `SECURITY DEFINER` de solo agregados (migración `000073`).
 - **2026-07-27 al 08-07 — guantelete de pruebas (`#236`–`#255`):** cobertura con trinquete, fuzzing de 15 objetivos, tests de RLS/concurrencia/cripto, suite de aceptación en Gherkin (`features/`), `make verify` como única definición de "hecho", 8 checks requeridos en `main` con `enforce_admins`, y **migraciones aplicadas por el propio deploy** (`#255`, con chequeo de `dirty`). Detalle en `docs/ai/PLAN_TESTING_GAUNTLET.md` y en el CHANGELOG.
 
 ### Corrupción de las plantillas de Marcela (2026-07-21) — diagnosticada y reparada
@@ -156,7 +185,6 @@ Antes la apertura tenía 27 campos con 16 de texto libre. `TestReconstructedForm
 | **WhatsApp Meta API** | Cargo COP $90.675 pagado. **Verificado en BD 2026-07-25**: la config de la única org ya tiene `phone_number_id` y las tres plantillas escritas (`recordatorio_cita_24h`, `recordatorio_cita_2h`, `cita_confirmada`, `lang=es_CO`) — lo que falta **no** es configurarlas, es que `org_whatsapp_config.enabled` sigue en `false`. Queda: confirmar que Meta desbloqueó y encender el toggle en Ajustes → Integraciones. | 🟡 configurado, apagado |
 | **Dead man's switch** | `scripts/monitor.sh` vigila la producción desde el host cada 5 minutos, pero **si el propio monitor se muere nadie avisa**: el cron puede desaparecer y el silencio se lee igual que la salud. Cerrarlo pide un observador fuera de este servidor. Ver `docs/ops/MONITORING.md`. | ⏸️ diferido a propósito (2026-08-20) hasta tener usuarios reales; diseño decidido y anotado en `docs/ai/BACKLOG.md` → Infraestructura / DevOps |
 | **Validación de demanda** | Conseguir 2-3 psicólogas externas en beta de diseño (acceso gratis 2 semanas, acompañamiento 1ª sesión en vivo). Sin esto, el go-live 1.0.0 carece de señal de mercado. 2 contactos disponibles (colegas de la esposa). Fases 1-2 de la auditoría deben cerrarse antes de la beta (logout/pérdida de borrador ya resueltos). | 🔴 sin iniciar |
-| **Primer cobro real** | ✅ **Cerrado el 2026-08-19.** No era que el cobro no hubiera entrado: eran cuatro fallos apilados en el camino de cobro, todos vivos desde que se escribió ese código, y por eso ninguna organización había quedado nunca registrada como cobrada. Ver el bloque de la sesión 2026-08-18/19. El cobro de `fbf1fb3d` (MarcelaChapues) está confirmado: `active`, `current_period_end 2026-09-18`. | ✅ resuelto |
 | **Validación de demanda B2B (clínicas)** | Señal orgánica en producción: ninguna aún — tras la limpieza del 2026-08-07 la cohorte del embudo es **1 organización real**; el único signup externo que hubo (Alma Vélez) canceló sin registrar un solo paciente y se eliminó. Señal de mercado (2026-07-06): sí existe — competidores colombianos (Psiris, MedSystem, RIPS/CIE10/Res. 1888) e IPS de salud mental reales en Bogotá/Medellín ya operan sin solución especializada en psicología+cifrado. Pendiente decidir: entrevistas directas con 3-5 IPS/clínicas antes del plan B2B completo, o construirlo ya con esta señal. | 🟡 en evaluación |
 | **Formatos reconstruidos — revisión clínica** | Los 4 formatos ya están en prod sin corrupción, pero al reconstruirlos se tomaron 2 decisiones que Marcela debe validar: (a) **consumo de SPA** quedó como un multiselect de sustancias con las frecuencias plegadas, en vez del "Sí/No" + casillas por sustancia del papel; (b) **ideación suicida e intento previo** siguen como campos del formato aunque el sistema ya tiene su control fijo de nivel de riesgo (posible duplicación). Ambas se ajustan desde el builder visual, sin tocar BD. | 🟡 pendiente de revisión |
 | **MCP `cloudflare-api` — scope del token** | ✅ **OAuth ya autorizado** (verificado 2026-07-25: lista las zonas `chapni.com` y `marcelachapues.com`). Pero el token concedido es de lectura acotada: `GET /zones/:id/rulesets` devuelve *request is not authorized* y `bot_management` da *Authentication error* — o sea, reglas de redirección y política de bots **siguen siendo manuales por el panel**. Cabo suelto heredado: confirmar si *JavaScript Detections* está apagado (no verificable por API con este token; el HTML se sirve cacheado y haría falta purgar). Cosmético: ese script es inline y el CSP del sitio (`script-src 'self'`) ya lo bloquea. | 🟡 conectado, sin permisos de escritura |
@@ -192,12 +220,12 @@ Antes la apertura tenía 27 campos con 16 de texto libre. `TestReconstructedForm
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción — CI deploy (último: PR #258, 2026-08-08 02:09 UTC). **Las migraciones las aplica el propio deploy desde PR #255**, antes de recrear el contenedor, y falla si queda `dirty`. **Verificado 2026-08-07: `schema_migrations` = 74, dirty=f** (`000073_platform_org_activation`, `000074_activation_paid_source`). Implicación heredada de #255: las migraciones tienen que ser **aditivas**. |
-| `ai-service` | ✅ producción — CI deploy (último: PR #208, 2026-07-21: `risk` pasa a control fijo del sistema, ya no widget de plantilla). Pipeline validado E2E con audio de 58 min (2026-07-11). |
+| `core-api:8080` | ✅ producción — CI deploy (último: PR #296, 2026-08-20 00:43 UTC; **healthcheck de compose desde #296**, `(healthy)` verificado). **Las migraciones las aplica el propio deploy desde PR #255**, antes de recrear el contenedor, y falla si queda `dirty`. **Verificado 2026-08-07: `schema_migrations` = 74, dirty=f** (`000073_platform_org_activation`, `000074_activation_paid_source`). Implicación heredada de #255: las migraciones tienen que ser **aditivas**. |
+| `ai-service` | ✅ producción — CI deploy (último: PR #296, 2026-08-20; **healthcheck de compose desde #296**, `(healthy)` verificado — verde solo dice que el proceso web contesta, no que la cola avance). Antes: PR #208, 2026-07-21 (`risk` pasa a control fijo del sistema). Pipeline validado E2E con audio de 58 min (2026-07-11). |
 | `frontend` (Caddy :80/:443) | ✅ producción — **CI deploy automático desde PR #185** (`build-frontend.yml`: build en Actions + rsync in-place al bind mount, sin restart de Caddy). Último: PR #258 (2026-08-08 02:06 UTC, pestaña de activación). **Caddy recreado a mano** el 2026-07-21 tras PR #211 (bind-mount de archivo: `reload` no basta). **Dominio:** `https://app.chapni.com` (DNS en nube gris a propósito: en proxy se rompe el ACME de Caddy, y Cloudflare corta las subidas en 100 MB — bloqueante para audio de sesión); `api.marcelachapues.com` legacy (mantiene `/api` para webhooks, redirige 308 el resto). |
 | Backups | `pg_dump` diario cifrado GPG → Backblaze B2 + **snapshot cifrado del `.env`** (desde 2026-07-13). Llave GPG rotada 2026-07-13: `backups@chapni.com` (privada en máquina del operador + LastPass; la vieja solo lee dumps ≤ 2026-07-13). **Restore probado**: RTO datos ~15 s — runbook en `docs/ops/DR_RUNBOOK.md`. |
 | **Disco** | 22% (7,7/38 GB — reverificado 2026-08-19) — cron semanal en el **host**: `0 4 * * 0 docker system prune -af` → `/var/log/docker-prune.log`. **Alerta por correo si ≥80% desde el 2026-08-19** (`scripts/monitor.sh`); antes de esa fecha este documento afirmaba tener esa alerta y no existía ninguna |
-| **Vigilancia** | `scripts/monitor.sh` cada 5 min desde el host → `/var/log/sghcp-monitor.log`, avisos por Resend. Se registra con un canario `PROFESSIONAL` de la org demo y pide `/auth/me` y la lista de pacientes: mide si **se puede entrar**, no si el proceso vive. Runbook en `docs/ops/MONITORING.md` |
+| **Vigilancia** | `scripts/monitor.sh` cada 5 min desde el host → `/var/log/sghcp-monitor.log`, avisos por Resend. Se registra con un canario `PROFESSIONAL` de la org demo y pide `/auth/me` y la lista de pacientes: mide si **se puede entrar**, no si el proceso vive. Runbook en `docs/ops/MONITORING.md`. Instalada por `/etc/cron.d/sghcp-monitor` (aditivo, no pisa el respaldo diario ni el prune semanal), log rotado semanal ×8. **El bit de ejecución lo garantiza `make verify` desde #297** — se commiteó `100644` y cron estuvo recibiendo `permission denied` hasta que se arregló |
 
 **Env crítico en VPS:**
 - `MASTER_KEY` — clave maestra de cifrado PII

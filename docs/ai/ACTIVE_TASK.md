@@ -1,37 +1,40 @@
 ## Sin tarea pendiente
 
-Sesión del 2026-08-07 cerrada limpia: PRs #256, #257 y #258 mergeados y desplegados,
-`schema_migrations` = 74 (dirty=f), `make verify` en verde antes de cada merge, y la guía
-enlazada desde el cuerpo del home y de `/precios` en el repo `../chapni` (`fa4e665`, en vivo).
+Sesión del 2026-08-18/20 cerrada limpia. PRs #292–#298 mergeados y desplegados, `make verify`
+en verde antes de cada merge, cinco contenedores arriba con `core-api` y `ai-service` ahora
+reportando `(healthy)`, y el monitor saliendo limpio por cron cada cinco minutos.
 
-Lo que quedó montado: el embudo de activación en `/admin?tab=activacion`, que ya avisa cuando
-la cohorte es demasiado chica para leer porcentajes y distingue un cobro real de una activación
-manual desde la consola. De paso se arregló un bug que llevaba desde la migración 000018: la
-consola de operador mostraba "0 pacientes" en todos los tenants y la cola de IA siempre vacía,
-porque los endpoints de admin consultan sin `app.current_org` y FORCE RLS devuelve cero filas.
+Lo que quedó montado: la vigilancia firmada (`scripts/monitor.sh`), que se registra como un
+canario `PROFESSIONAL` de solo lectura y camina login → `/auth/me` → lista de pacientes cada
+cinco minutos. La lección que la motivó está fechada: durante todo el encierro del 18 de agosto
+`/healthz` respondió 200, porque el proceso estaba vivo y lo cerrado era la puerta.
+
+De paso se cerró la cadena de cobro con dinero real (`fbf1fb3d` en `active`, hasta el
+2026-09-18) y se arregló el bug que el propio despliegue de la vigilancia destapó: `monitor.sh`
+se commiteó `100644` y cron estuvo recibiendo `permission denied`. Lo pinea `check_exec_bits.sh`
+dentro de `make verify`.
+
+Repo limpio: siete worktrees eliminados y `main` libre otra vez.
 
 ## Sugerencia de siguiente paso
 
-El producto no es el cuello y ahora hay con qué probarlo: la cohorte del embudo es **una sola
-organización**, y el único signup externo que hubo canceló sin registrar un paciente. Todo lo
-que sigue apunta a que entre gente, no a construir más.
+El producto dejó de ser el cuello. Ya cobra, ya se vigila solo y ya avisa cuando se rompe.
+Todo lo que sigue apunta a que entre gente, y casi nada de eso lo puede hacer un agente.
 
 1. **Los tres directorios (Francisco, ~1 h).** AlternativeTo, Capterra (publica también en
    GetApp y Software Advice) y SaaSHub. El texto está escrito y listo para pegar en
-   `../chapni/docs/marketing/directorios-checklist.md`; no hay que redactar nada. Es la única
-   palanca que no depende de que un tercero quiera hacer un favor, y sin backlinks el dominio
-   no aparece ni buscando `"Chapni"`. Guía TIC quedó descartada: es pauta pagada, no directorio.
-2. **Verificar el cobro de Marcela en MercadoPago (Francisco, 10 min).** El embudo la reporta
-   como `checkout` y no `charged`: está suscrita pero no hay ningún cobro registrado en
-   `last_billing_payment_id`. O el recurrente no ha entrado, o el webhook nunca llegó. Está en
-   la tabla de bloqueantes de `STATUS.md`.
-3. **Las tres frases de Marcela (Francisco, una conversación).** Es el hueco más grande del
-   sitio y lo señalaron los dos LLM que lo evaluaron: cero prueba social en un producto que
-   guarda historias clínicas. La sección se monta en cuanto existan.
+   `../chapni/docs/marketing/directorios-checklist.md`. Es la única palanca que no depende de
+   que un tercero quiera hacer un favor.
+2. **Las tres frases de Marcela (Francisco, una conversación).** Cero prueba social en un
+   producto que guarda historias clínicas. Las tres preguntas están escritas en
+   `docs/ai/PLAN_VENTA_DIRECTA.md` §4.0.1; la sección se monta en cuanto existan.
+3. **Dos o tres psicólogas externas en beta de diseño.** Es el bloqueante 🔴 real del go-live
+   1.0.0 y lleva semanas sin iniciar. Hay 2 contactos disponibles.
 4. **Las cinco entrevistas B2B**, paradas desde el 2026-07-07 (guion de 11 preguntas en
    `PLAN_B2B_COMERCIAL.md` §4). Bloquean el precio por tramos, la decisión sobre RIPS y publicar
    la tabla B2B en la landing.
 
-Del lado del agente, cuando se pida: la guía de RIPS en `/recursos` (ataca de frente lo que la
-competencia usa como diferenciador), la sección de testimonios en cuanto existan las frases, y
-las semanas de redes del 3 y el 10 de agosto, que están sin generar (`chapni-social`).
+Del lado del agente, cuando se pida: el batch de redes de la semana del 24 (toca el domingo; ahí
+estrena la guía de RIPS en el slot educativo del lunes y Ley 1090 sigue en cola detrás), recortar
+los streams de Redis antes de que haya carga (ver BACKLOG), y la sección de testimonios en cuanto
+existan las frases.
