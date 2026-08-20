@@ -154,6 +154,14 @@ jobs:
             # change" and exits 0, so every deploy runs this and almost every
             # deploy does nothing.
             set -a; . ./.env; set +a
+
+            # A copy of the database taken seconds before the migration, not at
+            # 02:00 like the daily one. The daily backup goes to B2 encrypted
+            # with a key this host cannot read — right for catastrophe, useless
+            # for undoing a bad backfill at four in the afternoon. If this copy
+            # cannot be taken the deploy stops here, before the schema moves.
+            ./scripts/predeploy_dump.sh "${{ github.sha }}"
+
             docker run --rm \
               -v /root/clinic-system/services/core-api/migrations:/migrations \
               --network container:sghcp_postgres \
