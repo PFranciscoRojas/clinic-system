@@ -157,8 +157,28 @@ function BuildBadge({ build }: { build: SystemHealth['build'] }) {
 // El botón de volver atrás vive fuera de la aplicación. Ver la nota al pie de
 // DeploySection y docs/ops/PLAN_RELEASE.md § "Por qué el botón de rollback NO va
 // dentro de la aplicación".
-const ROLLBACK_URL =
-  'https://github.com/PFranciscoRojas/clinic-system/actions/workflows/rollback.yml';
+const REPO_URL = 'https://github.com/PFranciscoRojas/clinic-system';
+const ROLLBACK_URL = `${REPO_URL}/actions/workflows/rollback.yml`;
+
+// Los enlaces al diff los resuelve el navegador, no esta aplicación. Esa es la
+// diferencia que los hace posibles: para saber qué hay mergeado y sin desplegar
+// haría falta preguntarle a la API de GitHub, y meter api.github.com en la lista
+// de hosts salientes del servicio que guarda historias clínicas no lo vale. Un
+// enlace no llama a nadie hasta que alguien lo pulsa, y entonces llama desde el
+// navegador de quien lo pulsó.
+function DiffLink({ from, to, children }: { from: string; to: string; children: React.ReactNode }) {
+  if (!from || !to || from === to) return null;
+  return (
+    <a
+      href={`${REPO_URL}/compare/${from}...${to}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{ fontSize: 11.5, color: '#4338ca', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 3 }}
+    >
+      {children} <ExternalLink size={10} />
+    </a>
+  );
+}
 
 function fmtAgo(iso: string | null) {
   if (!iso) return '—';
@@ -243,7 +263,8 @@ function DeploySection({ deploy: d, runningVersion }: {
         <strong style={{ fontSize: 13.5, color: 'var(--s700)' }}>Despliegues</strong>
       </div>
       <div style={{ fontSize: 12, color: 'var(--s400)', marginBottom: 6 }}>
-        Lo que está sirviendo y a qué se puede volver. Lo que todavía no ha salido se ve en GitHub Actions.
+        Lo que está sirviendo y a qué se puede volver. El despliegue corre a las 22:00 de Bogotá,
+        así que durante el día es normal que haya cosas mergeadas y todavía sin salir.
       </div>
 
       {mismatch && (
@@ -260,6 +281,12 @@ function DeploySection({ deploy: d, runningVersion }: {
         <Release value={d.active_version} />
         <Sha value={d.active_sha} />
         <span style={{ color: 'var(--s400)', fontSize: 12 }}>{fmtAgo(d.switched_at)}</span>
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 12 }}>
+          <DiffLink from={d.fallback_sha} to={d.active_sha}>qué entró</DiffLink>
+          {/* Lo mergeado que todavía no ha salido. Con la ventana nocturna esto
+              deja de ser raro y pasa a ser el estado normal durante el día. */}
+          <DiffLink from={d.active_sha} to="main">pendiente de salir</DiffLink>
+        </span>
       </div>
       <Subject text={d.active_subject} />
 
@@ -272,6 +299,7 @@ function DeploySection({ deploy: d, runningVersion }: {
             <Release value={d.fallback_version} />
             <Sha value={d.fallback_sha} />
             <span style={{ color: '#059669', fontSize: 12 }}>sigue encendida</span>
+            <DiffLink from={d.active_sha} to={d.fallback_sha}>qué se desharía</DiffLink>
             <a
               href={ROLLBACK_URL}
               target="_blank"
@@ -297,6 +325,11 @@ function DeploySection({ deploy: d, runningVersion }: {
       {/* Por qué el botón se va a otra pestaña en vez de estar aquí. Sin esta
           línea la pregunta vuelve cada seis meses, y la respuesta importa. */}
       <div style={{ fontSize: 11.5, color: 'var(--s400)', paddingTop: 8, lineHeight: 1.5 }}>
+        La versión anterior se queda encendida hasta el siguiente despliegue, que la apaga
+        para reutilizar ese contenedor. No hay que apagarla a mano: cuesta 12 MiB y es la
+        red de seguridad. Esa es la ventana en la que volver atrás es un clic.
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--s400)', paddingTop: 6, lineHeight: 1.5 }}>
         Volver atrás se ejecuta desde GitHub Actions, fuera de este servidor, a propósito:
         esta consola la sirve el mismo proceso que se querría revertir, así que un botón
         aquí estaría caído justo cuando hiciera falta. Desde la terminal es{' '}
@@ -321,6 +354,12 @@ function DeploySection({ deploy: d, runningVersion }: {
                 <span style={{ color: 'var(--s500)', fontSize: 12 }}>{e.colour}</span>
                 <Release value={e.version} />
                 <Sha value={e.sha} />
+                {/* El diff contra el despliegue inmediatamente anterior: el
+                    antes y el después de esta línea concreta. La última de la
+                    lista no tiene anterior con quien compararse. */}
+                {d.history[i + 1] && (
+                  <DiffLink from={d.history[i + 1].sha} to={e.sha}>antes y después</DiffLink>
+                )}
                 {e.subject && (
                   <span style={{ fontSize: 12, color: 'var(--s500)', flexBasis: '100%', paddingLeft: 130 }}>
                     {e.subject}
