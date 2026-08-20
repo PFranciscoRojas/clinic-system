@@ -109,6 +109,12 @@ step "monitor" ./scripts/monitor_test.sh
 # ways to take production down without writing a line that looks wrong.
 step "deploy-switch" ./scripts/deploy_switch_test.sh
 
+# And the copy taken before a migration. Same shape again: the dump itself needs
+# a database, but whether what came back counts as a backup is pure — and a
+# false yes there is worse than no check at all, because the deploy proceeds
+# believing it can go back.
+step "predeploy-dump" ./scripts/predeploy_dump_test.sh
+
 # And the mode of the scripts themselves. Every step above this line runs a
 # .sh by path, so a script committed without its exec bit is a step that
 # vanishes on any clone that did not create it — including the VPS.

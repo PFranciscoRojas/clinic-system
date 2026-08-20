@@ -146,12 +146,32 @@ carga modelos en memoria, así que dos no caben. Pero sus trabajos viajan por
 Redis Streams: si el contenedor se reinicia unos segundos, los trabajos esperan
 en la cola y nadie ve nada. Su caída ya es invisible por diseño.
 
-**0.2 Respaldo inmediatamente antes de migrar (una hora).** El despliegue hace
-`pg_dump` a disco local justo antes de `migrate up`, y aborta si falla. Retención
-siete días. Va a disco local y sin GPG a propósito: este host solo tiene la llave
-pública y no puede descifrar sus propios respaldos, así que el respaldo cifrado
-sirve para catástrofe, no para deshacer. Un dump local no empeora la exposición —
-la PII y el SOAP van cifrados con la DEK del paciente dentro del propio dump.
+**0.2 Respaldo inmediatamente antes de migrar. ✅ HECHO 2026-08-20.** El
+despliegue corre `scripts/predeploy_dump.sh` justo antes de `migrate up` y se
+detiene si la copia no sale. Retención siete días en `/var/backups/sghcp/predeploy`.
+
+Va a disco local y sin GPG a propósito: este host solo tiene la llave pública y
+no puede descifrar sus propios respaldos. Esa forma es la correcta para una
+catástrofe — el servidor desaparece y alguien restaura desde B2 con la llave
+offline — y la equivocada para lo que de verdad pasa un martes, que es una
+migración con un backfill malo a las cuatro de la tarde. Deshacer eso necesita
+una copia que **esta** máquina pueda leer, y de las cuatro de la tarde.
+
+No basta con que `pg_dump` salga 0. Sale 0 igual para una base vacía, y escribe
+un fichero pequeño y perfectamente válido — que es justo el estado que estaríamos
+a punto de volver permanente. Por eso también hay un piso de tamaño.
+
+Sobre qué contiene, corrigiendo lo que decía antes este documento: **no es cierto
+que "va todo cifrado"**. Los nombres, documentos, teléfonos, direcciones y la
+historia clínica sí van en `BYTEA` con la DEK del paciente, y las DEK van
+cifradas con `MASTER_KEY`, que vive en `.env` y nunca en la base — así que el
+dump por sí solo no abre una sola nota clínica. Pero `users.email` está en claro,
+y también los hashes bcrypt de contraseña y el `birth_date` y `gender` de los
+pacientes. El argumento real para dejarlo sin cifrar es más estrecho: el propio
+directorio de datos de Postgres, en este mismo disco, ya guarda esas columnas en
+ese mismo estado. Quien pueda leer el dump puede leer los ficheros de la base que
+tiene al lado. Lo que el fichero sí añade es una copia que sobrevive a un `DROP`,
+y por eso es de root, `0600`, y se barre a los siete días.
 
 **0.3 Simulacro de restauración con las llaves de hoy (una hora).** El último fue
 en julio y desde entonces rotaron llaves. Restaurar el dump de anoche en una BD
@@ -281,8 +301,8 @@ cerrar la Fase 0.
 
 | Orden | Qué | Costo | Bloquea la entrega |
 |---|---|---|---|
-| 1 | 0.1 blue/green + rollback | 1 día | sí |
-| 2 | 0.2 respaldo pre-migración | 1 h | sí |
+| 1 | 0.1 blue/green + rollback ✅ | 1 día | sí |
+| 2 | 0.2 respaldo pre-migración ✅ | 1 h | sí |
 | 3 | 0.3 simulacro de restauración | 1 h | sí |
 | 4 | 0.4 Environments + tarjeta de versión | medio día | sí |
 | 5 | 1.c ensayo de migración sobre copia | medio día | no, pero antes de la 1ª migración con externos |
