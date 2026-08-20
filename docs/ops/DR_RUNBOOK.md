@@ -1,7 +1,7 @@
 # Runbook de Disaster Recovery — Chapni
 
-> Procedimiento **probado** (simulacro del 2026-07-13, restauración real desde B2
-> en una máquina distinta al VPS). Responde: *"¿y si se cae/pierde tu servidor?"*
+> Procedimiento **probado** (último simulacro: 2026-08-20, restauración real desde
+> B2 en una máquina distinta al VPS, con la llave rotada en julio). Responde: *"¿y si se cae/pierde tu servidor?"*
 
 ## Qué se respalda y dónde
 
@@ -75,5 +75,18 @@ volumen real de postgres + DNS.
 | 2026-07-13 | ✅ | Desde B2 en máquina del operador. 45 tablas, 0 errores, PII descifrada con MASTER_KEY. Datos: 5 orgs / 9 users / 7 patients / 19 records. Hallazgo: el `.env` vivía solo en el VPS → se añadió el snapshot cifrado diario a B2 en esta misma fecha. |
 | 2026-07-13 (2) | ✅ rotación de llave | La privada anterior quedó expuesta fuera del keyring → rotada a `backups@chapni.com` (`413B0C877EB5D795`): pública importada en el VPS, `GPG_RECIPIENT` actualizado, backup + snapshot del día re-cifrados y round-trip de descifrado verificado con la nueva. La anterior se conserva solo para dumps históricos. |
 
+| 2026-08-20 | ✅ | Desde B2 (`sghcp-2026-08-20`), llave privada solo en la máquina del operador. **50 tablas, 0 errores, restauración en 7 s.** Contenido idéntico a producción: 5 orgs / 13 pacientes / 17 historias / 28 citas / migración 80. La cadena de sobre completa verificada extremo a extremo: `MASTER_KEY` (32 B) descifra la DEK del paciente (32 B), la DEK descifra el campo, y el apellido resultante se re-hashea con `SEARCH_PEPPER` (32 B) y **coincide con `paternal_last_name_hash` en los 3 pacientes probados** — prueba criptográfica de que el texto recuperado es el correcto, sin imprimir el nombre de nadie. Motivo de la corrida: primera restauración desde la rotación de llave de julio, antes de entregar el sistema a psicólogas externas. Material descifrado destruido con `shred` y contenedor eliminado al terminar. |
+
 > Repetir el simulacro tras cambios grandes de esquema o al menos cada 6 meses;
 > registrar aquí cada corrida.
+
+### Cómo verificar la PII sin exponer a nadie
+
+La prueba de que un respaldo sirve es descifrar un campo real, y eso choca con no
+andar imprimiendo el nombre de una paciente en una terminal. La salida es
+re-hashear: se descifra el apellido, se recalcula
+`hex(HMAC-SHA256(SEARCH_PEPPER, lower(trim(apellido))))` y se compara contra el
+`paternal_last_name_hash` guardado. Si coincide, el descifrado fue correcto —
+adivinar un HMAC-SHA256 no es una alternativa — y el nombre nunca sale a
+pantalla. `MASTER_KEY` y `SEARCH_PEPPER` son hex de 64 caracteres, 32 bytes cada
+uno; el formato del sobre es `nonce(12) || ciphertext || tag(16)`.
