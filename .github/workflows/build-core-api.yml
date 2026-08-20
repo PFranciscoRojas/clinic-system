@@ -187,6 +187,17 @@ jobs:
             # cannot be taken the deploy stops here, before the schema moves.
             ./scripts/predeploy_dump.sh "${{ github.sha }}"
 
+            # Ensayo antes del estreno. La migración corre primero sobre una
+            # restauración de esa misma copia, en una base desechable dentro del
+            # mismo Postgres — sin un contenedor más y sin un byte más de RAM,
+            # que en un CX21 de 1,9 GB es la diferencia entre poder y no poder.
+            #
+            # Las migraciones son aditivas por regla, lo que cubre el esquema.
+            # Lo que no cubre es un backfill con un UPDATE mal filtrado, y ése no
+            # fracasa ruidosamente: termina bien y se descubre días después
+            # porque una psicóloga dice que un dato está raro.
+            ./scripts/migration_rehearsal.sh "$(cat /var/backups/sghcp/predeploy/.last)"
+
             docker run --rm \
               -v /root/clinic-system/services/core-api/migrations:/migrations \
               --network container:sghcp_postgres \
