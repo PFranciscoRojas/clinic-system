@@ -123,5 +123,29 @@ Mientras tanto el hueco sigue abierto, y conviene no perderlo de vista: es
 exactamente la clase de silencio que este documento existe para no volver a
 confundir con salud.
 
+### La tasa de errores (desde 2026-08-20)
+
+El chequeo `errores` cuenta las respuestas 5xx que los dos colores de `core-api`
+registraron en los últimos cinco minutos, y avisa a partir de tres.
+
+Tapa un hueco que la sonda de entrada no ve: se puede entrar perfectamente
+mientras el guardado de una historia clínica devuelve 500 una vez de cada tres.
+Ese fallo antes llegaba por WhatsApp de la usuaria, días después, si se animaba a
+escribir.
+
+El aviso nombra las rutas que fallan (`/api/v1/clinical-records(2)`), que es lo
+que lo vuelve accionable: sin eso, "hay errores" obliga a empezar por el
+principio.
+
+Lee **los dos colores**, no solo el activo. Si el que no sirve está devolviendo
+500 es que arrancó mal, y conviene saberlo antes de que un despliegue lo ponga
+delante del tráfico.
+
+Tres es el umbral porque a este volumen —una decena de profesionales— tres
+errores de servidor en cinco minutos no son mala suerte. Uno suelto no despierta
+a nadie, a propósito: un aviso por cada error aislado enseña a ignorar los avisos,
+y entonces el canal deja de servir para el que importa. El recuento sale en el log
+igualmente, así que nada se pierde de vista.
+
 Tampoco cubre la lentitud. Un sistema que responde 200 en catorce segundos pasa
 todos estos chequeos y es inusable.

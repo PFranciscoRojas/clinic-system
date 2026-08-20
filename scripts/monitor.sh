@@ -55,6 +55,15 @@ REPEAT_AFTER_S="${MONITOR_REPEAT_AFTER_S:-3600}"
 # sign in through whichever colour Caddy is pointing at.
 CONTAINERS="${MONITOR_CONTAINERS:-sghcp_ai_service sghcp_postgres sghcp_redis sghcp_caddy}"
 
+# Cuántas respuestas 5xx en un ciclo dejan de ser mala suerte. A este volumen
+# —una decena de profesionales— tres errores de servidor en cinco minutos no son
+# ruido: son algo roto. El umbral sube el día que el tráfico lo justifique, y
+# subirlo es una decisión, no un ajuste.
+ERROR_THRESHOLD="${MONITOR_ERROR_THRESHOLD:-3}"
+# La ventana que se mira. Igual al periodo del cron: mirar más atrás repetiría
+# el mismo aviso ciclo tras ciclo por un incidente que ya pasó.
+ERROR_WINDOW="${MONITOR_ERROR_WINDOW:-5m}"
+
 # ── verdicts ────────────────────────────────────────────────────────────────
 # Everything below is a pure function of its arguments. That is what
 # monitor_test.sh exercises: the checks reach out to the network, but the
@@ -98,6 +107,29 @@ probe_verdict() {
 }
 
 # disk_verdict <used_percent> <threshold>
+# error_rate_verdict <5xx contados> <peticiones totales> <umbral>
+#
+# El hueco que tapa: la sonda de entrada pregunta si se puede entrar, y se puede
+# entrar perfectamente mientras el guardado de una historia clínica devuelve 500
+# una vez de cada tres. Ese fallo hoy llega por WhatsApp de la usuaria, si se
+# anima a escribir, y días después.
+#
+# Cero errores es ok aunque no haya habido tráfico: un sistema en el que nadie
+# entró de madrugada no está roto, está dormido. Lo que no puede pasar es que un
+# recuento ilegible se lea como silencio: eso es no saber, y no saber se dice.
+error_rate_verdict() {
+    local errors="$1" total="$2" threshold="$3"
+    is_number "$errors" || { echo unknown; return; }
+    is_number "$total"  || { echo unknown; return; }
+    (( errors == 0 )) && { echo ok; return; }
+    (( errors >= threshold )) && { echo failing; return; }
+    # Por debajo del umbral es ok, sin matices. Un veredicto propio para "hubo
+    # uno suelto" mandaría correo, porque run_check avisa ante todo lo que no
+    # sea ok, y un aviso por un 500 aislado enseña a ignorar los avisos. El
+    # recuento va igualmente en el detalle, así que el log lo cuenta todo.
+    echo ok
+}
+
 disk_verdict() {
     local pct="$1" threshold="$2"
     is_number "$pct" || { echo unknown; return; }
@@ -261,6 +293,30 @@ check_entry() {
         "healthz=$healthz login=$login me=$me pacientes=$workspace"
 }
 
+# Lee los registros de los dos colores de core-api. Los dos, no solo el activo:
+# si el que no sirve está devolviendo 500 es que arrancó mal, y eso se quiere
+# saber ANTES de que un despliegue lo ponga delante del tráfico.
+check_errors() {
+    local logs errors total paths c
+    logs=""
+    for c in $(docker ps --format '{{.Names}}' 2>/dev/null | grep '^sghcp_core_api_' || true); do
+        logs+="$(docker logs "$c" --since "$ERROR_WINDOW" 2>&1 | grep '"msg":"request"' || true)"$'\n'
+    done
+
+    total="$(printf '%s' "$logs" | grep -c '"status":' || true)"
+    errors="$(printf '%s' "$logs" | grep -cE '"status":5[0-9][0-9]' || true)"
+    # Dónde duele, que es lo que convierte un aviso en algo accionable.
+    paths="$(printf '%s' "$logs" \
+        | grep -E '"status":5[0-9][0-9]' \
+        | sed -n 's/.*"path":"\([^"]*\)".*/\1/p' \
+        | sort | uniq -c | sort -rn | head -3 \
+        | awk '{printf "%s(%s) ", $2, $1}' || true)"
+
+    printf '%s\t%s\n' \
+        "$(error_rate_verdict "${errors:-x}" "${total:-x}" "$ERROR_THRESHOLD")" \
+        "${errors:-?} de ${total:-?} peticiones en $ERROR_WINDOW (umbral $ERROR_THRESHOLD)${paths:+ · $paths}"
+}
+
 check_disk() {
     local pct
     pct="$(df -P / | awk 'NR==2 {gsub(/%/,"",$5); print $5}')"
@@ -390,6 +446,7 @@ main() {
     run_check entry      "$(check_entry)"      || failed=1
     run_check containers "$(check_containers)" || failed=1
     run_check queue      "$(check_queue)"      || failed=1
+    run_check errores    "$(check_errors)"     || failed=1
     run_check disk       "$(check_disk)"       || failed=1
     return $failed
 }
