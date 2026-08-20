@@ -83,16 +83,13 @@ jobs:
       - name: Coverage floors
         run: ./scripts/check_coverage.sh
 
+  # Construye y publica. NO despliega: desde 2026-08-20 el despliegue corre en
+  # su propia ventana nocturna (.github/workflows/deploy.yml), para que el
+  # sistema no le cambie a una psicóloga en mitad de una sesión.
   build:
     needs: [core-api-test, core-api-lint, core-api-coverage]
     outputs:
       version: ${{ steps.version.outputs.version }}
-    # Registra cada despliegue en Actions → Environments: qué SHA salió, cuándo,
-    # quién lo lanzó y con qué resultado, con botón para volver a desplegarlo.
-    # Antes eso solo existía leyendo registros de workflow uno por uno.
-    environment:
-      name: production
-      url: https://app.chapni.com
     # Not on pull_request. Deliberately not `== 'push'`: workflow_dispatch is
     # the manual redeploy escape hatch and must keep working.
     if: github.event_name != 'pull_request'
@@ -143,101 +140,3 @@ jobs:
             ghcr.io/pfranciscorojas/clinic-system-core-api:${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Deploy to VPS
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: root
-          key: ${{ secrets.VPS_SSH_KEY }}
-          # `set -e` so a failed step stops the deploy instead of carrying on
-          # to the next line. Without it a migration could fail and the new
-          # binary would still start, against the old schema.
-          script: |
-            set -e
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u pfranciscorojas --password-stdin
-            cd /root/clinic-system
-            git pull origin main
-            # No `compose pull` here: deploy_switch.sh pulls the exact tag it is
-            # about to start, into the colour that is not serving. Pulling by
-            # service name stopped meaning anything when core-api became two.
-
-            # Migrate BEFORE starting the new binary.
-            #
-            # This used to be a manual step, and the failure mode was silent:
-            # the workflow went green, the new code was running, and the schema
-            # it expected was not there. It happened on 000072 (PR #254) and was
-            # only caught because someone thought to check.
-            #
-            # Before the new container, not after, because the new code is the
-            # one that needs the new columns. That ordering assumes migrations
-            # are additive — a migration that DROPs something the running
-            # version still reads must be split across two deploys, which is the
-            # normal rule for zero-downtime anyway.
-            #
-            # golang-migrate is idempotent: with nothing pending it prints "no
-            # change" and exits 0, so every deploy runs this and almost every
-            # deploy does nothing.
-            set -a; . ./.env; set +a
-
-            # A copy of the database taken seconds before the migration, not at
-            # 02:00 like the daily one. The daily backup goes to B2 encrypted
-            # with a key this host cannot read — right for catastrophe, useless
-            # for undoing a bad backfill at four in the afternoon. If this copy
-            # cannot be taken the deploy stops here, before the schema moves.
-            ./scripts/predeploy_dump.sh "${{ github.sha }}"
-
-            # Ensayo antes del estreno. La migración corre primero sobre una
-            # restauración de esa misma copia, en una base desechable dentro del
-            # mismo Postgres — sin un contenedor más y sin un byte más de RAM,
-            # que en un CX21 de 1,9 GB es la diferencia entre poder y no poder.
-            #
-            # Las migraciones son aditivas por regla, lo que cubre el esquema.
-            # Lo que no cubre es un backfill con un UPDATE mal filtrado, y ése no
-            # fracasa ruidosamente: termina bien y se descubre días después
-            # porque una psicóloga dice que un dato está raro.
-            ./scripts/migration_rehearsal.sh "$(cat /var/backups/sghcp/predeploy/.last)"
-
-            docker run --rm \
-              -v /root/clinic-system/services/core-api/migrations:/migrations \
-              --network container:sghcp_postgres \
-              migrate/migrate \
-              -path=/migrations/ \
-              -database "postgres://$DB_USER:$DB_PASSWORD@localhost:5432/$DB_NAME?sslmode=disable" \
-              up
-
-            # A failed migration leaves schema_migrations.dirty = true, and
-            # golang-migrate refuses to do anything else until a human resolves
-            # it with `force <version>`. Fail the deploy loudly here rather than
-            # let the next one hit a wall it did not cause.
-            DIRTY=$(docker compose exec -T postgres \
-              psql -U "$DB_USER" -d "$DB_NAME" -tAc \
-              "SELECT dirty FROM schema_migrations")
-            if [ "$DIRTY" != "f" ]; then
-              echo "::error::schema_migrations is dirty — the migration failed halfway."
-              echo "Resolve it by hand before deploying again (migrate ... force <version>)."
-              exit 1
-            fi
-            echo "schema version: $(docker compose exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -tAc 'SELECT version FROM schema_migrations')"
-
-            # Blue/green, since 2026-08-20. The colour that is NOT serving gets
-            # the new image, has to report healthy on its own, and only then does
-            # Caddy get pointed at it. If it never comes up the script leaves the
-            # old colour serving and fails this step: no gap, and going back is a
-            # config reload rather than a rebuild.
-            #
-            # The old colour stays up on purpose — that is the rollback. It gets
-            # retired by the next deploy, which is what makes it the target.
-            ./scripts/deploy_switch.sh retire || true
-            DEPLOY_VERSION="${{ steps.version.outputs.version }}" \
-              ./scripts/deploy_switch.sh deploy "${{ github.sha }}"
-            ./scripts/deploy_switch.sh status
-
-            # Only images nothing has used for a week. A bare `prune -f` is what
-            # deleted the previous version and left no way back.
-            docker image prune -f --filter "until=168h"
-
-  smoke:
-    needs: build
-    uses: ./.github/workflows/smoke.yml
-    secrets: inherit

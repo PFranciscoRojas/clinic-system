@@ -160,6 +160,21 @@ sanitise_subject() {
     printf '%s' "$1" | tr '\n|' '  ' | cut -c1-160
 }
 
+# deploy_needed <sha ya sirviendo> <sha candidato>
+#
+# Con la ventana nocturna el despliegue corre por horario, así que la mayoría de
+# las noches no habrá nada nuevo. Desplegar igual no es inofensivo: `retire`
+# apaga el color de reserva y el ciclo vuelve a levantar la MISMA versión, así
+# que se pierde el punto de retorno a cambio de nada. Una noche tranquila debe
+# dejar las cosas exactamente como estaban.
+deploy_needed() {
+    local serving="$1" candidate="$2"
+    [[ -z "$candidate" ]] && { echo abort-no-candidate; return; }
+    [[ -z "$serving" ]] && { echo deploy; return; }   # sin nada sirviendo, adelante
+    [[ "$serving" == "$candidate" ]] && { echo skip-same; return; }
+    echo deploy
+}
+
 # rollback_target <active colour> <state of the other colour from docker ps>
 # Going back is only free while the previous colour is still up. Once it has
 # been retired there is nothing to point at, and the honest answer is to say so
@@ -302,6 +317,14 @@ cmd_status() {
 cmd_deploy() {
     local tag="${1:-}"
     [[ -z "$tag" ]] && { echo "uso: deploy_switch.sh deploy <tag>" >&2; return 2; }
+
+    local serving decision
+    serving="$(colour_sha "$(active_colour)")"
+    decision="$(deploy_needed "$serving" "$tag")"
+    if [[ "$decision" == skip-same ]]; then
+        echo "[deploy] $tag ya está sirviendo — no hay nada que desplegar."
+        return 0
+    fi
 
     local active target
     active="$(active_colour)"

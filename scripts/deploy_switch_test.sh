@@ -165,6 +165,21 @@ check "un rollback puede no traer versión y la línea sigue siendo válida" \
     "1787000000|blue|639aa2d||vuelta atrás" \
     "$(history_line 1787000000 blue 639aa2d "" "vuelta atrás")"
 
+echo "==> deploy_switch.sh cuándo NO hay que desplegar"
+
+# Con la ventana nocturna el despliegue corre por horario, así que la mayoría de
+# las noches no habrá nada nuevo. Volver a desplegar lo mismo no es inofensivo:
+# retire apaga la reserva y el ciclo levanta la MISMA versión, o sea que se
+# pierde el punto de retorno a cambio de nada.
+check "una versión nueva se despliega" \
+    deploy "$(deploy_needed 639aa2d bcfc0b5)"
+check "la misma versión que ya sirve NO se despliega" \
+    skip-same "$(deploy_needed 639aa2d 639aa2d)"
+check "sin nada sirviendo, se despliega" \
+    deploy "$(deploy_needed '' bcfc0b5)"
+check "sin candidato no se despliega nada" \
+    abort-no-candidate "$(deploy_needed 639aa2d '')"
+
 echo "==> deploy_switch.sh going back"
 
 check "going back is free while the old colour is up" \
