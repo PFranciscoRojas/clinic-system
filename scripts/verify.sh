@@ -103,6 +103,11 @@ step "mutation-reader" ./scripts/run_mutation_test.sh
 # goes quiet — that is the whole reason to test it from here.
 step "monitor" ./scripts/monitor_test.sh
 
+# And the mode of the scripts themselves. Every step above this line runs a
+# .sh by path, so a script committed without its exec bit is a step that
+# vanishes on any clone that did not create it — including the VPS.
+step "exec-bits" ./scripts/check_exec_bits.sh
+
 if have gitleaks; then
   step "secrets" gitleaks git . --no-banner --redact --config .gitleaks.toml
 else
