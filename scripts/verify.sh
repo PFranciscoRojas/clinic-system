@@ -128,6 +128,12 @@ step "predeploy-dump" ./scripts/predeploy_dump_test.sh
 # separa un DROP de las historias clínicas reales.
 step "migration-rehearsal" ./scripts/migration_rehearsal_test.sh
 
+# Y que el despliegue busque la versión donde el build la publicó. Son dos listas
+# de rutas en dos ficheros distintos; el 2026-08-20 se separaron y el despliegue
+# fue hacia atrás sin que nada fallara. Dos listas que deben coincidir y nadie
+# compara terminan separándose.
+step "deploy-paths" ./scripts/check_deploy_paths.sh
+
 # And the mode of the scripts themselves. Every step above this line runs a
 # .sh by path, so a script committed without its exec bit is a step that
 # vanishes on any clone that did not create it — including the VPS.
