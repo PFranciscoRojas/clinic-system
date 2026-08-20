@@ -111,9 +111,17 @@ en su archivo de estado cada cinco minutos sin que nadie se enterara de nada.
 **Si el propio monitor se muere, nadie avisa.** El cron puede desaparecer, el
 host puede apagarse, y el silencio se lee igual que la salud. Cerrarlo bien pide
 un observador fuera de este servidor (un dead man's switch: un servicio externo
-que alarma cuando *deja* de recibir el latido). Está sin hacer y conviene no
-olvidarlo, porque es exactamente la clase de hueco que este documento existe
-para no volver a tener.
+que alarma cuando *deja* de recibir el latido).
+
+Está diferido a propósito hasta que haya usuarios reales, no olvidado. El diseño
+quedó decidido y escrito en `docs/ai/BACKLOG.md` (Infraestructura / DevOps): el
+enganche es una línea al final de `main()`, y el `/fail` del latido serviría
+además como segundo canal de aviso independiente de Resend. Lo único que bloquea
+es crear la cuenta del receptor.
+
+Mientras tanto el hueco sigue abierto, y conviene no perderlo de vista: es
+exactamente la clase de silencio que este documento existe para no volver a
+confundir con salud.
 
 Tampoco cubre la lentitud. Un sistema que responde 200 en catorce segundos pasa
 todos estos chequeos y es inusable.
