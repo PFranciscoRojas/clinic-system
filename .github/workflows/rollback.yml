@@ -20,6 +20,9 @@ on:
 jobs:
   rollback:
     runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://app.chapni.com
     steps:
       - name: Check the confirmation
         run: |

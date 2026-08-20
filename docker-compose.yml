@@ -10,7 +10,7 @@ x-core-api: &core-api
       - "8080"
     env_file:
       - .env
-    environment:
+    environment: &core-api-env
       DB_HOST: postgres
       DB_PORT: "5432"
       REDIS_HOST: redis
@@ -92,10 +92,19 @@ services:
   core-api-blue:
     <<: *core-api
     container_name: sghcp_core_api_blue
+    # Which half this process is. Configuration rather than build-time, because
+    # a colour is a fact about where the image was placed: the same image runs
+    # as blue today and green next deploy.
+    environment:
+      <<: *core-api-env
+      CORE_API_COLOUR: blue
 
   core-api-green:
     <<: *core-api
     container_name: sghcp_core_api_green
+    environment:
+      <<: *core-api-env
+      CORE_API_COLOUR: green
 
   ai-service:
     image: ghcr.io/pfranciscorojas/clinic-system-ai-service:latest

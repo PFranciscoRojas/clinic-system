@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"sghcp/core-api/internal/shared/buildinfo"
 	"sghcp/core-api/internal/shared/httputil"
 )
 
@@ -111,7 +112,18 @@ type alertItem struct {
 	Tip     string `json:"tip"`
 }
 
+// What is actually running, as opposed to what the last workflow log says was
+// deployed. With two colours in front of Caddy those can differ, and the gap is
+// invisible from outside.
+type buildInfo struct {
+	Version          string `json:"version"`           // git SHA, injected at link time
+	Colour           string `json:"colour"`            // blue | green | unknown
+	MigrationVersion int64  `json:"migration_version"` // schema_migrations
+	MigrationDirty   bool   `json:"migration_dirty"`   // a migration that failed halfway
+}
+
 type systemHealthResponse struct {
+	Build       buildInfo    `json:"build"`
 	CPUPct      float64      `json:"cpu_pct"`
 	Disk        diskStats    `json:"disk"`
 	Mem         memStats     `json:"mem"`
@@ -133,7 +145,23 @@ var reMemory = regexp.MustCompile(`used_memory_human:(\S+)`)
 // GET /api/v1/admin/system/health — SYSTEM_ADMIN only.
 func (h *Handler) systemHealth(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	// Read before anything else: when the rest of this handler degrades because
+	// Postgres is unhappy, which build is serving is the first thing anyone
+	// needs and the cheapest thing to answer.
+	build := buildInfo{
+		Version: buildinfo.Version,
+		Colour:  buildinfo.Colour(),
+	}
+	// A dirty row means a migration stopped halfway and golang-migrate will
+	// refuse to do anything else until a human resolves it. Surfacing it here
+	// costs one query and turns a deploy-time error nobody reads into a fact on
+	// the screen an operator is already looking at.
+	_ = h.pool.QueryRow(ctx,
+		`SELECT version, dirty FROM schema_migrations`,
+	).Scan(&build.MigrationVersion, &build.MigrationDirty)
 	out := systemHealthResponse{
+		Build:       build,
 		UptimeSec:   int64(time.Since(h.startedAt).Seconds()),
 		CollectedAt: time.Now().UTC(),
 	}
