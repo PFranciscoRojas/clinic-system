@@ -95,6 +95,21 @@ switch_decision() {
     esac
 }
 
+# apply_verdict <colour we asked for> <colour Caddy actually reports>
+# `caddy reload` exits 0 for a config it read and accepted. It says nothing
+# about whether that config was the one just written — and on 2026-08-20 it was
+# not: the file is bind-mounted into the container by inode, so replacing it
+# with a rename (the usual atomic write) left Caddy reading the file it had
+# opened at start-up. The reload succeeded, reported success, and the traffic
+# never moved. A switch that cannot be seen from inside the container did not
+# happen, whatever the exit code says.
+apply_verdict() {
+    local asked="$1" seen="$2"
+    [[ -z "$seen" ]] && { echo unreadable; return; }
+    [[ "$asked" == "$seen" ]] && { echo applied; return; }
+    echo stale
+}
+
 # rollback_target <active colour> <state of the other colour from docker ps>
 # Going back is only free while the previous colour is still up. Once it has
 # been retired there is nothing to point at, and the honest answer is to say so
@@ -112,6 +127,22 @@ rollback_target() {
 # ── the world ───────────────────────────────────────────────────────────────
 
 compose() { docker compose -f "$COMPOSE_DIR/docker-compose.yml" "$@"; }
+
+# The live upstream file is deliberately not in git — the server rewrites it on
+# every deploy and the deploy runs `git pull` over the same directory, so a
+# tracked copy would be restored underneath the runtime. Docker also mounts a
+# single file by inode, so any checkout that replaced it would leave Caddy
+# reading the old one without saying so.
+#
+# Seeded here rather than by hand: if it is missing when compose starts, Docker
+# creates a DIRECTORY at that path and Caddy fails to load with an error that
+# does not mention any of this.
+seed_upstream() {
+    [[ -f "$UPSTREAM_FILE" ]] && return 0
+    echo "[switch] $UPSTREAM_FILE no existe — lo creo apuntando a blue"
+    cp "$COMPOSE_DIR/caddy-upstream.conf.example" "$UPSTREAM_FILE" 2>/dev/null \
+        || upstream_line blue > "$UPSTREAM_FILE"
+}
 
 active_colour() {
     parse_active "$(cat "$UPSTREAM_FILE" 2>/dev/null)"
@@ -136,15 +167,37 @@ wait_healthy() { # wait_healthy <colour> — echoes the final verdict
     done
 }
 
+# What Caddy itself reports as the serving colour, read from inside the
+# container. This is the only reading that counts: the host's copy of the file
+# and the container's can differ, and when they do it is silent.
+observed_colour() {
+    parse_active "$(compose exec -T caddy cat /etc/caddy/upstream.conf 2>/dev/null)"
+}
+
 point_caddy_at() { # point_caddy_at <colour>
-    upstream_line "$1" > "$UPSTREAM_FILE.new"
+    local colour="$1" body
     # Keep the explanation at the top of the file; only the directive changes.
-    { sed -n '1,/^$/p' "$UPSTREAM_FILE" | grep -E '^#|^$'; cat "$UPSTREAM_FILE.new"; } > "$UPSTREAM_FILE.tmp"
-    mv "$UPSTREAM_FILE.tmp" "$UPSTREAM_FILE"
-    rm -f "$UPSTREAM_FILE.new"
-    # reload parses and validates first: a bad config leaves the running one
-    # in place instead of dropping the site.
-    compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+    body="$(grep -E '^#|^$' "$UPSTREAM_FILE"; upstream_line "$colour")"
+
+    # Written IN PLACE, never renamed into position. Docker bind-mounts a single
+    # file by inode: a rename gives the host a new file and leaves the container
+    # holding the old one, so the tidy atomic write is exactly the thing that
+    # breaks the switch. Truncating keeps the inode the mount is pinned to.
+    printf '%s\n' "$body" > "$UPSTREAM_FILE" || return 1
+
+    # reload parses and validates first: a bad config leaves the running one in
+    # place instead of dropping the site.
+    compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile || return 1
+
+    local verdict
+    verdict="$(apply_verdict "$colour" "$(observed_colour)")"
+    if [[ "$verdict" != applied ]]; then
+        echo "[switch] Caddy NO quedó en $colour (lectura desde el contenedor: $verdict)." >&2
+        echo "[switch] Revisa el montaje de caddy-upstream.conf: si el fichero se borró" >&2
+        echo "[switch] y se recreó en el host, el contenedor sigue viendo el inodo viejo" >&2
+        echo "[switch] y hay que recrear Caddy (docker compose up -d --force-recreate caddy)." >&2
+        return 1
+    fi
 }
 
 cmd_status() {
@@ -215,6 +268,7 @@ cmd_retire() {
 
 main() {
     cd "$COMPOSE_DIR" 2>/dev/null || true
+    seed_upstream
     case "${1:-status}" in
         deploy)   shift; cmd_deploy "$@" ;;
         rollback) cmd_rollback ;;

@@ -6,7 +6,8 @@ on:
     paths:
       - 'services/core-api/**'
       - '.github/workflows/build-core-api.yml'
-      # The deploy job pulls this repo on the VPS and runs `compose up -d`, so
+      # The deploy job pulls this repo on the VPS and runs the blue/green switch,
+      # which reads docker-compose.yml and Caddyfile from the clone, so
       # this file is part of what it ships. Without it here, a change to
       # core-api's environment merges green and never reaches the box: no
       # failure, no deploy, and the setting simply is not there. Same gap the
@@ -132,7 +133,9 @@ jobs:
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u pfranciscorojas --password-stdin
             cd /root/clinic-system
             git pull origin main
-            docker compose pull core-api
+            # No `compose pull` here: deploy_switch.sh pulls the exact tag it is
+            # about to start, into the colour that is not serving. Pulling by
+            # service name stopped meaning anything when core-api became two.
 
             # Migrate BEFORE starting the new binary.
             #

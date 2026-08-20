@@ -1,0 +1,19 @@
+# Plantilla de caddy-upstream.conf. El fichero vivo NO se versiona.
+#
+# Which core-api colour serves production right now.
+#
+# One line, and it is the whole switch. scripts/deploy_switch.sh rewrites this
+# file and runs `caddy reload`, which parses and validates the new config before
+# swapping it in: a broken file leaves the running config untouched rather than
+# taking the site down. That is why the switch lives in a file Caddy validates
+# instead of in an environment variable, which would need the container recreated.
+reverse_proxy core-api-blue:8080
+
+# Por qué esta plantilla y no el fichero de verdad: el servidor lo reescribe en
+# caliente en cada despliegue, y el propio despliegue hace `git pull` sobre este
+# directorio. Un fichero que git quiere restaurar y el runtime quiere cambiar se
+# pelean en cada deploy. Peor: Docker monta un fichero suelto por inodo, así que
+# cualquier `git pull` o `git checkout` que lo reemplace deja a Caddy leyendo el
+# de antes, en silencio. Es estado, no código, y por eso está en .gitignore.
+#
+# deploy_switch.sh lo crea apuntando a blue si no existe.
