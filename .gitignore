@@ -27,3 +27,8 @@ services/frontend/dist/
 /services/core-api/api
 .claude/
 skills-lock.json
+
+# Estado de tiempo de ejecución, no código: lo reescribe scripts/deploy_switch.sh
+# en cada despliegue y el despliegue hace git pull sobre este mismo directorio.
+# Ver caddy-upstream.conf.example.
+/caddy-upstream.conf

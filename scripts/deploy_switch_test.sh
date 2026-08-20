@@ -90,6 +90,27 @@ check "switching to the colour already serving is a no-op" \
 check "an unreadable upstream file aborts instead of guessing" \
     abort-unknown-target "$(switch_decision '' '' ready)"
 
+echo "==> deploy_switch.sh did the switch actually land"
+
+# 2026-08-20, found before it bit anyone. caddy-upstream.conf is bind-mounted
+# into the container as a single file, which Docker pins by inode. The script
+# wrote the new colour with the usual atomic rename — and a rename creates a new
+# inode, so the host had the new file while Caddy kept reading the old one.
+# `caddy reload` parsed what it could see, accepted it, and exited 0. The traffic
+# would have stayed on the old colour with every log line saying the deploy
+# worked.
+#
+# So the exit code of a reload is not evidence. These cases pin the only reading
+# that is: what Caddy reports from inside the container.
+check "asked for green and Caddy says green" \
+    applied "$(apply_verdict green green)"
+check "asked for green and Caddy still says blue is a stale mount, not a success" \
+    stale "$(apply_verdict green blue)"
+check "asked for blue and Caddy still says green is stale too" \
+    stale "$(apply_verdict blue green)"
+check "a container we cannot read from is not a success either" \
+    unreadable "$(apply_verdict green '')"
+
 echo "==> deploy_switch.sh going back"
 
 check "going back is free while the old colour is up" \
