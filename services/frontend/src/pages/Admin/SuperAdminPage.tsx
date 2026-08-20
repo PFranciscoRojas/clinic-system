@@ -1,13 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  HardDrive, Database,
-  Cpu, Users, Bot, RefreshCw, AlertTriangle, Info,
-  AlertCircle, MemoryStick,
-  CreditCard, Lock, Unlock, CheckCircle, XCircle, Eye, EyeOff, KeyRound,
-  CalendarClock, TrendingUp,
-} from 'lucide-react';
+import { HardDrive, Database, Cpu, Users, Bot, RefreshCw, AlertTriangle, Info, AlertCircle, MemoryStick, CreditCard, Lock, Unlock, CheckCircle, XCircle, Eye, EyeOff, KeyRound, CalendarClock, TrendingUp, Rocket } from 'lucide-react';
 import { adminApi, type AdminOrg, type AdminOrgUser, type SystemHealth, type PlatformMPConfig, type ActivationMetrics } from '@/api/admin';
 import { leadBookingAdminApi, type LeadAgendaSettings } from '@/api/leadBooking';
 import { authApi } from '@/api/auth';
@@ -159,6 +153,125 @@ function BuildBadge({ build }: { build: SystemHealth['build'] }) {
   );
 }
 
+function fmtAgo(iso: string | null) {
+  if (!iso) return '—';
+  const sec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (sec < 60) return 'hace un momento';
+  if (sec < 3600) return `hace ${Math.floor(sec / 60)} min`;
+  if (sec < 86400) return `hace ${Math.floor(sec / 3600)} h`;
+  return `hace ${Math.floor(sec / 86400)} d`;
+}
+
+function shortSha(sha: string) {
+  if (!sha) return '—';
+  if (sha === 'latest' || sha === 'dev') return sha;
+  return sha.slice(0, 7);
+}
+
+function Sha({ value }: { value: string }) {
+  return (
+    <code style={{
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11.5,
+      padding: '1px 6px', borderRadius: 5, background: 'var(--s100)', color: 'var(--s600)',
+    }}>{shortSha(value)}</code>
+  );
+}
+
+function ColourDot({ colour }: { colour: string }) {
+  const c = colour === 'blue' ? '#2563eb' : colour === 'green' ? '#059669' : 'var(--s300)';
+  return <span style={{ width: 7, height: 7, borderRadius: '50%', background: c, display: 'inline-block' }} />;
+}
+
+// Qué se ha desplegado y a qué se puede volver.
+//
+// Todo lo que se ve aquí lo escribió el host en /var/lib/sghcp, porque esta
+// aplicación no ve Docker y no debe verlo: darle el socket es lo que se quitó
+// en el PR #107. La consola dice qué ES; qué va a salir lo dice GitHub.
+function DeploySection({ deploy: d, runningVersion }: {
+  deploy: SystemHealth['deploy'];
+  runningVersion?: string;
+}) {
+  if (!d || !d.active_colour) return null;
+
+  // El binario que contesta esta petición contra lo que el host anotó. Cuando
+  // difieren, un despliegue se rompió a mitad: es exactamente la forma que tuvo
+  // el fallo del montaje del 2026-08-20, donde el host creía haber cambiado de
+  // color y el tráfico seguía en el anterior.
+  const mismatch = !!runningVersion && runningVersion !== 'dev' && !!d.active_sha
+    && d.active_sha !== 'latest' && !runningVersion.startsWith(d.active_sha)
+    && !d.active_sha.startsWith(runningVersion);
+
+  const row: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0',
+    borderTop: '1px solid var(--s100)', fontSize: 13,
+  };
+
+  return (
+    <div style={{ border: '1px solid var(--s200)', borderRadius: 12, padding: '14px 16px', marginBottom: 14, background: '#fff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        <Rocket size={16} style={{ color: 'var(--s400)' }} />
+        <strong style={{ fontSize: 13.5, color: 'var(--s700)' }}>Despliegues</strong>
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--s400)', marginBottom: 6 }}>
+        Lo que está sirviendo y a qué se puede volver. Lo que todavía no ha salido se ve en GitHub Actions.
+      </div>
+
+      {mismatch && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', borderRadius: 8, padding: '8px 10px', fontSize: 12.5, margin: '8px 0' }}>
+          El binario que responde dice <strong>{shortSha(runningVersion!)}</strong> y el servidor
+          anotó <strong>{shortSha(d.active_sha)}</strong>. Un despliegue no terminó de aplicarse.
+        </div>
+      )}
+
+      <div style={row}>
+        <span style={{ minWidth: 120, color: 'var(--s400)' }}>Sirviendo</span>
+        <ColourDot colour={d.active_colour} />
+        <span style={{ color: 'var(--s700)' }}>{d.active_colour}</span>
+        <Sha value={d.active_sha} />
+        <span style={{ color: 'var(--s400)', fontSize: 12 }}>{fmtAgo(d.switched_at)}</span>
+      </div>
+
+      <div style={row}>
+        <span style={{ minWidth: 120, color: 'var(--s400)' }}>Vuelta atrás</span>
+        {d.fallback_running ? (
+          <>
+            <ColourDot colour={d.fallback_colour} />
+            <span style={{ color: 'var(--s700)' }}>{d.fallback_colour}</span>
+            <Sha value={d.fallback_sha} />
+            <span style={{ color: '#059669', fontSize: 12 }}>disponible en un clic</span>
+          </>
+        ) : (
+          <span style={{ color: 'var(--s400)', fontSize: 12.5 }}>
+            El color anterior ya se apagó. Volver exige desplegar un SHA del historial.
+          </span>
+        )}
+      </div>
+
+      {d.history.length > 0 && (
+        <details style={{ marginTop: 10 }}>
+          <summary style={{ cursor: 'pointer', fontSize: 12.5, color: 'var(--s500)' }}>
+            Historial ({d.history.length})
+          </summary>
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 11.5, color: 'var(--s400)', marginBottom: 6 }}>
+              Las imágenes siguen en GHCR etiquetadas por SHA, así que a cualquiera de
+              estas se puede volver con <code>deploy_switch.sh deploy &lt;sha&gt;</code>.
+            </div>
+            {d.history.map((e, i) => (
+              <div key={`${e.at}-${i}`} style={{ ...row, padding: '6px 0' }}>
+                <span style={{ minWidth: 120, color: 'var(--s400)', fontSize: 12 }}>{fmtAgo(e.at)}</span>
+                <ColourDot colour={e.colour} />
+                <span style={{ color: 'var(--s500)', fontSize: 12 }}>{e.colour}</span>
+                <Sha value={e.sha} />
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
 function StatRow({ label, value, tip, accent }: { label: string; value: React.ReactNode; tip?: string; accent?: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--s100)' }}>
@@ -258,6 +371,9 @@ function SistemaTab() {
           {(h.alerts ?? []).map(a => <AlertBanner key={a.code} level={a.level} message={a.message} tip={a.tip} />)}
         </div>
       )}
+
+      {/* Despliegues */}
+      <DeploySection deploy={h.deploy} runningVersion={h.build?.version} />
 
       {/* Metrics grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14, marginBottom: 14 }}>
