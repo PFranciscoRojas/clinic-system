@@ -52,7 +52,18 @@ jobs:
       - name: Qué versión toca desplegar
         id: target
         run: |
-          sha=$(git log -1 --format=%H -- services/core-api docker-compose.yml)
+          # Estas rutas son las MISMAS que disparan la construcción de la imagen
+          # en build-core-api.yml, y tienen que serlo: una ruta que construye
+          # imagen y que aquí no se mire produce un despliegue hacia atrás, en
+          # silencio. Pasó el 2026-08-20 y por eso existe check_deploy_paths.sh,
+          # que compara las dos listas en `make verify` usando estos marcadores.
+          sha=$(git log -1 --format=%H -- \
+            `# deploy-paths:inicio` \
+            services/core-api \
+            docker-compose.yml \
+            .github/workflows/build-core-api.yml \
+            `# deploy-paths:fin` \
+          )
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "Desplegando core-api de $sha"
 
