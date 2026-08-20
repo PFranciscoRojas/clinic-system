@@ -333,7 +333,7 @@ retorno a cambio de nada. `deploy_needed` corta eso, con sus cuatro casos en
 
 ## Fase 3 — enterarse antes que la usuaria
 
-**3.1 Tasa de 5xx en la vigilancia.** `monitor.sh` ya corre cada cinco minutos y
+**3.1 Tasa de 5xx en la vigilancia. ✅ HECHO 2026-08-20.** `monitor.sh` ya corre cada cinco minutos y
 ya sabe mandar correo. Añadir un chequeo que cuente respuestas 5xx en el log de
 `core-api` desde el ciclo anterior y avise pasado un umbral. Es el fallo que hoy
 es invisible: el servicio está arriba y una operación concreta está rota.
@@ -373,7 +373,7 @@ cerrar la Fase 0.
 | 4 | 0.4 Environments + tarjeta de versión ✅ | medio día | sí |
 | 5 | 1.c ensayo de migración sobre copia ✅ | medio día | no, pero antes de la 1ª migración con externos |
 | 6 | 2.3 ventana de despliegue ✅ | 0 | no |
-| 7 | 3.1 tasa de 5xx | medio día | no |
+| 7 | 3.1 tasa de 5xx ✅ | medio día | no |
 | 8 | 2.1 separar merge de deploy ✅ (salió de la 2.3) | — | no |
 | 9 | 1.b stack efímero en CI | 1 día | no |
 | 10 | 2.2 flags apagados | por feature | no |

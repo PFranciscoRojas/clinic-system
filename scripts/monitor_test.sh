@@ -69,6 +69,32 @@ check "no answer at all is unreachable" \
 check "silence anywhere in the sequence is unreachable" \
     unreachable "$(probe_verdict 200 200 000 200)"
 
+echo "==> monitor.sh tasa de errores"
+
+# El hueco que tapa: la sonda de entrada pregunta si se puede entrar, y se puede
+# entrar perfectamente mientras el guardado de una historia clínica devuelve 500
+# una vez de cada tres. Ese fallo llegaba por WhatsApp de la usuaria, días
+# después, si se animaba a escribir.
+check "sin errores es ok"                     ok      "$(error_rate_verdict 0 120 3)"
+check "sin tráfico ninguno tampoco es fallo"  ok      "$(error_rate_verdict 0 0 3)"
+check "en el umbral se avisa"                 failing "$(error_rate_verdict 3 120 3)"
+check "por encima del umbral también"         failing "$(error_rate_verdict 40 120 3)"
+
+# Un 500 aislado no despierta a nadie. Un aviso por cada error suelto enseña a
+# ignorar los avisos, y entonces el canal deja de servir para el que importa.
+check "uno suelto no despierta a nadie"       ok      "$(error_rate_verdict 1 120 3)"
+check "dos tampoco, con el umbral en tres"    ok      "$(error_rate_verdict 2 120 3)"
+
+# Todos los errores y ninguna petición buena: el caso más grave, y el que un
+# recuento por porcentaje podría dejar pasar por falta de volumen.
+check "todo roto con poco tráfico sí avisa"   failing "$(error_rate_verdict 4 4 3)"
+
+# No poder contar no es lo mismo que contar cero. Un recuento ilegible leído
+# como silencio es exactamente la clase de ceguera que este monitor existe para
+# no volver a tener.
+check "un recuento ilegible no es silencio"   unknown "$(error_rate_verdict x 120 3)"
+check "un total ilegible tampoco"             unknown "$(error_rate_verdict 0 x 3)"
+
 echo "==> monitor.sh disk"
 
 check "an empty disk is ok"    ok   "$(disk_verdict 22 80)"
