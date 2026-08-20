@@ -1,0 +1,51 @@
+name: Rollback (prod)
+
+# The button, and the reason it lives here rather than in the superadmin console.
+#
+# The console is served by the very process a rollback is meant to undo: if
+# core-api is broken, so is the button. And letting the application run docker
+# would mean mounting the docker socket into the container, which is exactly what
+# PR #107 removed because it granted root on the host through any RCE in the API.
+#
+# So the button is outside the box, on infrastructure that stays up when the box
+# does not, and every press is recorded with who pressed it.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Escribe "volver" para confirmar'
+        required: true
+        type: string
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the confirmation
+        run: |
+          if [ "${{ inputs.confirm }}" != "volver" ]; then
+            echo "::error::Confirmación incorrecta. No se hizo nada."
+            exit 1
+          fi
+
+      - name: Point traffic back at the previous colour
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /root/clinic-system
+            echo "── antes ──"
+            ./scripts/deploy_switch.sh status
+            ./scripts/deploy_switch.sh rollback
+            echo "── después ──"
+            ./scripts/deploy_switch.sh status
+
+  # The switch is only half the answer: the point is whether a person can sign in
+  # again. Same signed-in flow the deploy runs, against the colour now serving.
+  smoke:
+    needs: rollback
+    uses: ./.github/workflows/smoke.yml
+    secrets: inherit

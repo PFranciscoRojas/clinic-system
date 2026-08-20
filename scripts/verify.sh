@@ -103,6 +103,12 @@ step "mutation-reader" ./scripts/run_mutation_test.sh
 # goes quiet — that is the whole reason to test it from here.
 step "monitor" ./scripts/monitor_test.sh
 
+# And the script that decides whether a new build gets to serve anyone. It talks
+# to docker and to Caddy, so what runs here is its judgement: does this container
+# get the traffic, and can we still go back. Both answers are pure, and both are
+# ways to take production down without writing a line that looks wrong.
+step "deploy-switch" ./scripts/deploy_switch_test.sh
+
 # And the mode of the scripts themselves. Every step above this line runs a
 # .sh by path, so a script committed without its exec bit is a step that
 # vanishes on any clone that did not create it — including the VPS.

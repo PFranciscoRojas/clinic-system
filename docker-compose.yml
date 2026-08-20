@@ -1,31 +1,11 @@
-services:
-  caddy:
-    image: caddy:2-alpine
-    container_name: sghcp_caddy
+# Shared definition for both core-api colours (see core-api-blue below).
+x-core-api: &core-api
+    image: ghcr.io/pfranciscorojas/clinic-system-core-api:${CORE_API_TAG:-latest}
     restart: unless-stopped
-    env_file:
-      - .env
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-      - ./services/frontend/dist:/srv/frontend:ro
-    networks:
-      - sghcp_net
-    depends_on:
-      core-api:
-        condition: service_started
-
-  core-api:
-    image: ghcr.io/pfranciscorojas/clinic-system-core-api:latest
-    container_name: sghcp_core_api
-    restart: unless-stopped
-    # Not published to the host — Caddy reaches it via the internal network
-    # (core-api:8080). Publishing it would expose the whole API over plaintext
-    # HTTP, bypassing TLS, the security headers, and per-IP rate limiting.
+    # Not published to the host — Caddy reaches it by colour name on the
+    # internal network (core-api-blue:8080 / core-api-green:8080). Publishing it
+    # would expose the whole API over plaintext HTTP, bypassing TLS, the security
+    # headers, and per-IP rate limiting.
     expose:
       - "8080"
     env_file:
@@ -71,6 +51,51 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: sghcp_caddy
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Which colour serves right now. One line, rewritten by
+      # scripts/deploy_switch.sh and applied with `caddy reload`, which validates
+      # before swapping and keeps the running config if the new one is broken.
+      - ./caddy-upstream.conf:/etc/caddy/upstream.conf:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - ./services/frontend/dist:/srv/frontend:ro
+    networks:
+      - sghcp_net
+    # No depends_on any more: there is no single core-api service to wait for,
+    # and Caddy must come up even when neither colour is running — otherwise a
+    # bad deploy takes the static site down with the API.
+
+  # ── core-api, en dos colores ────────────────────────────────────────────────
+  # Blue and green are the same container twice. A deploy starts the colour that
+  # is NOT serving, waits for it to report healthy, and only then points Caddy at
+  # it; the old one stays up for a few minutes so going back is a config reload
+  # rather than an image pull.
+  #
+  # Measured before choosing this: core-api uses 12 MiB in production. The second
+  # copy costs another twelve, against 1.3 GB free. The RAM ceiling that rules out
+  # a staging stack on this box does not reach this far.
+  #
+  # While the switch happens both versions talk to the same database at once,
+  # which is why migrations have to be additive. That rule already exists (#255).
+  core-api-blue:
+    <<: *core-api
+    container_name: sghcp_core_api_blue
+
+  core-api-green:
+    <<: *core-api
+    container_name: sghcp_core_api_green
 
   ai-service:
     image: ghcr.io/pfranciscorojas/clinic-system-ai-service:latest

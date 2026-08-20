@@ -48,7 +48,12 @@ QUEUE_MAX_IDLE_S="${MONITOR_QUEUE_MAX_IDLE_S:-1200}"
 # outage is still shouting in the morning, rare enough to stay readable.
 REPEAT_AFTER_S="${MONITOR_REPEAT_AFTER_S:-3600}"
 
-CONTAINERS="${MONITOR_CONTAINERS:-sghcp_core_api sghcp_ai_service sghcp_postgres sghcp_redis sghcp_caddy}"
+# core-api is deliberately absent. Since blue/green there is no fixed container
+# name to look for — during a deploy both colours are up on purpose, and after a
+# retire only one is, so "is it running" has no single right answer here. The
+# entry probe already answers the better question: whether a professional can
+# sign in through whichever colour Caddy is pointing at.
+CONTAINERS="${MONITOR_CONTAINERS:-sghcp_ai_service sghcp_postgres sghcp_redis sghcp_caddy}"
 
 # ── verdicts ────────────────────────────────────────────────────────────────
 # Everything below is a pure function of its arguments. That is what
