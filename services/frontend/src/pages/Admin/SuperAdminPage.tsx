@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { HardDrive, Database, Cpu, Users, Bot, RefreshCw, AlertTriangle, Info, AlertCircle, MemoryStick, CreditCard, Lock, Unlock, CheckCircle, XCircle, Eye, EyeOff, KeyRound, CalendarClock, TrendingUp, Rocket } from 'lucide-react';
+import { HardDrive, Database, Cpu, Users, Bot, RefreshCw, AlertTriangle, Info, AlertCircle, MemoryStick, CreditCard, Lock, Unlock, CheckCircle, XCircle, Eye, EyeOff, KeyRound, CalendarClock, TrendingUp, Rocket, ExternalLink } from 'lucide-react';
 import { adminApi, type AdminOrg, type AdminOrgUser, type SystemHealth, type PlatformMPConfig, type ActivationMetrics } from '@/api/admin';
 import { leadBookingAdminApi, type LeadAgendaSettings } from '@/api/leadBooking';
 import { authApi } from '@/api/auth';
@@ -153,6 +153,12 @@ function BuildBadge({ build }: { build: SystemHealth['build'] }) {
   );
 }
 
+// El botón de volver atrás vive fuera de la aplicación. Ver la nota al pie de
+// DeploySection y docs/ops/PLAN_RELEASE.md § "Por qué el botón de rollback NO va
+// dentro de la aplicación".
+const ROLLBACK_URL =
+  'https://github.com/PFranciscoRojas/clinic-system/actions/workflows/rollback.yml';
+
 function fmtAgo(iso: string | null) {
   if (!iso) return '—';
   const sec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
@@ -238,13 +244,34 @@ function DeploySection({ deploy: d, runningVersion }: {
             <ColourDot colour={d.fallback_colour} />
             <span style={{ color: 'var(--s700)' }}>{d.fallback_colour}</span>
             <Sha value={d.fallback_sha} />
-            <span style={{ color: '#059669', fontSize: 12 }}>disponible en un clic</span>
+            <span style={{ color: '#059669', fontSize: 12 }}>sigue encendida</span>
+            <a
+              href={ROLLBACK_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5, marginLeft: 'auto',
+                border: '1px solid var(--s200)', borderRadius: 8, padding: '5px 10px',
+                fontSize: 12.5, color: 'var(--s600)', textDecoration: 'none', background: '#fff',
+              }}
+            >
+              Volver a esta versión <ExternalLink size={12} />
+            </a>
           </>
         ) : (
           <span style={{ color: 'var(--s400)', fontSize: 12.5 }}>
-            El color anterior ya se apagó. Volver exige desplegar un SHA del historial.
+            La versión anterior ya se apagó. Volver exige desplegar un SHA del historial.
           </span>
         )}
+      </div>
+
+      {/* Por qué el botón se va a otra pestaña en vez de estar aquí. Sin esta
+          línea la pregunta vuelve cada seis meses, y la respuesta importa. */}
+      <div style={{ fontSize: 11.5, color: 'var(--s400)', paddingTop: 8, lineHeight: 1.5 }}>
+        Volver atrás se ejecuta desde GitHub Actions, fuera de este servidor, a propósito:
+        esta consola la sirve el mismo proceso que se querría revertir, así que un botón
+        aquí estaría caído justo cuando hiciera falta. Desde la terminal es{' '}
+        <code style={{ fontSize: 11 }}>deploy_switch.sh rollback</code>, que tarda ~2 s.
       </div>
 
       {d.history.length > 0 && (
