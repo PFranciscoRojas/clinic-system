@@ -296,12 +296,13 @@ pagando o una feature que necesite días de uso real antes de salir.
 
 ## Fase 2 — despliegue controlado
 
-**2.1 Separar mergear de desplegar.** Hoy todo merge a `main` sale a producción.
-Propuesta: el merge construye y publica la imagen etiquetada con su SHA, y el
-despliegue se dispara con una etiqueta `v*` o a mano. Cuesta un paso más por
-release y compra dos cosas: eliges **cuándo** le cambia el sistema a la usuaria
-(no un martes a las 11 de la mañana, en mitad de una sesión), y puedes juntar una
-semana de merges en un release que se revisa entero.
+**2.1 Separar mergear de desplegar. ✅ HECHO 2026-08-20**, y salió de la 2.3: al
+poner la ventana nocturna, el merge y el despliegue quedaron separados solos.
+
+El merge construye y publica la imagen; el despliegue corre a su hora. No hay
+paso manual que recordar —que es lo que mató a las etiquetas de este repo en
+junio— y se gana lo mismo: eliges cuándo le cambia el sistema a la usuaria, y una
+semana de merges sale junta.
 
 **2.2 Flags apagados por defecto.** Cualquier cosa que toque el camino clínico
 entra detrás de una variable de entorno apagada, siguiendo el patrón que ya usa
@@ -309,9 +310,26 @@ entra detrás de una variable de entorno apagada, siguiendo el patrón que ya us
 código lleve días corriendo sin ejecutarse. Flags por organización solo cuando
 una feature necesite canario de verdad; no antes.
 
-**2.3 Ventana de despliegue.** Nada sale entre las 07:00 y las 19:00 de Bogotá
-salvo un arreglo urgente. Es la regla más barata de todas y evita la mayoría de
-los incidentes con testigos.
+**2.3 Ventana de despliegue. ✅ HECHO 2026-08-20.** El despliegue deja de colgar
+del merge y tiene su propia hora: **22:00 en Bogotá** (`0 3 * * *` UTC), cuando no
+hay consulta. Se mergea todo el día sin que salga nada, y por la noche sale lo que
+haya. Para un arreglo urgente está *Run workflow*, que despliega en el momento.
+
+No es una regla que alguien deba recordar, es un horario: `deploy.yml` con
+`schedule`. Una regla escrita en un documento se rompe el primer día ocupado.
+
+**El orden dentro del despliegue importa:** primero la API y después el frontend.
+Las migraciones son aditivas, así que una API nueva sirve al frontend viejo sin
+problema; al revés no — un frontend nuevo puede pedirle a la API un campo que
+todavía no existe. Por eso el despliegue del frontend se movió también a la
+ventana: dejarlo saliendo en cada merge habría abierto una brecha de horas en la
+que el frontend va por delante de su API.
+
+Y una guarda que la ventana hizo necesaria: la mayoría de las noches no habrá
+nada nuevo, y volver a desplegar lo mismo **no es inofensivo** — `retire` apaga la
+reserva y el ciclo levanta la misma versión, o sea que se pierde el punto de
+retorno a cambio de nada. `deploy_needed` corta eso, con sus cuatro casos en
+`make verify`.
 
 ## Fase 3 — enterarse antes que la usuaria
 
@@ -354,8 +372,8 @@ cerrar la Fase 0.
 | 3 | 0.3 simulacro de restauración ✅ | 1 h | sí |
 | 4 | 0.4 Environments + tarjeta de versión ✅ | medio día | sí |
 | 5 | 1.c ensayo de migración sobre copia ✅ | medio día | no, pero antes de la 1ª migración con externos |
-| 6 | 2.3 ventana de despliegue | 0 | no |
+| 6 | 2.3 ventana de despliegue ✅ | 0 | no |
 | 7 | 3.1 tasa de 5xx | medio día | no |
-| 8 | 2.1 separar merge de deploy | medio día | no |
+| 8 | 2.1 separar merge de deploy ✅ (salió de la 2.3) | — | no |
 | 9 | 1.b stack efímero en CI | 1 día | no |
 | 10 | 2.2 flags apagados | por feature | no |

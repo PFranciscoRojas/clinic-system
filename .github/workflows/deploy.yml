@@ -1,0 +1,166 @@
+name: Deploy (prod)
+
+# Cuándo le cambia el sistema a quien lo está usando.
+#
+# Hasta el 2026-08-20 cada merge a main salía a producción en el acto. Con una
+# sola usuaria interna eso daba igual. Con psicólogas externas significa que el
+# sistema puede cambiar debajo de alguien que está en sesión, con un paciente
+# enfrente, a las once de la mañana de un martes.
+#
+# Así que el despliegue deja de colgar del merge y pasa a tener su propia hora:
+# 22:00 en Bogotá, cuando no hay consulta. Se mergea todo el día sin que salga
+# nada, y por la noche sale lo que haya. Para un arreglo urgente está el botón
+# "Run workflow", que despliega en el momento.
+#
+# El orden importa: primero la API y después el frontend. Las migraciones son
+# aditivas, así que una API nueva sirve al frontend viejo sin problema; al revés
+# no — un frontend nuevo puede pedirle a la API un campo que todavía no existe.
+on:
+  schedule:
+    # 03:00 UTC = 22:00 en Bogotá (UTC-5, sin horario de verano).
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Por qué se despliega fuera de la ventana'
+        required: false
+        type: string
+
+concurrency:
+  # Un despliegue a la vez. Dos a la vez se pisarían en el cambio de color y
+  # dejarían a Caddy apuntando a un contenedor que el otro acaba de retirar.
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  core-api:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://app.chapni.com
+    outputs:
+      sha: ${{ steps.target.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Qué imagen existe para desplegar. No es el HEAD de main sin más: un
+      # commit que solo tocó el frontend no construyó imagen de core-api, y
+      # pedirla por su SHA fallaría al hacer pull. El último commit que tocó
+      # las rutas del filtro de build es exactamente el que sí la tiene.
+      - name: Qué versión toca desplegar
+        id: target
+        run: |
+          sha=$(git log -1 --format=%H -- services/core-api docker-compose.yml)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Desplegando core-api de $sha"
+
+      - name: Deploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u pfranciscorojas --password-stdin
+            cd /root/clinic-system
+            git pull origin main
+
+            set -a; . ./.env; set +a
+
+            # Una copia de la base tomada segundos antes de migrar, no a las 02:00
+            # como la diaria. Si no se puede tomar, el despliegue para aquí.
+            ./scripts/predeploy_dump.sh "${{ steps.target.outputs.sha }}"
+
+            # Ensayo antes del estreno: la migración corre primero sobre una
+            # restauración de esa copia, en una base desechable dentro del mismo
+            # Postgres. Solo si sale limpia se toca la base real.
+            ./scripts/migration_rehearsal.sh "$(cat /var/backups/sghcp/predeploy/.last)"
+
+            docker run --rm \
+              -v /root/clinic-system/services/core-api/migrations:/migrations \
+              --network container:sghcp_postgres \
+              migrate/migrate \
+              -path=/migrations/ \
+              -database "postgres://$DB_USER:$DB_PASSWORD@localhost:5432/$DB_NAME?sslmode=disable" \
+              up
+
+            DIRTY=$(docker compose exec -T postgres \
+              psql -U "$DB_USER" -d "$DB_NAME" -tAc \
+              "SELECT dirty FROM schema_migrations")
+            if [ "$DIRTY" != "f" ]; then
+              echo "::error::schema_migrations quedó sucia — la migración falló a mitad."
+              exit 1
+            fi
+
+            # Blue/green: el color que no sirve recibe la imagen nueva, tiene que
+            # reportar healthy por su cuenta, y solo entonces Caddy apunta ahí.
+            ./scripts/deploy_switch.sh retire || true
+            ./scripts/deploy_switch.sh deploy "${{ steps.target.outputs.sha }}"
+            ./scripts/deploy_switch.sh status
+
+            docker image prune -f --filter "until=168h"
+
+  frontend:
+    needs: core-api
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://app.chapni.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: services/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: services/frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: services/frontend
+        run: npm run build
+
+      - name: Package dist
+        run: tar czf frontend-dist.tgz -C services/frontend/dist .
+
+      - name: Upload bundle to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: frontend-dist.tgz
+          target: /tmp
+
+      # El contenido se reemplaza EN SITIO: el bind mount fija el inodo del
+      # directorio dist, así que el directorio no puede moverse ni recrearse.
+      # Misma clase de problema que el montaje del Caddyfile (ver PR #301).
+      - name: Deploy (replace dist contents in place)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /root/clinic-system
+            STAGE=$(mktemp -d /tmp/frontend-dist.XXXXXX)
+            tar xzf /tmp/frontend-dist.tgz -C "$STAGE"
+            mkdir -p services/frontend/dist
+            rsync -a --delete "$STAGE"/ services/frontend/dist/
+            rm -rf "$STAGE" /tmp/frontend-dist.tgz
+            echo "frontend desplegado: $(ls services/frontend/dist/assets | head -3)"
+
+  # La pregunta que cierra el despliegue no es si los contenedores están en pie,
+  # es si alguien puede entrar y trabajar. Misma sonda firmada que corre el
+  # monitor cada cinco minutos.
+  smoke:
+    needs: [core-api, frontend]
+    uses: ./.github/workflows/smoke.yml
+    secrets: inherit
