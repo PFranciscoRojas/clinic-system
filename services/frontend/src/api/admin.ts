@@ -26,6 +26,12 @@ export interface AdminOrg {
 }
 
 export interface SystemHealth {
+  build: {
+    version: string;          // SHA de git, o "dev" si no pasó por CI
+    colour: string;           // blue | green | unknown
+    migration_version: number;
+    migration_dirty: boolean;
+  };
   cpu_pct: number;
   disk: { total_gb: number; used_gb: number; free_gb: number; used_pct: number };
   mem: { total_gb: number; used_gb: number; free_gb: number; used_pct: number };

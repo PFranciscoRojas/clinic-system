@@ -118,6 +118,47 @@ function MetricCard({ icon, title, subtitle, children }: { icon: React.ReactNode
   );
 }
 
+// Qué build está respondiendo, leído del propio binario que contesta.
+//
+// Existe porque con dos colores delante de Caddy "¿está desplegado el arreglo?"
+// dejó de tener respuesta obvia: el registro del workflow dice qué se desplegó,
+// no qué está sirviendo ahora. Cuando este número y el de Actions no coinciden,
+// algo se rompió en el camino — y eso antes no se podía ver desde ningún lado.
+//
+// "dev" significa un binario que nunca pasó por CI. Se muestra tal cual, sin
+// disfrazarlo de hash, porque es justo el caso en que conviene mirar dos veces.
+function BuildBadge({ build }: { build: SystemHealth['build'] }) {
+  if (!build) return null;
+  const dev = build.version === 'dev';
+  const colour = build.colour === 'blue' ? '#2563eb'
+               : build.colour === 'green' ? '#059669'
+               : 'var(--s400)';
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+      <span
+        title={`Build ${build.version}`}
+        style={{
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+          fontSize: 11.5, padding: '2px 7px', borderRadius: 6,
+          background: dev ? '#fef3c7' : 'var(--s100)',
+          color: dev ? '#92400e' : 'var(--s600)',
+          border: `1px solid ${dev ? '#fcd34d' : 'var(--s200)'}`,
+        }}
+      >
+        {dev ? 'dev (sin CI)' : build.version.slice(0, 7)}
+      </span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--s500)' }}>
+        <span style={{ width: 7, height: 7, borderRadius: '50%', background: colour, display: 'inline-block' }} />
+        {build.colour}
+      </span>
+      <span style={{ color: build.migration_dirty ? '#dc2626' : 'var(--s400)' }}>
+        migración {build.migration_version}
+        {build.migration_dirty && ' · SUCIA'}
+      </span>
+    </span>
+  );
+}
+
 function StatRow({ label, value, tip, accent }: { label: string; value: React.ReactNode; tip?: string; accent?: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--s100)' }}>
@@ -194,8 +235,9 @@ function SistemaTab() {
     <div>
       {/* Header row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <div style={{ fontSize: 12.5, color: 'var(--s400)' }}>
-          Uptime: <strong style={{ color: 'var(--s700)' }}>{fmtUptime(h.uptime_sec)}</strong>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 12.5, color: 'var(--s400)', flexWrap: 'wrap' }}>
+          <span>Uptime: <strong style={{ color: 'var(--s700)' }}>{fmtUptime(h.uptime_sec)}</strong></span>
+          <BuildBadge build={h.build} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 12, color: 'var(--s400)' }}>Actualiza en {countdown}s</span>

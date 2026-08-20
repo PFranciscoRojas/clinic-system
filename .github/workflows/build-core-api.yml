@@ -85,6 +85,12 @@ jobs:
 
   build:
     needs: [core-api-test, core-api-lint, core-api-coverage]
+    # Registra cada despliegue en Actions → Environments: qué SHA salió, cuándo,
+    # quién lo lanzó y con qué resultado, con botón para volver a desplegarlo.
+    # Antes eso solo existía leyendo registros de workflow uno por uno.
+    environment:
+      name: production
+      url: https://app.chapni.com
     # Not on pull_request. Deliberately not `== 'push'`: workflow_dispatch is
     # the manual redeploy escape hatch and must keep working.
     if: github.event_name != 'pull_request'
@@ -108,6 +114,10 @@ jobs:
         with:
           context: ./services/core-api
           push: true
+          # Linked into the binary, so /admin/system/health reports the build
+          # that is actually answering rather than the one we believe we shipped.
+          build-args: |
+            VERSION=${{ github.sha }}
           # Two tags on purpose. `latest` is what a fresh box pulls; the SHA is
           # what makes a rollback possible at all. Until 2026-08-20 only `latest`
           # existed and the deploy pruned the previous image, so going back to

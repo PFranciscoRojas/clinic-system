@@ -186,20 +186,33 @@ guardado en los tres pacientes probados. Detalle y método en `DR_RUNBOOK.md`.
 
 Un respaldo que nunca se restauró no es un respaldo; ahora sí lo es.
 
-**0.4 Poder ver qué está corriendo (medio día).** Dos mitades que se verifican
-entre sí:
+**0.4 Poder ver qué está corriendo. ✅ HECHO 2026-08-20.** Dos mitades que se
+verifican entre sí:
 
 - **GitHub Environments**, que es nativo y no hay que construirlo: historial de
   despliegues con fecha y autor, qué SHA está vivo, botón de volver a desplegar
   y, si se quiere, aprobación manual antes de que algo salga. El rollback vive
   aquí como `workflow_dispatch`.
-- **Tarjeta de versión en la pestaña Sistema del superadmin**, de solo lectura:
-  SHA desplegado, color activo, fecha, versión de migración y estado de los
-  contenedores. Requiere inyectar el SHA en el build (`-X main.version=$SHA`),
-  que hoy compila con `-ldflags="-s -w"` sin versión.
+- **Distintivo de versión en la cabecera de Sistema**, de solo lectura: SHA
+  desplegado, color activo y versión de migración, con aviso en rojo si quedó
+  `dirty`. El SHA se enlaza dentro del binario
+  (`-X …/buildinfo.Version`, `ARG VERSION` en el Dockerfile) y **no** se lee de
+  una variable de entorno: una variable dice lo que alguien quiso desplegar, el
+  símbolo del enlazador dice qué se compiló de verdad en el proceso que está
+  contestando. Un build local se muestra como `dev (sin CI)` en ámbar, sin
+  disfrazarlo de hash.
+
+  El estado de los contenedores queda deliberadamente fuera: la aplicación no
+  ve Docker, y darle el socket para que lo viera sería deshacer el PR #107. Eso
+  ya lo cubre `monitor.sh`, que corre en el host.
 
 Cuando el número que muestra GitHub y el que muestra el superadmin no coinciden,
-algo se rompió en el camino — que es exactamente lo que hoy no se puede ver.
+algo se rompió en el camino — que es exactamente lo que antes no se podía ver
+desde ningún lado.
+
+**Con esto la Fase 0 queda cerrada.** El sistema se puede entregar: un despliegue
+malo se deshace en segundos, cada migración lleva una copia fresca detrás, esa
+copia está probada, y se puede ver qué está corriendo.
 
 ### Por qué el botón de rollback NO va dentro de la aplicación
 
@@ -312,7 +325,7 @@ cerrar la Fase 0.
 | 1 | 0.1 blue/green + rollback ✅ | 1 día | sí |
 | 2 | 0.2 respaldo pre-migración ✅ | 1 h | sí |
 | 3 | 0.3 simulacro de restauración ✅ | 1 h | sí |
-| 4 | 0.4 Environments + tarjeta de versión | medio día | sí |
+| 4 | 0.4 Environments + tarjeta de versión ✅ | medio día | sí |
 | 5 | 1.c ensayo de migración sobre copia | medio día | no, pero antes de la 1ª migración con externos |
 | 6 | 2.3 ventana de despliegue | 0 | no |
 | 7 | 3.1 tasa de 5xx | medio día | no |
