@@ -57,85 +57,73 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 | 5 — Tests | ✅ resuelto | testcontainers + tests de aislamiento RLS (`internal/integration/{infra,rls,needtoknow}_test.go`); vitest para `client.ts` y `RecordForm` |
 | 6 — Frontend refactor | ✅ resuelto | `SettingsPage` partido en 10 secciones bajo `components/settings/` (191 líneas, solo orquesta); `logout` hace `flushClinicalDrafts()` antes de invalidar el token (`AuthContext.tsx`) |
 
-### Sesión 2026-08-18/20 — latencia de audio, el camino de cobro y la vigilancia
+### Sesión 2026-08-20 — ingeniería de despliegue (fase 0 del plan de release)
 
-**Fase 4 de la latencia de audio, medida y afinada** (`#287`–`#290`). La prueba
-de carga con tres sesiones simultáneas destapó dos cosas que el diseño daba por
-ciertas y no lo eran: un carril propio para las ventanas **no** impedía que
-Whisper decodificara dos veces a la vez (60,7 s de cola contra 45,3 s del mismo
-trabajo a solas), y la ventana en vuelo se soltaba antes de escribirse. Con las
-dos arregladas, las tres sesiones esperan 61/131/198 s donde antes esperaban
-87/155/221, y sin ventanas esperarían ~200/~400/~600. Migración `000080`
-(`partial_transcripts.window_started_at`, el reclamo de la ventana en vuelo).
+Motivo: el sistema va a manos de psicólogas externas y hasta hoy **cada merge a
+`main` salía a producción en el acto**, sin vuelta atrás que no fuera un rebuild
+de ocho minutos. Plan completo en `docs/ops/PLAN_RELEASE.md`.
 
-**Barrido de producción:** el `PartSweeper` de 12 h borró los 63 trozos huérfanos
-de una subida abortada, y se purgaron **206 llaves de cifrado huérfanas** (el
-conjunto se construyó desde `pg_constraint`, 11 claves foráneas, con respaldo en
-`/root/orphan_keys_backup_20260818.csv`). Ninguna era de ese día: las corridas de
-prueba no filtran llaves.
+Lo que quedó montado — todo **ejercitado en producción**, no solo escrito:
 
-**Cuatro fallos apilados en el camino de cobro** (`#292`–`#295`), todos vivos
-desde que se escribió ese código, y la razón por la que ninguna organización
-había quedado nunca registrada como cobrada:
-
-| PR | Qué estaba mal |
+| Pieza | Qué hace |
 |---|---|
-| `#292` | `plan_amount` se guardaba sin validar nada. $1.000 está por debajo del piso de MercadoPago ($1.600 COP), así que cada checkout devolvía 400 → 502 → "no se pudo iniciar el pago". Un precio impagable ahora se rechaza al guardarlo, que es el último momento en que sale barato |
-| `#293` | `/preapproval/search` mandaba `sort=date_created&criteria=desc`, que es la convención de `/v1/payments/search`, y este endpoint contesta `400 Invalid sorting value format` — todas las veces, desde el día que se escribió. Como `reconcile` es también lo que parcha el `notification_url`, el webhook tampoco podía quedar enganchado nunca |
-| `#294` | `applyPreapproval` buscaba la organización por `external_reference`, que viene **null** cuando la suscripción nace de un `preapproval_plan`, y `_, _ = h.pool.Exec` tiraba las dos devoluciones: el UPDATE que no tocaba ninguna fila era silencioso. Ahora resuelve por `provider_customer_id` y grita si no encontró a nadie |
-| `#295` | Quien pagó y no se le activó **no tenía cómo reintentar**: el único sitio que llamaba a `reconcile` era la página de regreso del checkout. Si te la perdías una vez, se acabó. Botón "Ya pagué, verificar" en la propia pantalla de plan vencido |
+| **Blue/green** (`scripts/deploy_switch.sh`, `#300`) | dos contenedores `core-api` (12 MiB cada uno) y Caddy apuntando a uno; la vuelta atrás medida en **1,6 s** contra los ~8 min del rebuild. `ai-service` queda fuera a propósito: sus trabajos viajan por Redis Streams, así que un reinicio solo hace esperar a la cola |
+| **Ventana nocturna** (`.github/workflows/deploy.yml`, `#311`) | el merge ya **no** despliega; sale a las **22:00 Bogotá** por cron, o a mano con `workflow_dispatch` dando un motivo. `concurrency: deploy-prod` |
+| **Rollback de un clic** (`rollback.yml`, `#300`) | workflow aparte que exige escribir `volver`. Vive fuera de la aplicación a propósito |
+| **Copia antes de migrar** (`predeploy_dump.sh`, `#303`) | `pg_dump` segundos antes de la migración, no el respaldo de la madrugada. Retención 7 días, 700/600 |
+| **Ensayo de la migración sobre copia** (`migration_rehearsal.sh`, `#309`) | la migración se estrena contra un clon de la base real; si falla ahí, el despliegue no ocurre. Probado con una migración rota a propósito |
+| **Simulacro de restauración** (`#304`) | desde B2 en **7 s**, con 3/3 apellidos verificados criptográficamente (descifrar → recalcular el hash de búsqueda → comparar) sin imprimir un solo nombre |
+| **Consola de despliegues** (`/admin`, `#305`–`#308`, `#314`) | qué versión sirve, a cuál se vuelve, historial, y enlaces al diff de cada cambio |
+| **Versión legible** (`next_version.sh`, `#308`) | `v0.9.4` en vez de `09bbabd`. Derivada, no anotada: los tags viejos murieron el 2026-06-10 con 475 commits encima porque nada dependía del número |
+| **Tasa de 5xx** (`monitor.sh`, `#313`) | el vigilante ya veía si se puede entrar; ahora ve también el fallo que **no** tumba el servicio |
 
-Los cuatro salieron de probar el pago con dinero real. Ninguno se habría visto de
-otra forma hasta que una psicóloga pagara y se quedara afuera — que es
-exactamente lo que pasó el 18 de agosto a las 16:58.
+**Cuatro bugs, los cuatro encontrados por ejercitar la cosa y no por leer un
+código de salida. Los cuatro habrían sido silenciosos en producción:**
 
-**Verificado en producción (2026-08-19):** `fbf1fb3d` (MarcelaChapues) en
-`active` con `current_period_end 2026-09-18`, activada desde el botón nuevo.
+- **El cambio de color no llegaba a Caddy** (`#301`), el peor de la sesión. El host decía `green`, Caddy leía el archivo viejo y el tráfico real seguía yendo a `blue`, con `caddy reload` saliendo 0. Causa: Docker monta un archivo suelto **por inode**, así que el `mv` atómico — la forma prolija de escribir — le deja al contenedor el archivo antiguo. Ahora se escribe en sitio y el color se **relee desde dentro del contenedor** antes de dar el cambio por hecho.
+- **El despliegue fue hacia atrás** (`#312`). La lista de rutas que decide *qué versión desplegar* omitía `.github/workflows/build-core-api.yml`, que sí está en el filtro del build. Esta vez no hubo daño (código idéntico, verificado), pero con una migración de por medio habría sido una vuelta atrás de esquema en silencio. Lo pinea `check_deploy_paths.sh`, que salió rojo con la divergencia real.
+- **El archivo de estado vivo estaba rastreado en git**, así que `git pull` y el runtime se peleaban por él y cada reemplazo rompía el mount. Pasó a `.gitignore` con plantilla `.example` y una función que lo siembra.
+- **`image_sha` confundía el puerto del registro con la etiqueta.** Test rojo primero; una etiqueta nunca lleva barra.
 
-**Vigilancia** (`#296`, `docs/ops/MONITORING.md`): `scripts/monitor.sh` corre en
-el host cada 5 minutos, se registra como profesional y pide `/auth/me` y la lista
-de pacientes. La lección del 18 de agosto es que `/healthz` respondió 200 durante
-todo el incidente: medir si el proceso vive no es medir si se puede trabajar.
-Lo que el monitor *decide* se prueba en `scripts/monitor_test.sh` (47 casos) y
-entra en `make verify`. El canario es un `PROFESSIONAL` de solo lectura de la org
-demo interna, con su credencial en `/etc/sghcp/monitor.env` (600) y **no** en el
-`.env` de los contenedores: la credencial del vigilante no vive dentro de la
-aplicación que vigila.
+**Una corrección al registro:** afirmé que la copia pre-migración no empeora la
+exposición, y era falso — `users.email`, los hashes bcrypt, `birth_date` y
+`gender` viajan en claro. El argumento verdadero es más estrecho y quedó escrito
+en el plan: el propio directorio de datos de Postgres, en el mismo disco, ya
+guarda esas columnas así.
 
-**El propio despliegue de la vigilancia la rompió, y fue el bug de la sesión**
-(`#297`). `monitor.sh` se commiteó `100644`. Mientras el VPS tuvo la copia subida
-a mano por scp no se notó nada; al mergear `#296` y hacer `git pull` en el
-servidor, la copia rastreada reemplazó a la manual y cron pasó a recibir
-`permission denied` cada cinco minutos. El vigilante no se cayó: nunca arrancó, y
-el único sitio donde se habría quejado es el log que se quedó vacío — que se lee
-igual que "todo bien". La causa es que este repo tiene `core.fileMode = false`,
-así que git no mira el modo del disco y `make verify` seguía verde con la copia
-de trabajo conservando el bit que el índice no tenía. Lo pinea
-`scripts/check_exec_bits.sh` (paso `exec-bits` en `make verify`): todo `.sh`
-rastreado debe ser `100755`. Salió rojo con **cuatro** archivos, no uno —
-`run_fuzz_test.sh` y `run_mutation_test.sh` llevaban así desde que se escribieron
-y `verify.sh` también los ejecuta por ruta.
+**Lo que el plan deja fuera a propósito:** el botón de rollback **no** va dentro
+de la aplicación (si la aplicación es lo que está roto, su botón de emergencia
+también lo está), y canary tampoco todavía (con una sola profesional en
+producción, un 5% del tráfico es ruido, no señal).
 
-**Dead man's switch: diferido a propósito** (`#298`). Si el monitor se muere,
-nadie avisa. El diseño quedó decidido y escrito en `BACKLOG.md` para no volver a
-derivarlo — el VPS lata cada 5 minutos contra un servicio de afuera; ciclo limpio
-→ `curl $HEARTBEAT_URL`, algún chequeo rojo → `/fail`, que de paso sería un
-segundo canal de aviso independiente de Resend. Se implementa cuando haya
-usuarios reales; lo único que bloquea es crear la cuenta del receptor.
+### Últimos PRs a `main` (sesión 2026-08-20, todos verificados en producción)
 
-### Últimos PRs a `main` (sesión 2026-08-18/20, todos desplegados por CI)
+- `#300`–`#302` blue/green con su suite de funciones puras (~42 casos en `make verify`), el arreglo del inode y el cierre de la fase 0.1.
+- `#303`, `#304`, `#309` copia justo antes de migrar, simulacro de restauración desde B2 y ensayo de la migración sobre un clon.
+- `#305`–`#308`, `#314` la consola de despliegues: qué build sirve, a qué se vuelve, versión legible en vez de SHA, y los cuatro enlaces al diff (qué entró · pendiente de salir · qué se desharía · antes y después).
+- `#310` anotar que `govulncheck` falla por la red y parece hallazgo de seguridad.
+- `#311`–`#313` la ventana nocturna, el arreglo del despliegue hacia atrás y la tasa de 5xx en el vigilante.
 
-- `#292`–`#295` fix(billing): los cuatro fallos del camino de cobro, en la tabla de arriba.
-- `#296` feat(ops): la vigilancia firmada — `scripts/monitor.sh` + `monitor_test.sh` (47 casos en `make verify`), healthchecks de compose para `core-api` y `ai-service`, y `docs/ops/MONITORING.md`.
-- `#297` fix(ops): `check_exec_bits.sh` y los cuatro `.sh` commiteados sin bit de ejecución. Rojo antes del arreglo.
-- `#298` docs(ops): el dead man's switch pasa de "sin iniciar" a "diferido a propósito", con el diseño escrito.
+**Verificación en producción (2026-08-20):** `sirviendo: blue`, sonda de entrada
+en verde, `0 de 28 peticiones 5xx en 5m (umbral 3)`, y las cinco cadenas nuevas
+de la consola presentes en el bundle servido (verificado con `curl --compressed`:
+Caddy comprime, y sin esa bandera la primera lectura dio un falso negativo).
 
-**Verificación en producción (2026-08-20):** cinco contenedores arriba, `core-api`
-y `ai-service` ahora reportando `(healthy)`; el ciclo del monitor sale limpio por
-cron (`entry ok · containers ok · queue ok · disk ok`) leyendo la copia rastreada
-tras un `git pull` real, que es el escenario que había fallado. La máquina de
-avisos se ejercitó en vivo bajando el umbral de disco: `send` → `silent` →
-`recovered`, los tres correos confirmados en la bandeja.
+### Sesión anterior (2026-08-18/19), comprimida
+
+Fase 4 de la latencia de audio medida y afinada (`#287`–`#290`, migración `000080`):
+tres sesiones simultáneas esperan 61/131/198 s donde sin ventanas esperarían
+~200/~400/~600. Los **cuatro fallos apilados del camino de cobro** (`#292`–`#295`),
+vivos desde que se escribió ese código y la razón por la que ninguna organización
+había quedado nunca registrada como cobrada — salieron de pagar con dinero real, y
+ninguno se habría visto hasta que una psicóloga pagara y se quedara afuera, que es
+lo que pasó el 18 de agosto a las 16:58 (`fbf1fb3d` quedó en `active` hasta el
+2026-09-18). La **vigilancia firmada** (`#296`, `docs/ops/MONITORING.md`) que
+pregunta si se puede entrar en vez de si el proceso vive, y el bug que su propio
+despliegue destapó (`#297`): `monitor.sh` se commiteó `100644` y cron recibía
+`permission denied`; el vigilante no se cayó, nunca arrancó, y el único sitio
+donde se habría quejado es el log vacío, que se lee igual que "todo bien". Lo
+pinea `check_exec_bits.sh`. Detalle completo en el CHANGELOG.
 
 ### PRs de la sesión anterior (2026-07-23/25)
 
@@ -173,8 +161,9 @@ Antes la apertura tenía 27 campos con 16 de texto libre. `TestReconstructedForm
 
 **Sesión 2026-07-21/22 (marketing/SEO, sin PRs en `clinic-system` — todo en el repo `../chapni`):** se descubrió que **Cloudflare devolvía 403 a todos los crawlers de IA** (GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-User, PerplexityBot) e inyectaba un *managed robots.txt* con `Disallow: /` para ellos, mientras Googlebot pasaba normal — por eso ChatGPT respondía que el dominio no existía y otros modelos describían el producto sin precio, sin prueba gratis y sin la IA, inventando funciones. Resuelto en el panel. Además: **`/precios/` y `/seguridad/` como URLs propias** (antes solo anclas del home, y un ancla no se indexa como respuesta), **guía nueva "Cómo elegir software de historia clínica para psicólogos en Colombia"** (criterios sin nombrar competidores ni enlazarlos — decisión explícita de no darles visibilidad), **IndexNow** enganchado a `npm run deploy`, `www` con 301 al apex, ruta `*.workers.dev` retirada, y `plan-seo-backlinks-geo.md` corregido (llevaba desactualizado desde el 6 de julio y provocó tres afirmaciones falsas en la sesión).
 
-> Flujo actual: rama `fix/*` → PR → squash-merge → CI deploy. ✅ Branch protection activa desde 2026-07-09.
-> **CI/CD:** core-api `test → build → smoke`; ai-service `pytest → build → deploy`; **frontend `build → rsync al VPS → smoke` (automatizado desde #185)**; `smoke.yml` también corre por `workflow_dispatch` tras cambios manuales.
+> Flujo actual: rama `fix/*` → PR → squash-merge → **la imagen se construye y se publica, pero NO se despliega** (desde `#311`). ✅ Branch protection activa desde 2026-07-09.
+> **Despliegue:** `deploy.yml` a las 22:00 Bogotá (`0 3 * * *` UTC) o a mano con `workflow_dispatch` + motivo; orden `core-api → frontend → smoke` (la API primero porque las migraciones son aditivas). Vuelta atrás: `rollback.yml`, escribiendo `volver`.
+> **CI/CD:** core-api `test → build`; ai-service `pytest → build → deploy`; frontend `build → rsync al VPS → smoke`; `smoke.yml` también corre por `workflow_dispatch`.
 
 ---
 
@@ -183,7 +172,7 @@ Antes la apertura tenía 27 campos con 16 de texto libre. `TestReconstructedForm
 | ID | Descripción | Estado |
 |---|---|---|
 | **WhatsApp Meta API** | Cargo COP $90.675 pagado. **Verificado en BD 2026-07-25**: la config de la única org ya tiene `phone_number_id` y las tres plantillas escritas (`recordatorio_cita_24h`, `recordatorio_cita_2h`, `cita_confirmada`, `lang=es_CO`) — lo que falta **no** es configurarlas, es que `org_whatsapp_config.enabled` sigue en `false`. Queda: confirmar que Meta desbloqueó y encender el toggle en Ajustes → Integraciones. | 🟡 configurado, apagado |
-| **Dead man's switch** | `scripts/monitor.sh` vigila la producción desde el host cada 5 minutos, pero **si el propio monitor se muere nadie avisa**: el cron puede desaparecer y el silencio se lee igual que la salud. Cerrarlo pide un observador fuera de este servidor. Ver `docs/ops/MONITORING.md`. | ⏸️ diferido a propósito (2026-08-20) hasta tener usuarios reales; diseño decidido y anotado en `docs/ai/BACKLOG.md` → Infraestructura / DevOps |
+| **Dead man's switch** | `scripts/monitor.sh` vigila la producción desde el host cada 5 minutos, pero **si el propio monitor se muere nadie avisa**: el cron puede desaparecer y el silencio se lee igual que la salud. Cerrarlo pide un observador fuera de este servidor. Ver `docs/ops/MONITORING.md`. | ⏸️ diferido "hasta tener usuarios reales" — **y ese momento ya llegó**: el sistema pasa a psicólogas externas esta semana. Diseño decidido y escrito en `docs/ai/BACKLOG.md` → Infraestructura / DevOps; lo único que bloquea es que el usuario cree la cuenta en healthchecks.io y pase la URL del ping |
 | **Validación de demanda** | Conseguir 2-3 psicólogas externas en beta de diseño (acceso gratis 2 semanas, acompañamiento 1ª sesión en vivo). Sin esto, el go-live 1.0.0 carece de señal de mercado. 2 contactos disponibles (colegas de la esposa). Fases 1-2 de la auditoría deben cerrarse antes de la beta (logout/pérdida de borrador ya resueltos). | 🔴 sin iniciar |
 | **Validación de demanda B2B (clínicas)** | Señal orgánica en producción: ninguna aún — tras la limpieza del 2026-08-07 la cohorte del embudo es **1 organización real**; el único signup externo que hubo (Alma Vélez) canceló sin registrar un solo paciente y se eliminó. Señal de mercado (2026-07-06): sí existe — competidores colombianos (Psiris, MedSystem, RIPS/CIE10/Res. 1888) e IPS de salud mental reales en Bogotá/Medellín ya operan sin solución especializada en psicología+cifrado. Pendiente decidir: entrevistas directas con 3-5 IPS/clínicas antes del plan B2B completo, o construirlo ya con esta señal. | 🟡 en evaluación |
 | **Formatos reconstruidos — revisión clínica** | Los 4 formatos ya están en prod sin corrupción, pero al reconstruirlos se tomaron 2 decisiones que Marcela debe validar: (a) **consumo de SPA** quedó como un multiselect de sustancias con las frecuencias plegadas, en vez del "Sí/No" + casillas por sustancia del papel; (b) **ideación suicida e intento previo** siguen como campos del formato aunque el sistema ya tiene su control fijo de nivel de riesgo (posible duplicación). Ambas se ajustan desde el builder visual, sin tocar BD. | 🟡 pendiente de revisión |
@@ -220,12 +209,13 @@ Antes la apertura tenía 27 campos con 16 de texto libre. `TestReconstructedForm
 |---|---|
 | `postgres:5432` | ✅ corriendo |
 | `redis:6379` | ✅ corriendo |
-| `core-api:8080` | ✅ producción — CI deploy (último: PR #296, 2026-08-20 00:43 UTC; **healthcheck de compose desde #296**, `(healthy)` verificado). **Las migraciones las aplica el propio deploy desde PR #255**, antes de recrear el contenedor, y falla si queda `dirty`. **Verificado 2026-08-07: `schema_migrations` = 74, dirty=f** (`000073_platform_org_activation`, `000074_activation_paid_source`). Implicación heredada de #255: las migraciones tienen que ser **aditivas**. |
+| `core-api:8080` | ✅ producción — **blue/green desde #300**: `sghcp_core_api_blue` y `sghcp_core_api_green`, Caddy apuntando a uno vía `caddy-upstream.conf` (bind-mount de **directorio**, no de archivo). El de reserva se queda encendido hasta el siguiente despliegue, que lo reutiliza. Estado vivo en `/var/lib/sghcp/deploy_state` + `deploy_history`, visible en `/admin`. Último: PR #314 (2026-08-20, `workflow_dispatch` manual). **Sirviendo: blue.** Las migraciones las aplica el propio deploy desde PR #255 — ahora **ensayadas antes sobre un clon** (#309) y con `pg_dump` inmediatamente previo (#303) — y falla si queda `dirty`. Siguen teniendo que ser **aditivas**. |
 | `ai-service` | ✅ producción — CI deploy (último: PR #296, 2026-08-20; **healthcheck de compose desde #296**, `(healthy)` verificado — verde solo dice que el proceso web contesta, no que la cola avance). Antes: PR #208, 2026-07-21 (`risk` pasa a control fijo del sistema). Pipeline validado E2E con audio de 58 min (2026-07-11). |
-| `frontend` (Caddy :80/:443) | ✅ producción — **CI deploy automático desde PR #185** (`build-frontend.yml`: build en Actions + rsync in-place al bind mount, sin restart de Caddy). Último: PR #258 (2026-08-08 02:06 UTC, pestaña de activación). **Caddy recreado a mano** el 2026-07-21 tras PR #211 (bind-mount de archivo: `reload` no basta). **Dominio:** `https://app.chapni.com` (DNS en nube gris a propósito: en proxy se rompe el ACME de Caddy, y Cloudflare corta las subidas en 100 MB — bloqueante para audio de sesión); `api.marcelachapues.com` legacy (mantiene `/api` para webhooks, redirige 308 el resto). |
+| `frontend` (Caddy :80/:443) | ✅ producción — **CI deploy automático desde PR #185** (`build-frontend.yml`: build en Actions + rsync in-place al bind mount, sin restart de Caddy). Último: PR #314 (2026-08-20, consola de despliegues con enlaces al diff). **Caddy recreado a mano** el 2026-07-21 tras PR #211 (bind-mount de archivo: `reload` no basta). **Dominio:** `https://app.chapni.com` (DNS en nube gris a propósito: en proxy se rompe el ACME de Caddy, y Cloudflare corta las subidas en 100 MB — bloqueante para audio de sesión); `api.marcelachapues.com` legacy (mantiene `/api` para webhooks, redirige 308 el resto). |
 | Backups | `pg_dump` diario cifrado GPG → Backblaze B2 + **snapshot cifrado del `.env`** (desde 2026-07-13). Llave GPG rotada 2026-07-13: `backups@chapni.com` (privada en máquina del operador + LastPass; la vieja solo lee dumps ≤ 2026-07-13). **Restore probado**: RTO datos ~15 s — runbook en `docs/ops/DR_RUNBOOK.md`. |
 | **Disco** | 22% (7,7/38 GB — reverificado 2026-08-19) — cron semanal en el **host**: `0 4 * * 0 docker system prune -af` → `/var/log/docker-prune.log`. **Alerta por correo si ≥80% desde el 2026-08-19** (`scripts/monitor.sh`); antes de esa fecha este documento afirmaba tener esa alerta y no existía ninguna |
-| **Vigilancia** | `scripts/monitor.sh` cada 5 min desde el host → `/var/log/sghcp-monitor.log`, avisos por Resend. Se registra con un canario `PROFESSIONAL` de la org demo y pide `/auth/me` y la lista de pacientes: mide si **se puede entrar**, no si el proceso vive. Runbook en `docs/ops/MONITORING.md`. Instalada por `/etc/cron.d/sghcp-monitor` (aditivo, no pisa el respaldo diario ni el prune semanal), log rotado semanal ×8. **El bit de ejecución lo garantiza `make verify` desde #297** — se commiteó `100644` y cron estuvo recibiendo `permission denied` hasta que se arregló |
+| **Vigilancia** | `scripts/monitor.sh` cada 5 min desde el host → `/var/log/sghcp-monitor.log`, avisos por Resend. Se registra con un canario `PROFESSIONAL` de la org demo y pide `/auth/me` y la lista de pacientes: mide si **se puede entrar**, no si el proceso vive. Desde #313 cuenta además las respuestas 5xx de **los dos colores** en una ventana de 5 min y nombra las 3 rutas que más fallan (umbral 3; por debajo el veredicto es `ok` sin matices, porque un aviso por un 500 suelto enseña a ignorar los avisos). Runbook en `docs/ops/MONITORING.md`. Instalada por `/etc/cron.d/sghcp-monitor`, log rotado semanal ×8. **El bit de ejecución lo garantiza `make verify` desde #297** |
+| **Despliegue** | `deploy.yml` a las 22:00 Bogotá o `workflow_dispatch` con motivo; `rollback.yml` escribiendo `volver` (medido en **1,6 s**). Copias pre-migración en `/var/backups/sghcp/predeploy` (7 días). Consola en `/admin` con versión, colores, historial y enlaces al diff. Runbook completo en `docs/ops/PLAN_RELEASE.md` |
 
 **Env crítico en VPS:**
 - `MASTER_KEY` — clave maestra de cifrado PII
@@ -249,7 +239,8 @@ Antes la apertura tenía 27 campos con 16 de texto libre. `TestReconstructedForm
 | `frontend` | `services/frontend/` | ✅ React TS PWA, prod |
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
 | Migrations | `services/core-api/migrations/` | Última: `000080_window_in_flight` (reclamo de ventana en vuelo, PR #288) — aplicada en prod (`schema_migrations` = 80, verificado 2026-08-19). Las aplica el deploy desde PR #255, así que **tienen que ser aditivas**. Ojo: 000052 ya existía (`org_signup_lead`), por eso el salto de numeración |
-| CI/CD | `.github/workflows/build-ai-service.yml` + `build-core-api.yml` | Build+push ghcr.io + deploy SSH al VPS (secrets: `VPS_HOST`, `VPS_SSH_KEY`, `GHCR_TOKEN`) |
+| CI/CD | `.github/workflows/` | `build-*.yml` construye y publica en ghcr.io **sin desplegar**; `deploy.yml` (cron 22:00 Bogotá + manual) y `rollback.yml` (confirmación `volver`) hacen el despliegue por SSH. Secrets: `VPS_HOST`, `VPS_SSH_KEY`, `GHCR_TOKEN`. `environment: production`, `concurrency: deploy-prod` |
+| Despliegue (scripts) | `scripts/deploy_switch.sh`, `predeploy_dump.sh`, `migration_rehearsal.sh`, `next_version.sh` | Mitad pura probada en `make verify` (~88 casos entre los cuatro), mitad efectiva sin tests — el patrón de la casa desde `monitor.sh`. Ratchets: `check_exec_bits.sh`, `check_deploy_paths.sh` |
 | Claude skills | `~/.claude/commands/` + `~/.claude/skills/` | `chapni-social` (NO sincronizada al repo `claude-skills`) es ahora un sistema de content-ops completo: auditoría de estado (paso 0, comandos `estado`/`semana`), log con confirmación de publicación en el repo chapni, sinergia con el hub `/recursos`, política de slots perdidos, ritual dominical en batch, generador de banners (`render_banner.py`) y bios/perfiles oficiales documentados. Supervisada por rutina cloud dominical (reporte a Gmail). `ui-ux-pro-max` instalada; `ui-styling` desinstalada 2026-06-28 |
 
 ---
