@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+
+	"sghcp/core-api/internal/shared/redisstream"
 )
 
 const (
@@ -98,6 +100,8 @@ func (p *Publisher) publishBatch(ctx context.Context) error {
 		pipe.XAdd(ctx, &redis.XAddArgs{
 			Stream: streamName,
 			ID:     "*", // auto-generate stream ID
+			MaxLen: redisstream.MaxLen,
+			Approx: true,
 			Values: map[string]any{
 				"event_id":       e.ID,
 				"aggregate_type": e.AggregateType,

@@ -16,6 +16,7 @@ import (
 
 	"sghcp/core-api/internal/aidrafts"
 	"sghcp/core-api/internal/shared/crypto"
+	"sghcp/core-api/internal/shared/redisstream"
 )
 
 // UploadAudio stores the audio file, creates an ai_draft (PENDING), and enqueues the job.
@@ -228,6 +229,9 @@ func (s *Service) enqueue(ctx context.Context, draftID, audioPath, recordType, t
 	return s.rdb.XAdd(ctx, &redis.XAddArgs{
 		Stream: aiStream,
 		ID:     "*",
+		// XACK does not delete: without this the stream grows for ever.
+		MaxLen: redisstream.MaxLen,
+		Approx: true,
 		Values: values,
 	}).Err()
 }

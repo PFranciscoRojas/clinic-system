@@ -54,11 +54,39 @@ jobs:
           go-version-file: services/core-api/go.mod
           cache-dependency-path: services/core-api/go.sum
 
-      - name: govulncheck
+      # Dos cosas muy distintas se veían igual: "govulncheck falló". El
+      # 2026-08-20 falló dos veces el mismo día bajando módulos de
+      # proxy.golang.org — una con 403, otra con stream error — y en ninguna
+      # llegó a analizar nada. No había vulnerabilidad: el paso murió antes de
+      # empezar. Pero es un check requerido, su nombre dice "seguridad", y el
+      # arreglo era reejecutar. Esa es exactamente la costumbre que vuelve
+      # invisible un hallazgo de verdad el día que lo haya.
+      #
+      # Así que la red se separa del análisis. Bajar módulos es una operación de
+      # red, falla como fallan las operaciones de red, y se reintenta.
+      - name: Descargar módulos (la parte que es red)
         working-directory: services/core-api
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+          go install golang.org/x/vuln/cmd/govulncheck@v1.4.0
+          for intento in 1 2 3; do
+            if go mod download; then exit 0; fi
+            echo "::warning::go mod download falló (intento $intento de 3)"
+            sleep $((intento * 10))
+          done
+          echo "::error::no se pudieron bajar los módulos en 3 intentos. Esto es la red, no una vulnerabilidad."
+          exit 1
+
+      # Y el análisis corre sin red que pueda fallar: con GOPROXY=off los
+      # módulos están en la caché del paso anterior o no están, y eso ya no es
+      # un hipo pasajero. La base de vulnerabilidades sí se consulta (vuln.go.dev
+      # es una llamada directa, no pasa por el proxy de módulos).
+      #
+      # Un fallo de este paso vuelve a significar una sola cosa.
+      - name: govulncheck
+        working-directory: services/core-api
+        env:
+          GOPROXY: 'off'
+        run: govulncheck ./...
 
   # The one check aimed not at the code but at how the build was made to pass.
   # Everything else here goes green when a test is deleted or turned off; this

@@ -134,6 +134,13 @@ step "migration-rehearsal" ./scripts/migration_rehearsal_test.sh
 # compara terminan separándose.
 step "deploy-paths" ./scripts/check_deploy_paths.sh
 
+# Y que hable con producción con los dos ficheros de compose. Con el base solo,
+# los volúmenes de datos se ven declarados pelados, no cuadran con los que
+# existen en el VPS, y cada despliegue ofrecía recrearlos: "Recreate (data will
+# be lost)?", tres veces, sin que significara nada. Un aviso así enseña a
+# ignorar avisos.
+step "compose-files" ./scripts/check_compose_files.sh
+
 # And the mode of the scripts themselves. Every step above this line runs a
 # .sh by path, so a script committed without its exec bit is a step that
 # vanishes on any clone that did not create it — including the VPS.

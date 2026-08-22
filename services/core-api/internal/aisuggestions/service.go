@@ -8,6 +8,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"sghcp/core-api/internal/shared/crypto"
+	"sghcp/core-api/internal/shared/redisstream"
 )
 
 const (
@@ -97,6 +98,8 @@ func (s *Service) Request(ctx context.Context, orgID, patientID, kind, requested
 	if err := s.rdb.XAdd(ctx, &redis.XAddArgs{
 		Stream: aiStream,
 		ID:     "*",
+		MaxLen: redisstream.MaxLen,
+		Approx: true,
 		Values: values,
 	}).Err(); err != nil {
 		return "", fmt.Errorf("enqueue ai job: %w", err)

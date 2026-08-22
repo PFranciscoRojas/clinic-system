@@ -24,6 +24,7 @@
 #   MONITOR_EMAIL     canary user, a PROFESSIONAL in the internal demo org
 #   MONITOR_PASSWORD  its password
 #   ALERT_EMAIL       where the alarm goes
+#   HEARTBEAT_URL     the outside timer this script beats against (see below)
 # RESEND_API_KEY and RESEND_FROM are read from the app's env file, so the key
 # has one home on this host and cannot drift out of sync with the one the app
 # sends mail with.
@@ -238,6 +239,33 @@ alert_decision() {
     echo silent
 }
 
+# heartbeat_target <url> <failed_count>
+#
+# Todo lo de arriba solo puede avisar mientras esta máquina esté viva y con
+# salida a internet. Si se cae el VPS, si cron se rompe, o si Resend rechaza la
+# llave, el síntoma es el mismo: silencio — y el silencio se lee igual que
+# salud. La única forma de cerrar ese hueco es invertir quién pregunta: que el
+# VPS *lata* contra un servicio de afuera y que ese servicio avise cuando la
+# lata no llega, para que el temporizador viva fuera del sistema que vigila.
+#
+# El camino de fallo es además el segundo canal de aviso, independiente de
+# Resend, que hoy no existe: si Resend rechaza el correo, send_alert devuelve 1
+# y la queja se va a un log que nadie lee.
+#
+# Sin URL configurada devuelve vacío en vez de inventarse un destino. Es la
+# única rama que no es fail-closed, y a propósito: un latido que no se puede
+# mandar no es una avería del sistema vigilado, y tratarlo como tal haría que la
+# vigilancia se avisara a sí misma en lugar de avisar de producción. Lo que sí
+# hace send_heartbeat es decirlo en voz alta en cada ciclo.
+heartbeat_target() {
+    local url="${1%/}" failed="$2"
+    [[ -z "$url" ]] && { echo ""; return; }
+    # Un recuento ilegible es un ciclo que no sabemos leer, y no saber se avisa.
+    is_number "$failed" || { echo "$url/fail"; return; }
+    (( failed == 0 )) && { echo "$url"; return; }
+    echo "$url/fail"
+}
+
 
 # ── the world ───────────────────────────────────────────────────────────────
 # Everything past this point talks to something: the network, docker, the disk.
@@ -407,6 +435,33 @@ send_alert() { # send_alert <check> <verdict> <detail> <decision>
     fi
 }
 
+# Lo que salió en rojo este ciclo, para que el latido de fallo lleve en el
+# cuerpo qué se rompió y no solo que algo se rompió. Solo códigos HTTP, nombres
+# de contenedor y porcentajes: nada de esto sale de la frontera de cifrado.
+MONITOR_RED=()
+
+send_heartbeat() { # send_heartbeat <failed_count>
+    local target
+    target="$(heartbeat_target "${HEARTBEAT_URL:-}" "$1")"
+    if [[ -z "$target" ]]; then
+        echo "[monitor] sin HEARTBEAT_URL: nadie vigila al vigilante" >&2
+        return 0
+    fi
+
+    local body=""
+    (( ${#MONITOR_RED[@]} )) && body="$(printf '%s\n' "${MONITOR_RED[@]}")"
+
+    # --retry porque un latido perdido por un hipo de red es una falsa alarma a
+    # los diez minutos, y una falsa alarma en el detector de silencio es lo peor
+    # que le puede pasar: enseña a ignorarlo.
+    if ! curl -fsS --max-time 10 --retry 3 --retry-delay 2 \
+        --data-raw "$body" "$target" -o /dev/null 2>/dev/null; then
+        # La URL no se imprime: quien la tenga puede callar la alarma, y este
+        # log vive en claro en /var/log.
+        echo "[monitor] no pude latir contra el vigilante externo" >&2
+    fi
+}
+
 run_check() { # run_check <name> <verdict-tab-detail>
     local name="$1" verdict detail
     verdict="${2%%$'\t'*}"
@@ -421,6 +476,11 @@ run_check() { # run_check <name> <verdict-tab-detail>
 
     decision="$(alert_decision "$prev" "${last_sent:-x}" "$now" "$verdict" "$REPEAT_AFTER_S")"
     printf '[monitor] %-11s %-22s %s (%s)\n' "$name" "$verdict" "$detail" "$decision"
+
+    # Se anota aquí y no en main porque el latido tiene que llevar el detalle,
+    # no solo el nombre del chequeo. Al margen de si el correo sale o no: el
+    # latido de fallo existe justamente para el ciclo en que el correo no sale.
+    [[ "$verdict" != ok ]] && MONITOR_RED+=("$name=$verdict · $detail")
 
     case "$decision" in
         send|repeat|recovered)
@@ -442,12 +502,17 @@ run_check() { # run_check <name> <verdict-tab-detail>
 
 main() {
     load_env
+    MONITOR_RED=()
     local failed=0
     run_check entry      "$(check_entry)"      || failed=1
     run_check containers "$(check_containers)" || failed=1
     run_check queue      "$(check_queue)"      || failed=1
     run_check errores    "$(check_errors)"     || failed=1
     run_check disk       "$(check_disk)"       || failed=1
+    # Al final y siempre, pase lo que pase arriba. Un latido que solo sale en
+    # los ciclos buenos es un detector de silencio que confirma la salud y calla
+    # la avería.
+    send_heartbeat "$failed"
     return $failed
 }
 

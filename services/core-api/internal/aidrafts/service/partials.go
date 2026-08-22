@@ -8,6 +8,7 @@ import (
 
 	"sghcp/core-api/internal/aidrafts"
 	"sghcp/core-api/internal/shared/crypto"
+	"sghcp/core-api/internal/shared/redisstream"
 )
 
 // ensurePartialTranscript gives this upload somewhere to accumulate the
@@ -86,6 +87,8 @@ func (s *Service) enqueueWindow(ctx context.Context, in AppendPartInput) {
 	err = s.rdb.XAdd(ctx, &redis.XAddArgs{
 		Stream: windowStream,
 		ID:     "*",
+		MaxLen: redisstream.MaxLen,
+		Approx: true,
 		Values: map[string]any{
 			"kind":           "window",
 			"org_id":         in.OrganizationID,
