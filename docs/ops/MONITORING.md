@@ -63,7 +63,13 @@ Configuración en `/etc/sghcp/monitor.env`, modo 600:
 MONITOR_EMAIL=monitor@demo.clinica.co
 MONITOR_PASSWORD=…
 ALERT_EMAIL=…
+HEARTBEAT_URL=https://hc-ping.com/…
 ```
+
+`HEARTBEAT_URL` es un secreto y no por lo que se pueda leer con ella, sino por lo
+que se puede hacer: quien la tenga puede mandar latidos y **callar la alarma**.
+Por eso vive aquí, en el archivo modo 600, y no en el repositorio ni en el `.env`
+de los contenedores.
 
 Aparte de `/root/clinic-system/.env` a propósito: ese archivo es el `env_file`
 de los contenedores, y la credencial del vigilante no tiene por qué vivir dentro
@@ -106,24 +112,38 @@ en su archivo de estado cada cinco minutos sin que nadie se enterara de nada.
 | `down:` / `unhealthy:` | `docker ps -a` y los logs del que falta |
 | `full` | Audio sin barrer, logs, imágenes viejas. El prune semanal corre los domingos |
 
-## Lo que esto todavía no cubre
+## Quién vigila al vigilante (desde 2026-08-21)
 
-**Si el propio monitor se muere, nadie avisa.** El cron puede desaparecer, el
-host puede apagarse, y el silencio se lee igual que la salud. Cerrarlo bien pide
-un observador fuera de este servidor (un dead man's switch: un servicio externo
-que alarma cuando *deja* de recibir el latido).
+Todo lo de arriba solo puede avisar mientras este servidor esté vivo y con salida
+a internet. El cron puede desaparecer, el host puede apagarse, Resend puede
+rechazar la llave: los tres producen el mismo síntoma, que es silencio, y el
+silencio se lee igual que la salud.
 
-Está diferido a propósito hasta que haya usuarios reales, no olvidado. El diseño
-quedó decidido y escrito en `docs/ai/BACKLOG.md` (Infraestructura / DevOps): el
-enganche es una línea al final de `main()`, y el `/fail` del latido serviría
-además como segundo canal de aviso independiente de Resend. Lo único que bloquea
-es crear la cuenta del receptor.
+La única forma de cerrarlo es invertir quién pregunta. Al final de cada ciclo
+`monitor.sh` **lata** contra healthchecks.io:
 
-Mientras tanto el hueco sigue abierto, y conviene no perderlo de vista: es
-exactamente la clase de silencio que este documento existe para no volver a
-confundir con salud.
+- Los cinco chequeos en `ok` → `GET $HEARTBEAT_URL`.
+- Alguno en rojo → `POST $HEARTBEAT_URL/fail`, con las líneas rojas en el cuerpo
+  (solo códigos HTTP, nombres de contenedor y porcentaje de disco — nada que
+  cruce la frontera de cifrado).
 
-### La tasa de errores (desde 2026-08-20)
+Si la lata deja de llegar, el servicio de afuera alarma a los diez minutos: dos
+ciclos perdidos, no uno, para que un hipo de red no despierte a nadie. El
+temporizador vive fuera del sistema que vigila, que es todo el asunto.
+
+Ese camino de fallo es además el **segundo canal de aviso, independiente de
+Resend**. Antes, si Resend rechazaba el correo, `send_alert` devolvía 1 y la queja
+se iba al log que nadie lee.
+
+Tiene una propiedad útil: si algún día se pierde la URL en un despliegue o alguien
+vacía el archivo de configuración, el servicio avisa por silencio. La
+configuración olvidada se delata sola.
+
+Se descartó un cron de GitHub Actions como receptor: su programación es de mejor
+esfuerzo, se atrasa y se salta corridas, y un detector de silencio que a veces
+calla solo produce falsas alarmas.
+
+## La tasa de errores (desde 2026-08-20)
 
 El chequeo `errores` cuenta las respuestas 5xx que los dos colores de `core-api`
 registraron en los últimos cinco minutos, y avisa a partir de tres.
@@ -147,5 +167,7 @@ a nadie, a propósito: un aviso por cada error aislado enseña a ignorar los avi
 y entonces el canal deja de servir para el que importa. El recuento sale en el log
 igualmente, así que nada se pierde de vista.
 
-Tampoco cubre la lentitud. Un sistema que responde 200 en catorce segundos pasa
+## Lo que esto todavía no cubre
+
+**La lentitud.** Un sistema que responde 200 en catorce segundos pasa
 todos estos chequeos y es inusable.

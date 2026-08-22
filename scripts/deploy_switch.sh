@@ -191,7 +191,30 @@ rollback_target() {
 
 # ── the world ───────────────────────────────────────────────────────────────
 
-compose() { docker compose -f "$COMPOSE_DIR/docker-compose.yml" "$@"; }
+# Los dos ficheros, siempre. Con el base solo, cada despliegue imprimía tres
+# veces la frase más peligrosa que sabe imprimir este sistema:
+#
+#   Volume "clinic-system_postgres_data" exists but doesn't match configuration
+#   in compose file. Recreate (data will be lost)?
+#
+# No era un aviso de compose envejeciendo: los volúmenes de producción los creó
+# el overlay, con `driver_opts` de bind, y el fichero base los declara pelados
+# (`postgres_data:` y nada más). Dos definiciones distintas del mismo volumen,
+# así que compose comparaba y no cuadraba. En no interactivo la respuesta por
+# defecto es "no" y nunca se perdió un byte, pero salía en TODOS los
+# despliegues, y un aviso que siempre aparece y nunca significa nada es un aviso
+# que se aprende a saltar. El día que uno diga algo, también se salta.
+#
+# Comprobado además que la frase mentía: estos volúmenes son bind al directorio
+# del host, y `docker volume rm` sobre uno de esos borra el volumen y deja el
+# directorio intacto (probado el 2026-08-21 con un volumen desechable). O sea
+# que el riesgo real nunca fue perder la base — era este ruido.
+compose() {
+    docker compose \
+        -f "$COMPOSE_DIR/docker-compose.yml" \
+        -f "$COMPOSE_DIR/docker-compose.prod.yml" \
+        "$@"
+}
 
 # The live upstream file is deliberately not in git — the server rewrites it on
 # every deploy and the deploy runs `git pull` over the same directory, so a

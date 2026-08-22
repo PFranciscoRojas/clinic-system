@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-08-20)
+## Estado actual (2026-08-21)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -56,6 +56,35 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 | 4 — Plataforma/perf | ✅ resuelto | cache `SubscriptionGate` con TTL 60s (`middleware/subscription.go`); staticcheck en CI (`build-core-api.yml`) |
 | 5 — Tests | ✅ resuelto | testcontainers + tests de aislamiento RLS (`internal/integration/{infra,rls,needtoknow}_test.go`); vitest para `client.ts` y `RecordForm` |
 | 6 — Frontend refactor | ✅ resuelto | `SettingsPage` partido en 10 secciones bajo `components/settings/` (191 líneas, solo orquesta); `logout` hace `flushClinicalDrafts()` antes de invalidar el token (`AuthContext.tsx`) |
+
+### Sesión 2026-08-21 — cerrar los avisos que no avisaban
+
+Cuatro pendientes con la misma forma: instrumentos que decían algo distinto de lo
+que pasaba. Uno callaba, uno gritaba en falso, uno crecía sin que nadie mirara y
+uno se disfrazaba de hallazgo de seguridad.
+
+| Qué | Estado |
+|---|---|
+| **Dead man's switch** (#316) | ✅ encendido. `monitor.sh` late contra healthchecks.io al cerrar cada ciclo; `/fail` con las líneas rojas si algo no salió `ok`. El temporizador vive fuera del sistema vigilado — era el único agujero que la vigilancia no podía cubrir por construcción |
+| **Streams de Redis con techo** (#316) | ✅ `MaxLen: 10000, Approx: true` en los **cuatro** productores (había uno sin anotar: `shared/outbox`), tope en un solo sitio y un invariante de fuente para el quinto que venga |
+| **"Recreate (data will be lost)?"** (#316) | ✅ era compose invocado sin el overlay, no el `config-hash` envejeciendo. Reproducido con `--dry-run` y pineado con `check_compose_files.sh` |
+| **`govulncheck` que fallaba por la red** (#316) | ✅ la red se separa del análisis: módulos con reintentos, análisis con `GOPROXY=off`, escáner pineado en `v1.4.0` |
+| **Directorios de software** | ❌ descartados por decisión del usuario tras revisarlos uno por uno |
+
+Dos correcciones al registro anterior salieron de comprobar en vez de suponer:
+
+- La frase `Recreate (data will be lost)?` **mentía**. Estos volúmenes son bind al
+  directorio del host y `docker volume rm` sobre uno de esos borra el volumen
+  dejando el directorio intacto (probado con un volumen desechable el 2026-08-21).
+  El riesgo nunca fue perder la base; era acostumbrarse a saltarse el aviso más
+  alarmante que imprime el sistema, tres veces por despliegue.
+- Los productores de streams eran **cuatro**, no tres. `shared/outbox/publisher.go`
+  publica `domain-events` y crecía igual que los otros.
+
+Lo que se cae con el descarte de los directorios: eran la palanca que el plan SEO
+daba por hecha para los primeros backlinks. La autoridad tiene que venir ahora del
+hub `/recursos`, de prensa o gremios colombianos, y de prueba social real — o sea
+que **las tres frases de Marcela suben de prioridad**, no bajan.
 
 ### Sesión 2026-08-20 — ingeniería de despliegue (fase 0 del plan de release)
 
@@ -125,21 +154,9 @@ despliegue destapó (`#297`): `monitor.sh` se commiteó `100644` y cron recibía
 donde se habría quejado es el log vacío, que se lee igual que "todo bien". Lo
 pinea `check_exec_bits.sh`. Detalle completo en el CHANGELOG.
 
-### PRs de la sesión anterior (2026-07-23/25)
-
-- `#227` feat(auth): **auditoría de todo acceso denegado a un recurso** — el enlace directo a un paciente de otro consultorio ya fallaba en cerrado (RLS → cero filas → 404, indistinguible de un ID inventado a propósito); faltaba el rastro. Middleware `audit.Writer.Denied()` sobre el grupo protegido registra `RESOURCE_ACCESS_DENIED` con `success=false` ante 403/404 y solo en rutas con ID de recurso. Corrige además que la auditoría venía guardando la IP del proxy de Docker en vez de la del cliente (`httputil.ExtractIP`). Sin migraciones.
-- `#219` feat(agenda): **agenda de leads `/agenda`** vinculada al Google Calendar del superadmin. Migración `000069` (`lead_bookings`, `lead_booking_settings`). Hallazgo: el scope OAuth vigente (`calendar.events`) ya alcanza para crear evento + Meet — no hubo que reautorizar.
-- `#220` feat(agenda): la disponibilidad **respeta el free/busy real del calendario** — antes un bloqueo personal se ofrecía como libre. Ignora eventos "Libre" (transparent) y cancelados; los de día completo bloquean el día. Fail-closed si la lectura falla.
-- `#221` chore(docs): guía del sistema completa — 10 capítulos en vivo en `chapni.com/guia`.
-- `#222` feat(agenda): **consola del superadmin** (`/admin?tab=agenda`) para días/horas/duración/zona horaria y listado de llamadas agendadas. Los endpoints salieron en #219 sin UI: el horario solo se cambiaba por SQL.
-- `#223` fix(agenda): el formulario de settings se **deriva** (`draft ?? cfg`) en vez de hidratarse en un `useEffect` — el lint de `react-hooks` rompió CI en main tras #222.
-- `#225` feat(agenda): layout **estilo Calendly** en `/agenda` (panel de marca + calendario mensual + formulario al elegir hora), refresco de disponibilidad cada 90 s y al volver a la pestaña.
-- `#226` fix(agenda): fuera el nombre del anfitrión hardcodeado — mostraba `Marcela Chapués · Chapni`, que es una psicóloga clienta, no el equipo comercial.
-
-**Verificación en producción (2026-07-25):** `GET /agenda` → 200; `GET /api/v1/public/agenda/availability` devuelve días con slots y el 2026-07-29 aparece con menos huecos que el resto (faltan 07:00–08:00), lo que confirma que el free/busy del calendario real de #220 está bloqueando de verdad, no solo los horarios configurados. Los 8 últimos runs de CI en verde; 5 contenedores arriba; working tree limpio y `tsc --noEmit` del frontend sin errores.
-
 ### Sesiones anteriores, comprimidas
 
+- **2026-07-23/25 — agenda comercial de leads (`#219`–`#227`):** `/agenda` sin tenant ni pago (migración `000069`), evento con Meet en el calendar del superadmin, disponibilidad restando el free/busy real y fallando en cerrado si la lectura falla, consola en `/admin?tab=agenda`. Cierra con `#227`, que audita **todo acceso denegado a un recurso** (`RESOURCE_ACCESS_DENIED` ante 403/404 con ID) y corrige que la auditoría venía guardando la IP del proxy de Docker en vez de la del cliente. Detalle en el CHANGELOG.
 - **2026-07-21/22:** `#211` la app entera era rastreable (Caddy responde `X-Robots-Tag: noindex` salvo la allowlist; **solo `/book/marcela-chapues` es indexable**, cada profesional nuevo se agrega al matcher a mano). `#213` el parser de plantillas falla en cerrado ante un `##` en una pista. `#214` emails de ciclo de trial + primeros pasos + referidos v1 (migración `000068`). `#215` reconstrucción de los 4 formatos clínicos (ver bloque siguiente).
 - **2026-08-07 — embudo de activación (`#256`–`#258`):** `/admin?tab=activacion`, ocho pasos derivados de datos existentes, con aviso cuando la cohorte es demasiado chica para leer porcentajes y evidencia que distingue un cobro real de una activación manual (migración `000074`). Destapó un bug vivo desde la migración 000018: los endpoints de admin consultan sin `app.current_org`, así que con FORCE RLS la consola mostraba "0 pacientes" en todos los tenants — arreglado con dos funciones `SECURITY DEFINER` de solo agregados (migración `000073`).
 - **2026-07-27 al 08-07 — guantelete de pruebas (`#236`–`#255`):** cobertura con trinquete, fuzzing de 15 objetivos, tests de RLS/concurrencia/cripto, suite de aceptación en Gherkin (`features/`), `make verify` como única definición de "hecho", 8 checks requeridos en `main` con `enforce_admins`, y **migraciones aplicadas por el propio deploy** (`#255`, con chequeo de `dirty`). Detalle en `docs/ai/PLAN_TESTING_GAUNTLET.md` y en el CHANGELOG.
@@ -172,7 +189,7 @@ Antes la apertura tenía 27 campos con 16 de texto libre. `TestReconstructedForm
 | ID | Descripción | Estado |
 |---|---|---|
 | **WhatsApp Meta API** | Cargo COP $90.675 pagado. **Verificado en BD 2026-07-25**: la config de la única org ya tiene `phone_number_id` y las tres plantillas escritas (`recordatorio_cita_24h`, `recordatorio_cita_2h`, `cita_confirmada`, `lang=es_CO`) — lo que falta **no** es configurarlas, es que `org_whatsapp_config.enabled` sigue en `false`. Queda: confirmar que Meta desbloqueó y encender el toggle en Ajustes → Integraciones. | 🟡 configurado, apagado |
-| **Dead man's switch** | `scripts/monitor.sh` vigila la producción desde el host cada 5 minutos, pero **si el propio monitor se muere nadie avisa**: el cron puede desaparecer y el silencio se lee igual que la salud. Cerrarlo pide un observador fuera de este servidor. Ver `docs/ops/MONITORING.md`. | ⏸️ diferido "hasta tener usuarios reales" — **y ese momento ya llegó**: el sistema pasa a psicólogas externas esta semana. Diseño decidido y escrito en `docs/ai/BACKLOG.md` → Infraestructura / DevOps; lo único que bloquea es que el usuario cree la cuenta en healthchecks.io y pase la URL del ping |
+| **Dead man's switch** | ✅ **Resuelto 2026-08-21**: `monitor.sh` cierra cada ciclo latiendo contra healthchecks.io — al éxito si los cinco chequeos salieron `ok`, a `/fail` con las líneas rojas en el cuerpo si no. El temporizador vive fuera del sistema vigilado, así que una caída del VPS, un cron roto o una llave de Resend rechazada ya no producen el mismo silencio. El `/fail` es además el segundo canal de aviso, independiente de Resend. URL del ping en `/etc/sghcp/monitor.env` (600) — es un secreto: quien la tenga puede callar la alarma. | ✅ cerrado |
 | **Validación de demanda** | Conseguir 2-3 psicólogas externas en beta de diseño (acceso gratis 2 semanas, acompañamiento 1ª sesión en vivo). Sin esto, el go-live 1.0.0 carece de señal de mercado. 2 contactos disponibles (colegas de la esposa). Fases 1-2 de la auditoría deben cerrarse antes de la beta (logout/pérdida de borrador ya resueltos). | 🔴 sin iniciar |
 | **Validación de demanda B2B (clínicas)** | Señal orgánica en producción: ninguna aún — tras la limpieza del 2026-08-07 la cohorte del embudo es **1 organización real**; el único signup externo que hubo (Alma Vélez) canceló sin registrar un solo paciente y se eliminó. Señal de mercado (2026-07-06): sí existe — competidores colombianos (Psiris, MedSystem, RIPS/CIE10/Res. 1888) e IPS de salud mental reales en Bogotá/Medellín ya operan sin solución especializada en psicología+cifrado. Pendiente decidir: entrevistas directas con 3-5 IPS/clínicas antes del plan B2B completo, o construirlo ya con esta señal. | 🟡 en evaluación |
 | **Formatos reconstruidos — revisión clínica** | Los 4 formatos ya están en prod sin corrupción, pero al reconstruirlos se tomaron 2 decisiones que Marcela debe validar: (a) **consumo de SPA** quedó como un multiselect de sustancias con las frecuencias plegadas, en vez del "Sí/No" + casillas por sustancia del papel; (b) **ideación suicida e intento previo** siguen como campos del formato aunque el sistema ya tiene su control fijo de nivel de riesgo (posible duplicación). Ambas se ajustan desde el builder visual, sin tocar BD. | 🟡 pendiente de revisión |
@@ -214,8 +231,8 @@ Antes la apertura tenía 27 campos con 16 de texto libre. `TestReconstructedForm
 | `frontend` (Caddy :80/:443) | ✅ producción — **CI deploy automático desde PR #185** (`build-frontend.yml`: build en Actions + rsync in-place al bind mount, sin restart de Caddy). Último: PR #314 (2026-08-20, consola de despliegues con enlaces al diff). **Caddy recreado a mano** el 2026-07-21 tras PR #211 (bind-mount de archivo: `reload` no basta). **Dominio:** `https://app.chapni.com` (DNS en nube gris a propósito: en proxy se rompe el ACME de Caddy, y Cloudflare corta las subidas en 100 MB — bloqueante para audio de sesión); `api.marcelachapues.com` legacy (mantiene `/api` para webhooks, redirige 308 el resto). |
 | Backups | `pg_dump` diario cifrado GPG → Backblaze B2 + **snapshot cifrado del `.env`** (desde 2026-07-13). Llave GPG rotada 2026-07-13: `backups@chapni.com` (privada en máquina del operador + LastPass; la vieja solo lee dumps ≤ 2026-07-13). **Restore probado**: RTO datos ~15 s — runbook en `docs/ops/DR_RUNBOOK.md`. |
 | **Disco** | 22% (7,7/38 GB — reverificado 2026-08-19) — cron semanal en el **host**: `0 4 * * 0 docker system prune -af` → `/var/log/docker-prune.log`. **Alerta por correo si ≥80% desde el 2026-08-19** (`scripts/monitor.sh`); antes de esa fecha este documento afirmaba tener esa alerta y no existía ninguna |
-| **Vigilancia** | `scripts/monitor.sh` cada 5 min desde el host → `/var/log/sghcp-monitor.log`, avisos por Resend. Se registra con un canario `PROFESSIONAL` de la org demo y pide `/auth/me` y la lista de pacientes: mide si **se puede entrar**, no si el proceso vive. Desde #313 cuenta además las respuestas 5xx de **los dos colores** en una ventana de 5 min y nombra las 3 rutas que más fallan (umbral 3; por debajo el veredicto es `ok` sin matices, porque un aviso por un 500 suelto enseña a ignorar los avisos). Runbook en `docs/ops/MONITORING.md`. Instalada por `/etc/cron.d/sghcp-monitor`, log rotado semanal ×8. **El bit de ejecución lo garantiza `make verify` desde #297** |
-| **Despliegue** | `deploy.yml` a las 22:00 Bogotá o `workflow_dispatch` con motivo; `rollback.yml` escribiendo `volver` (medido en **1,6 s**). Copias pre-migración en `/var/backups/sghcp/predeploy` (7 días). Consola en `/admin` con versión, colores, historial y enlaces al diff. Runbook completo en `docs/ops/PLAN_RELEASE.md` |
+| **Vigilancia** | `scripts/monitor.sh` cada 5 min desde el host → `/var/log/sghcp-monitor.log`, avisos por Resend. Se registra con un canario `PROFESSIONAL` de la org demo y pide `/auth/me` y la lista de pacientes: mide si **se puede entrar**, no si el proceso vive. Desde #313 cuenta además las respuestas 5xx de **los dos colores** en una ventana de 5 min y nombra las 3 rutas que más fallan (umbral 3; por debajo el veredicto es `ok` sin matices, porque un aviso por un 500 suelto enseña a ignorar los avisos). Runbook en `docs/ops/MONITORING.md`. Instalada por `/etc/cron.d/sghcp-monitor`, log rotado semanal ×8. **El bit de ejecución lo garantiza `make verify` desde #297**. **Desde el 2026-08-21 late contra healthchecks.io al final de cada ciclo** (`/fail` si algo salió en rojo), así que si el VPS o el cron mueren avisa el servicio de afuera a los 10 min — y ese camino de fallo es el segundo canal, independiente de Resend |
+| **Despliegue** | `deploy.yml` a las 22:00 Bogotá o `workflow_dispatch` con motivo; `rollback.yml` escribiendo `volver` (medido en **1,6 s**). Copias pre-migración en `/var/backups/sghcp/predeploy` (7 días). Consola en `/admin` con versión, colores, historial y enlaces al diff. **Desde el 2026-08-21 compose se invoca siempre con los dos ficheros** (base + `docker-compose.prod.yml`): con el base solo, los volúmenes se veían declarados pelados y cada despliegue ofrecía recrearlos —"data will be lost"— tres veces sin significar nada. Runbook completo en `docs/ops/PLAN_RELEASE.md` |
 
 **Env crítico en VPS:**
 - `MASTER_KEY` — clave maestra de cifrado PII
@@ -240,7 +257,7 @@ Antes la apertura tenía 27 campos con 16 de texto libre. `TestReconstructedForm
 | `ai-service` | `services/ai-service/` | ✅ Whisper local + Claude, prod |
 | Migrations | `services/core-api/migrations/` | Última: `000080_window_in_flight` (reclamo de ventana en vuelo, PR #288) — aplicada en prod (`schema_migrations` = 80, verificado 2026-08-19). Las aplica el deploy desde PR #255, así que **tienen que ser aditivas**. Ojo: 000052 ya existía (`org_signup_lead`), por eso el salto de numeración |
 | CI/CD | `.github/workflows/` | `build-*.yml` construye y publica en ghcr.io **sin desplegar**; `deploy.yml` (cron 22:00 Bogotá + manual) y `rollback.yml` (confirmación `volver`) hacen el despliegue por SSH. Secrets: `VPS_HOST`, `VPS_SSH_KEY`, `GHCR_TOKEN`. `environment: production`, `concurrency: deploy-prod` |
-| Despliegue (scripts) | `scripts/deploy_switch.sh`, `predeploy_dump.sh`, `migration_rehearsal.sh`, `next_version.sh` | Mitad pura probada en `make verify` (~88 casos entre los cuatro), mitad efectiva sin tests — el patrón de la casa desde `monitor.sh`. Ratchets: `check_exec_bits.sh`, `check_deploy_paths.sh` |
+| Despliegue (scripts) | `scripts/deploy_switch.sh`, `predeploy_dump.sh`, `migration_rehearsal.sh`, `next_version.sh` | Mitad pura probada en `make verify` (~88 casos entre los cuatro), mitad efectiva sin tests — el patrón de la casa desde `monitor.sh`. Ratchets: `check_exec_bits.sh`, `check_deploy_paths.sh`, `check_compose_files.sh` |
 | Claude skills | `~/.claude/commands/` + `~/.claude/skills/` | `chapni-social` (NO sincronizada al repo `claude-skills`) es ahora un sistema de content-ops completo: auditoría de estado (paso 0, comandos `estado`/`semana`), log con confirmación de publicación en el repo chapni, sinergia con el hub `/recursos`, política de slots perdidos, ritual dominical en batch, generador de banners (`render_banner.py`) y bios/perfiles oficiales documentados. Supervisada por rutina cloud dominical (reporte a Gmail). `ui-ux-pro-max` instalada; `ui-styling` desinstalada 2026-06-28 |
 
 ---

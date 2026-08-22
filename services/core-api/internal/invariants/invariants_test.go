@@ -334,3 +334,79 @@ func TestThePIICheckStillWorks(t *testing.T) {
 		}
 	}
 }
+
+// ─── Redis streams have a ceiling ────────────────────────────────────────────
+
+// xAddArgs matches a Redis stream producer: the composite literal handed to
+// XAdd. Every one of them must set MaxLen.
+//
+// XACK does not delete. It takes an entry off the consumer group's pending list
+// and leaves the entry in the stream for ever, so a queue that is working
+// perfectly grows without bound and never once looks wrong. The three AI lanes
+// held 120 KB the day this check was written — small enough that nothing would
+// have noticed for a year, which is why it is capped now rather than after.
+//
+// The reason it is a source check and not a unit test on the four call sites we
+// happen to have today: the failure is a *new* producer added later without a
+// ceiling, by someone who has no reason to know any of this. A test that names
+// the existing four would keep passing while the fifth one leaked.
+var xAddArgs = regexp.MustCompile(`XAdd\((?:ctx|context\.\w+\(\))?[^,]*,\s*&redis\.XAddArgs\{`)
+
+func TestEveryRedisStreamIsCapped(t *testing.T) {
+	producers := 0
+	for _, path := range goFiles(t) {
+		if strings.HasSuffix(path, "_test.go") {
+			continue // a test's stream dies with its container
+		}
+		src, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(src)
+		for _, loc := range xAddArgs.FindAllStringIndex(text, -1) {
+			producers++
+			// The literal ends at the first closing brace at its own nesting
+			// depth; Values is a nested map, so counting is the only honest way
+			// to find where the arguments stop.
+			body, ok := literalBody(text[loc[1]:])
+			if !ok {
+				t.Errorf("%s:%d has an XAddArgs literal this check cannot read to the end of",
+					shortPath(path), 1+strings.Count(text[:loc[0]], "\n"))
+				continue
+			}
+			if !strings.Contains(body, "MaxLen:") {
+				t.Errorf("%s:%d adds to a Redis stream without a MaxLen.\n"+
+					"\tXACK does not delete — an uncapped stream grows for ever, and the\n"+
+					"\tsuggestion lane's entries carry patient_id and org_id in the clear,\n"+
+					"\tso the tail becomes a permanent unencrypted record of which patient\n"+
+					"\thad clinical activity and when. Add:\n"+
+					"\t\tMaxLen: redisstream.MaxLen,\n\t\tApprox: true,",
+					shortPath(path), 1+strings.Count(text[:loc[0]], "\n"))
+			}
+		}
+	}
+	// Same guard as everywhere else here: a regexp that stops matching passes
+	// silently and for ever.
+	if producers < 4 {
+		t.Fatalf("only found %d XAddArgs literals — the pattern has stopped matching "+
+			"how this codebase enqueues, so this check is looking at nothing", producers)
+	}
+}
+
+// literalBody returns the contents of a composite literal whose opening brace
+// has already been consumed.
+func literalBody(s string) (string, bool) {
+	depth := 1
+	for i, r := range s {
+		switch r {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return s[:i], true
+			}
+		}
+	}
+	return "", false
+}

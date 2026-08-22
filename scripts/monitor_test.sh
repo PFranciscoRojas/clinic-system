@@ -256,6 +256,36 @@ check "no answer is not an accepted send" \
 check "the word id in prose is not a receipt" \
     no "$(resend_accepted '{"message":"missing id parameter"}')"
 
+echo "==> monitor.sh latido externo"
+
+# El agujero que tapa: todo lo de arriba solo avisa mientras esta máquina esté
+# viva. Si se cae el VPS o se rompe cron, el síntoma es silencio, y el silencio
+# se lee igual que salud. Estas cuatro líneas son las que deciden si el
+# temporizador de afuera se entera.
+
+check "un ciclo limpio late al éxito" \
+    "https://hc-ping.com/uuid" "$(heartbeat_target https://hc-ping.com/uuid 0)"
+
+check "un ciclo con algo en rojo late al fallo" \
+    "https://hc-ping.com/uuid/fail" "$(heartbeat_target https://hc-ping.com/uuid 1)"
+
+# Una barra de más en el fichero de configuración no puede producir //fail: el
+# servicio lo trataría como otro chequeo, que no existe, y la alarma se quedaría
+# esperando un latido que sí se está mandando.
+check "la barra sobrante no inventa otro destino" \
+    "https://hc-ping.com/uuid/fail" "$(heartbeat_target https://hc-ping.com/uuid/ 1)"
+
+# Fail-closed, como todo lo demás aquí. Un recuento que no se puede leer es un
+# ciclo que no sabemos si salió bien.
+check "un recuento ilegible late al fallo" \
+    "https://hc-ping.com/uuid/fail" "$(heartbeat_target https://hc-ping.com/uuid x)"
+
+# La única rama que no es fail-closed, y es deliberada: sin URL no hay destino
+# que inventar. Si esto devolviera algo, el ciclo intentaría hablarle a una
+# cadena vacía y el error de curl se leería como avería de producción.
+check "sin URL configurada no hay latido" \
+    "" "$(heartbeat_target "" 0)"
+
 if [[ $failures -ne 0 ]]; then
     echo
     echo "The monitor is misreading production. It decides whether an outage"
