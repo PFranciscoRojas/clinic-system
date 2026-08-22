@@ -81,6 +81,26 @@ jobs:
 
             set -a; . ./.env; set +a
 
+            # ¿Existe la imagen antes de tocar nada?
+            #
+            # El 2026-08-21 se lanzó la ventana a mano 17 segundos después de un
+            # merge y el build todavía estaba corriendo. El despliegue hizo la
+            # copia de la base, ensayó la migración, **retiró el color de
+            # reserva** y solo entonces descubrió que la imagen no existía. Nada
+            # se rompió —el color activo siguió sirviendo— pero durante unos
+            # minutos no hubo a dónde volver: rollback_target exige que el otro
+            # color esté corriendo, y ya no lo estaba.
+            #
+            # El orden estaba al revés: se desmontaba la red de seguridad antes
+            # de comprobar el paso arriesgado. Preguntar aquí cuesta una llamada
+            # al registro y deja el sistema exactamente como estaba.
+            IMAGE="ghcr.io/pfranciscorojas/clinic-system-core-api:${{ steps.target.outputs.sha }}"
+            if ! docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
+              echo "::error::No existe imagen para ${{ steps.target.outputs.sha }}. Lo más probable es que el build siga corriendo — espera a que termine y vuelve a lanzar. No se ha tocado nada."
+              exit 1
+            fi
+            echo "imagen encontrada: $IMAGE"
+
             # Una copia de la base tomada segundos antes de migrar, no a las 02:00
             # como la diaria. Si no se puede tomar, el despliegue para aquí.
             ./scripts/predeploy_dump.sh "${{ steps.target.outputs.sha }}"
