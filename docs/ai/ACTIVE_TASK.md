@@ -1,50 +1,48 @@
 ## Sin tarea pendiente
 
-Sesión del 2026-08-21: se cerraron los cuatro pendientes de infraestructura que
-quedaban, todos de la misma familia — instrumentos que decían algo distinto de lo
-que pasaba.
+Sesión del 2026-08-22, sin código. El usuario está haciendo el reto "Máquina de
+Contenido con AI" (Lab10) y pidió aterrizar cada clase al proyecto. Salieron dos
+entregables de marketing (`#318`), una poda de contexto (`#319`) y la skill
+`chapni-social` ampliada con carruseles.
 
-- **El dead man's switch está encendido.** `monitor.sh` late contra
-  healthchecks.io al cerrar cada ciclo, y a `/fail` con las líneas rojas en el
-  cuerpo cuando algo no salió `ok`. Era el único agujero que la vigilancia no
-  podía tapar por construcción: solo avisa mientras el VPS esté vivo, así que una
-  caída del servidor, un cron roto o una llave de Resend rechazada producían el
-  mismo silencio. Ahora el temporizador vive afuera. La URL del ping es un
-  secreto —quien la tenga puede callar la alarma— y vive en
-  `/etc/sghcp/monitor.env` modo 600.
-- **Los streams de Redis tienen techo.** `XACK` no borra, así que crecían para
-  siempre. Eran cuatro productores, no los tres anotados.
-- **El aviso de "data will be lost" desapareció**, y de paso resultó ser falso:
-  esos volúmenes son bind al directorio del host, y borrarlos deja el directorio
-  intacto. Lo que se estaba perdiendo no eran datos, era la costumbre de leer los
-  avisos.
-- **`govulncheck` vuelve a significar una sola cosa**: la red se separó del
-  análisis.
+Lo que se aprendió, más útil que lo que se produjo:
 
-Decisión del usuario: **los directorios de software quedan descartados**. Los
-revisó uno por uno y no valen nada. Con eso se cae la palanca que el plan SEO daba
-por hecha para los primeros backlinks.
+- **El ICP individual es más estrecho de lo que se creía.** ENLAPSIC 2022 (Colpsic,
+  n = 8.495): 18% del gremio sin ningún ingreso reportado, 27% hasta $1.5M/mes. A
+  $180.000 de lista, el mercado del plan individual es el ~15% que gana más de $3.5M
+  y ejerce independiente. El argumento de venta correcto es por sesión, no por mes.
+- **El cifrado dejó de ser diferenciador**: PSICONAPSIS ya lo vende en Colombia con
+  exportación RIPS. Whisper local sigue siéndolo.
+- **23 posts publicados desde julio, cero métricas.** No se sabe qué produjeron.
+- **Ningún caso de cliente**, lo que deja 6 de los 30 ángulos de contenido sin poder
+  escribirse, y son justo los que más pesan en la decisión de compra.
 
 ## Sugerencia de siguiente paso
 
-La infraestructura ya no tiene nada abierto que bloquee. Lo que queda apunta a que
-entre gente, y casi nada de eso lo puede hacer un agente:
+Todo lo abierto apunta a lo mismo y casi nada lo puede hacer un agente. En orden de
+retorno:
 
-1. **Dos o tres psicólogas externas en beta de diseño.** Es el bloqueante 🔴 real
-   del go-live 1.0.0. Hay 2 contactos disponibles y el mensaje de reclutamiento
-   está escrito en `BACKLOG.md` → Validación / Go-to-market. Ya hay dónde
-   soltarlas sin miedo: vuelta atrás en 1,6 s, copia antes de cada migración y un
-   vigilante que ahora también avisa cuando es él quien se calla.
-2. **Las tres frases de Marcela (una conversación).** Suben de prioridad
-   justamente porque los directorios se cayeron: sin backlinks de relleno, la
-   autoridad tiene que venir de contenido y de prueba social real. Cero
-   testimonios en un producto que guarda historias clínicas. Preguntas en
-   `docs/ai/PLAN_VENTA_DIRECTA.md` §4.0.1.
-3. **Las cinco entrevistas B2B**, paradas desde el 2026-07-07 (guion en
-   `PLAN_B2B_COMERCIAL.md` §4). Bloquean el precio por tramos, la decisión sobre
-   RIPS y publicar la tabla en la landing.
-4. **Revisión jurídica de ToS y privacidad** antes del primer cliente pagando.
+1. **Instrumentar métricas de activación.** Es una tarde y desbloquea todo lo demás:
+   sin saber qué produjeron los 23 posts no se puede decidir si el problema es el
+   alcance, el gancho, la landing o la oferta. Está en `Bloqueantes` como 🔴 y va
+   antes de subir volumen o agregar formatos.
+2. **Las cinco entrevistas B2B**, paradas desde el 2026-07-07 (guion de 11 preguntas
+   en `PLAN_B2B_COMERCIAL.md` §4). Bloquean el precio por tramos, la decisión sobre
+   RIPS, y de paso llenan el giro "caso" del banco de ángulos.
+3. **Dos o tres psicólogas externas en beta de diseño** — sigue siendo el bloqueante
+   🔴 del go-live 1.0.0.
+4. **Una conversación grabada con Marcela**, pidiendo permiso de uso. Es la única
+   profesional con uso diario real y la única fuente posible de prueba social hoy.
+5. **Revisión jurídica de ToS y privacidad** antes del primer cliente pagando.
 
-Del lado del agente, cuando se pida: el stack efímero completo en CI (fase 1.b,
-anotada en BACKLOG y explícitamente no bloqueante), la sección de testimonios en
-cuanto existan las frases, y el batch de redes de la semana.
+Del lado del agente, cuando se pida: la plantilla de reel para `chapni-social`, los
+13 tests de invariantes de `PLAN_TESTING_GAUNTLET.md` (RLS en tablas nuevas, dinero en
+NUMERIC, PII en BYTEA, `ai_drafts` inmutables, anonimización antes del LLM), y el batch
+de redes de la semana.
+
+## Cabo suelto de infraestructura
+
+La skill `chapni-social` **no está versionada en ningún repo**. El repo `claude-skills`
+(`~/.claude/commands`) solo rastrea los `.md` de comandos sueltos, no las skills de
+carpeta. Todo lo que se le agregó hoy — `templates/slide.html`,
+`scripts/render_carousel.py`, `references/angulos.md` — vive únicamente en esta máquina.

@@ -27,6 +27,20 @@
   ComparaSoftware se revisaron uno por uno y no valen la pena. Se anota para no volver a
   proponerlo: con esto se cae la palanca de backlinks que el plan SEO daba por hecha.
 
+- **Grabar la voz de los videos cortos — Francisco (2026-08-22)** — decisión tomada: nada
+  de texto a voz de catálogo. Le hablamos a psicólogos, la audiencia más escéptica frente
+  a la IA en trabajo clínico, y una voz sintética narrando "el audio nunca sale de tu
+  servidor" se lee como contradicción. Voice Exchanger sí, si alguna vez hace falta
+  uniformar el timbre. Registrado en la skill `chapni-social`.
+- **Cambiar la mezcla de formatos, no subir el volumen (2026-08-22)** — de los 7 slots
+  semanales, convertir uno a carrusel y uno a reel. El carrusel ya renderiza
+  (`render_carousel.py`); falta la plantilla de reel. Mismo esfuerzo, más alcance por
+  pieza. Va DESPUÉS de instrumentar las métricas de activación.
+- **Fotos de ambiente de consultorio (2026-08-22)** — Chapni solo comunica con tipografía
+  y color. Falta material fotográfico de ambiente: espacio vacío, escritorio, libreta,
+  ventana. Escena montada de sesión con "paciente" se evita por diferenciación (es la foto
+  que usan todos los competidores), no por privacidad.
+
 ## Outreach B2B — Explee AutoGTM (2026-07-22)
 
 > Herramienta externa (explee.com) que corre campañas de cold email end-to-end para chapni.com (proyecto `id 21203`). Se revisó por su API pública. **Estado actual: TODO CONGELADO** — autopilot off, auto-reply off, presupuesto del proyecto en $0, gasto acumulado $0. Nada se envía ni gasta hasta decisión explícita.
