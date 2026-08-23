@@ -208,9 +208,10 @@ retorno:
 ### Regla operativa nueva
 
 Toda sesión de feedback con un profesional se graba o se transcribe **cruda** antes de
-convertirse en ticket. `tareas_clinica.md` es la prueba de por qué: los 7 ítems están
-escritos en lenguaje de ingeniería y el verbatim original se perdió. Lo que la psicóloga
-dijo de verdad sobre el borrador quemado a TCC no está en ningún archivo del repo.
+convertirse en ticket. El archivo `tareas_clinica.md` (retirado el 2026-08-22, vive en git
+y en el CHANGELOG) es la prueba de por qué: sus 7 ítems estaban escritos en lenguaje de
+ingeniería y el verbatim original se perdió. Lo que la psicóloga dijo de verdad sobre el
+borrador quemado a TCC no quedó en ningún archivo del repo.
 
 ---
 

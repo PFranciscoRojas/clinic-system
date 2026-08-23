@@ -17,7 +17,8 @@ conserva el giro conceptual; se descarta la plantilla sintáctica.
 y de voz pública prestada. Ver el semáforo de confianza en `voz-del-cliente-2026-08.md` §1.
 
 **Criterio aplicado (clase 2 del Día 2):** solo entran dolores de *antes de comprar*.
-Por eso `tareas_clinica.md` queda fuera de este banco: sus 7 ítems son quejas de una
+Por eso el feedback de uso queda fuera de este banco: los 7 ítems que se rastrearon en
+`tareas_clinica.md` (archivo retirado el 2026-08-22, ver CHANGELOG) eran quejas de una
 profesional que ya usa el producto. Sirven para el roadmap, no para atraer audiencia nueva.
 
 ---
