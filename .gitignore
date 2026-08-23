@@ -32,3 +32,8 @@ skills-lock.json
 # en cada despliegue y el despliegue hace git pull sobre este mismo directorio.
 # Ver caddy-upstream.conf.example.
 /caddy-upstream.conf
+
+# Voz del cliente sin procesar: nombres y contactos de profesionales reales.
+# Solo se commitea el documento minado (docs/marketing/voz-del-cliente-*.md).
+/docs/marketing/raw-data/*
+!/docs/marketing/raw-data/README.md
