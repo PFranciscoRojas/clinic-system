@@ -43,7 +43,7 @@ hecho solo con los primeros construye seguidores que nunca compran.
 
 | Giro | Titular | Ancla |
 |---|---|---|
-| Mecanismo | Tu tarifa no la fijas vos del todo. Hay una resolución que ya le puso un piso al mercado, y todo el que contrata la conoce | Tarifa SOAT 0,74 SMLDV |
+| Mecanismo | Tu tarifa no la fijas tú del todo. Hay una resolución que ya le puso un piso al mercado, y todo el que contrata la conoce | Tarifa SOAT 0,74 SMLDV |
 | Quitar la culpa | El 18% de los psicólogos encuestados en 2022 no reportó ningún ingreso. No es tu caso raro, son 8.495 personas respondiendo lo mismo | ENLAPSIC 2022, Tabla 14 |
 | **Caso** | **SIN MATERIAL** | — |
 | Comparación | Cuando el mes no cierra, casi todos bajan la tarifa. Lo que en realidad mueve la aguja es cuántas de las horas que ya trabajás terminan facturadas | Inferencia, marcar como opinión |
@@ -56,8 +56,8 @@ hecho solo con los primeros construye seguidores que nunca compran.
 | Mecanismo | El 80% del gremio trabaja por prestación de servicios o por su cuenta. El software clínico que se vende aquí se diseñó para quien firma contratos institucionales | ENLAPSIC 2022, Figura 55 |
 | Quitar la culpa | Si abriste uno de esos sistemas y te perdiste entre módulos de facturación a EPS y roles administrativos, no fue torpeza tuya. Esa herramienta nunca se pensó para una persona sola | Análisis de producto de competidores |
 | **Caso** | **SIN MATERIAL** | — |
-| Comparación | Excel, Google Calendar y el WhatsApp personal. Tres herramientas gratis que no se hablan entre ellas, y el pegamento entre las tres sos vos | Reformulación de un patrón que la propia categoría reconoce |
-| Objeción | "Soy uno solo, para qué me voy a meter en un sistema". La respuesta honesta depende de cuántos pacientes activos tenés, y hay un número debajo del cual la respuesta es que no | Requiere definir el número |
+| Comparación | Excel, Google Calendar y el WhatsApp personal. Tres herramientas gratis que no se hablan entre ellas, y el pegamento entre las tres eres tú | Reformulación de un patrón que la propia categoría reconoce |
+| Objeción | "Soy uno solo, para qué me voy a meter en un sistema". La respuesta honesta depende de cuántos pacientes activos tienes, y hay un número debajo del cual la respuesta es que no | Requiere definir el número |
 
 ## 4. D3 — La tarifa oficial
 
@@ -67,7 +67,7 @@ hecho solo con los primeros construye seguidores que nunca compran.
 | Quitar la culpa | Cuando una institución te ofrece una tarifa que suena a insulto, no está improvisando. Está citando una norma | Tarifa SOAT |
 | **Caso** | **SIN MATERIAL** | — |
 | Comparación | Veintiocho mil seiscientos pesos contra los ochenta o doscientos mil de una consulta particular en Bogotá. Esa distancia explica media profesión | SOAT + rango de mercado |
-| Objeción | "Cobrar particular suena bien hasta que te toca conseguir vos los pacientes". Ahí está el trabajo real, y casi nadie lo nombra | Honesto, sin prometer demanda |
+| Objeción | "Cobrar particular suena bien hasta que te toca conseguir tú los pacientes". Ahí está el trabajo real, y casi nadie lo nombra | Honesto, sin prometer demanda |
 
 ## 5. D4 — Las horas de papeleo
 
@@ -76,8 +76,8 @@ hecho solo con los primeros construye seguidores que nunca compran.
 | Mecanismo | La nota clínica no cabe dentro de la hora que cobrás. Vive en el rato de después, y ese rato no está en ninguna tarifa | Estructura del día clínico |
 | Quitar la culpa | "Lo que no se mete nunca en ese presupuesto inicial es el propio sueldo" | andainas.es, cita textual |
 | **Caso** | **PARCIAL** — hay una sola profesional con uso diario real. Requiere su permiso explícito y grabar la conversación primero | Marcela Chapues |
-| Comparación | Escribir la nota a las diez de la noche contra dictarla mientras todavía tenés la sesión fresca | Producto |
-| Objeción | "No quiero que una IA escriba mi historia clínica". Es la objeción correcta y hay que responderla de frente: el borrador no se guarda hasta que vos lo aprobás, y el audio no sale del servidor | `ai_drafts` inmutables + Whisper local |
+| Comparación | Escribir la nota a las diez de la noche contra dictarla mientras todavía tienes la sesión fresca | Producto |
+| Objeción | "No quiero que una IA escriba mi historia clínica". Es la objeción correcta y hay que responderla de frente: el borrador no se guarda hasta que tú lo apruebas, y el audio no sale del servidor | `ai_drafts` inmutables + Whisper local |
 
 ## 6. D5 — El joven que monta consulta por descarte
 
