@@ -57,8 +57,12 @@ Brechas que hacen perder tráfico o exigir presencia de Francisco:
 - 6 respuestas listas: video demo · precio y cómo pagar · seguridad/cifrado y Ley 1090 · cómo empezar (link signup) · migración de datos · soporte.
 - Redactadas con las reglas anti-IA de copy. Entregable: `docs/project/WHATSAPP_RESPUESTAS.md` + guardarlas en la app de WhatsApp Business.
 
-### 2.3 Directorios de software — tarea externa con checklist
-- Capterra, GetApp, Software Advice, ComparaSoftware, appvizer (es).
+### 2.3 Directorios de software — ~~DESCARTADO 2026-08-21~~
+> Francisco los revisó uno por uno el 2026-08-21 y decidió que no valen la pena. Con esto
+> se cae la palanca de backlinks que la sección de SEO daba por hecha: la autoridad tiene
+> que venir de contenido propio y de prueba social real.
+
+- ~~Capterra, GetApp, Software Advice, ComparaSoftware, appvizer (es).~~
 - Assets necesarios: logo, 4–6 screenshots (con datos de ejemplo, nunca reales), descripción corta/larga, categoría (EHR / práctica de psicología), link con UTM.
 
 ## Fase 3 — Crecimiento compuesto
@@ -82,7 +86,7 @@ Brechas que hacen perder tráfico o exigir presencia de Francisco:
 1. **1.2 emails de trial** y **1.3 checklist** (código, esta semana — evitan que los trials actuales mueran).
 2. **1.1 video** (Francisco graba; guion y sección de landing los hace Claude).
 3. **2.2 respuestas WhatsApp** (30 min) y **2.1 referidos v1** (código pequeño).
-4. **2.3 directorios** (una tarde de Francisco con el checklist).
+4. ~~2.3 directorios~~ — descartado 2026-08-21.
 5. **3.1 blog** como rutina quincenal.
 
 **Nota:** los precios B2B por tramo NO se publican aún — las entrevistas van primero (ver `PLAN_B2B_COMERCIAL.md`).
