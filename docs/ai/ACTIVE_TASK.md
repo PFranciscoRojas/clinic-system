@@ -40,9 +40,23 @@ Del lado del agente, cuando se pida: la plantilla de reel para `chapni-social`, 
 NUMERIC, PII en BYTEA, `ai_drafts` inmutables, anonimización antes del LLM), y el batch
 de redes de la semana.
 
-## Cabo suelto de infraestructura
+## Cabo suelto de infraestructura — cerrado 2026-08-24
 
-La skill `chapni-social` **no está versionada en ningún repo**. El repo `claude-skills`
-(`~/.claude/commands`) solo rastrea los `.md` de comandos sueltos, no las skills de
-carpeta. Todo lo que se le agregó hoy — `templates/slide.html`,
-`scripts/render_carousel.py`, `references/angulos.md` — vive únicamente en esta máquina.
+Las 13 skills de carpeta de `~/.claude/skills/` no estaban versionadas en ningún
+repo: `claude-skills` solo rastreaba los `.md` de comandos sueltos. `chapni-social`
+era la que dolía — scripts de render, plantillas, fuentes, logos y el banco de
+ángulos vivían en una sola máquina.
+
+Resuelto en `PFranciscoRojas/claude-skills`, rama **`folder-skills`** (`535dd7b`):
+`~/.claude/skills` es ahora su propio checkout y se versiona a sí mismo, sin copias
+ni paso de sincronización que se pueda olvidar. Quedan fuera `output/` (31 MB que
+los scripts regeneran) y las dos skills de terceros.
+
+Se descartó espejar las carpetas dentro de `~/.claude/commands/`: Claude Code
+escanea ese árbol completo y cada copia se registraba como una skill duplicada,
+incluso con el directorio prefijado con punto.
+
+El Paso 5 de `/actualizar-contexto` ahora revisa los **dos** checkouts — el olvido
+del segundo es exactamente por lo que esto pasó meses sin respaldo. El README del
+repo también se despodrió: duplicaba el estado de `clinic-system` y seguía diciendo
+"v0.4.0 — Fase 5" con migraciones `000001–000005`.
