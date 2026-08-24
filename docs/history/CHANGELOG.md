@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-08-22 — voz del cliente, banco de ángulos y poda de planes
+
+> Sesión sin código. El usuario está haciendo el reto "Máquina de Contenido con AI" (Lab10) y pidió aterrizar cada día al proyecto; terminó en dos entregables y una limpieza de contexto.
+
+- chore(docs): **documento de voz del cliente v0 y banco de 30 ángulos** (PR #318). El método del reto asume conversaciones propias que minar y Chapni no las tiene, así que el combustible se sustituye por datos duros del gremio (ENLAPSIC 2022 de Colpsic, n = 8.495, extraída del PDF) y voz pública de terceros, con semáforo de confianza por fuente. Tres hallazgos que valen más que el contenido: **(1)** la voz cruda de psicólogos colombianos casi no está indexada en la web abierta — lo que aparece al buscar es SEO escrito por los propios vendedores de software, y confundir eso con voz de cliente es la trampa que convierte el ejercicio en contenido genérico con pasos intermedios; **(2)** el ICP individual es mucho más estrecho de lo que sugiere el tamaño del gremio: 18% sin ningún ingreso reportado en 2022 y 27% hasta $1.5M/mes, así que a $180.000 de lista el mercado real es el ~15% que gana más de $3.5M, y el ángulo de venta correcto es por sesión y no por mes; **(3)** PSICONAPSIS ya vende "historia clínica encriptada" en Colombia con exportación RIPS, o sea que el cifrado por sí solo dejó de ser diferenciador y Whisper local sigue siéndolo. De los 30 ángulos, **24 son publicables**: los 6 del giro "caso" quedan vacíos porque no existe un solo caso de cliente, y el hueco se documenta en vez de fabricar testimonios.
+- chore(docs): **retirados 6 planes cerrados y podado el BACKLOG** (PR #319). Fuera `QUEUE.md` (sus 4 ítems en producción: enforce de `MP_WEBHOOK_SECRET`, migración `000031`, RLS en `ai_drafts`, `VerifyEmailChangePage`), `PLAN_IA_puntos_2_6_7.md`, `tareas_clinica.md`, `PLAN_AUDIT_FIXES.md`, `PLAN_GUIA_SISTEMA.md` y `PLAN_ASSESSMENTS.md`. `BACKLOG.md` de 187 a 133 líneas: 54 ítems resueltos y 5 secciones que quedaron vacías. **`PLAN_LATENCIA_AUDIO.md` se salvó de la poda** aunque su trabajo está hecho y eran 914 líneas: está citado desde 9 archivos de código (`docker-compose.yml`, `config.go`, `eta.go`, `windows.py` y cinco tests), o sea que no es un plan viejo sino el documento de referencia del subsistema, y borrarlo dejaba 9 punteros colgando. La lección operativa: antes de borrar un plan hay que buscar quién lo referencia en todo el repo, no solo en `docs/`.
+- skill `chapni-social`: **carruseles** (no versionado en este repo). `templates/slide.html` de 1080×1350 y `scripts/render_carousel.py`, que reusa la paleta, las fuentes y el pipeline HTML→PNG que ya existían — sin Higgsfield ni Canva, que habrían sido un paso atrás. El validador falla si el carrusel se sale de 4-8 slides, si un slide pasa de 40 palabras o 3 ideas, o si un slide con cifra o cita no trae fuente visible; esa última no es preferencia de estilo, es que le hablamos a profesionales colegiados sobre su propia profesión. Atrapó una portada con un dato sin fuente y, al revisar, un error de fondo que iba a publicarse: un slide decía "el 80% trabaja por su cuenta" cuando la ENLAPSIC dice "vinculación temporal **o** independiente", que incluye un 20% a término fijo. Se corrigió también la regla que yo mismo había escrito prohibiendo fotos de consultorio: la justificaba con privacidad y era falsa — un modelo de stock no es un paciente. Lo que sí se sostiene es evitar la escena montada de sesión por diferenciación, porque es la foto que usan todos los competidores.
+- decisión: **la voz de los videos la graba Francisco**, no un catálogo de texto a voz. Registrado en la skill.
+- registro: **23 posts publicados desde el 2026-07-06 y ninguna métrica de activación**. Entra a `Bloqueantes` como 🔴: sin ese número no se puede saber si lo que falla es el alcance, el gancho, la landing o la oferta. Instrumentarlo va antes de subir el volumen o de agregar formatos.
+
+---
+
 ## 2026-08-21 — cerrar los avisos que no avisaban
 
 > Cuatro pendientes que tenían la misma forma: instrumentos que decían algo distinto de lo que pasaba. Uno callaba, uno gritaba en falso, uno crecía sin que nadie mirara y uno se disfrazaba de hallazgo de seguridad.
@@ -94,40 +106,14 @@
 
 ---
 
-## 2026-06-26 — 2026-06-30 (resumen, sesiones 7–24)
+## Junio 2026 (resumen, compactado 2026-08-22)
 
-- **Pérdida real de contenido clínico en producción (sesiones 23–24):** el autoguardado se construyó y probó solo contra el formato integrado y nunca contempló `customSections`, o sea el contenido de todo registro creado con **plantilla personalizada**: no se guardaba en local, el fallback al servidor no se disparaba y los ciclos posteriores sobrescribieron el contenido real con el formulario vacío (410→610→139 bytes en la BD). Un registro quedó irrecuperable. Causa de fondo del bloque: `registerType: 'autoUpdate'` recargaba la página sin avisar en cada deploy. Fix en dos fases: recarga diferida con banner, y autoguardado real en servidor (migración 000048 con `finalized_at`, endpoints `autosave`/`finalize` separados de los estrictos, `session_number` asignado al finalizar para no dejar huecos).
-- **Need-to-know clínico (sesión 8, migración 000041):** `patient_staff_rel` obligatorio — un profesional sin fila activa recibe 403 `NO_PATIENT_ACCESS` (Res. 1995/1999 Art. 14), sin workaround; `SYSTEM_ADMIN` pasa, `CLINIC_ADMIN` puro conserva el break-the-glass. La sesión 7 ya había partido el perfil del paciente en Agenda (libre) e Historia clínica (con gate), y el gate se afinó para actuar solo al abrir contenido confidencial, no al ver metadata.
-- **Plantillas de registro definibles por el profesional (sesiones 15–16, migración 000046):** markdown `## título {tipo}` → `SectionDef[]`, CRUD con vista previa en vivo, catálogo de widgets compartido Go/Python/TS, el worker de IA construyendo el prompt desde el schema, y el PDF respetando etiquetas y orden de la plantilla vigente al aprobarse.
-- **Agenda y pagos:** el selector de profesional al agendar como admin enviaba el `user_id` del admin (un `<select>` cuyo valor inicial no coincidía con ninguna opción), lo que además bloqueaba al profesional real de su propio paciente; pagos por tenant (000042) con token cifrado, webhook secret por tenant (000043) y badge prueba/producción (000044); un pago real de COP $1.000 verificado de punta a punta.
-- **Plataforma y CI:** pestaña "Plataforma" del operador con rotación de credenciales MP cifradas (000045); tres capas de CI (`go test` bloqueando el build, `tsc --noEmit`, smoke test de 8 pasos tras cada deploy).
-- **Decisión de fundador (sesión 14):** congelar olas de features y validar demanda con psicólogas externas. El cuello es la distribución, no el producto — el mismo diagnóstico que sigue vigente.
+> Del arranque del vertical SaaS al cierre de las olas de gobernanza y plantillas. Detalle
+> completo en el git log; aquí queda lo que sigue explicando decisiones vigentes.
 
-## 2026-06-21 — 2026-06-24 (resumen)
-
-- **Gobernanza y legal (sesiones 5–6):** cuenta desactivada → 403 en español (chequeo *después* del bcrypt, no filtra existencia); migración 000039 deja a CLINIC_ADMIN en solo-lectura clínica con break-the-glass justificado en `audit_log` (Res. 1995/1999); CMS legal editable en BD (migración 000040) con ToS/privacidad/DPA servidos desde `legal_documents`; migración 000038 sella `terms_accepted_at`/`dpa_accepted_at` en el signup (Ley 1581).
-- **Consola del sistema (sesiones 3–4):** tablero SYSTEM_ADMIN con disco/RAM/CPU, métricas de PostgreSQL y Redis, cola IA, alertas server-side y 3 acciones de mantenimiento Docker; estado de backup leído de `/var/lib/sghcp/last_backup_ok`; baja de miembros por soft delete con guards (no self, no último admin). Decisión de arquitectura: multi-tenant compartido, no VPS por cliente.
-- **Google Calendar:** OAuth per-profesional con tokens cifrados (migración 000035), sync SGHCP→Google en create/cancel, backfill al conectar y limpieza al desconectar. Bug crítico: el service worker Workbox interceptaba la navegación al callback OAuth (`navigateFallbackDenylist`).
-- **Booking y pagos:** RLS en las tablas del flujo público con resolvers `SECURITY DEFINER` (migración 000032, cerró el bloqueante RLS); pagos diferidos Efecty/cash con hold extendido y voucher (000033); firma de webhook MP obligatoria, sin fail-open (cerró B-11); política de reembolso aceptada antes del pago (000031, cerró B6); guard anti doble-booking con estado `PAID_CONFLICT`.
-- **Clínico y pacientes:** Nº de HC consecutivo por tenant con advisory lock (000030) visible en la franja de identificación y en el PDF; estado civil/escolaridad/ocupación como blob cifrado (000029); workspace de redacción dirigido por estado en la pantalla de cita; grabación que sobrevive a F5 vía IndexedDB; preferencias de IA por profesional (estilo y tono) que viajan al prompt (000037).
-- **Infra — incidente de disco:** disco al 100% con PostgreSQL en crash loop; recuperado sin pérdida de WAL. Prevención permanente: journald capado a 200 MB, cron semanal de prune, alerta diaria si >80%, build de las imágenes movido a GitHub Actions + GHCR (el VPS dejó de compilar) y borrado del audio tras transcribir (PHI + disco).
-- Retirado el flujo "Solicitudes web" completo (migración 000036); `/book/:slug` + MercadoPago quedó como único camino público. Export CSV de pacientes, cambio de correo admin con token, y gestión de roles del equipo.
-
----
-
-## 2026-06-16 — 2026-06-20 (resumen)
-
-- Formatos clínicos F1–F4 alineados a los documentos físicos de Marcela + fix white-screen por arrays `undefined` en borradores stale (PRs #101–#106).
-- Formulario paciente y página de cita: validaciones, SlotPicker de disponibilidad, cancelar/reagendar inline desde el calendario (#92–#96).
-- BC-6 Facturación completo: tarjeta/PSE/Efecty/Nequi, filtros de período, balance por paciente (#80–#91, migraciones 000024–000026).
-- BC-6 multi-tenant habilitado + integración MercadoPago (webhook, PSE/Efecty/Nequi/tarjeta) + RLS en todas las tablas del sistema (#48–#73).
-
----
-
-## 2026-06-10 — 2026-06-15 (resumen)
-
-- `v0.5.0` tag: historia clínica psychology-native, consentimientos digitales, plan terapéutico, PDF export, audit log.
-- Ola Booking: `/book/:slug` público, pago MP único, emails automáticos 24h/2h, agenda con pago visible.
-- Ola 2 SaaS: multi-tenant RLS, signup self-serve, trial 30 días, gating 402, cobro MP suscripción mensual.
-- Ola 3 IA iniciada: recap pre-sesión + plan sugerido con Whisper + Claude Sonnet.
-- Migración inicial a VPS Hetzner (pre-wipe backup: `pre_wipe_20260616_1749.dump`).
+- **`v0.5.0` y las tres olas base (06-10 a 06-20):** historia clínica psychology-native, consentimientos, plan terapéutico, PDF con audit log; booking público `/book/:slug` con MercadoPago y emails 24h/2h; SaaS multi-tenant con RLS en todas las tablas, signup self-serve, trial de 30 días y gating 402; Ola 3 de IA iniciada (Whisper + Claude). BC-6 Facturación completo (tarjeta/PSE/Efecty/Nequi). Migración inicial al VPS Hetzner.
+- **Gobernanza, legal e integraciones (06-21 a 06-24):** CLINIC_ADMIN en solo-lectura clínica con break-the-glass justificado en `audit_log` (Res. 1995/1999, migración 000039); CMS legal en BD (000040); aceptación de ToS/DPA sellada en el signup (Ley 1581, 000038); Google Calendar OAuth per-profesional con tokens cifrados (000035); RLS en el flujo público de booking con resolvers `SECURITY DEFINER` (000032); firma de webhook MP obligatoria sin fail-open; Nº de HC consecutivo por tenant con advisory lock (000030). **Incidente de disco al 100%** con PostgreSQL en crash loop, recuperado sin pérdida de WAL — de ahí salieron el cap de journald, el prune semanal, la alerta a >80%, el build movido a GitHub Actions + GHCR y el borrado del audio tras transcribir.
+- **Pérdida real de contenido clínico en producción (sesiones 23–24):** el autoguardado se construyó y probó solo contra el formato integrado y nunca contempló `customSections`, o sea el contenido de todo registro creado con plantilla personalizada; los ciclos posteriores sobrescribieron el contenido real con el formulario vacío (410→610→139 bytes) y un registro quedó irrecuperable. Causa de fondo: `registerType: 'autoUpdate'` recargaba la página sin avisar en cada deploy. Fix: recarga diferida con banner y autoguardado real en servidor (000048, `finalized_at`, endpoints `autosave`/`finalize` separados).
+- **Need-to-know clínico (000041):** `patient_staff_rel` obligatorio — un profesional sin fila activa recibe 403 `NO_PATIENT_ACCESS`, sin workaround.
+- **Plantillas de registro definibles por el profesional (000046):** markdown `## título {tipo}` → `SectionDef[]`, catálogo de widgets compartido Go/Python/TS, el worker de IA construyendo el prompt desde el schema, y el PDF anclado a la plantilla vigente al aprobarse.
+- **Decisión de fundador (sesión 14):** congelar olas de features y validar demanda con psicólogas externas. **El cuello es la distribución, no el producto** — el mismo diagnóstico que sigue vigente dos meses después.

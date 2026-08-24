@@ -6,7 +6,7 @@
 
 ---
 
-## Estado actual (2026-08-21)
+## Estado actual (2026-08-22)
 
 **El proyecto evolucionó de sistema a medida → vertical SaaS multi-tenant de psicología.**
 
@@ -57,6 +57,54 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 | 5 — Tests | ✅ resuelto | testcontainers + tests de aislamiento RLS (`internal/integration/{infra,rls,needtoknow}_test.go`); vitest para `client.ts` y `RecordForm` |
 | 6 — Frontend refactor | ✅ resuelto | `SettingsPage` partido en 10 secciones bajo `components/settings/` (191 líneas, solo orquesta); `logout` hace `flushClinicalDrafts()` antes de invalidar el token (`AuthContext.tsx`) |
 
+### Sesión 2026-08-22 — voz del cliente, banco de ángulos y poda de planes
+
+Sesión sin código: marketing y limpieza de contexto. Motivo: el usuario está haciendo
+el reto "Máquina de Contenido con AI" (Lab10) y quería aterrizar cada día al proyecto.
+
+**Lo que se construyó** (`#318`):
+
+- `docs/marketing/voz-del-cliente-2026-08.md` — el documento de voz del cliente, marcado
+  **v0 prestada**: Chapni no tiene clientes propios que minar, así que el combustible
+  sale de datos duros del gremio (ENLAPSIC 2022 de Colpsic, n = 8.495) y de voz pública
+  de terceros, con semáforo de confianza por fuente.
+- `docs/marketing/banco-angulos-2026-08.md` — 30 ángulos (6 dolores × 5 giros). **24
+  publicables**; los 6 del giro "caso" quedan vacíos a propósito por no existir un solo
+  caso de cliente, y se documenta el hueco en vez de fabricar testimonios.
+- `docs/marketing/raw-data/` en `.gitignore` — ahí van los transcripts crudos cuando
+  existan; solo se commitea el documento ya minado.
+
+**Tres hallazgos que valen más que el contenido:**
+
+1. **La voz cruda de psicólogos colombianos casi no está indexada en la web abierta.**
+   Lo que aparece al buscar es SEO escrito por los propios vendedores de software
+   (SaludTools, AgendaPro, Medesk, Doctoralia). Confundir eso con voz de cliente es la
+   trampa que convierte el ejercicio en contenido genérico con pasos intermedios.
+2. **El ICP individual es mucho más estrecho de lo que sugiere el tamaño del gremio.**
+   ENLAPSIC 2022: 18% sin ningún ingreso reportado, 27% hasta $1.500.000/mes. A $180.000
+   de lista, para el 45% del gremio no es una decisión de compra. El mercado real del
+   plan individual es el ~15% que gana más de $3.5M y ejerce independiente. El ángulo de
+   venta correcto es por sesión, no por mes.
+3. **PSICONAPSIS ya vende "historia clínica encriptada" en Colombia**, con exportación
+   RIPS. El cifrado por sí solo dejó de ser diferenciador; Whisper local sigue siéndolo.
+
+**Skill `chapni-social` ampliada** (no versionada en este repo): plantilla de carrusel
+1080×1350 (`templates/slide.html`), `scripts/render_carousel.py` con validador que falla
+si el carrusel se sale de 4-8 slides, si un slide pasa de 40 palabras o 3 ideas, o si un
+slide con cifra o cita no trae fuente. `references/angulos.md` engancha el banco. El
+validador atrapó una portada con un dato sin fuente y, al revisar, un error de fondo:
+un slide decía "el 80% trabaja por su cuenta" cuando la ENLAPSIC dice "vinculación
+temporal **o** independiente", que incluye un 20% a término fijo.
+
+**Poda de planes cerrados** (`#319`): retirados `QUEUE.md`, `PLAN_IA_puntos_2_6_7.md`,
+`tareas_clinica.md`, `PLAN_AUDIT_FIXES.md`, `PLAN_GUIA_SISTEMA.md` y
+`PLAN_ASSESSMENTS.md`, todos verificados contra el código y no contra lo que decían de
+sí mismos. `BACKLOG.md` bajó de 187 a 133 líneas (54 ítems resueltos y 5 secciones
+vacías). **`PLAN_LATENCIA_AUDIO.md` NO se retiró** aunque su trabajo está hecho: está
+citado desde 9 archivos de código (`docker-compose.yml`, `config.go`, `eta.go`,
+`windows.py` y cinco tests), o sea que no es un plan viejo sino el documento de
+referencia del subsistema.
+
 ### Sesión 2026-08-21 — cerrar los avisos que no avisaban
 
 Cuatro pendientes con la misma forma: instrumentos que decían algo distinto de lo
@@ -86,57 +134,13 @@ daba por hecha para los primeros backlinks. La autoridad tiene que venir ahora d
 hub `/recursos`, de prensa o gremios colombianos, y de prueba social real — o sea
 que **las tres frases de Marcela suben de prioridad**, no bajan.
 
-### Sesión 2026-08-20 — ingeniería de despliegue (fase 0 del plan de release)
+### Últimos PRs a `main`
 
-Motivo: el sistema va a manos de psicólogas externas y hasta hoy **cada merge a
-`main` salía a producción en el acto**, sin vuelta atrás que no fuera un rebuild
-de ocho minutos. Plan completo en `docs/ops/PLAN_RELEASE.md`.
-
-Lo que quedó montado — todo **ejercitado en producción**, no solo escrito:
-
-| Pieza | Qué hace |
-|---|---|
-| **Blue/green** (`scripts/deploy_switch.sh`, `#300`) | dos contenedores `core-api` (12 MiB cada uno) y Caddy apuntando a uno; la vuelta atrás medida en **1,6 s** contra los ~8 min del rebuild. `ai-service` queda fuera a propósito: sus trabajos viajan por Redis Streams, así que un reinicio solo hace esperar a la cola |
-| **Ventana nocturna** (`.github/workflows/deploy.yml`, `#311`) | el merge ya **no** despliega; sale a las **22:00 Bogotá** por cron, o a mano con `workflow_dispatch` dando un motivo. `concurrency: deploy-prod` |
-| **Rollback de un clic** (`rollback.yml`, `#300`) | workflow aparte que exige escribir `volver`. Vive fuera de la aplicación a propósito |
-| **Copia antes de migrar** (`predeploy_dump.sh`, `#303`) | `pg_dump` segundos antes de la migración, no el respaldo de la madrugada. Retención 7 días, 700/600 |
-| **Ensayo de la migración sobre copia** (`migration_rehearsal.sh`, `#309`) | la migración se estrena contra un clon de la base real; si falla ahí, el despliegue no ocurre. Probado con una migración rota a propósito |
-| **Simulacro de restauración** (`#304`) | desde B2 en **7 s**, con 3/3 apellidos verificados criptográficamente (descifrar → recalcular el hash de búsqueda → comparar) sin imprimir un solo nombre |
-| **Consola de despliegues** (`/admin`, `#305`–`#308`, `#314`) | qué versión sirve, a cuál se vuelve, historial, y enlaces al diff de cada cambio |
-| **Versión legible** (`next_version.sh`, `#308`) | `v0.9.4` en vez de `09bbabd`. Derivada, no anotada: los tags viejos murieron el 2026-06-10 con 475 commits encima porque nada dependía del número |
-| **Tasa de 5xx** (`monitor.sh`, `#313`) | el vigilante ya veía si se puede entrar; ahora ve también el fallo que **no** tumba el servicio |
-
-**Cuatro bugs, los cuatro encontrados por ejercitar la cosa y no por leer un
-código de salida. Los cuatro habrían sido silenciosos en producción:**
-
-- **El cambio de color no llegaba a Caddy** (`#301`), el peor de la sesión. El host decía `green`, Caddy leía el archivo viejo y el tráfico real seguía yendo a `blue`, con `caddy reload` saliendo 0. Causa: Docker monta un archivo suelto **por inode**, así que el `mv` atómico — la forma prolija de escribir — le deja al contenedor el archivo antiguo. Ahora se escribe en sitio y el color se **relee desde dentro del contenedor** antes de dar el cambio por hecho.
-- **El despliegue fue hacia atrás** (`#312`). La lista de rutas que decide *qué versión desplegar* omitía `.github/workflows/build-core-api.yml`, que sí está en el filtro del build. Esta vez no hubo daño (código idéntico, verificado), pero con una migración de por medio habría sido una vuelta atrás de esquema en silencio. Lo pinea `check_deploy_paths.sh`, que salió rojo con la divergencia real.
-- **El archivo de estado vivo estaba rastreado en git**, así que `git pull` y el runtime se peleaban por él y cada reemplazo rompía el mount. Pasó a `.gitignore` con plantilla `.example` y una función que lo siembra.
-- **`image_sha` confundía el puerto del registro con la etiqueta.** Test rojo primero; una etiqueta nunca lleva barra.
-
-**Una corrección al registro:** afirmé que la copia pre-migración no empeora la
-exposición, y era falso — `users.email`, los hashes bcrypt, `birth_date` y
-`gender` viajan en claro. El argumento verdadero es más estrecho y quedó escrito
-en el plan: el propio directorio de datos de Postgres, en el mismo disco, ya
-guarda esas columnas así.
-
-**Lo que el plan deja fuera a propósito:** el botón de rollback **no** va dentro
-de la aplicación (si la aplicación es lo que está roto, su botón de emergencia
-también lo está), y canary tampoco todavía (con una sola profesional en
-producción, un 5% del tráfico es ruido, no señal).
-
-### Últimos PRs a `main` (sesión 2026-08-20, todos verificados en producción)
-
-- `#300`–`#302` blue/green con su suite de funciones puras (~42 casos en `make verify`), el arreglo del inode y el cierre de la fase 0.1.
-- `#303`, `#304`, `#309` copia justo antes de migrar, simulacro de restauración desde B2 y ensayo de la migración sobre un clon.
-- `#305`–`#308`, `#314` la consola de despliegues: qué build sirve, a qué se vuelve, versión legible en vez de SHA, y los cuatro enlaces al diff (qué entró · pendiente de salir · qué se desharía · antes y después).
-- `#310` anotar que `govulncheck` falla por la red y parece hallazgo de seguridad.
-- `#311`–`#313` la ventana nocturna, el arreglo del despliegue hacia atrás y la tasa de 5xx en el vigilante.
-
-**Verificación en producción (2026-08-20):** `sirviendo: blue`, sonda de entrada
-en verde, `0 de 28 peticiones 5xx en 5m (umbral 3)`, y las cinco cadenas nuevas
-de la consola presentes en el bundle servido (verificado con `curl --compressed`:
-Caddy comprime, y sin esa bandera la primera lectura dio un falso negativo).
+- `#318` documento de voz del cliente v0 y banco de 30 ángulos (`docs/marketing/`).
+- `#319` retirada de los 6 planes cerrados y poda del BACKLOG.
+- `#300`–`#314` (2026-08-20) toda la ingeniería de despliegue, verificada en producción.
+- `#316`, `#317` (2026-08-21) dead man's switch, techo en los streams de Redis, el aviso
+  falso de pérdida de datos, `govulncheck` sin red, y el orden del despliegue.
 
 ### Sesión anterior (2026-08-18/19), comprimida
 
@@ -156,6 +160,7 @@ pinea `check_exec_bits.sh`. Detalle completo en el CHANGELOG.
 
 ### Sesiones anteriores, comprimidas
 
+- **2026-08-20 — ingeniería de despliegue, fase 0 (`#300`–`#314`):** blue/green con vuelta atrás medida en 1,6 s, ventana nocturna a las 22:00 Bogotá en vez de desplegar en cada merge, rollback de un clic fuera de la aplicación, copia justo antes de migrar, ensayo de la migración sobre un clon, simulacro de restauración desde B2 en 7 s, consola de despliegues con enlaces al diff, versión legible y tasa de 5xx en el vigilante. Cuatro bugs encontrados por ejercitar la cosa, los cuatro silenciosos en producción — el peor: el cambio de color no llegaba a Caddy porque Docker monta un archivo suelto por inode y el `mv` atómico le dejaba el archivo antiguo. Plan en `docs/ops/PLAN_RELEASE.md`, detalle en el CHANGELOG.
 - **2026-07-23/25 — agenda comercial de leads (`#219`–`#227`):** `/agenda` sin tenant ni pago (migración `000069`), evento con Meet en el calendar del superadmin, disponibilidad restando el free/busy real y fallando en cerrado si la lectura falla, consola en `/admin?tab=agenda`. Cierra con `#227`, que audita **todo acceso denegado a un recurso** (`RESOURCE_ACCESS_DENIED` ante 403/404 con ID) y corrige que la auditoría venía guardando la IP del proxy de Docker en vez de la del cliente. Detalle en el CHANGELOG.
 - **2026-07-21/22:** `#211` la app entera era rastreable (Caddy responde `X-Robots-Tag: noindex` salvo la allowlist; **solo `/book/marcela-chapues` es indexable**, cada profesional nuevo se agrega al matcher a mano). `#213` el parser de plantillas falla en cerrado ante un `##` en una pista. `#214` emails de ciclo de trial + primeros pasos + referidos v1 (migración `000068`). `#215` reconstrucción de los 4 formatos clínicos (ver bloque siguiente).
 - **2026-08-07 — embudo de activación (`#256`–`#258`):** `/admin?tab=activacion`, ocho pasos derivados de datos existentes, con aviso cuando la cohorte es demasiado chica para leer porcentajes y evidencia que distingue un cobro real de una activación manual (migración `000074`). Destapó un bug vivo desde la migración 000018: los endpoints de admin consultan sin `app.current_org`, así que con FORCE RLS la consola mostraba "0 pacientes" en todos los tenants — arreglado con dos funciones `SECURITY DEFINER` de solo agregados (migración `000073`).
@@ -191,7 +196,8 @@ Antes la apertura tenía 27 campos con 16 de texto libre. `TestReconstructedForm
 | **WhatsApp Meta API** | Cargo COP $90.675 pagado. **Verificado en BD 2026-07-25**: la config de la única org ya tiene `phone_number_id` y las tres plantillas escritas (`recordatorio_cita_24h`, `recordatorio_cita_2h`, `cita_confirmada`, `lang=es_CO`) — lo que falta **no** es configurarlas, es que `org_whatsapp_config.enabled` sigue en `false`. Queda: confirmar que Meta desbloqueó y encender el toggle en Ajustes → Integraciones. | 🟡 configurado, apagado |
 | **Dead man's switch** | ✅ **Resuelto 2026-08-21**: `monitor.sh` cierra cada ciclo latiendo contra healthchecks.io — al éxito si los cinco chequeos salieron `ok`, a `/fail` con las líneas rojas en el cuerpo si no. El temporizador vive fuera del sistema vigilado, así que una caída del VPS, un cron roto o una llave de Resend rechazada ya no producen el mismo silencio. El `/fail` es además el segundo canal de aviso, independiente de Resend. URL del ping en `/etc/sghcp/monitor.env` (600) — es un secreto: quien la tenga puede callar la alarma. | ✅ cerrado |
 | **Validación de demanda** | Conseguir 2-3 psicólogas externas en beta de diseño (acceso gratis 2 semanas, acompañamiento 1ª sesión en vivo). Sin esto, el go-live 1.0.0 carece de señal de mercado. 2 contactos disponibles (colegas de la esposa). Fases 1-2 de la auditoría deben cerrarse antes de la beta (logout/pérdida de borrador ya resueltos). | 🔴 sin iniciar |
-| **Validación de demanda B2B (clínicas)** | Señal orgánica en producción: ninguna aún — tras la limpieza del 2026-08-07 la cohorte del embudo es **1 organización real**; el único signup externo que hubo (Alma Vélez) canceló sin registrar un solo paciente y se eliminó. Señal de mercado (2026-07-06): sí existe — competidores colombianos (Psiris, MedSystem, RIPS/CIE10/Res. 1888) e IPS de salud mental reales en Bogotá/Medellín ya operan sin solución especializada en psicología+cifrado. Pendiente decidir: entrevistas directas con 3-5 IPS/clínicas antes del plan B2B completo, o construirlo ya con esta señal. | 🟡 en evaluación |
+| **Validación de demanda B2B (clínicas)** | Señal orgánica en producción: ninguna aún — tras la limpieza del 2026-08-07 la cohorte del embudo es **1 organización real**; el único signup externo que hubo (Alma Vélez) canceló sin registrar un solo paciente y se eliminó. Señal de mercado (2026-07-06): sí existe — competidores colombianos (Psiris, MedSystem, RIPS/CIE10/Res. 1888) e IPS de salud mental reales en Bogotá/Medellín ya operan sin solución especializada en psicología+cifrado. Pendiente decidir: entrevistas directas con 3-5 IPS/clínicas antes del plan B2B completo, o construirlo ya con esta señal. **Dato nuevo (2026-08-22, ENLAPSIC 2022 n=8.495):** el 18% del gremio no reportó ningún ingreso en 2022 y el 27% ganó hasta $1.5M/mes, así que a $180.000 de lista el mercado del plan individual es el ~15% que gana más de $3.5M y ejerce independiente. Estrecha el ICP y refuerza el argumento del plan B2B. | 🟡 en evaluación |
+| **Contenido sin medición** | 23 posts publicados desde el 2026-07-06 (`content-log.md`), sin una sola métrica de activación: no se sabe cuántas visitas a chapni.com ni cuántos signups produjeron. Sin ese número no se puede saber si lo que falla es el alcance, el gancho, la landing o la oferta, y cada uno se arregla distinto. Instrumentarlo va antes de subir el volumen o de agregar formatos. | 🔴 sin instrumentar |
 | **Formatos reconstruidos — revisión clínica** | Los 4 formatos ya están en prod sin corrupción, pero al reconstruirlos se tomaron 2 decisiones que Marcela debe validar: (a) **consumo de SPA** quedó como un multiselect de sustancias con las frecuencias plegadas, en vez del "Sí/No" + casillas por sustancia del papel; (b) **ideación suicida e intento previo** siguen como campos del formato aunque el sistema ya tiene su control fijo de nivel de riesgo (posible duplicación). Ambas se ajustan desde el builder visual, sin tocar BD. | 🟡 pendiente de revisión |
 | **MCP `cloudflare-api` — scope del token** | ✅ **OAuth ya autorizado** (verificado 2026-07-25: lista las zonas `chapni.com` y `marcelachapues.com`). Pero el token concedido es de lectura acotada: `GET /zones/:id/rulesets` devuelve *request is not authorized* y `bot_management` da *Authentication error* — o sea, reglas de redirección y política de bots **siguen siendo manuales por el panel**. Cabo suelto heredado: confirmar si *JavaScript Detections* está apagado (no verificable por API con este token; el HTML se sirve cacheado y haría falta purgar). Cosmético: ese script es inline y el CSP del sitio (`script-src 'self'`) ya lo bloquea. | 🟡 conectado, sin permisos de escritura |
 
