@@ -480,8 +480,8 @@ const tmplTenantWelcomeSrc = `<!DOCTYPE html>
             </td></tr>
           </table>
           <p style="margin:0 0 24px;font-size:15px;color:#555;line-height:1.7;">
-            Soy Francisco, el creador de Chapni. Si quieres, te acompaño personalmente en tus primeros pasos
-            {{if .SupportWhatsApp}} — escríbeme por <a href="https://wa.me/{{.SupportWhatsApp}}?text=Hola%20Francisco%2C%20acabo%20de%20crear%20mi%20cuenta%20en%20Chapni" style="color:#363285;font-weight:600;text-decoration:none;">WhatsApp</a> y agendamos un tour de 15 minutos{{else}} — responde a este correo y agendamos un tour de 15 minutos{{end}}. Sin compromiso: la idea es que en tu prueba veas el sistema funcionando con tu forma de trabajar.
+            Soy Alexander, cofundador de Chapni. Si quieres, te acompaño personalmente en tus primeros pasos
+            {{if .SupportWhatsApp}} — escríbeme por <a href="https://wa.me/{{.SupportWhatsApp}}?text=Hola%20Alexander%2C%20acabo%20de%20crear%20mi%20cuenta%20en%20Chapni" style="color:#363285;font-weight:600;text-decoration:none;">WhatsApp</a> y agendamos un tour de 15 minutos{{else}} — responde a este correo y agendamos un tour de 15 minutos{{end}}. Sin compromiso: la idea es que en tu prueba veas el sistema funcionando con tu forma de trabajar.
           </p>
           <p style="margin:0;font-size:13px;color:#999;line-height:1.6;">
             Tus datos clínicos se cifran con una llave por paciente y cumplimos la Ley 1581 de 2012.
@@ -557,7 +557,7 @@ const tmplTrialNudgeSrc = `<!DOCTYPE html>
             </td></tr>
           </table>
           <p style="margin:0;font-size:14px;color:#777;line-height:1.7;">
-            {{if .SupportWhatsApp}}Si algo no te cuadra o tienes preguntas, escríbeme por <a href="https://wa.me/{{.SupportWhatsApp}}?text=Hola%20Francisco%2C%20estoy%20probando%20Chapni%20y%20tengo%20una%20pregunta" style="color:#363285;font-weight:600;text-decoration:none;">WhatsApp</a>. Respondo yo, no un bot.{{else}}Si algo no te cuadra o tienes preguntas, responde a este correo.{{end}}
+            {{if .SupportWhatsApp}}Si algo no te cuadra o tienes preguntas, escríbeme por <a href="https://wa.me/{{.SupportWhatsApp}}?text=Hola%20Alexander%2C%20estoy%20probando%20Chapni%20y%20tengo%20una%20pregunta" style="color:#363285;font-weight:600;text-decoration:none;">WhatsApp</a>. Respondo yo, no un bot.{{else}}Si algo no te cuadra o tienes preguntas, responde a este correo.{{end}}
           </p>
         </td></tr>
         <tr><td style="padding:16px 36px 24px;border-top:1px solid #ece9e3;">
@@ -599,7 +599,7 @@ const tmplTrialEndingSrc = `<!DOCTYPE html>
             </td></tr>
           </table>
           <p style="margin:0;font-size:14px;color:#777;line-height:1.7;">
-            {{if .SupportWhatsApp}}¿Dudas sobre el plan o el pago? Escríbeme por <a href="https://wa.me/{{.SupportWhatsApp}}?text=Hola%20Francisco%2C%20tengo%20una%20pregunta%20sobre%20mi%20plan%20de%20Chapni" style="color:#363285;font-weight:600;text-decoration:none;">WhatsApp</a> y lo resolvemos.{{else}}¿Dudas sobre el plan o el pago? Responde a este correo y lo resolvemos.{{end}}
+            {{if .SupportWhatsApp}}¿Dudas sobre el plan o el pago? Escríbeme por <a href="https://wa.me/{{.SupportWhatsApp}}?text=Hola%20Alexander%2C%20tengo%20una%20pregunta%20sobre%20mi%20plan%20de%20Chapni" style="color:#363285;font-weight:600;text-decoration:none;">WhatsApp</a> y lo resolvemos.{{else}}¿Dudas sobre el plan o el pago? Responde a este correo y lo resolvemos.{{end}}
           </p>
         </td></tr>
         <tr><td style="padding:16px 36px 24px;border-top:1px solid #ece9e3;">
