@@ -75,6 +75,7 @@ type fakeRepo struct {
 	replaceRole    func(ctx context.Context, orgID, targetUserID, newRoleID, callerUserID string) error
 	orgInfo        func(ctx context.Context, orgID string) (string, string, *time.Time, *time.Time, error)
 	orgSlug        func(ctx context.Context, orgID string) (string, error)
+	orgLeadInfo    func(ctx context.Context, orgID string) (auth.OrgLead, error)
 	isInternal     func(ctx context.Context, orgID string) (bool, error)
 	listUsers      func(ctx context.Context, orgID string) ([]auth.OrgUser, error)
 	listPros       func(ctx context.Context, orgID string) ([]auth.OrgProfessional, error)
@@ -101,6 +102,10 @@ func (f *fakeRepo) AssignRole(ctx context.Context, orgID, userID, roleID, assign
 
 func (f *fakeRepo) OrgSlug(ctx context.Context, orgID string) (string, error) {
 	return f.orgSlug(ctx, orgID)
+}
+
+func (f *fakeRepo) OrgLeadInfo(ctx context.Context, orgID string) (auth.OrgLead, error) {
+	return f.orgLeadInfo(ctx, orgID)
 }
 
 func (f *fakeRepo) IsInternalOrg(ctx context.Context, orgID string) (bool, error) {

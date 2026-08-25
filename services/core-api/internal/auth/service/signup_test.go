@@ -10,6 +10,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"sghcp/core-api/internal/auth"
+	"sghcp/core-api/internal/notify"
 	"sghcp/core-api/internal/shared/hash"
 )
 
@@ -327,5 +328,85 @@ func TestSignupTokenTTLs(t *testing.T) {
 	}
 	if trialDays != 14 {
 		t.Errorf("trialDays = %d, want 14", trialDays)
+	}
+}
+
+// captureNotifier records the operator alert instead of sending it. The service
+// fires notifications in goroutines, so the alert arrives over a channel.
+type captureNotifier struct {
+	notify.NoopNotifier
+	alerts chan notify.TenantSignupDetails
+}
+
+func (c *captureNotifier) TenantSignupAlert(_ context.Context, _ string, d notify.TenantSignupDetails) {
+	c.alerts <- d
+}
+
+// TestVerifyEmailAlertCarriesTheLeadDetails pins a bug seen in production on
+// 2026-08-25 with the first organic signup: the "email verified" alert built
+// its details from scratch and left Slug, Phone and Source empty, so the one
+// alert that says "write to this person now" was the one missing the way to
+// reach them. The signup alert had them; this one dropped them on the floor.
+func TestVerifyEmailAlertCarriesTheLeadDetails(t *testing.T) {
+	ctx := context.Background()
+
+	user := verifiedUser(t, testPassword)
+	user.EmailVerifiedAt = nil
+	name := "Juan Arrieta"
+	user.DisplayName = &name
+	user.Email = "juan@consultorio.test"
+
+	repo := &fakeRepo{
+		findUserByID: func(context.Context, string) (*auth.User, error) { return user, nil },
+		markVerified: func(context.Context, string) error { return nil },
+		orgLeadInfo: func(_ context.Context, orgID string) (auth.OrgLead, error) {
+			if orgID != user.OrganizationID {
+				t.Errorf("OrgLeadInfo called with %q, want the user's org", orgID)
+			}
+			return auth.OrgLead{
+				Name:   "Consultorio Juan",
+				Slug:   "juan",
+				Phone:  "573001234567",
+				Source: "un colega",
+			}, nil
+		},
+	}
+	svc, mr := newTestService(t, repo)
+	n := &captureNotifier{alerts: make(chan notify.TenantSignupDetails, 1)}
+	svc.notifier = n
+	svc.signupAlertEmail = "citas@chapni.com"
+
+	const raw = "the-verification-token"
+	if err := mr.Set(emailVerifyPrefix+hash.Token(raw), user.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.VerifyEmail(ctx, raw); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+
+	var got notify.TenantSignupDetails
+	select {
+	case got = <-n.alerts:
+	case <-time.After(2 * time.Second):
+		t.Fatal("no operator alert was sent")
+	}
+
+	if !got.Verified {
+		t.Error("Verified = false, want true — this is the post-confirmation alert")
+	}
+	if got.Slug != "juan" {
+		t.Errorf("Slug = %q, want %q — the alert links to the tenant", got.Slug, "juan")
+	}
+	if got.Phone != "573001234567" {
+		t.Errorf("Phone = %q, want the signup WhatsApp number", got.Phone)
+	}
+	if got.Source != "un colega" {
+		t.Errorf("Source = %q, want the referral answer from the form", got.Source)
+	}
+	if got.OrgName != "Consultorio Juan" {
+		t.Errorf("OrgName = %q, want the organization name", got.OrgName)
+	}
+	if got.AdminName != name || got.Email != user.Email {
+		t.Errorf("owner identity is wrong: %+v", got)
 	}
 }

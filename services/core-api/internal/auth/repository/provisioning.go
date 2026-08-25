@@ -158,6 +158,23 @@ func (r *Repository) OrgSlug(ctx context.Context, orgID string) (string, error) 
 	return slug, nil
 }
 
+// OrgLeadInfo loads the facts the operator's lead alert shows. signup_phone and
+// signup_source are nullable — the form fields are optional — so they are
+// coalesced to empty strings, which is what the email template treats as
+// "don't render this row".
+func (r *Repository) OrgLeadInfo(ctx context.Context, orgID string) (auth.OrgLead, error) {
+	var l auth.OrgLead
+	err := r.db.QueryRow(ctx,
+		`SELECT name, slug, COALESCE(signup_phone, ''), COALESCE(signup_source, '')
+		   FROM organizations WHERE id = $1`,
+		orgID,
+	).Scan(&l.Name, &l.Slug, &l.Phone, &l.Source)
+	if err != nil {
+		return auth.OrgLead{}, fmt.Errorf("load org lead info: %w", err)
+	}
+	return l, nil
+}
+
 // IsInternalOrg reports whether orgID is an operational fixture (the SaaS
 // operator's own org or the CI-seeded demo org) rather than a real tenant.
 func (r *Repository) IsInternalOrg(ctx context.Context, orgID string) (bool, error) {

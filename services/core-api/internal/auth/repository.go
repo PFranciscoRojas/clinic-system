@@ -24,6 +24,9 @@ type Repository interface {
 	OrgInfo(ctx context.Context, orgID string) (name, status string, trialEndsAt, currentPeriodEnd *time.Time, err error)
 	// OrgSlug returns the tenant's URL slug, used by the in-app referral link.
 	OrgSlug(ctx context.Context, orgID string) (string, error)
+	// OrgLeadInfo returns the sales-facing facts captured at signup, for the
+	// operator's lead alerts.
+	OrgLeadInfo(ctx context.Context, orgID string) (OrgLead, error)
 	// IsInternalOrg reports whether orgID is an operational fixture (the SaaS
 	// operator's own org or the CI-seeded demo org) rather than a real tenant.
 	IsInternalOrg(ctx context.Context, orgID string) (bool, error)
@@ -50,6 +53,16 @@ type Repository interface {
 	// Legal / DPA.
 	AcceptDPA(ctx context.Context, userID string) error
 	DPAAccepted(ctx context.Context, userID string) (bool, error)
+}
+
+// OrgLead is what the operator needs to act on a lead: how to address the
+// clinic, where its tenant lives, and the optional contact details the owner
+// typed into the signup form.
+type OrgLead struct {
+	Name   string
+	Slug   string
+	Phone  string // signup_phone, empty when the owner skipped the field
+	Source string // signup_source, likewise optional
 }
 
 // CreateOrgParams carries everything CreateOrgWithOwner needs to provision a

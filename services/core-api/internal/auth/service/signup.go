@@ -166,14 +166,19 @@ func (s *Service) VerifyEmail(ctx context.Context, token string) error {
 		SupportWhatsApp: s.supportWhatsApp,
 	})
 	if s.signupAlertEmail != "" {
-		orgName, _, _, _, err := s.repo.OrgInfo(ctx, u.OrganizationID)
+		// The same lead facts the signup alert carried: this is the alert that
+		// says "write to them now", so it must not be the poorer of the two.
+		lead, err := s.repo.OrgLeadInfo(ctx, u.OrganizationID)
 		if err != nil {
-			orgName = u.OrganizationID
+			lead.Name = u.OrganizationID
 		}
 		go s.notifier.TenantSignupAlert(context.Background(), s.signupAlertEmail, notify.TenantSignupDetails{
-			OrgName:   orgName,
+			OrgName:   lead.Name,
+			Slug:      lead.Slug,
 			AdminName: name,
 			Email:     u.Email,
+			Phone:     lead.Phone,
+			Source:    lead.Source,
 			Verified:  true,
 		})
 	}
