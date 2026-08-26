@@ -450,13 +450,26 @@ func TestRepositoryDelegations(t *testing.T) {
 	})
 
 	t.Run("onboarding", func(t *testing.T) {
+		// The skipped flag has to survive the trip: it is the difference
+		// between a tenant that set the product up and one that clicked past
+		// the wizard, and the funnel used to report both as the former.
+		var gotSkipped []bool
 		repo := &fakeRepo{}
-		repo.setOnboarding = func(context.Context, string) error { return nil }
+		repo.setOnboarding = func(_ context.Context, _ string, skipped bool) error {
+			gotSkipped = append(gotSkipped, skipped)
+			return nil
+		}
 		repo.onboardingDone = func(context.Context, string) (bool, error) { return true, nil }
 		svc, _ := newTestService(t, repo)
 
-		if err := svc.CompleteOnboarding(ctx, "user-1"); err != nil {
+		if err := svc.CompleteOnboarding(ctx, "user-1", false); err != nil {
 			t.Errorf("CompleteOnboarding: %v", err)
+		}
+		if err := svc.CompleteOnboarding(ctx, "user-2", true); err != nil {
+			t.Errorf("CompleteOnboarding (skipped): %v", err)
+		}
+		if want := []bool{false, true}; len(gotSkipped) != 2 || gotSkipped[0] != want[0] || gotSkipped[1] != want[1] {
+			t.Errorf("skipped flags reaching the repository = %v, want %v", gotSkipped, want)
 		}
 		ok, err := svc.OnboardingCompleted(ctx, "user-1")
 		if err != nil || !ok {

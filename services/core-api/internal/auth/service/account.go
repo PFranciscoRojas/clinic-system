@@ -52,8 +52,9 @@ func (s *Service) ChangePassword(ctx context.Context, userID, currentPassword, n
 }
 
 // CompleteOnboarding stamps the server-side onboarding flag (idempotent).
-func (s *Service) CompleteOnboarding(ctx context.Context, userID string) error {
-	return s.repo.SetOnboardingCompleted(ctx, userID)
+// skipped says how the wizard was closed; see SetOnboardingCompleted.
+func (s *Service) CompleteOnboarding(ctx context.Context, userID string, skipped bool) error {
+	return s.repo.SetOnboardingCompleted(ctx, userID, skipped)
 }
 
 // OnboardingCompleted reports the server-side onboarding flag.

@@ -887,7 +887,7 @@ export function LoginPage() {
             <div style={{ textAlign: 'center', marginTop: 10 }}>
               <button type="button" onClick={async () => {
                 if (user) { localStorage.setItem(`sghcp_onboarding_done_${user.user_id}`, 'true'); }
-                try { await authApi.onboardingComplete(); } catch { /* non-blocking */ }
+                try { await authApi.onboardingComplete(true); } catch { /* non-blocking */ }
                 navigate('/');
               }} style={{ border: 'none', background: 'none', fontSize: 12.5, color: 'rgba(255,255,255,0.65)', textDecoration: 'underline', cursor: 'pointer' }}>
                 Omitir por ahora · lo configuro después

@@ -52,9 +52,18 @@ func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST /api/v1/auth/onboarding-complete — stamps the server-side flag.
+//
+// The optional {"skipped": true} body says the wizard was closed through
+// "Omitir por ahora" rather than finished. An absent or unparseable body means
+// false (completed): older clients send {} and predate the distinction, and
+// mislabelling them as skips would be as wrong as the bug this replaced.
 func (h *Handler) onboardingComplete(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
-	if err := h.svc.CompleteOnboarding(r.Context(), claims.UserID); err != nil {
+	var body struct {
+		Skipped bool `json:"skipped"`
+	}
+	_ = httputil.DecodeJSON(r, &body)
+	if err := h.svc.CompleteOnboarding(r.Context(), claims.UserID, body.Skipped); err != nil {
 		slog.Error("auth.onboarding-complete", "err", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "could not save onboarding state")
 		return

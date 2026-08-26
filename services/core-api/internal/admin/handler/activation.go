@@ -32,7 +32,9 @@ type activationStepDef struct {
 var activationStepDefs = []activationStepDef{
 	{"signup", "Creó la cuenta", func(o orgActivation) *time.Time { return &o.CreatedAt }},
 	{"verified", "Verificó el correo", func(o orgActivation) *time.Time { return o.VerifiedAt }},
-	{"onboarded", "Terminó la puesta en marcha", func(o orgActivation) *time.Time { return o.OnboardedAt }},
+	// "Cerró", not "Terminó": the step counts both outcomes, and the split
+	// between them travels separately in onboarding_breakdown.
+	{"onboarded", "Cerró la puesta en marcha", func(o orgActivation) *time.Time { return o.OnboardedAt }},
 	{"first_patient", "Registró al primer paciente", func(o orgActivation) *time.Time { return o.FirstPatientAt }},
 	{"first_appointment", "Agendó la primera cita", func(o orgActivation) *time.Time { return o.FirstAppointmentAt }},
 	{"first_record", "Firmó la primera historia", func(o orgActivation) *time.Time { return o.FirstRecordAt }},
@@ -71,6 +73,9 @@ type orgActivation struct {
 	CurrentPeriodEnd   *time.Time `json:"current_period_end"`
 	VerifiedAt         *time.Time `json:"-"`
 	OnboardedAt        *time.Time `json:"-"`
+	// OnboardingSkipped says how the wizard was closed: true = the skip link,
+	// false = finished, nil = the tenant predates the distinction (000081).
+	OnboardingSkipped  *bool      `json:"onboarding_skipped"`
 	FirstPatientAt     *time.Time `json:"-"`
 	FirstAppointmentAt *time.Time `json:"-"`
 	FirstRecordAt      *time.Time `json:"-"`
@@ -114,11 +119,24 @@ type paidBreakdown struct {
 	Manual   int `json:"manual"`
 }
 
+// onboardingBreakdown splits the onboarding step by how the wizard was closed,
+// for the same reason paidBreakdown exists: "3 · 100%" on that bar read as
+// three tenants who set the product up, when the ones who clicked past it in
+// half a minute counted the same. Unknown is not zero — it is every tenant who
+// signed up before the outcome was recorded, and folding those into Completed
+// would restate the claim this replaced.
+type onboardingBreakdown struct {
+	Completed int `json:"completed"`
+	Skipped   int `json:"skipped"`
+	Unknown   int `json:"unknown"`
+}
+
 type activationResponse struct {
-	CohortTotal int              `json:"cohort_total"`
-	Steps       []activationStep `json:"steps"`
-	Orgs        []orgActivation  `json:"orgs"`
-	Paid        paidBreakdown    `json:"paid_breakdown"`
+	CohortTotal int                 `json:"cohort_total"`
+	Steps       []activationStep    `json:"steps"`
+	Orgs        []orgActivation     `json:"orgs"`
+	Paid        paidBreakdown       `json:"paid_breakdown"`
+	Onboarding  onboardingBreakdown `json:"onboarding_breakdown"`
 	// MinReadableCohort is the sample size below which the percentages say
 	// nothing. The console warns instead of pretending.
 	MinReadableCohort int `json:"min_readable_cohort"`
@@ -133,6 +151,7 @@ func (h *Handler) activationMetrics(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.pool.Query(r.Context(), `
 		SELECT org_id, name, slug, subscription_status, signup_source, created_at,
 		       trial_ends_at, current_period_end, verified_at, onboarded_at,
+		       onboarding_skipped,
 		       first_patient_at, first_appointment_at, first_record_at,
 		       first_ai_draft_at, last_login_at,
 		       total_patients, total_appointments, total_records, total_ai_drafts,
@@ -152,7 +171,7 @@ func (h *Handler) activationMetrics(w http.ResponseWriter, r *http.Request) {
 		var o orgActivation
 		if err := rows.Scan(&o.OrgID, &o.Name, &o.Slug, &o.SubscriptionStatus, &o.SignupSource,
 			&o.CreatedAt, &o.TrialEndsAt, &o.CurrentPeriodEnd, &o.VerifiedAt, &o.OnboardedAt,
-			&o.FirstPatientAt, &o.FirstAppointmentAt, &o.FirstRecordAt, &o.FirstAIDraftAt,
+			&o.OnboardingSkipped, &o.FirstPatientAt, &o.FirstAppointmentAt, &o.FirstRecordAt, &o.FirstAIDraftAt,
 			&o.LastLoginAt, &o.TotalPatients, &o.TotalAppointments, &o.TotalRecords,
 			&o.TotalAIDrafts, &o.HasBillingProvider, &o.HasRecordedCharge); err != nil {
 			slog.Error("admin.activation-metrics.scan", "err", err)
@@ -176,6 +195,7 @@ func (h *Handler) activationMetrics(w http.ResponseWriter, r *http.Request) {
 		Steps:             activationFunnel(orgs),
 		Orgs:              orgs,
 		Paid:              splitPaid(orgs),
+		Onboarding:        splitOnboarding(orgs),
 		MinReadableCohort: minReadableCohort,
 	})
 }
@@ -210,6 +230,28 @@ func splitPaid(orgs []orgActivation) paidBreakdown {
 			out.Checkout++
 		case paidManual:
 			out.Manual++
+		}
+	}
+	return out
+}
+
+// splitOnboarding counts the onboarding step by outcome, over the tenants that
+// reached it at all: a tenant still on the verification step has not skipped
+// anything, and counting it as unknown would inflate the bucket that means
+// "we lost this".
+func splitOnboarding(orgs []orgActivation) onboardingBreakdown {
+	var out onboardingBreakdown
+	for _, o := range orgs {
+		if o.OnboardedAt == nil {
+			continue
+		}
+		switch {
+		case o.OnboardingSkipped == nil:
+			out.Unknown++
+		case *o.OnboardingSkipped:
+			out.Skipped++
+		default:
+			out.Completed++
 		}
 	}
 	return out

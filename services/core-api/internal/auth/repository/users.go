@@ -235,12 +235,19 @@ func (r *Repository) UpdatePasswordByID(ctx context.Context, userID, passwordHas
 	return nil
 }
 
-// SetOnboardingCompleted stamps the server-side onboarding flag.
-func (r *Repository) SetOnboardingCompleted(ctx context.Context, userID string) error {
+// SetOnboardingCompleted stamps the server-side onboarding flag and records
+// which way the wizard was closed. skipped=true is the "Omitir por ahora" link;
+// false is finishing it. The guard keeps the first outcome: a user who skipped
+// and later walks the wizard has still, for funnel purposes, skipped it the
+// first time — which is the moment onboarded_at refers to.
+func (r *Repository) SetOnboardingCompleted(ctx context.Context, userID string, skipped bool) error {
 	_, err := r.db.Exec(ctx,
-		`UPDATE users SET onboarding_completed_at = NOW(), updated_at = NOW()
-		 WHERE id = $1 AND onboarding_completed_at IS NULL`,
-		userID,
+		`UPDATE users
+		    SET onboarding_completed_at = NOW(),
+		        onboarding_skipped      = $2,
+		        updated_at              = NOW()
+		  WHERE id = $1 AND onboarding_completed_at IS NULL`,
+		userID, skipped,
 	)
 	if err != nil {
 		return fmt.Errorf("set onboarding completed: %w", err)

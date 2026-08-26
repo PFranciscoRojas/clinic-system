@@ -35,7 +35,7 @@ type Repository interface {
 	UpdatePassword(ctx context.Context, orgID, targetEmail, passwordHash string) error
 	UpdatePasswordByID(ctx context.Context, userID, passwordHash string) error
 	UpdateDisplayName(ctx context.Context, userID, displayName string) error
-	SetOnboardingCompleted(ctx context.Context, userID string) error
+	SetOnboardingCompleted(ctx context.Context, userID string, skipped bool) error
 	OnboardingCompleted(ctx context.Context, userID string) (bool, error)
 
 	// Email change flow.

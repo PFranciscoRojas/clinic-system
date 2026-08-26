@@ -81,7 +81,7 @@ type fakeRepo struct {
 	listPros       func(ctx context.Context, orgID string) ([]auth.OrgProfessional, error)
 	acceptDPA      func(ctx context.Context, userID string) error
 	dpaAccepted    func(ctx context.Context, userID string) (bool, error)
-	setOnboarding  func(ctx context.Context, userID string) error
+	setOnboarding  func(ctx context.Context, userID string, skipped bool) error
 	onboardingDone func(ctx context.Context, userID string) (bool, error)
 	findInOrg      func(ctx context.Context, orgID, email string) (*auth.User, error)
 	createUser     func(ctx context.Context, orgID, email, passwordHash, displayName string) (string, error)
@@ -128,8 +128,8 @@ func (f *fakeRepo) DPAAccepted(ctx context.Context, userID string) (bool, error)
 	return f.dpaAccepted(ctx, userID)
 }
 
-func (f *fakeRepo) SetOnboardingCompleted(ctx context.Context, userID string) error {
-	return f.setOnboarding(ctx, userID)
+func (f *fakeRepo) SetOnboardingCompleted(ctx context.Context, userID string, skipped bool) error {
+	return f.setOnboarding(ctx, userID, skipped)
 }
 
 func (f *fakeRepo) OnboardingCompleted(ctx context.Context, userID string) (bool, error) {
