@@ -26,7 +26,7 @@ type svcPort interface {
 	UpdateProfile(ctx context.Context, userID, displayName string) (*token.Pair, error)
 	VerifyPassword(ctx context.Context, userID, password string) error
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
-	CompleteOnboarding(ctx context.Context, userID string) error
+	CompleteOnboarding(ctx context.Context, userID string, skipped bool) error
 	OnboardingCompleted(ctx context.Context, userID string) (bool, error)
 	OrgInfo(ctx context.Context, orgID string) (name, status string, trialEndsAt, currentPeriodEnd *time.Time, err error)
 	OrgSlug(ctx context.Context, orgID string) (string, error)

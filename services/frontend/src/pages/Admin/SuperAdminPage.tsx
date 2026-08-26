@@ -1059,6 +1059,7 @@ function ActivacionTab() {
   // beats drawing confident bars over a sample of one.
   const thin = data.cohort_total < data.min_readable_cohort;
   const paid = data.paid_breakdown;
+  const onb = data.onboarding_breakdown;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
@@ -1113,6 +1114,16 @@ function ActivacionTab() {
               </div>
               {/* El último paso es el que más se presta a leerse de más: una
                   activación manual desde la consola no es una venta. */}
+              {/* Cerrar el asistente y configurar el producto son dos cosas
+                  distintas: el enlace "Omitir por ahora" marcaba el paso igual
+                  que terminarlo, y el embudo lo contaba como puesta en marcha. */}
+              {s.key === 'onboarded' && s.orgs > 0 && (
+                <div style={{ fontSize: 11.5, color: 'var(--s400)', marginTop: 4 }}>
+                  {onb.completed} {onb.completed === 1 ? 'la terminó' : 'la terminaron'}
+                  {onb.skipped > 0 && ` · ${onb.skipped} le dio a "Omitir por ahora"`}
+                  {onb.unknown > 0 && ` · ${onb.unknown} sin registrar (antes de medirlo)`}
+                </div>
+              )}
               {s.key === 'paid' && s.orgs > 0 && (
                 <div style={{ fontSize: 11.5, color: 'var(--s400)', marginTop: 4 }}>
                   {paid.charged} con cobro real

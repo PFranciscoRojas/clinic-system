@@ -233,3 +233,75 @@ func TestMedianDoesNotReorderItsInput(t *testing.T) {
 }
 
 func ptr(f float64) *float64 { return &f }
+
+func boolp(b bool) *bool { return &b }
+
+// TestSplitOnboarding pins the distinction the funnel was missing. Before
+// 000081 both ways of closing the wizard stamped the same column, so the
+// console reported a tenant who clicked "Omitir por ahora" 26 seconds after
+// logging in — the first organic signup, 2026-08-25 — as one that had set the
+// product up.
+func TestSplitOnboarding(t *testing.T) {
+	base := time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC)
+	done := at(base, 2)
+
+	cases := []struct {
+		name string
+		orgs []orgActivation
+		want onboardingBreakdown
+	}{
+		{
+			"finishing and skipping are not the same tenant",
+			[]orgActivation{
+				{CreatedAt: base, OnboardedAt: done, OnboardingSkipped: boolp(false)},
+				{CreatedAt: base, OnboardedAt: done, OnboardingSkipped: boolp(true)},
+			},
+			onboardingBreakdown{Completed: 1, Skipped: 1},
+		},
+		{
+			// The whole point of the nullable column: these tenants closed the
+			// wizard before anyone recorded how, and calling them completed
+			// would make up the number this test exists to protect.
+			"tenants from before the distinction count as unknown",
+			[]orgActivation{{CreatedAt: base, OnboardedAt: done, OnboardingSkipped: nil}},
+			onboardingBreakdown{Unknown: 1},
+		},
+		{
+			// Never reaching the step is not an outcome. Counting it as unknown
+			// would inflate the bucket that reads as "we lost this one".
+			"a tenant that never reached onboarding is not counted",
+			[]orgActivation{
+				{CreatedAt: base, VerifiedAt: at(base, 1)},
+				{CreatedAt: base},
+			},
+			onboardingBreakdown{},
+		},
+		{
+			"empty cohort",
+			nil,
+			onboardingBreakdown{},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := splitOnboarding(tc.orgs); got != tc.want {
+				t.Errorf("splitOnboarding = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
+// The onboarding step counts both outcomes, so its label must not claim the
+// tenant finished anything. The split lives in onboarding_breakdown.
+func TestOnboardingStepLabelDoesNotClaimCompletion(t *testing.T) {
+	for _, s := range activationStepDefs {
+		if s.key != "onboarded" {
+			continue
+		}
+		if s.label != "Cerró la puesta en marcha" {
+			t.Errorf("label = %q; the step counts skips too, so it cannot say the tenant finished", s.label)
+		}
+		return
+	}
+	t.Fatal("the onboarded step disappeared from the funnel")
+}

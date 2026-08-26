@@ -73,8 +73,10 @@ export const authApi = {
     api.post<void>('/auth/verify-password', { password }),
   changePassword: (current_password: string, new_password: string) =>
     api.post<void>('/auth/change-password', { current_password, new_password }),
-  onboardingComplete: () =>
-    api.post<void>('/auth/onboarding-complete', {}),
+  /** skipped=true is the "Omitir por ahora" link, false is finishing the
+   *  wizard. The funnel counts them apart; sending neither reads as finished. */
+  onboardingComplete: (skipped = false) =>
+    api.post<void>('/auth/onboarding-complete', { skipped }),
   updateProfile: (display_name: string) =>
     api.patch<TokenPair>('/auth/profile', { display_name }),
 

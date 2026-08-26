@@ -101,6 +101,9 @@ export interface ActivationOrg {
   slug: string;
   subscription_status: string;
   signup_source: string | null;
+  /** true = cerró la puesta en marcha con "Omitir por ahora"; false = la
+   *  terminó; null = se registró antes de que se guardara la diferencia. */
+  onboarding_skipped: boolean | null;
   created_at: string;
   trial_ends_at: string | null;
   current_period_end: string | null;
@@ -124,6 +127,9 @@ export interface ActivationMetrics {
   steps: ActivationStep[];
   orgs: ActivationOrg[];
   paid_breakdown: { charged: number; checkout: number; manual: number };
+  /** El paso de puesta en marcha, partido por cómo se cerró el asistente.
+   *  unknown = registros anteriores a que se guardara la diferencia. */
+  onboarding_breakdown: { completed: number; skipped: number; unknown: number };
   /** Sample size below which the percentages say nothing. */
   min_readable_cohort: number;
 }
