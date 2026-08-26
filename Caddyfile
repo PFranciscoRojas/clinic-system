@@ -58,8 +58,21 @@
         file_server
     }
 
+    # Access log to disk, not stdout: `docker logs` keeps only what fits in the
+    # container's buffer, so the one record of how a lead found us and what they
+    # did before leaving evaporates within days. Thirty days of history is what
+    # makes questions like "where did this signup come from" answerable after
+    # the fact instead of only while it is still happening.
+    #
+    # The URIs include patient UUIDs, so this file is personal data under Ley
+    # 1581: it stays on the server, is never shipped anywhere, and rolls off on
+    # its own. Do not widen the retention without revisiting the privacy policy.
     log {
-        output stdout
+        output file /var/log/caddy/access.log {
+            roll_size 20MiB
+            roll_keep 12
+            roll_keep_for 720h   # 30 días
+        }
         format json
     }
 }
@@ -82,7 +95,11 @@
     }
 
     log {
-        output stdout
+        output file /var/log/caddy/access.log {
+            roll_size 20MiB
+            roll_keep 12
+            roll_keep_for 720h   # 30 días
+        }
         format json
     }
 }

@@ -70,6 +70,9 @@ services:
       - ./caddy-upstream.conf:/etc/caddy/upstream.conf:ro
       - caddy_data:/data
       - caddy_config:/config
+      # Access logs, 30 days. See the log block in Caddyfile: this is personal
+      # data (patient UUIDs appear in the URIs) and never leaves the server.
+      - caddy_logs:/var/log/caddy
       - ./services/frontend/dist:/srv/frontend:ro
     networks:
       - sghcp_net
@@ -218,6 +221,7 @@ volumes:
   audio_data:
   caddy_data:
   caddy_config:
+  caddy_logs:
 
 networks:
   sghcp_net:
