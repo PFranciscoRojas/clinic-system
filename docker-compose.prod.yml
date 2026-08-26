@@ -26,3 +26,13 @@ volumes:
       type: none
       o: bind
       device: ${DATA_DIR}/caddy
+  # Los access logs viven junto al resto de los datos, no en el árbol de Docker:
+  # 30 días de tráfico son 240MiB en el peor caso (20MiB × 12) y el disco que
+  # importa vigilar es el mismo que ya se vigila. Sin esta entrada el volumen se
+  # crearía suelto en /var/lib/docker, fuera de DATA_DIR y de cualquier copia.
+  caddy_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR}/caddy-logs
