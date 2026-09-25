@@ -74,10 +74,14 @@ func (r *Repository) CreateOrgWithOwner(ctx context.Context, p auth.CreateOrgPar
 
 	// terms_accepted_at = now() records the moment of acceptance; terms_version
 	// captures which revision of the legal documents was accepted (Ley 1581 audit trail).
+	// The version is the one current in legal_documents, which is what the signup
+	// page links to. The client's value is only a fallback for a database with no
+	// terms published: the frontend used to send a constant that went stale.
 	err = tx.QueryRow(ctx, `
 		INSERT INTO users (organization_id, email, email_hash, password_hash, display_name,
 		                   terms_accepted_at, terms_version)
-		VALUES ($1, $2, $3, $4, $5, now(), $6)
+		VALUES ($1, $2, $3, $4, $5, now(),
+		        COALESCE((SELECT version FROM legal_documents WHERE doc_type = 'terms' AND is_current), $6))
 		RETURNING id
 	`, orgID, p.Email, hashEmail(p.Email), p.PasswordHash, p.DisplayName, p.TermsVersion).Scan(&userID)
 	if err != nil {
