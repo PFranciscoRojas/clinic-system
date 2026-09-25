@@ -1,7 +1,7 @@
 # Textos legales de Chapni
 
-Versión vigente: `2026-09-25` de privacidad, términos y DPA, publicada con la
-migración `000083_legal_documents_2026_09_25`. El texto está en esa migración y
+Versión vigente: privacidad `2026-09-25.1` (migración 000084, corrige la ubicación
+del servidor: Ashburn, EE. UU.), términos y DPA `2026-09-25` (migración 000083). El texto está en esas migraciones y
 en la tabla `legal_documents`; las versiones anteriores siguen en la tabla con
 `is_current = false`. Los cambios siguientes se publican desde SuperAdmin → Legal.
 
@@ -19,7 +19,5 @@ había pedido la auditoría legal. Quedan pendientes:
      al art. 43 de la Ley 1480?
    - ¿Chapni debe inscribirse en el RNBD? (Decreto 090 de 2018).
 3. Contador: confirmar si la suscripción causa IVA.
-4. País del centro de datos de Hetzner: la política dice "Alemania (casa matriz)".
-   Si el servidor está fuera de Alemania, hay que decirlo en la tabla de encargados.
-5. Contratos de transmisión con los encargados fuera de Colombia (Anthropic,
+4. Contratos de transmisión con los encargados fuera de Colombia (Hetzner, Anthropic,
    Backblaze, Resend, Cloudflare, Google): la política dice que existen.
