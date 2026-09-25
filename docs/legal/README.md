@@ -38,15 +38,20 @@ Cloudflare). No va archivo aparte.
 
 ## Propuesta de reembolsos (decisión pendiente)
 
-Suscripción de Chapni:
-- Retracto: 5 días hábiles desde el primer cobro de una suscripción nueva,
-  reembolso del 100%, sin condiciones. Reemplaza los "5 días calendario" y el
-  límite de "10 sesiones de uso activo", que no estaba definido en ningún lado.
-- Mensual: después del retracto no hay reembolso proporcional; al cancelar, el
-  servicio sigue hasta el fin del mes pagado.
-- Anual: después del retracto, reembolso de los meses completos no usados,
-  calculados sobre el precio con descuento (10 meses por 12).
+Suscripción de Chapni (versión ajustada el 2026-09-25, tras "está muy libre"):
+- Retracto: 5 días hábiles desde el primer pago de la primera suscripción,
+  reembolso del 100%. Una sola vez por profesional y por organización, para que
+  no se pueda encadenar cancelar y volver a suscribirse. Si la Ley 1480 aplica,
+  el retracto no se puede quitar ni condicionar al uso, así que ese es el
+  margen real para cerrarlo. Reemplaza los "5 días calendario" y el límite de
+  "10 sesiones de uso activo", que no estaba definido.
+- Mensual: después del retracto no hay reembolso; al cancelar, el servicio sigue
+  hasta el fin del mes pagado.
+- Anual: después del retracto se devuelve lo pagado menos cada mes iniciado,
+  cobrado al precio mensual completo. Así el descuento del anual solo se gana
+  quedándose el año, y a partir del mes 10 ya no hay nada que devolver.
 - Cobros duplicados o por error del sistema: reembolso completo siempre.
+- Suspensión por fraude o incumplimiento: sin reembolso.
 
 Reservas de pacientes: se mantiene la política que ya aplica la página
 (cancelación gratis hasta 24 horas antes, sin reembolso después o por
