@@ -226,6 +226,12 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// DataConsentVersion names the authorisation text the booking page shows next
+// to the data-consent checkbox (BookingWizardPage.tsx, DATA_CONSENT_VERSION).
+// Change both together whenever that text changes, so each stored consent
+// points at the exact wording the patient accepted.
+const DataConsentVersion = "2026-09-25"
+
 // POST /checkout — hold the slot and return a MercadoPago checkout URL.
 func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -237,8 +243,9 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 		Name           string `json:"name"`
 		Email          string `json:"email"`
 		Phone          string `json:"phone"`
-		PolicyAccepted bool   `json:"policy_accepted"` // refund/cancellation policy (B6)
-		PrevBookingID  string `json:"prev_booking_id"` // hold to release before re-checking out
+		PolicyAccepted bool   `json:"policy_accepted"`       // refund/cancellation policy (B6)
+		DataConsent    bool   `json:"data_consent_accepted"` // Ley 1581 authorisation to process the patient's data
+		PrevBookingID  string `json:"prev_booking_id"`       // hold to release before re-checking out
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
@@ -247,6 +254,10 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 	body.Name, body.Email = strings.TrimSpace(body.Name), strings.TrimSpace(body.Email)
 	if body.Name == "" || body.Email == "" || body.Date == "" || body.Time == "" {
 		httputil.WriteError(w, http.StatusBadRequest, "faltan datos")
+		return
+	}
+	if !body.DataConsent {
+		httputil.WriteError(w, http.StatusBadRequest, "debes autorizar el tratamiento de tus datos personales")
 		return
 	}
 	if !body.PolicyAccepted {
@@ -320,11 +331,11 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 		}
 
 		err = q.QueryRow(ctx, `
-			INSERT INTO bookings (organization_id, staff_id, scheduled_at, modality, guest_name, email, phone, amount, hold_expires_at, policy_accepted_at)
-			VALUES ($1, $2, $3, $4::appointment_modality, $5, $6, $7, $8, NOW() + interval '15 minutes', NOW())
+			INSERT INTO bookings (organization_id, staff_id, scheduled_at, modality, guest_name, email, phone, amount, hold_expires_at, policy_accepted_at, data_consent_at, data_consent_version)
+			VALUES ($1, $2, $3, $4::appointment_modality, $5, $6, $7, $8, NOW() + interval '15 minutes', NOW(), NOW(), $9)
 			ON CONFLICT (staff_id, scheduled_at) WHERE status = 'PENDING_PAYMENT' DO NOTHING
 			RETURNING id
-		`, prof.OrgID, prof.StaffID, scheduledAt, modality, body.Name, body.Email, body.Phone, amount).Scan(&bookingID)
+		`, prof.OrgID, prof.StaffID, scheduledAt, modality, body.Name, body.Email, body.Phone, amount, DataConsentVersion).Scan(&bookingID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Lost the race against a concurrent checkout for the same slot.
 			return errSlotTaken
