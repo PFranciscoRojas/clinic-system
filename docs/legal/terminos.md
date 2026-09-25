@@ -34,13 +34,15 @@ Chapni puede suspender o cancelar cuentas usadas de forma fraudulenta o con info
 
 ### 5. Retracto, reembolsos y cancelación
 
-**Retracto.** Puedes retractarte dentro de los 5 días hábiles siguientes al primer cobro de una suscripción nueva, mensual o anual, y te devolvemos el 100% de lo pagado, sin preguntas ni condiciones de uso.
+**Retracto.** Puedes retractarte dentro de los 5 días hábiles siguientes al primer pago de tu primera suscripción, mensual o anual, y te devolvemos el 100% de lo pagado. El retracto aplica una sola vez por profesional y por organización: si cancelas y vuelves a suscribirte, la nueva suscripción no tiene retracto.
 
 **Plan mensual.** Después del retracto no hay reembolsos proporcionales. Puedes cancelar cuando quieras desde Configuración → Facturación y el servicio sigue activo hasta el final del mes pagado. No hay permanencia mínima ni penalidad.
 
-**Plan anual.** Después del retracto, si cancelas te devolvemos los meses completos que no hayas usado, calculados sobre el precio mensual efectivo del plan anual (el pago total dividido entre 12).
+**Plan anual.** Después del retracto, si cancelas te devolvemos lo pagado menos cada mes iniciado, cobrado al precio del plan mensual (sin el descuento del anual). Si ese valor ya iguala o supera lo pagado, no hay reembolso. Ejemplo con el precio actual de $180.000 mensuales: pagaste $1.800.000 y cancelas en el mes 4; se descuentan 4 × $180.000 = $720.000 y se devuelven $1.080.000.
 
 **Cobros por error.** Un cobro duplicado o hecho por una falla del sistema se devuelve completo en cualquier momento.
+
+**Sin reembolso.** No hay reembolso cuando la cuenta se suspende o termina por uso fraudulento, ilegal o por incumplimiento de estos términos (sección 11).
 
 **Cómo pedirlo.** Escribe a hola@chapni.com con el asunto "Reembolso" y el comprobante de pago. El dinero vuelve al mismo medio de pago en un plazo de 5 a 15 días hábiles, según el medio. Esto no afecta tu derecho a la reversión del pago en los casos del artículo 51 de la Ley 1480 de 2011.
 
