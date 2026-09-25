@@ -15,6 +15,11 @@ const PAPER = '#faf6f1', INK = '#2a2420', INK_SOFT = '#6b5f55', INK_FAINT = '#a8
 const DISPLAY = "'Fraunces', Georgia, serif";
 
 const DOW = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+
+// Version of the data-processing authorisation shown in the 'data' step. The
+// backend stores it with each booking (booking.DataConsentVersion); bump both
+// together whenever the wording below changes.
+const DATA_CONSENT_VERSION = '2026-09-25';
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
 // Public booking wizard (/book/:slug). No auth. Themed per tenant.
@@ -43,6 +48,7 @@ export function BookingWizardPage() {
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
   const [policyAccepted, setPolicyAccepted] = useState(false);
+  const [dataConsent, setDataConsent] = useState(false);
   const [checkout, setCheckout] = useState<Checkout | null>(null);
 
   const accent = info?.brand_color && /^#[0-9a-fA-F]{3,8}$/.test(info.brand_color) ? info.brand_color : '#8a5a5a';
@@ -106,6 +112,7 @@ export function BookingWizardPage() {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { setErr('Ingresa un correo válido.'); return; }
     const phoneErr = validatePhone(code, phone.trim());
     if (phoneErr) { setErr(phoneErr); return; }
+    if (!dataConsent) { setErr('Debes autorizar el tratamiento de tus datos personales.'); return; }
     if (!policyAccepted) { setErr('Debes aceptar la política de reembolso y cancelación.'); return; }
     if (!picked) { setStep('slot'); return; }
     setSaving(true);
@@ -114,6 +121,7 @@ export function BookingWizardPage() {
         org_slug: slug, staff_id: selProf?.staff_id, modality, date: picked.date, time: picked.time,
         name: name.trim(), email: email.trim(), phone: `${code} ${phone.trim()}`,
         policy_accepted: policyAccepted,
+        data_consent_accepted: dataConsent,
         // Release any prior hold from this same wizard session so editing the
         // summary and re-submitting doesn't collide with the patient's own slot.
         prev_booking_id: checkout?.booking_id,
@@ -236,7 +244,7 @@ export function BookingWizardPage() {
                 <ChevronLeft size={15} /> {hasPicker && selProf ? `${selProf.name} · cambiar` : `${modality === 'VIRTUAL' ? 'Online' : 'Presencial'} · cambiar`}
               </button>
               {loadingSlots ? (
-                <div style={{ color: INK_FAINT, padding: '24px 0' }}>Cargando horarios…</div>
+                <div role="status" style={{ color: INK_SOFT, padding: '24px 0' }}>Cargando horarios…</div>
               ) : notFound ? (
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', color: INK_SOFT, padding: '16px 0' }}><AlertTriangle size={16} color="#b45309" /> No encontramos este consultorio.</div>
               ) : Object.keys(byDate).length === 0 ? (
@@ -246,14 +254,17 @@ export function BookingWizardPage() {
                   {/* Calendar */}
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                      <button onClick={() => canPrev && shiftMonth(-1)} disabled={!canPrev} style={{ border: 'none', background: 'none', cursor: canPrev ? 'pointer' : 'default', color: canPrev ? INK : INK_FAINT, display: 'flex', padding: 4 }}><ChevronLeft size={18} /></button>
+                      <button type="button" aria-label="Mes anterior" onClick={() => canPrev && shiftMonth(-1)} disabled={!canPrev} style={{ border: 'none', background: 'none', cursor: canPrev ? 'pointer' : 'default', color: canPrev ? INK : INK_FAINT, display: 'flex', padding: 4 }}><ChevronLeft size={18} /></button>
                       <div style={{ fontFamily: DISPLAY, fontSize: 16, textTransform: 'capitalize' }}>{MONTHS[viewMonth.m]} {viewMonth.y}</div>
-                      <button onClick={() => shiftMonth(1)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: INK, display: 'flex', padding: 4 }}><ChevronRight size={18} /></button>
+                      <button type="button" aria-label="Mes siguiente" onClick={() => shiftMonth(1)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: INK, display: 'flex', padding: 4 }}><ChevronRight size={18} /></button>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3, textAlign: 'center' }}>
-                      {DOW.map((d, i) => <div key={i} style={{ fontSize: 10.5, color: INK_FAINT, fontWeight: 600, padding: '4px 0' }}>{d}</div>)}
+                      {/* Hidden from screen readers: each day button already names its weekday. */}
+                      {DOW.map((d, i) => <div key={i} aria-hidden="true" style={{ fontSize: 10.5, color: INK_SOFT, fontWeight: 600, padding: '4px 0' }}>{d}</div>)}
                       {cells.map((c, i) => c === null ? <div key={i} /> : (
-                        <button key={i} disabled={!c.has} onClick={() => setSelDate(c.date)} style={{
+                        <button key={i} type="button" disabled={!c.has} aria-pressed={selDate === c.date}
+                          aria-label={`${fmtLongDay(c.date)}${c.has ? '' : ', sin horarios'}`}
+                          onClick={() => setSelDate(c.date)} style={{
                           aspectRatio: '1', border: 'none', borderRadius: 8, fontSize: 13, cursor: c.has ? 'pointer' : 'default',
                           background: selDate === c.date ? accent : c.has ? '#fff' : 'transparent',
                           color: selDate === c.date ? '#fff' : c.has ? INK : INK_FAINT,
@@ -269,11 +280,14 @@ export function BookingWizardPage() {
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
                       {(byDate[selDate] ?? []).map(t => (
-                        <button key={t} onClick={() => { setPicked({ date: selDate, time: t }); setStep('data'); }} style={chip(false)}
+                        <button key={t} type="button" onClick={() => { setPicked({ date: selDate, time: t }); setStep('data'); }} style={chip(false)}
+                          aria-label={`${fmtLongDay(selDate)}, ${fmt12h(t)}`}
                           onMouseEnter={e => { e.currentTarget.style.borderColor = accent; e.currentTarget.style.color = accent; }}
-                          onMouseLeave={e => { e.currentTarget.style.borderColor = LINE; e.currentTarget.style.color = INK; }}>{fmt12h(t)}</button>
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = LINE; e.currentTarget.style.color = INK; }}
+                          onFocus={e => { e.currentTarget.style.borderColor = accent; e.currentTarget.style.color = accent; }}
+                          onBlur={e => { e.currentTarget.style.borderColor = LINE; e.currentTarget.style.color = INK; }}>{fmt12h(t)}</button>
                       ))}
-                      {selDate && (byDate[selDate]?.length ?? 0) === 0 && <div style={{ color: INK_FAINT, fontSize: 13 }}>Sin horarios este día.</div>}
+                      {selDate && (byDate[selDate]?.length ?? 0) === 0 && <div style={{ color: INK_SOFT, fontSize: 13 }}>Sin horarios este día.</div>}
                     </div>
                   </div>
                 </div>
@@ -291,14 +305,32 @@ export function BookingWizardPage() {
                 <strong style={{ textTransform: 'capitalize', fontFamily: DISPLAY }}>{fmtLongDay(picked.date)}</strong> · {fmt12h(picked.time)} · {modality === 'VIRTUAL' ? 'Online' : 'Presencial'}
                 {hasPicker && selProf ? <> · con <strong style={{ fontFamily: DISPLAY }}>{selProf.name}</strong></> : null}
               </div>
-              <div style={inputWrap}><User size={16} color={INK_FAINT} /><input value={name} onChange={e => setName(e.target.value)} placeholder="Tu nombre" style={input} /></div>
-              <div style={inputWrap}><Mail size={16} color={INK_FAINT} /><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Correo electrónico" style={input} /></div>
+              <div style={inputWrap}><User size={16} color={INK_FAINT} aria-hidden="true" /><input value={name} onChange={e => setName(e.target.value)} placeholder="Tu nombre" aria-label="Tu nombre" autoComplete="name" style={input} /></div>
+              <div style={inputWrap}><Mail size={16} color={INK_FAINT} aria-hidden="true" /><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Correo electrónico" aria-label="Correo electrónico" autoComplete="email" style={input} /></div>
               <div style={{ ...inputWrap, paddingLeft: 6 }}>
-                <select value={code} onChange={e => setCode(e.target.value)} style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 14, color: INK, padding: '0 4px', cursor: 'pointer', flexShrink: 0 }}>
+                <select value={code} onChange={e => setCode(e.target.value)} aria-label="Indicativo del país" autoComplete="tel-country-code" style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 14, color: INK, padding: '0 4px', cursor: 'pointer', flexShrink: 0 }}>
                   {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
                 </select>
                 <div style={{ width: 1, height: 20, background: LINE, flexShrink: 0 }} />
-                <input value={phone} onChange={e => setPhone(e.target.value.replace(/[^\d]/g, ''))} placeholder="Número de celular" inputMode="numeric" maxLength={11} style={{ ...input, minWidth: 0 }} />
+                <input value={phone} onChange={e => setPhone(e.target.value.replace(/[^\d]/g, ''))} placeholder="Número de celular" aria-label="Número de celular" autoComplete="tel-national" inputMode="numeric" maxLength={11} style={{ ...input, minWidth: 0 }} />
+              </div>
+              {/* Data-processing authorisation (Ley 1581/2012). Separate from the
+                  refund policy: each is its own acceptance, and this one is
+                  stored with DATA_CONSENT_VERSION as proof of the wording. */}
+              <div style={{ background: '#fff', border: `1.5px solid ${LINE}`, borderRadius: 11, padding: '13px 15px', marginBottom: 14 }}>
+                <div style={{ fontFamily: DISPLAY, fontSize: 14, fontWeight: 600, marginBottom: 7 }}>Tratamiento de tus datos</div>
+                <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.6, color: INK_SOFT }}>
+                  {clinicName} es responsable de tus datos. Los usa para agendar, confirmar y recordarte tu cita, cobrarla y
+                  comunicarse contigo sobre tu atención. Que tengas una cita psicológica es un dato de salud, y por eso te
+                  pedimos autorización expresa. Chapni (la plataforma de agenda) y MercadoPago (el pago) los tratan por
+                  encargo de {clinicName}. Puedes conocer, actualizar, corregir o pedir que se borren tus datos, y revocar
+                  esta autorización, contactando a {clinicName}. Cómo los protege Chapni está en su{' '}
+                  <a href="/legal/privacidad" target="_blank" rel="noopener noreferrer" style={{ color: accent, fontWeight: 600 }}>política de tratamiento de datos</a>.
+                </p>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginTop: 11, cursor: 'pointer', fontSize: 13, color: INK }}>
+                  <input type="checkbox" checked={dataConsent} data-consent-version={DATA_CONSENT_VERSION} onChange={e => { setDataConsent(e.target.checked); if (e.target.checked) setErr(''); }} style={{ marginTop: 2, width: 16, height: 16, accentColor: accent, flexShrink: 0, cursor: 'pointer' }} />
+                  <span>Autorizo el tratamiento de mis datos personales, incluidos los de salud, para gestionar mi cita (Ley 1581 de 2012).</span>
+                </label>
               </div>
               {/* Refund / cancellation policy — acceptance required before payment (B6) */}
               <div style={{ background: '#fff', border: `1.5px solid ${LINE}`, borderRadius: 11, padding: '13px 15px', marginBottom: 14 }}>
@@ -313,8 +345,8 @@ export function BookingWizardPage() {
                   <span>He leído y acepto la política de reembolso y cancelación.</span>
                 </label>
               </div>
-              {err && <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: '#a8443c', marginBottom: 14 }}><AlertTriangle size={14} />{err}</div>}
-              <button onClick={submit} disabled={saving || !policyAccepted} style={{ width: '100%', padding: 14, borderRadius: 11, border: 'none', background: (saving || !policyAccepted) ? INK_FAINT : accent, color: '#fff', fontSize: 15, fontWeight: 600, cursor: saving ? 'wait' : !policyAccepted ? 'not-allowed' : 'pointer', fontFamily: DISPLAY }}>
+              {err && <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: '#a8443c', marginBottom: 14 }}><AlertTriangle size={14} aria-hidden="true" />{err}</div>}
+              <button type="button" onClick={submit} disabled={saving || !policyAccepted || !dataConsent} style={{ width: '100%', padding: 14, borderRadius: 11, border: 'none', background: (saving || !policyAccepted || !dataConsent) ? INK_FAINT : accent, color: '#fff', fontSize: 15, fontWeight: 600, cursor: saving ? 'wait' : (!policyAccepted || !dataConsent) ? 'not-allowed' : 'pointer', fontFamily: DISPLAY }}>
                 {saving ? 'Un momento…' : 'Continuar al pago'}
               </button>
             </div>
@@ -345,13 +377,13 @@ export function BookingWizardPage() {
               <button onClick={() => { window.location.href = checkout.init_point; }} style={{ width: '100%', padding: 15, borderRadius: 11, border: 'none', background: accent, color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: DISPLAY }}>
                 Pagar con MercadoPago
               </button>
-              <p style={{ fontSize: 12, color: INK_FAINT, textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
+              <p style={{ fontSize: 12, color: INK_SOFT, textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
                 Tu horario queda reservado por 15 minutos mientras completas el pago.
               </p>
             </div>
           )}
 
-          <p style={{ fontSize: 11.5, color: INK_FAINT, textAlign: 'center', marginTop: 36 }}>
+          <p style={{ fontSize: 11.5, color: INK_SOFT, textAlign: 'center', marginTop: 36 }}>
             Con la tecnología de <span style={{ fontWeight: 600 }}>Chapni</span>
           </p>
         </div>
