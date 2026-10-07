@@ -1,4 +1,4 @@
-"""Executable form of CLAUDE.md rule 5: the LLM only ever sees anonymized text.
+"""Executable form of AGENTS.md rule 5: the LLM only ever sees anonymized text.
 
 The anonymizer runs three layers. Two are deterministic and fully asserted
 here: the literal replacement of the patient's known names, and the regexes for

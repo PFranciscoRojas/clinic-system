@@ -220,7 +220,7 @@ func TestNoUndeclaredDependencies(t *testing.T) {
 var logCall = regexp.MustCompile(
 	`(?i)\b([A-Za-z0-9_.]*log[A-Za-z0-9_.]*)\.(Debug|Info|Warn|Error)(Context)?\(`)
 
-// Field names that are plaintext PII in this codebase's vocabulary. CLAUDE.md
+// Field names that are plaintext PII in this codebase's vocabulary. AGENTS.md
 // rule 4: names, documents, phones and SOAP are encrypted at rest — writing
 // them to stdout hands them to whoever reads the container logs, in the clear,
 // forever, outside the encryption boundary the whole design rests on.

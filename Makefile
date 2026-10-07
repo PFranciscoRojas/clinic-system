@@ -8,7 +8,7 @@
 # ── El contrato: un solo comando decide si el trabajo está hecho ─────────────
 # `make verify` corre los mismos checks que el CI, en el mismo orden. Ningún
 # cambio se reporta como terminado sin esto en verde (ver Definition of Done en
-# CLAUDE.md). Para un loop local rápido: VERIFY_SKIP="frontend-test ai-test" make verify
+# AGENTS.md). Para un loop local rápido: VERIFY_SKIP="frontend-test ai-test" make verify
 verify:
 	./scripts/verify.sh
 

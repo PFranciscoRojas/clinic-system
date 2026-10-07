@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// These tests turn the strict rules in CLAUDE.md into executable constraints.
+// These tests turn the strict rules in AGENTS.md into executable constraints.
 // They are deliberately self-discovering: instead of listing the tables and
 // columns that exist today, they walk the live schema and fail on any
 // violation. A table added next month is covered without anyone remembering
@@ -22,10 +22,10 @@ import (
 
 // floatColumnAllowlist holds columns that may legitimately be floating point:
 // values where a rounding error is harmless and NUMERIC would be overkill.
-// Money must never appear here (CLAUDE.md rule 3).
+// Money must never appear here (AGENTS.md rule 3).
 var floatColumnAllowlist = map[string]string{}
 
-// TestNoFloatingPointColumns enforces CLAUDE.md rule 3: every financial
+// TestNoFloatingPointColumns enforces AGENTS.md rule 3: every financial
 // calculation happens in PostgreSQL using NUMERIC, never floats. Rather than
 // guessing which columns hold money by name, this rejects floating point
 // across the whole schema and makes each exception explicit.
@@ -63,7 +63,7 @@ func TestNoFloatingPointColumns(t *testing.T) {
 	}
 
 	if len(offenders) > 0 {
-		t.Errorf("floating point columns found — money must be NUMERIC (CLAUDE.md rule 3).\n"+
+		t.Errorf("floating point columns found — money must be NUMERIC (AGENTS.md rule 3).\n"+
 			"If one of these genuinely is not money, add it to floatColumnAllowlist with a reason:\n  %s",
 			strings.Join(offenders, "\n  "))
 	}
@@ -84,7 +84,7 @@ func TestNoFloatingPointColumns(t *testing.T) {
 	t.Logf("no floating point columns; %d NUMERIC columns present", numericColumns)
 }
 
-// TestEncryptedColumnsAreBytea enforces CLAUDE.md rule 4: PII and clinical data
+// TestEncryptedColumnsAreBytea enforces AGENTS.md rule 4: PII and clinical data
 // live in BYTEA columns encrypted with a per-patient DEK. A column named *_enc
 // that is text would mean plaintext PII sitting in the database.
 func TestEncryptedColumnsAreBytea(t *testing.T) {
@@ -127,7 +127,7 @@ func TestEncryptedColumnsAreBytea(t *testing.T) {
 		t.Fatal("no *_enc columns found at all — the encrypted-column convention or this query is broken")
 	}
 	if len(offenders) > 0 {
-		t.Errorf("encrypted columns must be BYTEA (CLAUDE.md rule 4):\n  %s", strings.Join(offenders, "\n  "))
+		t.Errorf("encrypted columns must be BYTEA (AGENTS.md rule 4):\n  %s", strings.Join(offenders, "\n  "))
 	}
 	t.Logf("verified %d encrypted columns", checked)
 }
@@ -219,7 +219,7 @@ var forceRLSExemptTables = map[string]string{
 	"org_whatsapp_config": "org-level config, reached outside the request-scoped querier",
 }
 
-// TestTenantScopedTablesHaveRLSPolicy enforces CLAUDE.md rule 2 structurally.
+// TestTenantScopedTablesHaveRLSPolicy enforces AGENTS.md rule 2 structurally.
 // rls_test.go proves isolation behaves correctly for a fixed list of tables;
 // this proves nobody can add a tenant-scoped table without a policy, which is
 // how that fixed list would silently fall behind.
@@ -296,7 +296,7 @@ func TestTenantScopedTablesHaveRLSPolicy(t *testing.T) {
 
 	if len(missingPolicy) > 0 {
 		sort.Strings(missingPolicy)
-		t.Errorf("tables with organization_id must have ROW LEVEL SECURITY and at least one policy (CLAUDE.md rule 2).\n"+
+		t.Errorf("tables with organization_id must have ROW LEVEL SECURITY and at least one policy (AGENTS.md rule 2).\n"+
 			"If a table genuinely cannot be tenant-scoped, add it to rlsExemptTables with a reason:\n  %s",
 			strings.Join(missingPolicy, "\n  "))
 	}

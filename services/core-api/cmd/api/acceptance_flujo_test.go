@@ -271,7 +271,7 @@ func (w *world) laAdendaQuedaRegistrada() error {
 // professional's language.
 //
 // The amount travels as a string all the way down, never as a float: money is
-// NUMERIC in Postgres (CLAUDE.md rule 3) and a JSON number would be a float64
+// NUMERIC in Postgres (AGENTS.md rule 3) and a JSON number would be a float64
 // the moment Go decoded it.
 func (w *world) emiteFactura(monto string) error {
 	if w.lastPatientID == "" || w.lastAppointmentID == "" {
@@ -370,7 +370,7 @@ func (w *world) laFacturaQuedaPagada() error {
 
 // sameAmount compares two NUMERIC-shaped strings without parsing them as
 // floats. "150000" and "150000.00" are the same money; == would say otherwise,
-// and strconv.ParseFloat would introduce exactly the arithmetic CLAUDE.md
+// and strconv.ParseFloat would introduce exactly the arithmetic AGENTS.md
 // rule 3 forbids.
 func sameAmount(a, b string) bool {
 	return normalizeMoney(a) == normalizeMoney(b)

@@ -9,7 +9,7 @@ import (
 	"sghcp/core-api/internal/shared/token"
 )
 
-// TenantScope is the single enforcement point for CLAUDE.md rule 2 — every DB
+// TenantScope is the single enforcement point for AGENTS.md rule 2 — every DB
 // interaction goes through RLS with app.current_org set. The success path needs
 // a live database and lives in internal/integration (tenant_scope_test.go); what
 // is asserted here is everything that happens when the pool cannot serve the

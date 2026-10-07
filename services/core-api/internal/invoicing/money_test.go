@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// CLAUDE.md rule 3: every financial calculation happens in PostgreSQL with
+// AGENTS.md rule 3: every financial calculation happens in PostgreSQL with
 // NUMERIC, never a float. Go's job here is to validate the decimal string on
 // the way in and to compare integer cents for the two guards that cannot wait
 // for the database (discount+insurance > subtotal, and overpaying an invoice).

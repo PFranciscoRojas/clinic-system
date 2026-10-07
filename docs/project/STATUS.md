@@ -2,7 +2,7 @@
 
 > Fuente canónica del estado vivo. Se **SOBRESCRIBE** en cada actualización (`/actualizar-contexto`).
 > El historial diario está en `docs/history/CHANGELOG.md`.
-> Las reglas de código y el mapa de arquitectura están en `CLAUDE.md`.
+> Las reglas de código y el mapa de arquitectura están en `AGENTS.md`.
 
 ---
 
