@@ -8,7 +8,7 @@ import (
 // Fuzzing is the part of the gauntlet that cannot be gamed: the inputs come
 // from the machine, so a test cannot be written to pass by construction.
 //
-// The property that matters here is the one CLAUDE.md rule 4 depends on.
+// The property that matters here is the one AGENTS.md rule 4 depends on.
 // Patient names are encrypted, so search is only possible through these
 // hashes — there is no LIKE to fall back on. If a name and the prefix a
 // receptionist types disagree about folding for even one input, that patient

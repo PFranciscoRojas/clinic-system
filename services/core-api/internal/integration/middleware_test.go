@@ -17,7 +17,7 @@ import (
 // The middleware unit tests (internal/shared/middleware) cover every branch that
 // can be reached without a database. These cover the ones that cannot — and
 // those happen to be the two that matter most: TenantScope is the single
-// enforcement point for CLAUDE.md rule 2, and it is only meaningful against a
+// enforcement point for AGENTS.md rule 2, and it is only meaningful against a
 // server that actually applies RLS.
 
 var mwJWTSecret = []byte("integration-test-secret")

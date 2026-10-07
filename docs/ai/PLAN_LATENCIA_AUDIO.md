@@ -4,7 +4,7 @@
 > a ~1–3 min, y cerrar los agujeros de concurrencia que hoy no están cubiertos por
 > ninguna prueba.
 >
-> Restricción dura (CLAUDE.md regla 5): **Whisper corre local, el audio nunca sale
+> Restricción dura (AGENTS.md regla 5): **Whisper corre local, el audio nunca sale
 > del servidor.** Eso descarta Deepgram, AssemblyAI, Groq y la API de OpenAI, que
 > serían la respuesta obvia y equivocada. Todo lo de abajo respeta esa regla.
 
@@ -429,7 +429,7 @@ toda la optimización de latencia.
 
 - ✅ Go: dos subidas sobre la **misma cita**, secuenciales y concurrentes → dos
   archivos distintos, ninguno truncado. **Falló antes del fix** (regla 3 del
-  CLAUDE.md: el bug entra primero como test rojo).
+  AGENTS.md: el bug entra primero como test rojo).
 - ✅ Go: separación por org y por cita en la ruta; extensión validada en el
   servicio, no solo en el handler; un `io.Copy` fallido no deja PHI a medio
   escribir.
@@ -904,7 +904,7 @@ que justificarse contra ese número y no contra los 7,4 min de hoy.
 ## 8. Reglas que aplican
 
 - **Definition of Done**: `make verify` en verde. No antes, y no por otro criterio.
-- **Regla 3 (CLAUDE.md)**: P1 y P2 entran primero como test rojo, después el parche.
+- **Regla 3 (AGENTS.md)**: P1 y P2 entran primero como test rojo, después el parche.
 - Ni un `skip` nuevo, ni tocar `skip-budget.txt`.
 - Este es trabajo de rendimiento y el riesgo de colar una regresión de **calidad**
   de transcripción es alto: hace falta un audio de referencia fijo con WER medido

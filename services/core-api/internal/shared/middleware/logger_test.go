@@ -11,7 +11,7 @@ import (
 )
 
 // The access log is the one place where every request is written to disk, so it
-// is also the easiest place to leak PII by accident (CLAUDE.md rule 4). These
+// is also the easiest place to leak PII by accident (AGENTS.md rule 4). These
 // tests pin both halves: the fields that must be there, and the request data
 // that must never be.
 

@@ -230,7 +230,7 @@ func TestLoginRejections(t *testing.T) {
 				t.Errorf("audit lost the request context: ip=%q ua=%q", entry.IP, entry.UserAgent)
 			}
 			// The audit trail identifies the attempt by email hash, never by the
-			// address itself (CLAUDE.md rule 4).
+			// address itself (AGENTS.md rule 4).
 			if entry.EmailHash != hash.Normalize("pro@clinic.test") {
 				t.Errorf("audit EmailHash = %q, want the normalized hash", entry.EmailHash)
 			}

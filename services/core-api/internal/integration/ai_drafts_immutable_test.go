@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// CLAUDE.md rule 5: AI drafts are immutable — the professional approves
+// AGENTS.md rule 5: AI drafts are immutable — the professional approves
 // explicitly, and what they approved has to stay exactly what they approved.
 // These tests prove the guarantee lives in the database, not in the good
 // intentions of whoever writes the next UPDATE.

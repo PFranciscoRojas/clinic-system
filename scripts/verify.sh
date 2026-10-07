@@ -141,6 +141,12 @@ step "deploy-paths" ./scripts/check_deploy_paths.sh
 # ignorar avisos.
 step "compose-files" ./scripts/check_compose_files.sh
 
+# And the files every agent reads first. The old CLAUDE.md pointed at folders
+# that had been renamed and described a hash that had been replaced, for two
+# months, because nothing compared it to the tree. Paths are the part of the
+# prose that can be checked.
+step "agents-md" ./scripts/check_agents_md.sh
+
 # And the mode of the scripts themselves. Every step above this line runs a
 # .sh by path, so a script committed without its exec bit is a step that
 # vanishes on any clone that did not create it — including the VPS.
@@ -179,5 +185,5 @@ if [[ ${#FAILED[@]} -eq 0 ]]; then
 fi
 printf '\033[31mverify FAILED\033[0m (%ss): %s\n' "$ELAPSED" "${FAILED[*]}"
 printf '\nThe work is not done. Fix it — do not weaken, skip or delete a test to\n'
-printf 'get past this; see the Definition of Done in CLAUDE.md.\n'
+printf 'get past this; see the Definition of Done in AGENTS.md.\n'
 exit 1

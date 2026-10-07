@@ -149,13 +149,13 @@ prueba que existe.
 
 ---
 
-### Fase 1 — Escribir las 5 reglas de CLAUDE.md como tests ejecutables
+### Fase 1 — Escribir las 5 reglas de AGENTS.md como tests ejecutables
 
-Las reglas estrictas del proyecto hoy viven en prosa dentro de `CLAUDE.md`. Un
+Las reglas estrictas del proyecto hoy viven en prosa dentro de `AGENTS.md`. Un
 agente las lee y las *puede* respetar. El objetivo es que no *pueda* violarlas.
 Cada regla pasa a ser un test que falla si se rompe.
 
-| Regla CLAUDE.md | Test que la vuelve ejecutable | Dónde |
+| Regla AGENTS.md | Test que la vuelve ejecutable | Dónde |
 |---|---|---|
 | 2. Multi-tenant vía RLS | ✅ ya existe | `integration/rls_test.go` |
 | 2b. Toda tabla nueva con `organization_id` tiene política RLS | ⬜ test que consulta `pg_policies` y falla si una tabla tenant-scoped no tiene `tenant_isolation` | `integration/rls_policy_coverage_test.go` |
@@ -577,7 +577,7 @@ segunda vez que pasa en este plan.
 El otro hallazgo no fue un bug sino el harness chocando con un control real: el
 límite de 20 altas por minuto y por IP empezó a devolver 429 según crecía la
 suite, porque los siete escenarios llegaban todos desde `127.0.0.1`. La
-tentación evidente —aflojar el límite en test— es justo lo que CLAUDE.md
+tentación evidente —aflojar el límite en test— es justo lo que AGENTS.md
 prohíbe. La solución es más fiel a producción, no menos: cada escenario llega
 con su propio `X-Forwarded-For`, igual que Caddy lo pone. No es falsificar
 (`ClientIPFromXFF` toma la entrada de la derecha, y aquí el harness *es* el
@@ -675,13 +675,13 @@ declara el módulo era una mentira que nadie estaba comprobando.
 Lo anterior es infraestructura. Esto es lo que hace que el agente la use **antes**
 de decirte "listo".
 
-- [x] Añadir a `CLAUDE.md` una sección **Definition of Done** explícita: ningún
+- [x] Añadir a `AGENTS.md` una sección **Definition of Done** explícita: ningún
       cambio se reporta como terminado sin `make verify` en verde.
 - [x] Crear `make verify` = `test-api -race` + `lint-api` + cobertura + los tests
       de invariantes + typecheck frontend + pytest. Un solo comando.
 - [x] Hook `pre-push` en git que corre `make verify`. El agente no puede empujar
       código roto aunque quiera.
-- [x] Regla en `CLAUDE.md`: **está prohibido debilitar, saltar (`t.Skip`) o
+- [x] Regla en `AGENTS.md`: **está prohibido debilitar, saltar (`t.Skip`) o
       borrar un test para hacer pasar el build.** Si un test estorba, se reporta,
       no se toca. Añadir un check en CI que falle si el número de `t.Skip` sube.
 - [x] Regla: todo bug encontrado en producción entra primero como test que falla,
@@ -694,7 +694,7 @@ de decirte "listo".
 | El comando único que decide "hecho" | `scripts/verify.sh`, `make verify` | portátil, hook |
 | Puerta antes de empujar | `.githooks/pre-push`, `make hooks` | `git push` |
 | Trinquete de skips | `scripts/check_skips.sh`, `skip-budget.txt` | `make verify`, job `skip-ratchet` |
-| El contrato escrito | `CLAUDE.md` → *Definition of Done* | lo lee el agente al arrancar |
+| El contrato escrito | `AGENTS.md` → *Definition of Done* | lo lee el agente al arrancar |
 
 `make verify` corre los once pasos **en serie y en el orden del CI**. En serie a
 propósito: cuando algo se rompe quieres el primer fallo y su log entero, no ocho
@@ -708,11 +708,11 @@ El mensaje final no es decorativo:
 verify FAILED (116s): ai-test
 
 The work is not done. Fix it — do not weaken, skip or delete a test to
-get past this; see the Definition of Done in CLAUDE.md.
+get past this; see the Definition of Done in AGENTS.md.
 ```
 
 Es el único sitio donde la regla aparece **en el momento exacto** en que apetece
-romperla. Una regla que solo vive en `CLAUDE.md` compite con 200 líneas de
+romperla. Una regla que solo vive en `AGENTS.md` compite con 200 líneas de
 contexto; ésta la lee quien acaba de ver rojo.
 
 `VERIFY_SKIP="frontend-test ai-test" make verify` existe para el loop rápido, y
@@ -771,7 +771,7 @@ trimestre a tiempo completo.
 | Bloque | Fases | Esfuerzo | Resultado |
 |---|---|---|---|
 | **Semana 1** | 0 | ~3 h | El CI bloquea de verdad. Cambio de mayor retorno del plan. |
-| **Semana 2–3** | 1 | ~8 h | Las 5 reglas de CLAUDE.md dejan de ser prosa. |
+| **Semana 2–3** | 1 | ~8 h | Las 5 reglas de AGENTS.md dejan de ser prosa. |
 | **Semana 4–6** | 2 (crypto, clinicalperm, auth) | ~12 h | El código de más riesgo, cubierto. Trinquete activo. |
 | **Semana 7–8** | 3 + 4 | ~10 h | Fuzzing y concurrencia. Aquí aparecen bugs reales. |
 | **Semana 9–10** | 6 | ~12 h | Aceptación en Gherkin de los 5 flujos de negocio. |
