@@ -71,6 +71,15 @@ Bloquea la franja en tu calendario. Misma hora todos los días. Si un día no se
 
 Todo el copy sigue las reglas de escritura de Chapni: sin guion largo, sin negrita, sin abrir con ¿, frases de largo distinto, nada de "no es solo X, es Y".
 
+Los mensajes en frío (4.2 y 4.3) siguen la estructura de primer contacto de Sandler (taller del 2026-10-07):
+
+1. Presentación corta. Quién eres y por qué eres distinto, que brille poquito. Lo de Marcela ya cumple.
+2. Halago. "Hablo con psicólogas que tienen su consulta andando..." prepara el terreno para hablar de lo que duele. Corto: este gremio conoce la PNL y un halago cargado se lee como técnica.
+3. Tres dolores, cada uno con emoción, problema y consecuencia. Son tres porque si el primero no conecta, el segundo o el tercero sí. La consecuencia tiene que doler y además ser verdad, nada que el producto no resuelva hoy.
+4. Pregunta gancho: "De pura casualidad, alguna de esas te suena?". Su único trabajo es abrir el "cuéntame más". El producto, el piloto y los enlaces llegan después, cuando ella ya dijo cuál le pasa.
+
+Los mismos tres dolores están en la sección de empatía de chapni.com (`chapni/src/components/Empathy.astro`), cada uno con su botón de WhatsApp. Si cambian aquí, cambian allá.
+
 ### 4.0 WhatsApp a las colegas de Marcela (el primero de todos)
 
 Este es el único mensaje con referido de por medio, así que es el que más probabilidad tiene de
@@ -124,40 +133,73 @@ Cambia solo el nombre. No la "mejores" para cada persona, no hace falta y te va 
 ```
 Gracias por aceptar, Ingrid.
 
-Te cuento de que se trata sin rodeos. Mi esposa es psicóloga clínica y llevaba años peleando con las notas de sesión los domingos en la noche. Le armé un sistema para eso y lleva un año usándolo todos los días.
+Soy Francisco. Mi esposa es psicóloga clínica y hace un año le construí el sistema donde lleva su consulta. Lo usa todos los días.
 
-Graba la sesión con el consentimiento del paciente, el audio se transcribe en el mismo servidor sin salir a ninguna nube, y le queda un borrador del registro que ella corrige y aprueba. Nunca se guarda nada que ella no haya revisado. La historia clínica queda cifrada, paciente por paciente.
+Hablo con psicólogas que tienen su consulta andando, pacientes que vuelven y agenda llena. Y casi todas me cuentan alguna de estas tres cosas:
 
-Ahora quiero que lo usen 5 psicólogas mas antes de abrirlo de verdad. Acceso completo gratis un mes, yo te lo dejo montado y te acompaño la primera sesión en vivo. Lo único que pido es que me digas sin filtro que te estorba.
+- Terminan la última sesión y todavía les faltan las notas del día. Las escriben de memoria el domingo, y para entonces ya se les fue la mitad de lo que dijo el paciente.
+- La historia de cada paciente está repartida entre el cuaderno, un Word y WhatsApp. Si un paciente la pide completa, no hay cómo entregarla, y la Resolución 1995 se la exige a ellas.
+- Los cobros van en un Excel que nunca está al día. A fin de mes no saben bien quién les debe.
 
-Si prefieres verlo antes de decidir, aca esta todo con pantallazos reales: chapni.com/guia
-
-Te sirve una llamada de 20 minutos esta semana?
+De pura casualidad, alguna de esas te suena?
 ```
+
+Nada de producto, guía ni piloto en este mensaje. Si ella pregunta "y qué es lo que hiciste", ahí sí.
+
+### 4.2.1 Si responde que sí
+
+Primero el cuéntame más. No mandes la oferta en la misma respuesta.
+
+```
+Me imaginaba. Cuál de las tres te pega más, y cuánto te está costando más o menos a la semana?
+```
+
+Cuando conteste, la oferta, amarrada al dolor que ella eligió:
+
+```
+Gracias por contarme, eso es justo lo que le pasaba a Marcela.
+
+Lo que le armé hace esto: [una sola frase sobre el dolor que eligió, ver abajo]. Ahora quiero que lo usen 5 psicólogas más antes de abrirlo de verdad. Acceso completo gratis un mes, yo te lo dejo montado y te acompaño la primera sesión en vivo. Lo único que pido es que me digas sin filtro qué te estorba.
+
+Te sirve una llamada de 20 minutos esta semana? Si prefieres verlo antes, aquí está todo con pantallazos reales: chapni.com/guia
+```
+
+La frase según el dolor:
+
+- Notas: graba la sesión con el consentimiento del paciente, el audio se transcribe en el mismo servidor sin salir a ninguna nube, y queda un borrador del registro que ella corrige y aprueba. Nada se guarda sin que lo revise.
+- Historia repartida: cada paciente tiene su historia en un solo lugar, cifrada, y se exporta completa en PDF cuando la piden.
+- Cobros: cada cita queda con su cobro, y a fin de mes ve quién pagó y quién debe sin abrir un Excel.
+
+### 4.2.2 Si responde que no le pasa
+
+```
+Qué bien, de verdad. Por curiosidad, qué es lo que más te cuesta de la parte administrativa de la consulta?
+```
+
+Si nombra otro dolor, vuelves a 4.2.1 con ese. Si dice que nada, cierras con amabilidad y la marcas como cerrada. Esa respuesta también vale: anota qué dijo.
 
 ### 4.3 Correo frío (para quien no acepta LinkedIn)
 
 Asunto, rotar entre estos tres y medir cuál abre más:
 
-- `Un sistema de historia clínica que le hice a mi esposa`
-- `Busco 5 psicólogas en Colombia que prueben esto gratis`
 - `Las notas de sesión de los domingos`
+- `Una pregunta corta sobre tu consulta`
+- `Un sistema de historia clínica que le hice a mi esposa`
 
 Cuerpo:
 
 ```
 Hola Ingrid,
 
-Me llamo Francisco Rojas, soy desarrollador en Bogotá. Te escribo porque tu perfil dice consulta privada y estoy buscando psicólogas clínicas independientes para algo puntual.
+Me llamo Francisco Rojas, soy desarrollador en Bogotá. Mi esposa, Marcela, es psicóloga clínica, y hace un año le construí el sistema donde lleva su consulta. Te escribo porque tu perfil dice consulta privada.
 
-Mi esposa, Marcela, es psicóloga clínica. Hace un año le construí un sistema para llevar sus historias clínicas porque estaba perdiendo los domingos escribiendo notas. Lo usa a diario desde entonces.
+Hablo con psicólogas que tienen su consulta andando, pacientes que vuelven y agenda llena. Y casi todas me cuentan alguna de estas tres cosas:
 
-Como funciona: graba la sesión con consentimiento del paciente, el audio se transcribe en el servidor sin salir a ninguna nube externa, y queda un borrador del registro que ella corrige y aprueba antes de guardar. La historia queda cifrada paciente por paciente y los formatos los define ella, no yo.
+- Terminan la última sesión y todavía les faltan las notas del día. Las escriben de memoria el domingo, y para entonces ya se les fue la mitad de lo que dijo el paciente.
+- La historia de cada paciente está repartida entre el cuaderno, un Word y WhatsApp. Si un paciente la pide completa, no hay cómo entregarla, y la Resolución 1995 se la exige a ellas.
+- Los cobros van en un Excel que nunca está al día. A fin de mes no saben bien quién les debe.
 
-Quiero que lo usen cinco psicólogas mas antes de abrirlo. Acceso completo gratis por un mes, yo te lo configuro y te acompaño la primera sesión. A cambio solo quiero que me digas que no te sirve.
-
-Aca esta todo el sistema explicado con pantallazos, sin registrarte: chapni.com/guia
-Y aca puedes agendar 20 minutos conmigo si te interesa: chapni.com/agenda
+De pura casualidad, alguna de esas te suena? Si me respondes cuál, te cuento qué le armé a Marcela para eso.
 
 Un saludo,
 Francisco Rojas
@@ -168,14 +210,14 @@ Escribo a profesionales de salud mental en Colombia con datos de perfiles profes
 
 Ese último párrafo no es adorno legal. Va siempre. Ver sección 8.
 
+Si responde, sigues igual que en 4.2.1 y 4.2.2.
+
 ### 4.4 Seguimiento 1 (día 4, mismo canal)
 
 ```
 Hola Ingrid, te escribo una vez mas y ya no insisto.
 
-Si la parte de la grabación te genera dudas, es la duda correcta y con gusto te explico como está resuelto. El audio no sale del servidor y se borra despues de transcribir.
-
-Si simplemente no es el momento, dímelo y cierro el tema.
+Si ninguna de las tres te pasa, me alegra, y con un "no" cierro el tema. Si alguna sí pero no es el momento, dime y te escribo en un par de meses.
 ```
 
 ### 4.5 Seguimiento 2 (día 10, cierre)
@@ -197,6 +239,16 @@ Después de ese, no vuelves a escribir. Marca la fila como cerrada y sigue.
 Es el paso que nunca has hecho. Escribe el guion en un papel y tenlo al lado.
 
 **Minuto 0 a 3, preguntas, no pitch.** No abras la pantalla todavía.
+
+Si en el mensaje ya eligió un dolor, empieza por ese y bájalo antes de las preguntas generales:
+
+- Cuéntame más. Cómo te pasa a ti.
+- Desde cuándo te pasa.
+- Qué has intentado para resolverlo.
+- Cuánto te cuesta, en horas o en plata.
+- Qué pasa si sigue igual seis meses más.
+
+La última es la consecuencia, y tiene que decirla ella. Si la dice ella, no la tienes que vender tú.
 
 - Cuántos pacientes ves a la semana.
 - Dónde llevas las historias hoy. Papel, Word, Excel, otro programa.
