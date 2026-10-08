@@ -57,6 +57,15 @@ Auditoría técnica completa (código, BD, IA, seguridad, UX). Plan de 6 fases; 
 | 5 — Tests | ✅ resuelto | testcontainers + tests de aislamiento RLS (`internal/integration/{infra,rls,needtoknow}_test.go`); vitest para `client.ts` y `RecordForm` |
 | 6 — Frontend refactor | ✅ resuelto | `SettingsPage` partido en 10 secciones bajo `components/settings/` (191 líneas, solo orquesta); `logout` hace `flushClinicalDrafts()` antes de invalidar el token (`AuthContext.tsx`) |
 
+### Sesión 2026-10-07 — competencia y relanzamiento de la venta directa
+
+Sin código. Revisión de competencia (`docs/marketing/competencia-2026-10.md`): SMind vende gestión del
+negocio (DIAN, WhatsApp, 90 indicadores, reactivación) a USD 29 individual y USD 49 plano hasta 10
+profesionales, sin IA ni cifrado. Deja muy expuesto el precio por asiento del plan B2B (nota añadida
+en `PLAN_B2B_COMERCIAL.md` §1). Conclusión: el cuello de botella es la venta, no el producto ni la
+competencia. `PLAN_VENTA_DIRECTA.md` relanzado con plazo 2026-12-06 (el original venció el 2026-09-22
+sin ejecutarse) y la regla de no construir nada que no pida un piloto.
+
 ### Sesión 2026-08-22 — voz del cliente, banco de ángulos y poda de planes
 
 Sesión sin código: marketing y limpieza de contexto. Motivo: el usuario está haciendo

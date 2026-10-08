@@ -1,6 +1,8 @@
 # Plan — Venta directa a psicólogas de consulta privada
 
-**Fecha:** 2026-07-24 · **Objetivo:** conseguir los 3 primeros clientes pagos externos en 60 días (hasta 2026-09-22), a mano, uno por uno, partiendo de la lista de 502 leads de AutoGTM.
+**Fecha:** 2026-07-24, relanzado 2026-10-07 · **Objetivo:** conseguir los 3 primeros clientes pagos externos en 60 días (hasta 2026-12-06), a mano, uno por uno, partiendo de la lista de 502 leads de AutoGTM.
+
+> **Relanzamiento 2026-10-07.** El plazo original (2026-09-22) venció sin que el plan se ejecutara: sigue sin haber clientes externos. Regla para estos 60 días: no se construyen funciones nuevas salvo lo que pida un piloto real. La competencia revisada (SMind y otros) está en `docs/marketing/competencia-2026-10.md`; no cambia el plan, solo agrega una objeción (sección 6).
 
 > Complementa `PLAN_VENTA_PASIVA.md` (funnel que trabaja solo). Este es lo contrario: Francisco escribiendo mensajes uno a uno. La venta pasiva recoge lo que llega; esto sale a buscarlo.
 
@@ -257,7 +259,7 @@ La última es la consecuencia, y tiene que decirla ella. Si la dice ella, no la 
 
 Anota las respuestas literales. Eso vale más que la venta.
 
-**Minuto 3 a 12, muestra solo lo que responde a lo que dijo.** Si dijo que pierde tiempo en notas, muestra grabación y borrador. Si dijo que le preocupa perder los datos, muestra cifrado y respaldo. No hagas el tour completo de la aplicación. Nadie quiere ver 40 pantallas.
+**Minuto 3 a 12, muestra solo lo que responde a lo que dijo.** La demo base: subir el audio de una sesión simulada y ver salir la nota llena en el formato de ella. Ten ese audio listo antes de la llamada. Si dijo que pierde tiempo en notas, muestra grabación y borrador. Si dijo que le preocupa perder los datos, muestra cifrado y respaldo. No hagas el tour completo de la aplicación. Nadie quiere ver 40 pantallas.
 
 **Minuto 12 a 17, objeciones.** Ver sección 6.
 
@@ -285,6 +287,9 @@ Respuesta honesta: es un riesgo real de trabajar con alguien solo. Por eso puede
 
 **"Cumple con la ley colombiana?"**
 Historia clínica según Resolución 1995, registros inmutables una vez firmados, consentimientos informados, y tratamiento de datos bajo Ley 1581 con contrato de encargado. Todo está publicado en el sitio. No prometas más de lo que hay, y no digas "certificado" porque no lo estás.
+
+**"Vi otro programa que cuesta USD 29 (SMind, AgendaPro...)."**
+Hacen agenda, facturación y tableros del negocio, y lo hacen bien. Ninguno te escribe la nota de la sesión ni mantiene el audio dentro del servidor, y no dicen cómo cifran la historia. Si lo que más te pesa es la administración, puede que te sirva más otro. Si lo que te pesa son las notas, es aquí. No ataques al competidor por nombre.
 
 **"Déjame pensarlo."**
 No presiones. Cierra con fecha: te escribo el jueves y me dices sí o no, así no quedamos los dos en el aire.
@@ -328,7 +333,7 @@ Números esperados de un lote de 120 contactos de prioridad A, con lista limpia 
 | Piloto arrancado | 3 a 5 | |
 | Pagan al día 30 | 1 a 3 | Este es el número que importa |
 
-**Criterio de parada, día 60 (2026-09-22):**
+**Criterio de parada, día 60 (2026-12-06):**
 
 - 3 o más pagando: funciona. Ahí sí automatizas el resto de la lista y miras México y España.
 - 1 o 2 pagando: hay señal pero el embudo está flojo. Revisa precio y mensaje con los "no" que anotaste, y corre otro lote de 120.

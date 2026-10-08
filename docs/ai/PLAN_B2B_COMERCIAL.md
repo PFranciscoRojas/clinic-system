@@ -42,6 +42,13 @@ en $180.000 individual y bajar a $135.000 en volumen mantiene a Chapni competiti
 (especialización en psicología + cifrado) sin regalar margen en el tramo bajo, donde no hay presión
 de precio real todavía (ver señal de demanda §4).
 
+**Revisión 2026-10-07: sí hay presión de precio en clínicas.** SMind cobra USD 49/mes plano por
+hasta 10 profesionales (USD 99 hasta 35), sin IA ni cifrado (`docs/marketing/competencia-2026-10.md`).
+Una clínica de 5 pagaría ~$765.000/mes con esta tabla contra ~$200.000 allá. A las entrevistas de §4
+se lleva también una variante de tarifa plana por clínica (o asiento administrativo barato) para
+medir la reacción contra esa referencia. La fecha de fundadoras (2026-09-30) venció sin firmas;
+se fija nueva fecha cuando arranquen las entrevistas.
+
 ---
 
 ## 2. Empaquetado — qué se vende distinto en cada plan
