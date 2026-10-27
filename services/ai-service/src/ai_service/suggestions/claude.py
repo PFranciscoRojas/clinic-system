@@ -4,6 +4,7 @@ import logging
 import anthropic
 
 from ai_service.approaches import plan_instruction, wording_instruction
+from ai_service.claude_reply import reply_text
 from ai_service.config import settings
 from ai_service.prompt_guard import HISTORY_TAG, wrap_untrusted
 
@@ -123,11 +124,10 @@ async def generate_risk_assessment(anonymized_history: str) -> str:
     message = await _client.messages.create(
         model=settings.anthropic_model,
         max_tokens=1536,
-        temperature=settings.anthropic_temperature,
         system=_RISK_SYSTEM,
         messages=[{"role": "user", "content": f"Historia clínica:\n\n{wrap_untrusted(HISTORY_TAG, anonymized_history)}"}],
     )
-    parsed = _extract_json(message.content[0].text)
+    parsed = _extract_json(reply_text(message))
 
     level = parsed.get("level")
     if level not in ("none", "low", "moderate", "high"):
@@ -162,11 +162,10 @@ async def generate_recap(anonymized_history: str, approach: str = "") -> str:
     message = await _client.messages.create(
         model=settings.anthropic_model,
         max_tokens=2048,
-        temperature=settings.anthropic_temperature,
         system=system,
         messages=[{"role": "user", "content": f"Historia clínica:\n\n{wrap_untrusted(HISTORY_TAG, anonymized_history)}"}],
     )
-    parsed = _extract_json(message.content[0].text)
+    parsed = _extract_json(reply_text(message))
 
     out = {
         "summary": _clean_str(parsed.get("summary")),
@@ -189,11 +188,10 @@ async def generate_treatment_plan(anonymized_history: str, approach: str = "") -
     message = await _client.messages.create(
         model=settings.anthropic_model,
         max_tokens=2048,
-        temperature=settings.anthropic_temperature,
         system=_PLAN_SYSTEM.format(approach_instruction=plan_instruction(approach)),
         messages=[{"role": "user", "content": f"Historia clínica:\n\n{wrap_untrusted(HISTORY_TAG, anonymized_history)}"}],
     )
-    parsed = _extract_json(message.content[0].text)
+    parsed = _extract_json(reply_text(message))
 
     goals = []
     for g in parsed.get("goals", []):
