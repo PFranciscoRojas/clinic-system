@@ -11,16 +11,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # of CUDA libraries off a GPU-less VPS. faster-whisper runs on CTranslate2, so
 # the whole dependency is gone rather than merely slimmed.
 
-# Install dependencies from pyproject before copying source so code edits
-# don't invalidate the heavy spaCy layer
-COPY pyproject.toml .
-RUN python -c "import tomllib; print('\n'.join(tomllib.load(open('pyproject.toml','rb'))['project']['dependencies']))" > /tmp/requirements.txt \
-    && pip install --no-cache-dir -r /tmp/requirements.txt
+# Install the locked dependencies before copying source so code edits don't
+# invalidate the heavy spaCy layer. requirements.txt pins every package with
+# its hash: a rebuild installs exactly what CI tested, never "the latest".
+COPY requirements.txt .
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
 # Download spaCy Spanish models — md (~40 MB) is the runtime default (better
 # PERSON/ORG/LOC recall than sm); sm stays as the in-code fallback so a
 # missing model can never be the reason the worker fails to boot.
-RUN python -m spacy download es_core_news_md && python -m spacy download es_core_news_sm
+# Pinned by URL and hash: `spacy download` would fetch whatever model release
+# is newest for the installed spaCy, which is the same trap as an unpinned dep.
+RUN pip install --no-cache-dir --no-deps \
+    "es_core_news_md @ https://github.com/explosion/spacy-models/releases/download/es_core_news_md-3.8.0/es_core_news_md-3.8.0-py3-none-any.whl#sha256=478b8bb3f3e8eb149192f7d80e7cd64f990b7e9bccbc5329df41a57e86326be2" \
+    "es_core_news_sm @ https://github.com/explosion/spacy-models/releases/download/es_core_news_sm-3.8.0/es_core_news_sm-3.8.0-py3-none-any.whl#sha256=e451a83d6df79b87e9eed0cb553f03e99e36a3bab18a7b79f0dcfd1fdf875e12"
 
 # Pre-download the CTranslate2 weights so they're baked into the image. Without
 # this the first job of a fresh container downloads them mid-transcription,
@@ -30,6 +34,7 @@ ARG WHISPER_MODEL=tiny
 ARG WHISPER_COMPUTE_TYPE=int8
 RUN python -c "from faster_whisper import WhisperModel; WhisperModel('${WHISPER_MODEL}', device='cpu', compute_type='${WHISPER_COMPUTE_TYPE}')"
 
+COPY pyproject.toml .
 COPY src/ ./src/
 RUN pip install --no-cache-dir --no-deps .
 

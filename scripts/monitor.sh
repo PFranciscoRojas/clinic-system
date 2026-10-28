@@ -64,6 +64,10 @@ ERROR_THRESHOLD="${MONITOR_ERROR_THRESHOLD:-3}"
 # La ventana que se mira. Igual al periodo del cron: mirar más atrás repetiría
 # el mismo aviso ciclo tras ciclo por un incidente que ya pasó.
 ERROR_WINDOW="${MONITOR_ERROR_WINDOW:-5m}"
+# How far back to look for the ai-service's last error when a lane alerts. Long
+# on purpose: a job that failed once a day sits in the queue looking "stuck"
+# hours after the error that explains it was logged.
+AI_ERROR_WINDOW="${MONITOR_AI_ERROR_WINDOW:-24h}"
 
 # ── verdicts ────────────────────────────────────────────────────────────────
 # Everything below is a pure function of its arguments. That is what
@@ -372,6 +376,14 @@ group_field() { # group_field <xinfo output> <field>
     awk -v f="$2" '$0==f {getline; print; exit}' <<< "$1"
 }
 
+# last_error_line — stdin: ai-service log; stdout: its newest ERROR line, cut
+# short. From 2026-10-07 every Claude call failed with the same TypeError for 20
+# days, and the only alert said "ai_jobs_fast-stuck": true, and useless. The
+# line that named the cause was sitting in the log. An alert should carry it.
+last_error_line() {
+    { grep -a ' ERROR ' || true; } | tail -1 | cut -c1-240
+}
+
 # check_queue — the three AI lanes. A lane can fail two different ways and they
 # need different words: work picked up and never finished (stuck), or work
 # nobody picked up at all while the worker sits there looking healthy (stalled).
@@ -404,6 +416,11 @@ check_queue() {
         [[ "$verdict" != ok ]] && worst="$stream-$verdict"
         [[ "$lagv"    != ok ]] && worst="$stream-$lagv"
     done
+    if [[ "$worst" != ok ]]; then
+        local err
+        err="$(docker logs sghcp_ai_service --since "$AI_ERROR_WINDOW" 2>&1 | last_error_line || true)"
+        [[ -n "$err" ]] && details+=("último error: $err")
+    fi
     printf '%s\t%s\n' "$worst" "${details[*]}"
 }
 
