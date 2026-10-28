@@ -51,6 +51,11 @@ sistema no cambie debajo de una psicóloga en plena sesión.
   están montados así. Tras un `git pull` que cambie el Caddyfile, `caddy reload` no basta: hay que
   `docker compose up -d --force-recreate caddy`. El directorio `dist` nunca se borra ni se mueve, se
   reemplaza su contenido con `rsync --delete`.
+- **El deploy del ai-service termina con un smoke contra Claude.** Tras el `up -d` espera a que el
+  contenedor esté `healthy` y corre `python -m ai_service.smoke` dentro: una llamada real con 5
+  tokens de salida y un texto fijo, sin datos clínicos. Si falla, el workflow sale en rojo. Un
+  contenedor que arranca no prueba que la IA funcione: del 2026-10-07 al 2026-10-27 arrancó bien y
+  todas las llamadas fallaban.
 - **El usuario del smoke** es `admin@demo.clinica.co` en la org `demo-clinica`, con suscripción
   activa hasta 2099. Si se vuelve a sembrar, hay que correr `docker compose exec -T core-api ./rehash`:
   el hash del correo en el SQL es un marcador; el real es HMAC con `SEARCH_PEPPER`.

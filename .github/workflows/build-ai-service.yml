@@ -34,8 +34,14 @@ jobs:
       # conftest.py stubs the module; no test loads a model. redis/asyncpg/cryptography are small
       # and are real imports of worker.py, which now has tests: stubbing those
       # would fake the very module under test.
+      # Two steps on purpose. The runtime deps are constrained by the lock, so
+      # tests run against the exact versions the image ships; a hashed
+      # constraints file puts pip in --require-hashes mode, which then rejects
+      # anything not in the lock — hence pytest on its own line.
       - name: Install test dependencies
-        run: pip install pytest pytest-asyncio pydantic-settings 'anthropic>=1.12,<2' redis asyncpg cryptography
+        run: |
+          pip install -c services/ai-service/requirements.txt pydantic-settings anthropic redis asyncpg cryptography packaging
+          pip install pytest pytest-asyncio
 
       - name: Run tests
         working-directory: services/ai-service
@@ -91,3 +97,13 @@ jobs:
             docker compose --profile ai pull ai-service
             docker compose --profile ai up -d ai-service
             docker image prune -f
+            # Smoke check: one real, minimal Claude call from the new container
+            # (src/ai_service/smoke.py). A green deploy used to mean only "the
+            # container started"; from 2026-10-07 it started fine and every AI
+            # call failed for 20 days. Wait for healthy first so a slow boot
+            # isn't read as a broken one.
+            for i in $(seq 1 24); do
+              [ "$(docker inspect -f '{{.State.Health.Status}}' sghcp_ai_service)" = healthy ] && break
+              sleep 5
+            done
+            docker exec sghcp_ai_service python -m ai_service.smoke || exit 1

@@ -128,6 +128,17 @@ check "an unreadable queue is not an empty one" \
 check "pending work with no clock is unknown" \
     unknown "$(queue_verdict 3 x 1200)"
 
+# A lane alert carries the error that explains it. The log below is the
+# 2026-10 outage, shortened: the cause was one grep away for 20 days.
+ai_log='2026-10-27 08:27:51,100 INFO ai_service.worker processing suggestion
+2026-10-27 08:27:59,984 ERROR ai_service.worker suggestion processing failed | err=AsyncMessages.create() got an unexpected keyword argument '"'"'temperature'"'"'
+2026-10-27 08:28:00,001 INFO ai_service.worker idle'
+check "the newest ERROR line is the one reported" \
+    "2026-10-27 08:27:59,984 ERROR ai_service.worker suggestion processing failed | err=AsyncMessages.create() got an unexpected keyword argument 'temperature'" \
+    "$(last_error_line <<< "$ai_log")"
+check "a log without errors adds nothing" "" "$(last_error_line <<< "INFO all good")"
+check "a runaway line is cut short" 240 "$(last_error_line <<< "x ERROR $(printf 'y%.0s' {1..400})" | tr -d '\n' | wc -c)"
+
 echo "==> monitor.sh worker liveness"
 
 check "no lag is ok" ok "$(lag_verdict 0 100-0 100-0)"

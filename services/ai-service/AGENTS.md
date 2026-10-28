@@ -31,6 +31,13 @@ están en el `AGENTS.md` de la raíz; la que más pesa aquí es la 5.
 - La latencia y las ventanas de transcripción están documentadas en
   `docs/ai/PLAN_LATENCIA_AUDIO.md` (raíz del repo), que también citan el código y los tests.
 
+## Dependencias
+
+El Dockerfile instala `requirements.txt` (versiones exactas con hash), no `pyproject.toml`. Una
+dependencia nueva va en los dos: se declara en `pyproject.toml` y se regenera el lock con el
+comando de su cabecera. `tests/test_dependency_lock.py` falla si no. Detalle en `docs/ops/CI.md`
+(raíz del repo).
+
 ## Tests
 
 ```

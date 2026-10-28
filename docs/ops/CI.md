@@ -36,6 +36,24 @@ monitor, versiones, AGENTS.md). Ver `scripts/verify.sh`.
    `workflow_dispatch` es la escotilla de redespliegue manual y con `== 'push'` dejaría de desplegar
    sin avisar.
 
+## Dependencias
+
+Ninguna imagen instala "la última versión" de nada. Go fija con `go.sum`, el frontend con
+`package-lock.json` y el ai-service con `services/ai-service/requirements.txt`, un lock con versión
+exacta y hash de cada paquete que el Dockerfile instala con `--require-hashes`. El
+`pyproject.toml` dice qué necesita el servicio; el lock dice qué se despliega.
+`tests/test_dependency_lock.py` falla si los dos se desalinean (cómo regenerar el lock: cabecera del
+archivo).
+
+Las actualizaciones llegan como PR de Dependabot (`.github/dependabot.yml`): uno semanal por
+ecosistema con los minor y patch agrupados, y los major sueltos. Pasan por los checks requeridos
+como cualquier cambio y se mergean a mano.
+
+Por qué: el 2026-10-07 un rebuild del ai-service con `anthropic>=0.27` bajó el SDK 1.x, que ya no
+acepta `temperature`, y todas las llamadas a Claude fallaron durante 20 días con el deploy en verde.
+Desde entonces el deploy del ai-service termina con una llamada real y mínima a Claude
+(`src/ai_service/smoke.py`, ver `docs/ops/DEPLOY.md`).
+
 ## Añadir un check requerido
 
 No se toca la protección entera. Un `POST` sobre los contexts añade sin reemplazar nada más:
