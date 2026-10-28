@@ -25,13 +25,13 @@ jobs:
   secret-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Full history. A secret deleted in the next commit is still a leaked
           # secret — it lives in the pack file, and this repo is public.
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: services/core-api/go.mod
           cache-dependency-path: services/core-api/go.sum
@@ -47,9 +47,9 @@ jobs:
   govulncheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: services/core-api/go.mod
           cache-dependency-path: services/core-api/go.sum
@@ -94,7 +94,7 @@ jobs:
   skip-ratchet:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Skip budget
         run: ./scripts/check_skips.sh

@@ -31,9 +31,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: services/core-api/go.mod
           cache-dependency-path: services/core-api/go.sum
@@ -50,7 +50,7 @@ jobs:
       # line, which is the only actionable part of the run.
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mutation-report
           path: mutation.log
@@ -95,14 +95,14 @@ jobs:
       # informative outcome there is, and the script below says so.
       - name: Download report
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mutation-report
 
       # One issue per drop, reusing an open one so a week of red nights does not
       # become seven issues.
       - name: Open an issue
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           MUTATION_RESULT: ${{ needs.mutation.result }}
         with:

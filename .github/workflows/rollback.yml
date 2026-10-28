@@ -32,7 +32,7 @@ jobs:
           fi
 
       - name: Point traffic back at the previous colour
-        uses: appleboy/ssh-action@v1.2.0
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.VPS_HOST }}
           username: root

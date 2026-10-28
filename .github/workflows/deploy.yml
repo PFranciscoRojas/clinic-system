@@ -41,7 +41,7 @@ jobs:
     outputs:
       sha: ${{ steps.target.outputs.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -68,7 +68,7 @@ jobs:
           echo "Desplegando core-api de $sha"
 
       - name: Deploy
-        uses: appleboy/ssh-action@v1.2.0
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.VPS_HOST }}
           username: root
@@ -141,9 +141,9 @@ jobs:
       name: production
       url: https://app.chapni.com
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: npm
@@ -161,7 +161,7 @@ jobs:
         run: tar czf frontend-dist.tgz -C services/frontend/dist .
 
       - name: Upload bundle to VPS
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.VPS_HOST }}
           username: root
@@ -173,7 +173,7 @@ jobs:
       # directorio dist, así que el directorio no puede moverse ni recrearse.
       # Misma clase de problema que el montaje del Caddyfile (ver PR #301).
       - name: Deploy (replace dist contents in place)
-        uses: appleboy/ssh-action@v1.2.0
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.VPS_HOST }}
           username: root
