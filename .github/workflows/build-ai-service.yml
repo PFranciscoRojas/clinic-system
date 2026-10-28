@@ -35,7 +35,7 @@ jobs:
       # and are real imports of worker.py, which now has tests: stubbing those
       # would fake the very module under test.
       - name: Install test dependencies
-        run: pip install pytest pytest-asyncio pydantic-settings anthropic redis asyncpg cryptography
+        run: pip install pytest pytest-asyncio pydantic-settings 'anthropic>=1.12,<2' redis asyncpg cryptography
 
       - name: Run tests
         working-directory: services/ai-service

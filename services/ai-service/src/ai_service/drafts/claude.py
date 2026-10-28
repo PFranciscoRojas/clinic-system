@@ -6,6 +6,7 @@ from typing import Any
 import anthropic
 
 from ai_service.approaches import wording_instruction
+from ai_service.claude_reply import reply_text
 from ai_service.config import settings
 from ai_service.drafts.widgets import validate_widget_value
 from ai_service.prompt_guard import TRANSCRIPT_TAG, wrap_untrusted
@@ -296,7 +297,6 @@ async def generate_clinical_draft(
     message = await _client.messages.create(
         model=settings.anthropic_model,
         max_tokens=max_tokens,
-        temperature=settings.anthropic_temperature,
         system=_SYSTEM_PROMPT.format(
             schema=schema_json,
             tone_instruction=tone_instr,
@@ -310,7 +310,7 @@ async def generate_clinical_draft(
         ],
     )
 
-    raw = message.content[0].text.strip()
+    raw = reply_text(message).strip()
 
     try:
         parsed = json.loads(raw)
