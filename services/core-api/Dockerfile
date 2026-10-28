@@ -26,7 +26,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/rehash ./cmd/rehash
 
 # ─── runtime stage ────────────────────────────────────────────────────────────
-FROM alpine:3.19
+FROM alpine:3.24
 
 RUN apk --no-cache add ca-certificates tzdata
 
