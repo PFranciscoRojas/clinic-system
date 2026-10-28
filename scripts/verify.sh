@@ -70,7 +70,9 @@ step "bundle"         ./scripts/check_bundle_size.sh
 # faster-whisper and its converted weights are deliberately absent — conftest.py
 # stubs the module, exactly as in build-ai-service.yml. Only the test deps are
 # needed:
-#   services/ai-service/.venv/bin/pip install -c services/ai-service/requirements.txt pytest pytest-asyncio pydantic-settings anthropic redis asyncpg cryptography
+#   services/ai-service/.venv/bin/pip install -c services/ai-service/requirements.txt pydantic-settings anthropic redis asyncpg cryptography packaging
+#   services/ai-service/.venv/bin/pip install pytest pytest-asyncio
+# (two steps: the hashed lock as constraints rejects anything it doesn't list)
 PY=python3
 if [[ -x services/ai-service/.venv/bin/python ]]; then
   PY=.venv/bin/python
